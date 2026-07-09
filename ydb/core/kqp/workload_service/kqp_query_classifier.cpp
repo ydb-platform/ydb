@@ -38,7 +38,7 @@ public:
         }
 
         for (const auto& [rank, value] : *ClassifierView) {
-            const NResourcePool::TClassifierSettings& settings = value.GetClassifierSettings();
+            const auto& settings = value.GetClassifierSettings();
 
             if (!MatchesStatic(settings)) {
                 continue;
@@ -102,13 +102,17 @@ private:
     ///
     /// Check Predicate MemberName
     ///
-    bool MatchesMemberName(const TString& target) const {
-        // Check anonymous user
-        if (!Context.UserToken) {
-            return target == NACLib::TSID();
+    bool MatchesMemberName(const std::optional<TString>& target) const {
+        if (!target) {
+            return true;
         }
 
-        auto [it, inserted] = MemberNameCache.emplace(target, false);
+        // Check anonymous user
+        if (!Context.UserToken) {
+            return *target == NACLib::TSID();
+        }
+
+        auto [it, inserted] = MemberNameCache.emplace(*target, false);
 
         if (!inserted) {
             return it->second;
@@ -118,13 +122,13 @@ private:
 
         // Check UserSID only for non-system users.
         if (!Context.UserToken->IsSystemUser()) {
-            found = target == Context.UserToken->GetUserSID();
+            found = *target == Context.UserToken->GetUserSID();
         }
 
         // Check GroupSID for all users
         if (!found) {
             for (const auto& groupSID : Context.UserToken->GetGroupSIDs()) {
-                if (target == groupSID) {
+                if (*target == groupSID) {
                     found = true;
                     break;
                 }
@@ -135,13 +139,24 @@ private:
     }
 
     ///
+    /// Check Predicate HasAppName
+    ///
+    static bool MatchesAppName(const std::optional<NResourcePool::TRegexPredicate>& predicate, const TString& appName) {
+        return !predicate || predicate->Match(appName);
+    }
+
+    ///
     /// Performs query classification using static query parameters. Static parameters are:
     /// - Known before query compilation/execution.
     /// - Independent of SQL analysis, plan building, or computations.
     /// - Provided as session/connection metadata alongside the query.
     ///
-    bool MatchesStatic(const NResourcePool::TClassifierSettings& s) const {
-        if (s.MemberName && !MatchesMemberName(*s.MemberName)) {
+    bool MatchesStatic(const NResourcePool::TClassifierSettings& settings) const {
+        if (!MatchesAppName(settings.HasAppName, Context.AppName)) {
+            return false;
+        }
+
+        if (!MatchesMemberName(settings.MemberName)) {
             return false;
         }
 

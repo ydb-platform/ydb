@@ -27,6 +27,23 @@ enum class EHostHealth
     Offline,
 };
 
+struct TOracleHostStat
+{
+    TOracleHostStat(
+        THostIndex index,
+        const THostState& state,
+        EHostHealth health,
+        const THostStat& hostStat,
+        TInstant now);
+
+    THostIndex Index;
+    EHostState State;
+    EHostHealth Health;
+    TInflightByOperation InflightByOperation;
+    THostStat::TErrorsInfo Errors;
+    ui64 PBufferUsedSize;
+};
+
 ////////////////////////////////////////////////////////////////////////////////
 
 class IOracle
@@ -150,6 +167,8 @@ public:
     [[nodiscard]] const THostStat& GetHostStatistics(
         THostIndex hostIndex) const override;
     [[nodiscard]] TString Dump() const override;
+
+    [[nodiscard]] TVector<TOracleHostStat> BuildHostStats(TInstant now) const;
 
 private:
     [[nodiscard]] TTimePredictor& AccessTimePredictor(EOperation operation);

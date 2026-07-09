@@ -12,6 +12,7 @@
 #include <ydb/core/tx/tiering/abstract/manager.h>
 
 #include <ydb/library/accessor/accessor.h>
+#include <ydb/library/actors/struct_log/log_stack.h>
 
 #include <optional>
 
@@ -151,14 +152,17 @@ public:
     }
 
     [[nodiscard]] std::shared_ptr<IBlobsGCAction> CreateGC() {
-        NActors::TLogContextGuard gLogging = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD_BLOBS)(
-            "storage_id", GetStorageId())("tablet_id", GetSelfTabletId());
+        YDB_LOG_CREATE_CONTEXT_COMP(NKikimrServices::TX_COLUMNSHARD_BLOBS,
+            {"storageId", GetStorageId()},
+            {"tabletId", GetSelfTabletId()});
         if (CurrentGCAction && CurrentGCAction->IsInProgress()) {
-            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_BLOBS)("event", "gc_in_progress");
+            YDB_LOG_DEBUG_COMP(NKikimrServices::TX_COLUMNSHARD_BLOBS, "",
+                {"event", "gc_in_progress"});
             return nullptr;
         }
         if (Stopped) {
-            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_BLOBS)("event", "stopped_on_gc");
+            YDB_LOG_DEBUG_COMP(NKikimrServices::TX_COLUMNSHARD_BLOBS, "",
+                {"event", "stopped_on_gc"});
             return nullptr;
         }
         auto task = CreateGCAction(Counters->GetConsumerCounter(NBlobOperations::EConsumer::GC)->GetRemoveGCCounters());

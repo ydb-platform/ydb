@@ -432,5 +432,226 @@ Y_UNIT_TEST_SUITE(TDeriveStorageConfigCleanupTest) {
     }
 }
 
+Y_UNIT_TEST_SUITE(TDistconfStaticGroupSelfHealTest) {
+
+    struct TSetup {
+        NKikimrBlobStorage::TStorageConfig Config;
+        NKikimrBlobStorage::TBaseConfig BaseConfig;
+
+        void AddNode(ui32 nodeId, const TString& host, ui32 port = 19001, 
+                     const TString& dataCenter = "", const TString& rack = "") {
+            auto *node = Config.AddAllNodes();
+            node->SetNodeId(nodeId);
+            node->SetHost(host);
+            node->SetPort(port);
+            if (dataCenter || rack) {
+                node->MutableLocation()->SetDataCenter(dataCenter);
+                node->MutableLocation()->SetRack(rack);
+            }
+        }
+
+        void AddCandidatePDisk(ui32 nodeId, ui32 pdiskId) {
+            auto *pdisk = BaseConfig.AddPDisk();
+            pdisk->SetNodeId(nodeId);
+            pdisk->SetPDiskId(pdiskId);
+            pdisk->SetPath("/dev/disk" + std::to_string(nodeId) + "_" + std::to_string(pdiskId));
+            pdisk->SetGuid(nodeId * 1000 + pdiskId);
+            pdisk->SetType(NKikimrBlobStorage::EPDiskType::ROT);
+            pdisk->SetDriveStatus(NKikimrBlobStorage::EDriveStatus::ACTIVE);
+            pdisk->SetDecommitStatus(NKikimrBlobStorage::EDecommitStatus::DECOMMIT_NONE);
+        }
+
+        void AddGroupOn(ui32 nodeId, ui32 pdiskId) {
+            auto *ss = Config.MutableBlobStorageConfig()->MutableServiceSet();
+
+            auto *pdisk = ss->AddPDisks();
+            pdisk->SetNodeID(nodeId);
+            pdisk->SetPDiskID(pdiskId);
+            pdisk->SetPath("/dev/disk" + std::to_string(nodeId) + "_" + std::to_string(pdiskId));
+            pdisk->SetPDiskGuid(nodeId * 1000 + pdiskId);
+            pdisk->SetPDiskCategory(0);
+
+            auto *vdisk = ss->AddVDisks();
+            auto *vid = vdisk->MutableVDiskID();
+            vid->SetGroupID(0);
+            vid->SetGroupGeneration(1);
+            vid->SetRing(0);
+            vid->SetDomain(0);
+            vid->SetVDisk(0);
+            auto *loc = vdisk->MutableVDiskLocation();
+            loc->SetNodeID(nodeId);
+            loc->SetPDiskID(pdiskId);
+            loc->SetVDiskSlotID(0);
+            loc->SetPDiskGuid(nodeId * 1000 + pdiskId);
+
+            auto *group = ss->AddGroups();
+            group->SetGroupID(0);
+            group->SetGroupGeneration(1);
+            group->SetErasureSpecies(TBlobStorageGroupType::ErasureNone);
+            auto *ring = group->AddRings();
+            auto *fd = ring->AddFailDomains();
+            auto *gloc = fd->AddVDiskLocations();
+            gloc->SetNodeID(nodeId);
+            gloc->SetPDiskID(pdiskId);
+            gloc->SetVDiskSlotID(0);
+            gloc->SetPDiskGuid(nodeId * 1000 + pdiskId);
+        }
+
+        ui32 GetGroupVDiskNode() const {
+            const auto& group = Config.GetBlobStorageConfig().GetServiceSet().GetGroups(0);
+            return group.GetRings(0).GetFailDomains(0).GetVDiskLocations(0).GetNodeID();
+        }
+
+        void AddMultiVDiskGroupOn(const std::vector<ui32>& nodeIds, i32 erasureSpecies) {
+            auto *ss = Config.MutableBlobStorageConfig()->MutableServiceSet();
+
+            auto *group = ss->AddGroups();
+            group->SetGroupID(0);
+            group->SetGroupGeneration(1);
+            group->SetErasureSpecies(erasureSpecies);
+            auto *ring = group->AddRings();
+
+            for (ui32 domainIdx = 0; domainIdx < nodeIds.size(); ++domainIdx) {
+                const ui32 nodeId = nodeIds[domainIdx];
+                const ui32 pdiskId = 1;
+
+                auto *pdisk = ss->AddPDisks();
+                pdisk->SetNodeID(nodeId);
+                pdisk->SetPDiskID(pdiskId);
+                pdisk->SetPath("/dev/disk" + std::to_string(nodeId) + "_" + std::to_string(pdiskId));
+                pdisk->SetPDiskGuid(nodeId * 1000 + pdiskId);
+                pdisk->SetPDiskCategory(0);
+
+                auto *vdisk = ss->AddVDisks();
+                auto *vid = vdisk->MutableVDiskID();
+                vid->SetGroupID(0);
+                vid->SetGroupGeneration(1);
+                vid->SetRing(0);
+                vid->SetDomain(domainIdx);
+                vid->SetVDisk(0);
+                auto *loc = vdisk->MutableVDiskLocation();
+                loc->SetNodeID(nodeId);
+                loc->SetPDiskID(pdiskId);
+                loc->SetVDiskSlotID(0);
+                loc->SetPDiskGuid(nodeId * 1000 + pdiskId);
+
+                auto *fd = ring->AddFailDomains();
+                auto *gloc = fd->AddVDiskLocations();
+                gloc->SetNodeID(nodeId);
+                gloc->SetPDiskID(pdiskId);
+                gloc->SetVDiskSlotID(0);
+                gloc->SetPDiskGuid(nodeId * 1000 + pdiskId);
+            }
+        }
+
+        std::vector<ui32> GetGroupDomainNodes() const {
+            std::vector<ui32> result;
+            const auto& group = Config.GetBlobStorageConfig().GetServiceSet().GetGroups(0);
+            for (const auto& fd : group.GetRings(0).GetFailDomains()) {
+                result.push_back(fd.GetVDiskLocations(0).GetNodeID());
+            }
+            return result;
+        }
+    };
+
+    NKikimrBlobStorage::TGroupGeometry Geometry(ui32 numFailDomains) {
+        NKikimrBlobStorage::TGroupGeometry g;
+        g.SetNumFailRealms(1);
+        g.SetNumFailDomainsPerFailRealm(numFailDomains);
+        g.SetNumVDisksPerFailDomain(1);
+        return g;
+    }
+
+    void Reallocate(TSetup& s, const NProtoBuf::RepeatedField<ui32>& allowedNodeIds, bool applyNodeAllowList,
+                    i32 erasureSpecies = TBlobStorageGroupType::ErasureNone, ui32 numFailDomains = 1) {
+        NKikimr::NStorage::TDistributedConfigKeeper keeper(nullptr, nullptr, true);
+        THashMap<TVDiskIdShort, NBsController::TPDiskId> replacedDisks;
+        replacedDisks.emplace(TVDiskIdShort(0, 0, 0), NBsController::TPDiskId());
+        NBsController::TGroupMapper::TForbiddenPDisks forbid;
+        keeper.AllocateStaticGroup(&s.Config, TGroupId::FromValue(0), /*groupGeneration=*/ 2,
+            TBlobStorageGroupType((TBlobStorageGroupType::EErasureSpecies)erasureSpecies), Geometry(numFailDomains),
+            /*pdiskFilters=*/ {}, NKikimrBlobStorage::EPDiskType::ROT, replacedDisks, forbid,
+            /*requiredSpace=*/ 0, &s.BaseConfig, /*convertToDonor=*/ false, /*ignoreVSlotQuotaCheck=*/ true,
+            /*isSelfHealReasonDecommit=*/ false, TBridgePileId(), std::nullopt, allowedNodeIds, applyNodeAllowList);
+    }
+
+    NProtoBuf::RepeatedField<ui32> NodeIds(const std::vector<ui32>& nodeIds) {
+        NProtoBuf::RepeatedField<ui32> result;
+        for (ui32 nodeId : nodeIds) {
+            result.Add(nodeId);
+        }
+        return result;
+    }
+
+    TSetup MakeSetup() {
+        TSetup s;
+        for (ui32 i = 1; i <= 5; ++i) {
+            s.AddNode(i, "host-" + std::to_string(i));
+            s.AddCandidatePDisk(i, 1);
+        }
+        s.AddGroupOn(1, 1);
+        return s;
+    }
+
+    TSetup MakeBlock42Setup() {
+        TSetup s;
+        for (ui32 i = 1; i <= 10; ++i) {
+            s.AddNode(i, "host-" + std::to_string(i), 19001, "dc1", "rack-" + std::to_string(i));
+            s.AddCandidatePDisk(i, 1);
+        }
+        s.AddMultiVDiskGroupOn({1, 2, 3, 4, 5, 6, 7, 8}, TBlobStorageGroupType::Erasure4Plus2Block);
+        return s;
+    }
+
+    Y_UNIT_TEST(RespectsNodeAllowList) {
+        TSetup s = MakeSetup();
+        Reallocate(s, NodeIds({3}), /*applyNodeAllowList=*/ true);
+        UNIT_ASSERT_VALUES_EQUAL(s.GetGroupVDiskNode(), 3u);
+    }
+
+    Y_UNIT_TEST(RespectsNodeAllowListAnotherNode) {
+        TSetup s = MakeSetup();
+        Reallocate(s, NodeIds({4}), /*applyNodeAllowList=*/ true);
+        UNIT_ASSERT_VALUES_EQUAL(s.GetGroupVDiskNode(), 4u);
+    }
+
+    Y_UNIT_TEST(FailsWhenNoAllowedNodeAvailable) {
+        TSetup s = MakeSetup();
+        UNIT_ASSERT_EXCEPTION(
+            Reallocate(s, NodeIds({999}), /*applyNodeAllowList=*/ true),
+            NKikimr::NStorage::TDistributedConfigKeeper::TExConfigError);
+    }
+
+    Y_UNIT_TEST(NoRestrictionWhenAllowListNotApplied) {
+        TSetup s = MakeSetup();
+        UNIT_ASSERT_NO_EXCEPTION(
+            Reallocate(s, NodeIds({999}), /*applyNodeAllowList=*/ false));
+    }
+
+    Y_UNIT_TEST(EmptyAllowListMeansNoRestriction) {
+        TSetup s = MakeSetup();
+        UNIT_ASSERT_NO_EXCEPTION(Reallocate(s, NodeIds({}), /*applyNodeAllowList=*/ true));
+    }
+
+    Y_UNIT_TEST(Block42KeepsExistingVDisksOnNonAllowedNodes) {
+        TSetup s = MakeBlock42Setup();
+        Reallocate(s, NodeIds({10}), /*applyNodeAllowList=*/ true, TBlobStorageGroupType::Erasure4Plus2Block, /*numFailDomains=*/ 8);
+
+        const std::vector<ui32> domainNodes = s.GetGroupDomainNodes();
+        UNIT_ASSERT_VALUES_EQUAL(domainNodes.size(), 8u);
+        UNIT_ASSERT_VALUES_EQUAL(domainNodes[0], 10u);
+        for (ui32 domainIdx = 1; domainIdx < 8; ++domainIdx) {
+            UNIT_ASSERT_VALUES_EQUAL(domainNodes[domainIdx], domainIdx + 1);
+        }
+    }
+
+    Y_UNIT_TEST(Block42FailsWhenAllowedNodeConflictsWithExistingDomain) {
+        TSetup s = MakeBlock42Setup();
+        UNIT_ASSERT_EXCEPTION(
+            Reallocate(s, NodeIds({2}), /*applyNodeAllowList=*/ true, TBlobStorageGroupType::Erasure4Plus2Block, /*numFailDomains=*/ 8),
+            NKikimr::NStorage::TDistributedConfigKeeper::TExConfigError);
+    }
+}
+
 }
 }

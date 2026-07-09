@@ -390,6 +390,11 @@ void TDirectBlockGroupMock::OnAddHostResult(
         std::move(pbufferId));
 }
 
+NThreading::TFuture<TDbgSnapshot> TDirectBlockGroupMock::BuildMonSnapshot()
+{
+    return NThreading::MakeFuture(TDbgSnapshot{});
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 }   // namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect

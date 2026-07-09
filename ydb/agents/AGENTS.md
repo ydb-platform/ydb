@@ -13,18 +13,7 @@ Respect layer boundaries when adding dependencies (`PEERDIR` in `ya.make`):
 
 ## Nested agent instructions
 
-Read the nearest `AGENTS.md` when working in that tree:
-
-| Path | Topics |
-|------|--------|
-| [`ydb/core/persqueue/AGENTS.md`](../core/persqueue/AGENTS.md) | Topics core: tablets, layout, design rules |
-| [`ydb/core/kafka_proxy/AGENTS.md`](../core/kafka_proxy/AGENTS.md) | Kafka API over Topics |
-| [`ydb/services/persqueue_v1/AGENTS.md`](../services/persqueue_v1/AGENTS.md) | Topic API and PQv1 |
-| [`ydb/services/sqs_topic/AGENTS.md`](../services/sqs_topic/AGENTS.md) | SQS API over Topics |
-| [`ydb/services/datastreams/AGENTS.md`](../services/datastreams/AGENTS.md) | Kinesis API over Topics |
-| [`ydb/public/lib/ydb_cli/AGENTS.md`](../public/lib/ydb_cli/AGENTS.md) | CLI architecture, changelog |
-| [`ydb/tools/mnc/AGENTS.md`](../tools/mnc/AGENTS.md) | Python MNC tool |
-
+Read the nearest `AGENTS.md` when working in that tree.
 Add area-specific rules in a local `AGENTS.md` rather than growing this file.
 
 ## Build & Test
@@ -50,8 +39,7 @@ Test types and frameworks: [`TESTS.md`](TESTS.md).
 ## Languages
 
 C++20 or earlier. Style: [`CODESTYLE.md`](CODESTYLE.md). Tests: [`TESTS.md`](TESTS.md).
-Python via `ya`, packages from `contrib/python`; MNC details in
-[`ydb/tools/mnc/AGENTS.md`](../tools/mnc/AGENTS.md).
+Python via `ya`, packages from `contrib/python`.
 
 ## Agent workflow
 
@@ -61,8 +49,3 @@ Python via `ya`, packages from `contrib/python`; MNC details in
 - For non-trivial changes, check [`CONTRIBUTING.md`](../../CONTRIBUTING.md).
 - Run `./ya make --build relwithdebinfo -tA <folder>` for the area you changed.
 - Do not create commits or push unless explicitly asked.
-
-## Further reading
-
-[`BUILD.md`](../../BUILD.md) · [`CONTRIBUTING.md`](../../CONTRIBUTING.md) ·
-[`README.md`](../../README.md) · [YDB docs](https://ydb.tech/docs/en/)

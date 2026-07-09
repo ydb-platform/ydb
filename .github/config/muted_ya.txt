@@ -59,6 +59,7 @@ ydb/tests/fq/streaming test_udfs.py.TestUdfsUsage.test_precompute_recovery[True]
 ydb/tests/functional/blobstorage test_node_warden_cache.py.TestNodeWardenCacheFile.test_cache_file_lifecycle_and_restart
 ydb/tests/functional/dstool test_canonical_requests.py.Test.test_group_add
 ydb/tests/functional/query_cache/warmup test_warmup.py.TestCompileCacheViewPeerWarnings.test_peer_scan_warnings_increment_on_dead_peer
+ydb/tests/functional/sqs/migration/compatibility/common ydb.tests.functional.sqs.common.test_queue_counters.py.TestSqsGettingCounters.test_sqs_action_counters
 ydb/tests/functional/sqs/migration/compatibility/large ydb.tests.functional.sqs.large.test_leader_start_inflight.py.TestSqsMultinodeCluster.test_limit_leader_start_inflight[tables_format_v0-std]
 ydb/tests/functional/sqs/migration/finished/large ydb.tests.functional.sqs.large.test_leader_start_inflight.py.TestSqsMultinodeCluster.test_limit_leader_start_inflight[tables_format_v0-std]
 ydb/tests/functional/sqs/migration/topic_creation/multinode ydb.tests.functional.sqs.multinode.test_multinode_cluster.py.TestSqsMultinodeCluster.test_has_messages_counters[kick_tablets-fifo]

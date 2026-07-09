@@ -719,16 +719,6 @@ public:
     }
 
     bool AreAllTheTopicsAndPartitionsKnown() const {
-        if (QueryState->HasDeferredPublication()) {
-            const auto& request = QueryState->GetDeferredPublicationFromRequest();
-            for (const auto& destination : request.GetDestinations()) {
-                if (!destination.HasTabletId()) {
-                    return false;
-                }
-            }
-            return true;
-        }
-
         if (QueryState->HasTopicOperations()) {
             const NKikimrKqp::TTopicOperationsRequest& operations = QueryState->GetTopicOperationsFromRequest();
 

@@ -103,15 +103,16 @@ bool TWriteId::operator<(const TWriteId& rhs) const
 
 size_t TWriteId::GetHash() const
 {
+    const auto idCase = static_cast<size_t>(Proto.Id_case());
     switch (Proto.Id_case()) {
         case NKikimrPQ::TWriteId::kTopicApi:
-            return MultiHash(Proto.GetTopicApi().GetNodeId(), Proto.GetTopicApi().GetKeyId());
+            return MultiHash(idCase, Proto.GetTopicApi().GetNodeId(), Proto.GetTopicApi().GetKeyId());
         case NKikimrPQ::TWriteId::kKafkaApi:
-            return MultiHash(KafkaProducerInstanceId.Id, KafkaProducerInstanceId.Epoch);
+            return MultiHash(idCase, KafkaProducerInstanceId.Id, KafkaProducerInstanceId.Epoch);
         case NKikimrPQ::TWriteId::kDeferredPublicationApi:
-            return Proto.GetDeferredPublicationApi().GetIntPublicationId();
+            return MultiHash(idCase, Proto.GetDeferredPublicationApi().GetIntPublicationId());
         case NKikimrPQ::TWriteId::ID_NOT_SET:
-            return 0;
+            return MultiHash(idCase);
     }
     Y_UNREACHABLE();
     return 0;

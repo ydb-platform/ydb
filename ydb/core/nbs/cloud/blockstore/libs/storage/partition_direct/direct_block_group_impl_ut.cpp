@@ -1,4 +1,5 @@
 #include "direct_block_group_test_fixture.h"
+#include "vchunk.h"
 
 #include <ydb/core/nbs/cloud/blockstore/libs/common/constants.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/partition_direct_service_mock.h>
@@ -28,8 +29,19 @@ using EConnectionType = NTransport::THostConnection::EConnectionType;
 using TStorageTransportMock = NTransport::TStorageTransportMock;
 using TICStorageTransportTestAdapter =
     NTransport::NTestLib::TICStorageTransportTestAdapter;
+using TDDiskId = NBsController::TDDiskId;
 
 ////////////////////////////////////////////////////////////////////////////////
+
+TVector<TDDiskId> MakeDDiskIds(ui32 baseNodeId, ui32 count)
+{
+    TVector<TDDiskId> ids;
+    ids.reserve(count);
+    for (ui32 i = 0; i < count; ++i) {
+        ids.emplace_back(baseNodeId + i, 1, i);
+    }
+    return ids;
+}
 
 TGuardedSgList MakeSgList(TString& buffer)
 {
@@ -1060,6 +1072,100 @@ Y_UNIT_TEST_SUITE(TDirectBlockGroupTest)
         UNIT_ASSERT(!state.DDiskSessionBroken);
         UNIT_ASSERT(!state.BlockedGenerationDetected);
         UNIT_ASSERT_VALUES_EQUAL(0, service.BlockedGenerationCount);
+    }
+
+    // QueryAddHost() routes an add-host request to the partition-direct
+    // service, tagged with this DBG's index.
+    Y_UNIT_TEST_F(ShouldQueryAddHostThroughService, TDBGFixture)
+    {
+        auto executor = MakeExecutor();
+        auto dbg = MakeDirectBlockGroup(
+            executor,
+            std::make_unique<TStorageTransportMock>());
+
+        auto initialReady = RunAndGetInitialReady(dbg);
+        WaitReady(executor, initialReady);
+
+        auto& service = *Services.back();
+        UNIT_ASSERT_VALUES_EQUAL(0u, service.AddHostRequests.size());
+
+        RunOnExecutor(
+            executor,
+            [&]
+            {
+                dbg->QueryAddHost();
+                return true;
+            })
+            .GetValue(WaitTimeout);
+
+        UNIT_ASSERT_VALUES_EQUAL(1u, service.AddHostRequests.size());
+        UNIT_ASSERT_VALUES_EQUAL(
+            static_cast<size_t>(0),
+            service.AddHostRequests[0]);
+    }
+
+    // On restart a DBG comes up with the committed connection count (here N+1).
+    // The Oracle is born at that count in the constructor, and a vchunk whose
+    // persisted config still lags at N is caught up by the DBG the moment it
+    // registers - the same OnHostAppended path a live AddHost uses, with no
+    // partition involved.
+    Y_UNIT_TEST_F(ShouldCatchUpHostsOnStartup, TDBGFixture)
+    {
+        constexpr ui32 grownHostCount = DirectBlockGroupHostCount + 1;
+        constexpr ui64 vChunkSize = RegionSize / DirectBlockGroupsCount;
+
+        auto executor = MakeExecutor();
+
+        // The DBG comes up already grown to N+1 connections.
+        auto dbg = MakeDirectBlockGroup(
+            executor,
+            std::make_unique<TStorageTransportMock>(),
+            MakeDDiskIds(100, grownHostCount),
+            MakeDDiskIds(100 + grownHostCount, grownHostCount));
+
+        auto initialReady = RunAndGetInitialReady(dbg);
+        WaitReady(executor, initialReady);
+
+        // A vchunk that still only knows the pre-add host count.
+        TIntrusivePtr<::NMonitoring::TDynamicCounters> counters(
+            new ::NMonitoring::TDynamicCounters());
+        auto vchunk = std::make_shared<TVChunk>(
+            Runtime->GetActorSystem(0),
+            Services.back().get(),
+            TVChunkConfig::MakeDefault(
+                100,
+                DirectBlockGroupHostCount,
+                DefaultPrimaryCount),
+            dbg,
+            3,
+            vChunkSize,
+            counters);
+
+        TString oracleDump;
+        TString dumpBefore;
+        TString dumpAfter;
+        RunOnExecutor(
+            executor,
+            [&]
+            {
+                oracleDump = dbg->GetOracle()->Dump();
+                dumpBefore = vchunk->DebugPrintDirtyMap();
+                dbg->Register(vchunk);
+                dumpAfter = vchunk->DebugPrintDirtyMap();
+                return true;
+            })
+            .GetValue(WaitTimeout);
+
+        // The Oracle is born at the connection count - the grown slot H5 is
+        // already present.
+        UNIT_ASSERT_STRING_CONTAINS(oracleDump, "H5");
+
+        // The grown host slot (H5) is absent in the vchunk before registering
+        // and present after - the DBG caught it up at registration.
+        UNIT_ASSERT_C(
+            dumpBefore.find("H5-") == TString::npos,
+            "unexpected H5 before register:\n" + dumpBefore);
+        UNIT_ASSERT_STRING_CONTAINS(dumpAfter, "H5-");
     }
 }
 

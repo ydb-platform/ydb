@@ -127,7 +127,11 @@ public:
 
     NThreading::TFuture<TDBGDumpResponse> Dump() override;
 
-    ui64 GetDDiskSessionSeqNo(size_t index) const;
+    void OnAddHostResult(
+        const NProto::TError& error,
+        THostIndex newHostIndex,
+        NKikimrBlobStorage::NDDisk::TDDiskId ddiskId,
+        NKikimrBlobStorage::NDDisk::TDDiskId pbufferId) override;
 
     bool IsDDiskSessionBroken(size_t hostIndex) const;
     bool IsBlockedGenerationDetected() const;
@@ -138,6 +142,10 @@ public:
         EHostState oldState,
         EHostState newState) override;
     ui64 GetHostPBufferUsedSize(THostIndex hostIndex) const override;
+    void QueryAddHost() override;
+
+    // Own methods (not part of any interface).
+    ui64 GetDDiskSessionSeqNo(size_t index) const;
 
 private:
     using TEvSyncResult = NKikimrBlobStorage::NDDisk::TEvSyncResult;
@@ -173,6 +181,14 @@ private:
 
     void DoEstablishConnections();
     void DoEstablishConnection(size_t index, EConnectionType connectionType);
+
+    // Live AddHost: grow all vchunks and the Oracle to the new connection.
+    void SyncHostsWithConnections();
+
+    // Catch one vchunk / the Oracle up to the current connection count.
+    void GrowVChunkToConnections(TVChunk& vChunk);
+    void GrowOracleToConnections();
+
     void OnConnectionEstablished(
         EConnectionType connectionType,
         size_t index,
@@ -183,6 +199,11 @@ private:
 
     [[nodiscard]] bool HasPBufferQuorum() const;
     [[nodiscard]] bool HasLockedQuorum() const;
+
+    [[nodiscard]] bool IsInitialized() const
+    {
+        return InitialReadyPromise.HasValue();
+    }
 
     void DoListPBuffers();
     void OnPBuffersListed(const TAggregatedListPBufferResponse& response);

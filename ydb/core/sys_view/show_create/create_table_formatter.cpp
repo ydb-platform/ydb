@@ -1745,6 +1745,13 @@ void TCreateTableFormatter::FormatAlterColumn(const TString& fullPath, const NKi
                         EscapeValue(settings.GetOthersAllowedFraction(), paramsStr);
                         del = ", ";
                     }
+                    if (settings.HasDictionaryUniqueFraction() && settings.GetDictionaryUniqueFraction()) {
+                        paramsStr << del;
+                        EscapeName("DICTIONARY_UNIQUE_FRACTION", paramsStr);
+                        paramsStr << "=";
+                        EscapeValue(settings.GetDictionaryUniqueFraction(), paramsStr);
+                        del = ", ";
+                    }
                     if (settings.HasDataExtractor()) {
                         const auto& dataExtractor = settings.GetDataExtractor();
                         if (dataExtractor.HasClassName() && !dataExtractor.GetClassName().empty()) {

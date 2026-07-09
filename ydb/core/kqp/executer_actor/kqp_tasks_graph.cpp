@@ -1811,9 +1811,10 @@ void TKqpTasksGraph::FillInputDesc(NYql::NDqProto::TTaskInput& inputDesc, const 
                 input.Meta.VectorSearchSettings->MutableSnapshot()->SetTxId(snapshot.TxId);
             }
 
-            // The index impl tables (level, posting) are immutable, so under stale-RO
-            // they are read from followers without a snapshot, regardless of whether the
-            // whole query forced an MVCC snapshot for the (mutable) main table.
+            // Under stale-RO the index impl tables (level, posting) are read from
+            // followers without a snapshot, regardless of whether the whole query forced
+            // an MVCC snapshot for the main table. The level table is immutable; the
+            // posting table is not, but stale-RO accepts reading a stale replica of it.
             input.Meta.VectorSearchSettings->SetUseFollowers(
                 GetMeta().RequestIsolationLevel == NKqpProto::EIsolationLevel::ISOLATION_LEVEL_READ_STALE);
 

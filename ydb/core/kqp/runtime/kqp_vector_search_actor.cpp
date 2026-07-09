@@ -299,10 +299,11 @@ private:
     }
 
     // Dispatch buffered posting PKs into a pipelined main read (see PollActiveReads).
-    // Non-covered posting rows stream in across many drain cycles; each cycle that
+    // Non-covered posting rows stream in across many drain cycles; every cycle that
     // leaves keys buffered dispatches them straight into a main read that overlaps the
-    // still-running posting read. Every posting drain cycle's keys go out immediately,
-    // so nothing is ever left stranded and no explicit final-tail flush is needed.
+    // still-running posting read -- there is no accumulation threshold, so a drain cycle
+    // with a single new key still launches a read. Because every cycle's keys go out
+    // immediately, nothing is left stranded and no explicit final-tail flush is needed.
     void MaybeFlushPendingMainKeys() {
         if (PostingCovers || PendingMainKeys.empty()) {
             return;
@@ -508,8 +509,10 @@ private:
         }
     }
 
-    // immutableFollowerRead: the table is an immutable index impl table being read
-    // under stale-RO. Such reads skip the MVCC snapshot and go to followers.
+    // immutableFollowerRead: the table is an index impl table (level or posting) being
+    // read under stale-RO. Such reads skip the MVCC snapshot and go to followers. Only
+    // the level table is truly immutable; the posting table is rewritten by the write
+    // path, so reading it off a follower is sound only because stale-RO accepts staleness.
     NKikimrTxDataShard::TKqpReadRangesSourceSettings* MakeSourceSettings(
         TIntrusivePtr<NActors::TProtoArenaHolder>& arena, const NKikimrTxDataShard::TKqpTransaction::TTableMeta& table,
         bool immutableFollowerRead)
@@ -530,7 +533,8 @@ private:
         const bool followerRead = immutableFollowerRead && !Settings.HasLockTxId();
         if (followerRead) {
             // No snapshot: the read actor only routes to followers when no snapshot
-            // is set; the table is immutable, so inconsistent reads are safe.
+            // is set. Inconsistent reads are acceptable here because this path is only
+            // taken under stale-RO (see the caller's immutableFollowerRead argument).
             src->SetUseFollowers(true);
             src->SetAllowInconsistentReads(true);
         } else if (Snapshot.IsValid()) {
@@ -691,12 +695,14 @@ private:
     }
 
     // Launch a main-table read for one batch of candidate PKs. Non-covered searches
-    // pipeline posting -> main: instead of waiting for the whole posting scan, PKs are
-    // flushed to a main read as soon as a batch accumulates (see HandleRead), so the
-    // main reads overlap the remaining posting reads and cross-node latency is hidden
-    // instead of serialized behind a barrier. Each batch pushes its own top-K down;
-    // the global K nearest are necessarily among the per-batch top-Ks, which the actor
-    // merges in FinalizeResults.
+    // pipeline posting -> main: instead of waiting for the whole posting scan, the PKs
+    // buffered by each posting drain cycle are flushed to their own main read (see
+    // PollActiveReads), so the main reads overlap the remaining posting reads and
+    // cross-node latency is hidden instead of serialized behind a barrier. That means
+    // one read actor -- with its own scheme-cache resolve and its own locks -- per
+    // batch the posting scan yields. Each batch pushes its own top-K down; the global K
+    // nearest are necessarily among the per-batch top-Ks, which the actor merges in
+    // FinalizeResults.
     void LaunchMainReadFor(TVector<TString> keys) {
         if (keys.empty()) {
             return;
@@ -753,10 +759,15 @@ private:
             std::move(keyPoints));
         ActiveReads.push_back({readActorInput, kind});
         RegisterWithSameMailbox(readActor);
-        // Kick off the freshly launched read: the first GetAsyncInputData poll starts
-        // the inner read actor. Always called after (never during) the ActiveReads
-        // iteration loop, so re-polling here is safe -- the new read has no data yet,
-        // so the nested poll finds nothing finished and returns early.
+        // Kick off the freshly launched read: the first GetAsyncInputData poll is what
+        // starts the inner read actor's table scan. Always called after (never during)
+        // the ActiveReads iteration loop, so mutating ActiveReads above is safe.
+        //
+        // This nested poll drains the *whole* active set, not just the new read, and can
+        // therefore finish reads and (via MaybeFlushPendingMainKeys) launch further ones,
+        // recursing back into LaunchRead. The recursion terminates because each level
+        // only recurses while a read still has buffered rows to hand over, and it is safe
+        // because PollActiveReads re-checks Failed and Phase before acting on its results.
         PollActiveReads();
     }
 
@@ -778,7 +789,8 @@ private:
     // its own sources/transforms (AsyncInput->PassAway()). The inner actor's PassAway
     // binds the allocator via the TaskRunner's TypeEnv, which the compute actor frees
     // in the same Terminate turn — a queued poison would run too late, against a freed
-    // TypeEnv. Must be called without holding our own allocator guard.
+    // TypeEnv. Nesting that bind inside a guard we already hold is fine (TScopedAlloc
+    // acquisition is reentrant), which is what the PassAway path below relies on.
     void StopRead(NYql::NDq::IDqComputeActorAsyncInput* read) {
         AccumulateInnerReadStats(read);
         read->PassAway();
@@ -809,11 +821,12 @@ private:
 
     // Drain every active inner read, collecting their rows by table kind. Level rounds
     // are barriered (the next round needs all children ranked). Posting and main reads
-    // of a non-covered search overlap: as the posting read streams rows in, once enough
-    // candidate PKs have buffered they are dispatched to a main read (LaunchMainReadFor)
-    // while the posting read keeps running, so cross-node latency is hidden instead of
-    // serialized behind a posting->main barrier. The search finishes once no posting and
-    // no main reads remain. Also called to kick a freshly launched read (see LaunchRead).
+    // of a non-covered search overlap: every drain cycle that buffers candidate PKs
+    // dispatches them to a main read (LaunchMainReadFor) while the posting read keeps
+    // running, so cross-node latency is hidden instead of serialized behind a
+    // posting->main barrier. The search finishes once no posting and no main reads
+    // remain. Also called to kick a freshly launched read (see LaunchRead), which makes
+    // this function re-enter itself; the Failed and Phase re-checks below keep that safe.
     void PollActiveReads() {
         if (ActiveReads.empty()) {
             return;
@@ -867,8 +880,8 @@ private:
         // Pipeline posting -> main like the legacy StreamLookup fetch-then-dispatch
         // loop: dispatch buffered candidate PKs to a main read that overlaps the still
         // -running posting read, so cross-node latency is hidden instead of serialized
-        // behind a posting->main barrier. A dispatch fires as the posting stream yields
-        // batches. See MaybeFlushPendingMainKeys.
+        // behind a posting->main barrier. One dispatch per drain cycle that buffered
+        // anything, with no accumulation threshold. See MaybeFlushPendingMainKeys.
         MaybeFlushPendingMainKeys();
 
         if (finishedReads.empty() || Phase == EPhase::Done) {

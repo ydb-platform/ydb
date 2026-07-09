@@ -162,6 +162,13 @@ public:
                 return false;
             }
             while (vslot.IsValid()) {
+                if (vslot.HaveValue<Table::Mood>() && vslot.GetValue<Table::Mood>() == TMood::Delete) {
+                    if (!vslot.Next()) {
+                        return false;
+                    }
+                    continue;
+                }
+
                 const auto groupId = vslot.GetValue<Table::GroupID>();
                 auto& record = geometry[groupId];
 

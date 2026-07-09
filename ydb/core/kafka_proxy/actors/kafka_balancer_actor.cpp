@@ -1,4 +1,5 @@
 #include "kafka_balancer_actor.h"
+#include "kafka_metadata_service.h"
 
 namespace NKafka {
 
@@ -21,9 +22,14 @@ void TKafkaBalancerActor::Bootstrap(const NActors::TActorContext& ctx) {
         SendResponseFail(ctx, EKafkaErrors::MEMBER_ID_REQUIRED, TStringBuilder() << "Empty MemberId.");
         return;
     }
-    if (Context->ResourceDatabasePath == AppData(ctx)->TenantName) {
-        Kqp->SendInitTableRequest(ctx, NKikimr::NGRpcProxy::V1::TKafkaConsumerGroupsMetaInitManager::GetInstant());
-        Kqp->SendInitTableRequest(ctx, NKikimr::NGRpcProxy::V1::TKafkaConsumerMembersMetaInitManager::GetInstant());
+    KAFKA_LOG_D("TenantName=" << AppData()->TenantName << ", ResourceDatabasePath=" << Context->ResourceDatabasePath << ", DatabasePath=" << Context->DatabasePath);
+    if (!NKikimr::AppData()->FeatureFlags.GetEnableServerlessTransactions()) {
+        if (Context->ResourceDatabasePath == AppData(ctx)->TenantName) {
+            Kqp->SendInitTableRequest(ctx, NKikimr::NGRpcProxy::V1::TKafkaConsumerGroupsMetaInitManager::GetInstant());
+            Kqp->SendInitTableRequest(ctx, NKikimr::NGRpcProxy::V1::TKafkaConsumerMembersMetaInitManager::GetInstant());
+        } else {
+            Kqp->SendCreateSessionRequest(ctx);
+        }
     } else {
         Kqp->SendCreateSessionRequest(ctx);
     }
@@ -102,6 +108,13 @@ void TKafkaBalancerActor::Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const
 
     const auto& record = ev->Get()->Record;
     auto status = record.GetYdbStatus();
+
+    if (TryRequestMetadataTablesCreation(status, Context->ResourceDatabasePath, ctx)) {
+        SendResponseFail(ctx, EKafkaErrors::COORDINATOR_NOT_AVAILABLE,
+            "Kafka metadata tables are not initialized yet. Please retry.");
+        return;
+    }
+
     if (status == Ydb::StatusIds::ABORTED) {
         if ((CurrentStep == JOIN_UPDATE_MASTER_HEARTBEAT_AND_WAIT_JOINS || CurrentStep == JOIN_UPDATE_GROUP_STATE_AND_PROTOCOL) && CurrentTxAbortRetryNumber < TX_ABORT_RETRY_MAX_COUNT) {
             CurrentTxAbortRetryNumber++;

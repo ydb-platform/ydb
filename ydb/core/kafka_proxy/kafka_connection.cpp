@@ -118,6 +118,7 @@ public:
         Context->RequireAuthentication = NKikimr::AppData()->EnforceUserTokenRequirement || NKikimr::AppData()->PQConfig.GetRequireCredentialsInNewProtocol();
         // if no authentication required, then we can use local database as our target
         if (!Context->RequireAuthentication) {
+            KAFKA_LOG_D("Do not require authentication. Setting Context->ResourceDatabasePath = NKikimr::AppData()->TenantName.");
             Context->DatabasePath = NKikimr::AppData()->TenantName;
             Context->ResourceDatabasePath = NKikimr::AppData()->TenantName;
         }
@@ -586,6 +587,7 @@ protected:
         Context->CloudId = event->CloudId;
         Context->FolderId = event->FolderId;
         Context->IsServerless = event->IsServerless;
+        KAFKA_LOG_D("event->ResourceDatabasePath=" << event->ResourceDatabasePath);
         Context->ResourceDatabasePath = event->ResourceDatabasePath ? NKikimr::CanonizePath(event->ResourceDatabasePath) : Context->DatabasePath;
 
         KAFKA_LOG_D("Authentication successful. SID=" << Context->UserToken->GetUserSID());

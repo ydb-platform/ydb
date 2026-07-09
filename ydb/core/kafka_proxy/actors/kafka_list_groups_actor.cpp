@@ -14,6 +14,7 @@
 
 #include "actors.h"
 #include "kafka_list_groups_actor.h"
+#include "kafka_metadata_service.h"
 #include "kafka_state_name_to_int.h"
 
 
@@ -60,6 +61,13 @@ void TKafkaListGroupsActor::Handle(NKqp::TEvKqp::TEvCreateSessionResponse::TPtr&
 
 void TKafkaListGroupsActor::Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const TActorContext& ctx) {
     KAFKA_LOG_D("Received query response from KQP ListGroups request");
+    if (TryRequestMetadataTablesCreation(ev->Get()->Record.GetYdbStatus(), Context->ResourceDatabasePath, ctx)) {
+        SendFailResponse(EKafkaErrors::COORDINATOR_NOT_AVAILABLE,
+            "Kafka metadata tables are not initialized yet. Please retry.");
+        Die(ctx);
+        return;
+    }
+
     if (auto error = GetErrorFromYdbResponse(ev)) {
         KAFKA_LOG_W(error);
         SendFailResponse(EKafkaErrors::BROKER_NOT_AVAILABLE, error->data());

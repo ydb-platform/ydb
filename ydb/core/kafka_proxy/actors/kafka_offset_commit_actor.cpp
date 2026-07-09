@@ -1,4 +1,5 @@
 #include "kafka_offset_commit_actor.h"
+#include "kafka_metadata_service.h"
 
 namespace NKafka {
 
@@ -149,6 +150,12 @@ void TKafkaOffsetCommitActor::SendGenerationCheckRequest(const TActorContext& ct
 
 void TKafkaOffsetCommitActor::Handle(NKikimr::NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const TActorContext& ctx) {
     const auto& record = ev->Get()->Record;
+    if (TryRequestMetadataTablesCreation(record.GetYdbStatus(), Context->ResourceDatabasePath, ctx)) {
+        Error = COORDINATOR_NOT_AVAILABLE;
+        SendFailedForAllPartitions(Error, ctx);
+        return;
+    }
+
     if (record.GetYdbStatus() != Ydb::StatusIds::SUCCESS) {
         KAFKA_LOG_CRIT("Generation check KQP query failed."
             << " group# " << Message->GroupId.value()

@@ -3943,6 +3943,94 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
         }
     }
 
+    Y_UNIT_TEST(KafkaBalancingAfterServerlessMigration) {
+        TInsecureTestServer testServer("1", false, true, false, true, true, false, true);
+
+        TString topicName = "/Root/topic-0";
+        ui64 totalPartitions = 24;
+        TString groupId = "consumer-0";
+        TString protocolType = "consumer";
+        TString protocolName = "range";
+
+        {
+            NYdb::NTopic::TTopicClient pqClient(*testServer.Driver);
+            auto result = pqClient
+                .CreateTopic(
+                    topicName,
+                    NYdb::NTopic::TCreateTopicSettings()
+                        .PartitioningSettings(totalPartitions, 100)
+                        .BeginAddConsumer(groupId).EndAddConsumer()
+                )
+                .ExtractValueSync();
+            UNIT_ASSERT_C(
+                result.IsSuccess(),
+                "CreateTopic failed, issues: " << result.GetIssues().ToString()
+            );
+        }
+
+        TKafkaTestClient clientA(testServer.Port, "ClientA");
+
+        {
+            auto rA = clientA.ApiVersions();
+            UNIT_ASSERT_VALUES_EQUAL(rA->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
+        }
+        {
+            auto rA = clientA.SaslHandshake("PLAIN");
+            UNIT_ASSERT_VALUES_EQUAL(rA->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
+        }
+        {
+            TString user = "ouruser@/Root";
+            TString pass = "ourUserPassword";
+            auto rA = clientA.SaslPlainAuthenticate(user, pass);
+            UNIT_ASSERT_VALUES_EQUAL(rA->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
+        }
+
+        std::vector<TString> topics = {topicName};
+        i32 heartbeatTimeout = 15000;
+        i32 rebalanceTimeout = 5000;
+
+        TRequestHeaderData headerAJoin = clientA.Header(NKafka::EApiKey::JOIN_GROUP, 9);
+
+        TJoinGroupRequestData joinReq;
+        joinReq.GroupId = groupId;
+        joinReq.ProtocolType = protocolType;
+        joinReq.SessionTimeoutMs = heartbeatTimeout;
+        joinReq.RebalanceTimeoutMs = rebalanceTimeout;
+
+        NKafka::TJoinGroupRequestData::TJoinGroupRequestProtocol protocol;
+        protocol.Name = protocolName;
+
+        TConsumerProtocolSubscription subscribtion;
+        for (auto& topic : topics) {
+            subscribtion.Topics.push_back(topic);
+        }
+        TKafkaVersion version = 3;
+        TKafkaWriteBuffer buf( subscribtion.Size(version) + sizeof(version));
+        TKafkaWritable writable(buf);
+        writable << version;
+        subscribtion.Write(writable, version);
+        protocol.Metadata = TKafkaRawBytes(buf.GetFrontBuffer().data(), buf.GetFrontBuffer().size());
+
+        joinReq.Protocols.push_back(protocol);
+
+        TJoinGroupRequestData joinReqA = joinReq;
+        joinReqA.GroupInstanceId = "instanceA";
+
+        clientA.WriteToSocket(headerAJoin, joinReqA);
+
+        auto joinResp1 = clientA.ReadResponse<TJoinGroupResponseData>(headerAJoin);
+
+        UNIT_ASSERT_VALUES_EQUAL(joinResp1->ErrorCode, 15);
+
+        Sleep(TDuration::Seconds(2));
+
+        clientA.WriteToSocket(headerAJoin, joinReqA);
+
+        auto joinResp2 = clientA.ReadResponse<TJoinGroupResponseData>(headerAJoin);
+
+        UNIT_ASSERT_VALUES_EQUAL(joinResp2->ErrorCode, (TKafkaInt16)EKafkaErrors::NONE_ERROR);
+    }
+
     Y_UNIT_TEST(NativeKafkaBalanceScenario) {
         TInsecureTestServer testServer("1", false, true);
 

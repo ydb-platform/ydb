@@ -43,7 +43,8 @@ namespace NKafka {
             void Bootstrap(const TActorContext& ctx) {
                 TAppData* appData = AppData(ctx);
                 TIntrusivePtr<TDynamicNameserviceConfig> dynamicNameserviceConfig = appData->DynamicNameserviceConfig;
-                if (dynamicNameserviceConfig && dynamicNameserviceConfig->MinDynamicNodeId <= ctx.SelfID.NodeId()) {
+                if (!appData->FeatureFlags.GetEnableServerlessTransactions() && dynamicNameserviceConfig
+                        && dynamicNameserviceConfig->MinDynamicNodeId <= ctx.SelfID.NodeId()) {
                     std::unique_ptr<NKafka::TKqpTxHelper> Kqp = std::make_unique<TKqpTxHelper>(AppData(ctx)->TenantName);
                     Kqp->SendInitTableRequest(ctx, NKikimr::NGRpcProxy::V1::TKafkaConsumerGroupsMetaInitManager::GetInstant());
                     Kqp->SendInitTableRequest(ctx, NKikimr::NGRpcProxy::V1::TKafkaConsumerMembersMetaInitManager::GetInstant());

@@ -102,6 +102,9 @@ TTestServer<TKikimr, secure>::TTestServer(const TTestServerSettings& settings) {
     if (!settings.EnableNativeKafkaBalancing) {
         KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableKafkaNativeBalancing(false);
     }
+    if (settings.EnableServerlessTransactions) {
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableServerlessTransactions(true);
+    }
     KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableKafkaTransactions(true);
     KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableTopicCompactificationByKey(true);
 
@@ -208,8 +211,10 @@ TTestServer<TKikimr, secure>::TTestServer(const TTestServerSettings& settings) {
 
 template <class TKikimr, bool secure>
 TTestServer<TKikimr, secure>::TTestServer(const TString& kafkaApiMode, bool serverless, bool enableNativeKafkaBalancing,
-            bool enableAutoTopicCreation, bool enableAutoConsumerCreation, bool enableQuoting, bool checkACL)
-    : TTestServer(TTestServerSettings{kafkaApiMode, serverless, enableNativeKafkaBalancing, enableAutoTopicCreation, enableAutoConsumerCreation, enableQuoting, checkACL})
+            bool enableAutoTopicCreation, bool enableAutoConsumerCreation, bool enableQuoting, bool checkACL, bool enableServerlessTransactions)
+    : TTestServer(TTestServerSettings{kafkaApiMode, serverless, enableNativeKafkaBalancing,
+                enableAutoTopicCreation, enableAutoConsumerCreation,
+                    enableQuoting, checkACL, false, enableServerlessTransactions})
 {}
 
 // Explicit template instantiations

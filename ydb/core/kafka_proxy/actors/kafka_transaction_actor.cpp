@@ -1,5 +1,6 @@
 #include "kafka_transaction_actor.h"
 #include "kafka_transaction_actor_sql.h"
+#include "kafka_metadata_service.h"
 #include "txn_actor_response_builder.h"
 #include <ydb/core/kafka_proxy/kafka_transactions_coordinator.h>
 #include <ydb/core/kafka_proxy/kafka_transactional_producers_initializers.h>
@@ -117,6 +118,13 @@ namespace NKafka {
 
     void TTransactionActor::Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const TActorContext& ctx) {
         KAFKA_LOG_D("Received query response from KQP for " << GetAsStr(LastSentToKqpRequest) << " request");
+        if (TryRequestMetadataTablesCreation(ev->Get()->Record.GetYdbStatus(), ResourceDatabasePath, ctx)) {
+            SendFailResponse<TEndTxnResponseData>(EndTxnRequestPtr, EKafkaErrors::COORDINATOR_NOT_AVAILABLE,
+                "Kafka metadata tables are not initialized yet. Please retry.");
+            Die(ctx);
+            return;
+        }
+
         if (auto error = GetErrorFromYdbResponse(ev)) {
             KAFKA_LOG_W(error);
             SendFailResponse<TEndTxnResponseData>(EndTxnRequestPtr, EKafkaErrors::BROKER_NOT_AVAILABLE, error->data());
@@ -140,7 +148,7 @@ namespace NKafka {
     }
 
     void TTransactionActor::StartKqpSession(const TActorContext& ctx) {
-        Kqp = std::make_unique<TKqpTxHelper>(AppData(ctx)->TenantName);
+        Kqp = std::make_unique<TKqpTxHelper>(ResourceDatabasePath);
         KAFKA_LOG_D("Sending create session request to KQP for database " << DatabasePath);
         Kqp->SendCreateSessionRequest(ctx);
     }

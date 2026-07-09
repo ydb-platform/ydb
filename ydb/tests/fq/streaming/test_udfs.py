@@ -168,7 +168,7 @@ $script = @@#py
 import time
 
 def hang():
-    time.sleep(20)
+    time.sleep(15)
     return None
 @@;
 
@@ -212,7 +212,13 @@ END DO
                 INSERT INTO {out} SELECT Data || "_final" FROM {inp}
             END DO
         """
-        kikimr_udfs.ydb_client.query(sql)
+
+        for _ in range(5):
+            try:
+                kikimr_udfs.ydb_client.query(sql)
+            except ydb.issues.Error as e:
+                logger.info(f"Failed to create streaming query {e}")
+                time.sleep(5)
 
         time.sleep(1)
         validate_query(sql, tests_count)

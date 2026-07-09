@@ -1,40 +1,127 @@
 #include "write_id.h"
 
-#include <util/stream/output.h>
+#include "pqdata_transaction_compat.h"
 
-#include <tuple>
+#include <util/digest/multi.h>
+#include <util/stream/output.h>
+#include <util/system/yassert.h>
 
 namespace NKikimr::NPQ {
 
-TWriteId::TWriteId(ui64 nodeId, ui64 keyId) :
-    KafkaApiTransaction(false),
-    NodeId(nodeId),
-    KeyId(keyId)
+namespace {
+
+int CompareScalars(auto lhs, auto rhs)
 {
+    if (lhs < rhs) {
+        return -1;
+    }
+    if (rhs < lhs) {
+        return 1;
+    }
+    return 0;
 }
 
-TWriteId::TWriteId(NKafka::TProducerInstanceId kafkaProducerInstanceId) :
-    KafkaApiTransaction(true),
-    KafkaProducerInstanceId(kafkaProducerInstanceId)
+int CompareWriteIdProto(const NKikimrPQ::TWriteId& lhs, const NKikimrPQ::TWriteId& rhs)
 {
+    if (lhs.Id_case() != rhs.Id_case()) {
+        return CompareScalars(lhs.Id_case(), rhs.Id_case());
+    }
+
+    switch (lhs.Id_case()) {
+        case NKikimrPQ::TWriteId::kTopicApi: {
+            const auto& l = lhs.GetTopicApi();
+            const auto& r = rhs.GetTopicApi();
+            if (auto cmp = CompareScalars(l.GetNodeId(), r.GetNodeId()); cmp != 0) {
+                return cmp;
+            }
+            return CompareScalars(l.GetKeyId(), r.GetKeyId());
+        }
+        case NKikimrPQ::TWriteId::kKafkaApi: {
+            const auto& l = lhs.GetKafkaApi().GetKafkaProducerInstanceId();
+            const auto& r = rhs.GetKafkaApi().GetKafkaProducerInstanceId();
+            if (auto cmp = CompareScalars(l.GetId(), r.GetId()); cmp != 0) {
+                return cmp;
+            }
+            return CompareScalars(l.GetEpoch(), r.GetEpoch());
+        }
+        case NKikimrPQ::TWriteId::ID_NOT_SET:
+            return 0;
+    }
+    Y_UNREACHABLE();
+    return 0;
+}
+
+} // namespace
+
+void TWriteId::SyncKafkaProducerInstanceIdFromProto()
+{
+    if (IsKafkaApiTransaction()) {
+        const auto& producerInstanceId = Proto.GetKafkaApi().GetKafkaProducerInstanceId();
+        KafkaProducerInstanceId = {producerInstanceId.GetId(), producerInstanceId.GetEpoch()};
+    } else {
+        KafkaProducerInstanceId = {};
+    }
+}
+
+TWriteId::TWriteId(ui64 nodeId, ui64 keyId)
+{
+    auto* topicApi = Proto.MutableTopicApi();
+    topicApi->SetNodeId(nodeId);
+    topicApi->SetKeyId(keyId);
+}
+
+TWriteId::TWriteId(NKafka::TProducerInstanceId kafkaProducerInstanceId)
+    : KafkaProducerInstanceId(kafkaProducerInstanceId)
+{
+    auto* kafkaApi = Proto.MutableKafkaApi();
+    auto* producerInstanceId = kafkaApi->MutableKafkaProducerInstanceId();
+    producerInstanceId->SetId(kafkaProducerInstanceId.Id);
+    producerInstanceId->SetEpoch(kafkaProducerInstanceId.Epoch);
+}
+
+TWriteId::TWriteId(NKikimrPQ::TWriteId proto)
+    : Proto(std::move(proto))
+{
+    EnsureCanonical(Proto);
+    SyncKafkaProducerInstanceIdFromProto();
 }
 
 bool TWriteId::operator==(const TWriteId& rhs) const
 {
-    return std::make_tuple(NodeId, KeyId) == std::make_tuple(rhs.NodeId, rhs.KeyId);
+    return CompareWriteIdProto(Proto, rhs.Proto) == 0;
 }
 
 bool TWriteId::operator<(const TWriteId& rhs) const
 {
-    return std::make_tuple(NodeId, KeyId) < std::make_tuple(rhs.NodeId, rhs.KeyId);
+    return CompareWriteIdProto(Proto, rhs.Proto) < 0;
+}
+
+size_t TWriteId::GetHash() const
+{
+    switch (Proto.Id_case()) {
+        case NKikimrPQ::TWriteId::kTopicApi:
+            return MultiHash(Proto.GetTopicApi().GetNodeId(), Proto.GetTopicApi().GetKeyId());
+        case NKikimrPQ::TWriteId::kKafkaApi:
+            return MultiHash(KafkaProducerInstanceId.Id, KafkaProducerInstanceId.Epoch);
+        case NKikimrPQ::TWriteId::ID_NOT_SET:
+            return 0;
+    }
+    Y_UNREACHABLE();
+    return 0;
 }
 
 void TWriteId::ToStream(IOutputStream& s) const
 {
-    if (KafkaApiTransaction) {
-        s << "KafkaTransactionWriteId{" << KafkaProducerInstanceId.Id << ", " << KafkaProducerInstanceId.Epoch << '}';
-    } else {
-        s << '{' << NodeId << ", " << KeyId << '}';
+    switch (Proto.Id_case()) {
+        case NKikimrPQ::TWriteId::kKafkaApi:
+            s << "KafkaTransactionWriteId{" << KafkaProducerInstanceId.Id << ", " << KafkaProducerInstanceId.Epoch << '}';
+            break;
+        case NKikimrPQ::TWriteId::kTopicApi:
+            s << '{' << GetNodeId() << ", " << GetKeyId() << '}';
+            break;
+        case NKikimrPQ::TWriteId::ID_NOT_SET:
+            s << "{}";
+            break;
     }
 }
 
@@ -47,29 +134,15 @@ TString TWriteId::ToString() const {
 template <class T>
 TWriteId GetWriteIdImpl(const T& m)
 {
-    const auto& writeId = m.GetWriteId();
-    if (writeId.GetKafkaTransaction()) {
-        const auto& kafkaProducerInstanceId = writeId.GetKafkaProducerInstanceId();
-        return TWriteId{NKafka::TProducerInstanceId{kafkaProducerInstanceId.GetId(), kafkaProducerInstanceId.GetEpoch()}};
-    } else {
-        return {writeId.GetNodeId(), writeId.GetKeyId()};
-    }
+    return TWriteId(m.GetWriteId());
 }
 
 template <class T>
 void SetWriteIdImpl(T& m, const TWriteId& writeId)
 {
     auto* w = m.MutableWriteId();
-    if (writeId.KafkaApiTransaction) {
-        w->SetKafkaTransaction(true);
-        auto* kafkaProducerInstanceId = w->MutableKafkaProducerInstanceId();
-        kafkaProducerInstanceId->SetId(writeId.KafkaProducerInstanceId.Id);
-        kafkaProducerInstanceId->SetEpoch(writeId.KafkaProducerInstanceId.Epoch);
-    } else {
-        w->SetKafkaTransaction(false);
-        w->SetNodeId(writeId.NodeId);
-        w->SetKeyId(writeId.KeyId);
-    }
+    *w = writeId.GetProto();
+    DowngradeToLegacy(*w);
 }
 
 TWriteId GetWriteId(const NKikimrPQ::TTransaction& m)
@@ -114,12 +187,28 @@ void SetWriteId(NKikimrClient::TPersQueuePartitionRequest& m, const NKikimr::NPQ
 
 TWriteId GetWriteId(const NKikimrKqp::TTopicOperationsResponse& m)
 {
-    return GetWriteIdImpl(m);
+    const auto& writeId = m.GetWriteId();
+    if (writeId.GetKafkaTransaction()) {
+        const auto& kafkaProducerInstanceId = writeId.GetKafkaProducerInstanceId();
+        return TWriteId{NKafka::TProducerInstanceId{kafkaProducerInstanceId.GetId(), kafkaProducerInstanceId.GetEpoch()}};
+    }
+    return {writeId.GetNodeId(), writeId.GetKeyId()};
 }
 
 void SetWriteId(NKikimrKqp::TTopicOperationsResponse& m, const TWriteId& writeId)
 {
-    SetWriteIdImpl(m, writeId);
+    auto* w = m.MutableWriteId();
+    if (writeId.IsKafkaApiTransaction()) {
+        const auto& producerInstanceId = writeId.GetKafkaProducerInstanceId();
+        w->SetKafkaTransaction(true);
+        auto* kafkaProducerInstanceId = w->MutableKafkaProducerInstanceId();
+        kafkaProducerInstanceId->SetId(producerInstanceId.Id);
+        kafkaProducerInstanceId->SetEpoch(producerInstanceId.Epoch);
+    } else if (writeId.IsTopicApiTransaction()) {
+        w->SetKafkaTransaction(false);
+        w->SetNodeId(writeId.GetNodeId());
+        w->SetKeyId(writeId.GetKeyId());
+    }
 }
 
 } // namespace NKikimr::NPQ

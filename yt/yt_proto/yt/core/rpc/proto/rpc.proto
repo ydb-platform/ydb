@@ -98,9 +98,12 @@ message TRequestHeader
      * resolve_depth                        119
      * ssl_credentials_ext                  120
      * request_peer_kind_ext                121
+     * target_node_effective_acl            123
      * caused_by_node_expiration            124
      * multiproxy_target_ext                125
      * target_master_peer_ext               126
+     * target_node_has_row_level_ace        127
+     * resolved_sequoia_object              128
      * req_execute_ext                      200
      * req_multiread_ext                    201
      */

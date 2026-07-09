@@ -110,13 +110,13 @@ enum class EYtSettingType: ui64 {
     BlockInputApplied        /* "blockInputApplied" */,        // hybrid supported
     BlockOutputReady         /* "blockOutputReady" */,         // hybrid supported
     BlockOutputApplied       /* "blockOutputApplied" */,       // hybrid supported
-    // Out tables
-    UniqueBy                 /* "uniqueBy" */,
-    OpHash                   /* "opHash" */,
-    // Operations
     MapOutputType            /* "mapOutputType" */,            // hybrid supported
     ReduceInputType          /* "reduceInputType" */,          // hybrid supported
     NoDq                     /* "noDq" */,
+    Transparent              /* "transparent" */,
+    // Out tables
+    UniqueBy                 /* "uniqueBy" */,
+    OpHash                   /* "opHash" */,
     // Read
     Split                    /* "split" */,
     // Write hints

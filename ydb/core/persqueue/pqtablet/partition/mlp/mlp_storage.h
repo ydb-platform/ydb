@@ -3,8 +3,8 @@
 #include "mlp.h"
 #include "mlp_common.h"
 
-#include <library/cpp/containers/absl_flat_hash/flat_hash_set.h>
-#include <library/cpp/containers/absl_flat_hash/flat_hash_map.h>
+#include <library/cpp/containers/absl/flat_hash_set.h>
+#include <library/cpp/containers/absl/flat_hash_map.h>
 
 #include <library/cpp/iterator/iterate_keys.h>
 #include <ydb/core/protos/pqconfig.pb.h>
@@ -168,6 +168,11 @@ public:
 
     friend struct TMessageIterator;
 
+    struct TReceiveAttempt {
+        std::vector<ui64> Offsets;
+        TInstant Expiry;
+    };
+
     struct TBatch {
         friend class TStorage;
 
@@ -190,6 +195,8 @@ public:
         void DeleteFromSlow(ui64 offset);
         void SetPurged();
         void SetUpdateExternalLockedMessageGroupsId(ui32 parentPartitionId);
+        void AddReceiveAttemptUpsert(const TString& receiveAttemptId, const TReceiveAttempt& attempt);
+        void AddReceiveAttemptDelete(const TString& receiveAttemptId);
 
         void Compacted(size_t count);
         void MoveBaseTime(TInstant baseDeadline, TInstant baseWriteTimestamp);
@@ -207,6 +214,9 @@ public:
         bool Purged = false;
         absl::flat_hash_set<ui32> UpdateExternalLockedMessageGroupsId;
 
+        THashMap<TString, TReceiveAttempt> ReceiveAttemptUpserts;
+        THashSet<TString> ReceiveAttemptDeletes;
+
         std::optional<TInstant> BaseDeadline;
         std::optional<TInstant> BaseWriteTimestamp;
     };
@@ -222,6 +232,7 @@ public:
 
     void SetMaxMessageProcessingCount(ui32 MaxMessageProcessingCount);
     void SetRetentionPeriod(std::optional<TDuration> retentionPeriod);
+    void SetReceiveAttemptIdPeriod(TDuration receiveAttemptIdPeriod);
     void SetDeadLetterPolicy(std::optional<NKikimrPQ::TPQTabletConfig::EDeadLetterPolicy> deadLetterPolicy);
 
     ui64 GetFirstOffset() const;
@@ -255,11 +266,21 @@ public:
     // fromOffset indicates from which offset it is necessary to continue searching for the next free message.
     //            it is an optimization for the case when the method is called several times in a row.
     std::optional<TReadMessage> Next(TInstant deadline, TPosition& position, const absl::flat_hash_set<ui32>& skipMessageGroups = {});
-    bool Commit(ui64 message);
-    bool Unlock(ui64 message);
+    // Read up to maxCount messages. When receiveAttemptId is set, repeated reads with the same
+    // attempt id within ReceiveAttemptIdPeriod replay the same message set (SQS FIFO semantics).
+    std::deque<TReadMessage> Read(
+        TInstant now,
+        TInstant visibilityDeadline,
+        TPosition& position,
+        const absl::flat_hash_set<ui32>& skipMessageGroups,
+        size_t maxCount,
+        const TString& receiveAttemptId
+    );
+    EOperationResult Commit(ui64 message);
+    EOperationResult Unlock(ui64 message);
     // For SQS compatibility
     // https://docs.amazonaws.cn/en_us/AWSSimpleQueueService/latest/APIReference/API_ChangeMessageVisibility.html
-    bool ChangeMessageDeadline(ui64 message, TInstant deadline);
+    EOperationResult ChangeMessageDeadline(ui64 message, TInstant deadline);
     bool Purge(ui64 endOffset);
     bool AddMessage(ui64 offset, bool hasMessagegroup, ui32 messageGroupIdHash, TInstant writeTimestamp, TDuration delay = TDuration::Zero(), ui64 logicalMessageCount = 1);
     bool MarkDLQMoved(TDLQMessage message);
@@ -300,8 +321,8 @@ private:
     ui64 NormalizeDeadline(TInstant deadline);
 
     ui64 DoLock(ui64 offset, TMessage& message, TInstant deadline);
-    bool DoCommit(ui64 offset, size_t& totalMetrics);
-    bool DoUnlock(ui64 offset);
+    EOperationResult DoCommit(ui64 offset, size_t& totalMetrics);
+    EOperationResult DoUnlock(ui64 offset);
     void DoUnlock(ui64 offset, TMessage& message);
     bool DoUndelay(ui64 offset);
     TUpdateExternalLockedMessageGroupsResult DoUpdateExternalLockedMessageGroupsId(const NKikimrPQ::TExternalLockedMessageGroupsId&, bool loadState);
@@ -336,6 +357,19 @@ private:
 
     TReadMessage ConvertToReadMessage(ui64 offset, const TMessage& message) const;
     bool IsMessageGroupLocked(const TMessage& message, const absl::flat_hash_set<ui32>& skipMessageGroups) const;
+
+    std::optional<TReadMessage> ReadForReplay(ui64 offset, TInstant deadline);
+    void MarkReceiveAttemptOffsetInvalid(ui64 offset);
+    void CleanupReceiveAttempts(TInstant now);
+    void ClearReceiveAttempts();
+    void RecordReceiveAttemptUpsert(const TString& receiveAttemptId, const TReceiveAttempt& attempt);
+    void RecordReceiveAttemptDelete(const TString& receiveAttemptId);
+
+    THashMap<TString, TReceiveAttempt> ReceiveAttempts_;
+    absl::flat_hash_set<ui64> InvalidatedReceiveAttemptOffsets_;
+    // The window during which a repeated read with the same receive-request-attempt-id replays
+    // the same messages (SQS FIFO semantics). Overridden from consumer config on actor init.
+    TDuration ReceiveAttemptIdPeriod = TDuration::MilliSeconds(NKikimrPQ::TPQTabletConfig::TConsumer().GetReadRequestAttemptIdPeriodMs());
 
     struct TNextMessageResult {
         TMessage* Message; // nullable

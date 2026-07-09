@@ -206,7 +206,7 @@ void TQueryBase::RunQuery() {
     try {
         OnRunQuery();
     } catch (const std::exception& ex) {
-        Finish(StatusIds::INTERNAL_ERROR, ex.what());
+        Finish(StatusIds::INTERNAL_ERROR, AddRootIssue("Failed to run query", NYql::TIssues{NYql::TIssue{ex.what()}}) );
     }
 }
 
@@ -280,7 +280,7 @@ void TQueryBase::Handle(TEvQueryBasePrivate::TEvDataQueryResult::TPtr& ev) {
         try {
             (this->*QueryResultHandler)();
         } catch (const std::exception& ex) {
-            Finish(StatusIds::INTERNAL_ERROR, ex.what());
+            Finish(StatusIds::INTERNAL_ERROR, AddRootIssue("Failed to process query result", NYql::TIssues{NYql::TIssue{ex.what()}}) );
         }
         Y_ABORT_UNLESS(Finished || RunningQuery || RunningCommit || IsStreamingMode);
     } else {
@@ -362,7 +362,7 @@ void TQueryBase::Handle(TEvQueryBasePrivate::TEvStreamQueryResultPart::TPtr& ev)
         try {
             (this->*StreamResultHandler)(std::move(ev->Get()->ResultSet));
         } catch (const std::exception& ex) {
-            Finish(StatusIds::INTERNAL_ERROR, ex.what());
+            Finish(StatusIds::INTERNAL_ERROR, AddRootIssue("Failed to process query result", NYql::TIssues{NYql::TIssue{ex.what()}}) );
             return;
         }
     }
@@ -398,7 +398,7 @@ void TQueryBase::FinishStreamRequest() {
     try {
         (this->*QueryResultHandler)();
     } catch (const std::exception& ex) {
-        Finish(StatusIds::INTERNAL_ERROR, ex.what());
+        Finish(StatusIds::INTERNAL_ERROR, AddRootIssue("Failed to process query result", NYql::TIssues{NYql::TIssue{ex.what()}}) );
     }
     Y_ABORT_UNLESS(Finished || RunningQuery || RunningCommit);
 }

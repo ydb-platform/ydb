@@ -57,6 +57,7 @@ PEERDIR(
     ydb/core/kqp/common/buffer
     ydb/core/mon
     ydb/core/persqueue/events
+    ydb/core/persqueue/public
     ydb/core/protos
     ydb/core/scheme
     ydb/core/tx/scheme_board

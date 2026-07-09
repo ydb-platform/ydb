@@ -21,7 +21,7 @@
 #include <ydb/core/protos/grpc_pq_old.pb.h>
 #include <ydb/public/sdk/cpp/src/client/persqueue_public/include/aliases.h>
 #include <ydb/services/metadata/service.h>
-
+#include <ydb/core/tx/scheme_cache/scheme_cache.h>
 
 namespace NKikimr::NGRpcProxy::V1 {
 
@@ -266,7 +266,7 @@ private:
     TInstant LastACLCheckTimestamp;
     TInstant LogSessionDeadline;
 
-    NKikimrSchemeOp::TPersQueueGroupDescription Config;
+    TIntrusiveConstPtr<NSchemeCache::TSchemeCacheNavigate::TPQGroupInfo> PQGroupInfo;
     // PQ tablet configuration that we get at the time of session initialization
     NKikimrPQ::TPQTabletConfig InitialPQTabletConfig;
     std::shared_ptr<NPQ::IPartitionChooser> Chooser;

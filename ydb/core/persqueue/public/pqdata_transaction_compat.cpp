@@ -47,6 +47,14 @@ bool HasLegacy(const NKikimrPQ::TWriteId& writeId)
         || writeId.HasNodeId() || writeId.HasKeyId();
 }
 
+void ClearLegacyWriteIdFields(NKikimrPQ::TWriteId& writeId)
+{
+    writeId.ClearNodeId();
+    writeId.ClearKeyId();
+    writeId.SetKafkaTransaction(false);
+    writeId.ClearKafkaProducerInstanceId();
+}
+
 void ClearLegacyPartitionOpFields(NKikimrPQ::TPartitionOperation& op)
 {
     op.ClearCommitOffsetsBegin();
@@ -198,7 +206,7 @@ void DowngradeToLegacy(NKikimrPQ::TWriteId& writeId)
             DowngradeKafkaApiToLegacy(writeId.GetKafkaApi(), writeId);
             break;
         case NKikimrPQ::TWriteId::kDeferredPublicationApi:
-            // Legacy wire format has no deferred representation.
+            ClearLegacyWriteIdFields(writeId);
             break;
         case NKikimrPQ::TWriteId::ID_NOT_SET:
             break;

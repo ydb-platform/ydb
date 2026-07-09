@@ -77,7 +77,10 @@ static void UpdateDeferredPublicationIntId(TMaybe<ui64>& lhs, const TMaybe<ui64>
 
 static void UpdateDeferredPublicationExtId(TMaybe<TString>& lhs, const TString& rhs)
 {
-    if (lhs.Empty()) {
+    if (rhs.empty()) {
+        return;
+    }
+    if (lhs.Empty() || lhs->empty()) {
         lhs = rhs;
         return;
     }

@@ -590,6 +590,28 @@ Y_UNIT_TEST(DeferredPublication_MergeKeepsPublicationId) {
     UNIT_ASSERT_VALUES_EQUAL(lhs.GetSize(), 2u);
 }
 
+Y_UNIT_TEST(DeferredPublication_MergeAllowsMissingExtPublicationId) {
+    NTopic::TTopicOperations lhs;
+    lhs.AddDeferredPublicationOperation("topic_A", 0, 100,
+        NKikimrKqp::TTopicDeferredPublicationRequest::Publish, 11, "");
+
+    NTopic::TTopicOperations rhs;
+    AddDeferredPublicationOperation(rhs, "topic_B", 1, 200,
+        NKikimrKqp::TTopicDeferredPublicationRequest::Publish, 11, "ext-11");
+
+    lhs.Merge(rhs);
+
+    UNIT_ASSERT_VALUES_EQUAL(lhs.GetDeferredPublicationIntId(), 11u);
+    UNIT_ASSERT_VALUES_EQUAL(lhs.GetDeferredPublicationExtId(), "ext-11");
+
+    NTopic::TTopicOperations followUp;
+    followUp.AddDeferredPublicationOperation("topic_C", 2, 300,
+        NKikimrKqp::TTopicDeferredPublicationRequest::Publish, 11, "");
+
+    lhs.Merge(followUp);
+    UNIT_ASSERT_VALUES_EQUAL(lhs.GetDeferredPublicationExtId(), "ext-11");
+}
+
 Y_UNIT_TEST(DeferredPublication_MergeConflictsOnDifferentPublicationId) {
     NTopic::TTopicOperations lhs;
     AddDeferredPublicationOperation(lhs, "topic_A", 0, 100,

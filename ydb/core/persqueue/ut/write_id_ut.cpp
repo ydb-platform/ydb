@@ -176,6 +176,21 @@ Y_UNIT_TEST(DowngradeToLegacyKeepsDeferredCanonical) {
     UNIT_ASSERT_VALUES_EQUAL(writeId.GetDeferredPublicationApi().GetExtPublicationId(), "ext-7");
 }
 
+Y_UNIT_TEST(DowngradeToLegacyDeferredClearsStaleLegacyFields) {
+    auto writeId = MakeDeferredWriteId(7, "ext-7");
+    writeId.SetNodeId(1);
+    writeId.SetKeyId(2);
+    writeId.SetKafkaTransaction(true);
+    writeId.MutableKafkaProducerInstanceId()->SetId(3);
+    writeId.MutableKafkaProducerInstanceId()->SetEpoch(4);
+
+    DowngradeToLegacy(writeId);
+
+    UNIT_ASSERT(HasCanonical(writeId));
+    UNIT_ASSERT(!HasLegacy(writeId));
+    UNIT_ASSERT_VALUES_EQUAL(writeId.GetDeferredPublicationApi().GetIntPublicationId(), 7u);
+}
+
 } // Y_UNIT_TEST_SUITE(TWriteIdCompat)
 
 Y_UNIT_TEST_SUITE(TWriteIdEquality) {

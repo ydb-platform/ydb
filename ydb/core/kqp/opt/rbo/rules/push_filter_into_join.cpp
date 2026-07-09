@@ -148,7 +148,7 @@ TIntrusivePtr<IOperator> TPushFilterIntoJoinRule::SimpleMatchAndApply(const TInt
     auto leftInput = join->GetLeftInput();
     auto rightInput = join->GetRightInput();
 
-    // When join conditions have been set for the join, replicate constant coditions from left/right side
+    // When join conditions have been set for the join, replicate constant conditions from left/right side
     // to the other side. This optimization is enabled for inner joins
     // FIXME: Check if we can expand this to Left Joins
    

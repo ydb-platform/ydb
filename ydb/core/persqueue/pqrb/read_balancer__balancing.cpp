@@ -2032,7 +2032,7 @@ void TBalancer::Handle(TEvPersQueue::TEvBalancingSubscribe::TPtr& ev, const TAct
     auto& record = ev->Get()->Record;
     YDB_LOG_DEBUG("Handle TEvPersQueue::TEvBalancingSubscribe",
         {"logPrefix", LogPrefix()},
-        {"ev", record});
+        {"ev", record.ShortDebugString()});
 
     auto sender = ActorIdFromProto(record.GetSourceActor());
     auto status = Consumers.contains(record.GetConsumer()) ?
@@ -2046,7 +2046,7 @@ void TBalancer::Handle(TEvPersQueue::TEvBalancingUnsubscribe::TPtr& ev, const TA
     auto& record = ev->Get()->Record;
     YDB_LOG_DEBUG("Handle TEvPersQueue::TEvBalancingUnsubscribe",
         {"logPrefix", LogPrefix()},
-        {"ev", record});
+        {"ev", record.ShortDebugString()});
 
     auto sender = ActorIdFromProto(record.GetSourceActor());
     auto& consumer = record.GetConsumer();

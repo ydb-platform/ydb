@@ -5,8 +5,6 @@
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::PERSQUEUE_READ_BALANCER
 
-#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::PERSQUEUE_READ_BALANCER
-
 namespace NKikimr::NPQ::NBalancing {
 
 namespace {
@@ -320,7 +318,7 @@ void TMLPBalancer::Handle(TEvPQ::TEvMLPGetRuntimeAttributesRequest::TPtr& ev) {
 void TMLPBalancer::Handle(TEvPersQueue::TEvStatusResponse::TPtr& ev, const TActorContext&) {
     YDB_LOG_DEBUG("Handle TEvPersQueue::TEvStatusResponse",
         {"logPrefix", LogPrefix()},
-        {"ev", ev->Get()->Record});
+        {"ev", ev->Get()->Record.ShortDebugString()});
 
     absl::flat_hash_map<TString, bool> mlpConsumers;
     for (const auto& consumer : GetConfig().GetConsumers()) {
@@ -367,7 +365,7 @@ void TMLPBalancer::Handle(TEvPQ::TEvReadingPartitionStatusRequest::TPtr& ev, con
     auto& record = ev->Get()->Record;
     YDB_LOG_DEBUG("Handle TEvPQ::TEvReadingPartitionStatusRequest",
         {"logPrefix", LogPrefix()},
-        {"ev", record});
+        {"ev", record.ShortDebugString()});
     SetUseForReading(record.GetConsumer(),
                      record.GetPartitionId(),
                      true, // reading is finished
@@ -385,7 +383,7 @@ void TMLPBalancer::Handle(TEvPQ::TEvMLPConsumerStatus::TPtr& ev) {
     auto& record = ev->Get()->Record;
     YDB_LOG_DEBUG("Handle TEvPQ::TEvMLPConsumerStatus",
         {"logPrefix", LogPrefix()},
-        {"ev", record});
+        {"ev", record.ShortDebugString()});
     SetUseForReading(record.GetConsumer(),
                      record.GetPartitionId(),
                      std::nullopt, // reading is finished

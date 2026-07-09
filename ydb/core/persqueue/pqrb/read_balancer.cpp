@@ -884,7 +884,7 @@ void TPersQueueReadBalancer::Handle(TEvPQ::TEvMLPConsumerStatus::TPtr& ev, const
     Y_UNUSED(ctx);
     YDB_LOG_DEBUG("Handle TEvPQ::TEvMLPConsumerStatus",
         {"logPrefix", LogPrefix()},
-        {"ev", ev->Get()->Record});
+        {"ev", ev->Get()->Record.ShortDebugString()});
     MLPBalancer->Handle(ev);
 }
 
@@ -972,7 +972,7 @@ void TPersQueueReadBalancer::BroadcastPartitionError(const TString& message, con
 void TPersQueueReadBalancer::Handle(TEvPQ::TEvMLPGetPartitionRequest::TPtr& ev) {
     YDB_LOG_DEBUG("Handle TEvPQ::TEvMLPGetPartitionRequest",
         {"logPrefix", LogPrefix()},
-        {"ev", ev->Get()->Record});
+        {"ev", ev->Get()->Record.ShortDebugString()});
     PendingMLPGetPartitionRequests.push_back(std::move(ev));
     ProcessMLPGetPartitionRequests(ActorContext());
 }
@@ -980,7 +980,7 @@ void TPersQueueReadBalancer::Handle(TEvPQ::TEvMLPGetPartitionRequest::TPtr& ev) 
 void TPersQueueReadBalancer::Handle(TEvPQ::TEvMLPGetRuntimeAttributesRequest::TPtr& ev) {
     YDB_LOG_DEBUG("Handle",
         {"logPrefix", LogPrefix()},
-        {"mlpGetRuntimeAttributesRequest", ev->Get()->Record});
+        {"mlpGetRuntimeAttributesRequest", ev->Get()->Record.ShortDebugString()});
     if (StatsRequestTracker.StatsReceived) {
         return MLPBalancer->Handle(ev);
     }

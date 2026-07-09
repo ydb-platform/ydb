@@ -103,10 +103,10 @@ struct TTxCoordinator::TTxRestoreTransactions : public TTransactionBase<TTxCoord
                     auto& medTx = GetMediatorTx(medId, tx.PlanOnStep, txId);
                     medTx.PushToAffected.push_back(affectedShardId);
                 } else {
-                    YDB_LOG_ERROR_CTX(ctx, "Transaction not found: MedId TxId DataShardId",
+                    YDB_LOG_ERROR_CTX(ctx, "Transaction not found",
                         {"medId", medId},
                         {"txId", txId},
-                        {"affectedShardId", affectedShardId});
+                        {"dataShardId", affectedShardId});
                     ++errors;
                 }
 

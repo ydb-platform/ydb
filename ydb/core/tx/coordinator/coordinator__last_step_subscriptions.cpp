@@ -8,18 +8,18 @@ namespace NKikimr::NFlatTxCoordinator {
         TActorId pipeServerId = ev->Recipient;
         auto itPipeServer = PipeServers.find(pipeServerId);
         if (Y_UNLIKELY(itPipeServer == PipeServers.end())) {
-            YDB_LOG_CRIT("Unexpected TEvSubscribeLastStep from at coordinator without an active pipe server",
+            YDB_LOG_CRIT("Unexpected TEvSubscribeLastStep: no active pipe server",
                 {"sender", ev->Sender},
-                {"tabletId", TabletID()});
+                {"tablet", TabletID()});
             return;
         }
 
         auto* msg = ev->Get();
         if (Y_UNLIKELY(msg->Record.GetCoordinatorID() != TabletID())) {
-            YDB_LOG_CRIT("Unexpected TEvSubscribeLastStep from at coordinator for coordinator",
+            YDB_LOG_CRIT("Unexpected TEvSubscribeLastStep: wrong coordinator",
                 {"sender", ev->Sender},
-                {"tabletId", TabletID()},
-                {"coordinatorId", msg->Record.GetCoordinatorID()});
+                {"tablet", TabletID()},
+                {"evCoordinatorId", msg->Record.GetCoordinatorID()});
             return;
         }
 
@@ -31,11 +31,11 @@ namespace NKikimr::NFlatTxCoordinator {
 
             if (msg->Record.GetSeqNo() <= subscriber->SeqNo) {
                 // Ignore messages that are out of sequence
-                YDB_LOG_DEBUG("Ignored TEvSubscribeLastStep from coordinator with existing seqNo",
+                YDB_LOG_DEBUG("Ignored TEvSubscribeLastStep with stale seqNo",
+                    {"tablet", TabletID()},
                     {"sender", ev->Sender},
-                    {"tabletId", TabletID()},
-                    {"seqNo", msg->Record.GetSeqNo()},
-                    {"subscriberSeqNo", subscriber->SeqNo});
+                    {"evSeqNo", msg->Record.GetSeqNo()},
+                    {"existingSeqNo", subscriber->SeqNo});
                 return;
             }
 
@@ -46,9 +46,9 @@ namespace NKikimr::NFlatTxCoordinator {
             subscriber = &LastStepSubscribers[ev->Sender];
         }
 
-        YDB_LOG_DEBUG("Processing TEvSubscribeLastStep from at coordinator with seqNo and cookie",
+        YDB_LOG_DEBUG("Processing TEvSubscribeLastStep",
+            {"tablet", TabletID()},
             {"sender", ev->Sender},
-            {"tabletId", TabletID()},
             {"seqNo", msg->Record.GetSeqNo()},
             {"cookie", ev->Cookie});
 
@@ -69,18 +69,18 @@ namespace NKikimr::NFlatTxCoordinator {
         TActorId pipeServerId = ev->Recipient;
         auto itPipeServer = PipeServers.find(pipeServerId);
         if (Y_UNLIKELY(itPipeServer == PipeServers.end())) {
-            YDB_LOG_CRIT("Unexpected TEvUnsubscribeLastStep from at coordinator without an active pipe server",
-                {"sender", ev->Sender},
-                {"tabletId", TabletID()});
+            YDB_LOG_CRIT("Unexpected TEvUnsubscribeLastStep: no active pipe server",
+                {"tablet", TabletID()},
+                {"sender", ev->Sender});
             return;
         }
 
         auto* msg = ev->Get();
         if (Y_UNLIKELY(msg->Record.GetCoordinatorID() != TabletID())) {
-            YDB_LOG_CRIT("Unexpected TEvSubscribeLastStep from at coordinator for coordinator",
+            YDB_LOG_CRIT("Unexpected TEvUnsubscribeLastStep: wrong coordinator",
+                {"tablet", TabletID()},
                 {"sender", ev->Sender},
-                {"tabletId", TabletID()},
-                {"coordinatorId", msg->Record.GetCoordinatorID()});
+                {"evCoordinatorId", msg->Record.GetCoordinatorID()});
             return;
         }
 
@@ -91,9 +91,9 @@ namespace NKikimr::NFlatTxCoordinator {
 
         auto& subscriber = itSubscriber->second;
         if (pipeServerId == subscriber.PipeServer && msg->Record.GetSeqNo() == subscriber.SeqNo) {
-            YDB_LOG_DEBUG("Processing TEvUnsubscribeLastStep from at coordinator with seqNo",
+            YDB_LOG_DEBUG("Processing TEvUnsubscribeLastStep",
+                {"tablet", TabletID()},
                 {"sender", ev->Sender},
-                {"tabletId", TabletID()},
                 {"seqNo", msg->Record.GetSeqNo()});
             itPipeServer->second.LastStepSubscribers.erase(ev->Sender);
             LastStepSubscribers.erase(itSubscriber);

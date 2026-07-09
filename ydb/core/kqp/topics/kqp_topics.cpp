@@ -107,7 +107,8 @@ static void EnsurePartitionOperationsNotMixed(const TTopicPartitionOperations& o
 
 static bool HasTopicKafkaOperations(const TTopicOperations& ops)
 {
-    return ops.HasReadOperations() || ops.HasWriteOperations() || ops.HasKafkaOperations();
+    return ops.HasReadOperations() || ops.HasKafkaOperations()
+        || (ops.HasWriteOperations() && !ops.HasDeferredPublicationOperations());
 }
 
 //

@@ -47,8 +47,8 @@ std::shared_ptr<IChunkedArray> BuildTypedPlain(const std::deque<NBinaryJson::TBi
 
 void TColumnElements::BuildSparsedAccessor(const ui32 recordsCount, const EValueType valueType) {
     AFL_VERIFY(!Accessor);
-    // Sparsed encoding currently applies only to BinaryJson/String columns (IsSparsed is disabled
-    // for now, and native Double/Bool never take this path).
+    // Columns with non-binary encoding are not supported.
+    AFL_VERIFY(valueType == EValueType::BinaryJson || valueType == EValueType::String)("value_type", (ui32)valueType);
     auto recordsBuilder = TSparsedArray::MakeBuilderBinary(RecordIndexes.size(), DataSize);
     for (ui32 idx = 0; idx < RecordIndexes.size(); ++idx) {
         recordsBuilder.AddRecord(RecordIndexes[idx], StorageView(Values[idx], valueType));
@@ -112,7 +112,7 @@ std::shared_ptr<TSubColumnsArray> TDataBuilder::Finish() {
     };
     std::sort(columnElements.begin(), columnElements.end(), predSortElements);
     std::sort(otherElements.begin(), otherElements.end(), predSortElements);
-    TDictStats columnStats = BuildStats(columnElements, Settings, CurrentRecordIndex, /*allowDictionary*/ true);
+    TDictStats columnStats = BuildStats(columnElements, Settings, CurrentRecordIndex, true);
     {
         ui32 columnIdx = 0;
         for (auto&& i : columnElements) {

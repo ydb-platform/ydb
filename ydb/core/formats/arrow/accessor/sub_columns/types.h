@@ -21,6 +21,12 @@ enum class EValueType : ui8 {
 
 std::shared_ptr<arrow::DataType> GetArrowTypeForValueType(const EValueType valueType);
 
+// Dictionary encoding only pays off for the binary-backed types (BinaryJson blobs and raw strings);
+// for the compact native Double/Bool arrays it is excessive, so they stay plain.
+bool DictionaryApplicableForValueType(const EValueType valueType);
+
+EValueType MergeValueTypes(const std::optional<EValueType>& acc, const EValueType next);
+
 EValueType DetectValueTypeForArray(const std::deque<NBinaryJson::TBinaryJson>& values);
 
 // Convert json blob to its contained scalar.

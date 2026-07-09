@@ -17,6 +17,7 @@ namespace {
 
 NBinaryJson::TBinaryJson ToBinaryJson(const NJson::TJsonValue& json) {
     auto result = NBinaryJson::SerializeToBinaryJson(NJson::WriteJson(&json, false));
+    AFL_VERIFY(std::holds_alternative<NBinaryJson::TBinaryJson>(result));
     return std::get<NBinaryJson::TBinaryJson>(std::move(result));
 }
 
@@ -39,14 +40,6 @@ EValueType ValueTypeForItem(const NBinaryJson::TBinaryJson& blob) {
     }
 }
 
-// Element type to represent result of merging arrays with arg types
-EValueType MergeValueTypes(const std::optional<EValueType>& acc, const EValueType next) {
-    if (!acc) {
-        return next;
-    }
-    return (*acc == next) ? *acc : EValueType::BinaryJson;
-}
-
 }   // namespace
 
 std::shared_ptr<arrow::DataType> GetArrowTypeForValueType(const EValueType valueType) {
@@ -61,6 +54,27 @@ std::shared_ptr<arrow::DataType> GetArrowTypeForValueType(const EValueType value
         AFL_VERIFY(false)("unhandled value_type", (ui32)valueType);
             return arrow::binary();
     }
+}
+
+bool DictionaryApplicableForValueType(const EValueType valueType) {
+    switch (valueType) {
+        case EValueType::BinaryJson:
+        case EValueType::String:
+            return true;
+        // Integral types trade fixed-size position in array for fixed-size index.
+        // May still be good for compression, but requires further experiments
+        // and probably a separate threshold from strings
+        default:
+            return false;
+    }
+}
+
+// Element type to represent result of merging arrays with arg types
+EValueType MergeValueTypes(const std::optional<EValueType>& acc, const EValueType next) {
+    if (!acc) {
+        return next;
+    }
+    return (*acc == next) ? *acc : EValueType::BinaryJson;
 }
 
 EValueType DetectValueTypeForArray(const std::deque<NBinaryJson::TBinaryJson>& values) {
@@ -106,6 +120,9 @@ NJson::TJsonValue ArrayElementToJsonValue(const arrow::Array& array, const i64 i
             AFL_VERIFY(NJson::ReadJsonTree(text, &result));
             return result;
         }
+        default:
+            AFL_VERIFY(false)("unhandled value_type", (ui32)valueType);
+            return NJson::TJsonValue();
     }
 }
 
@@ -119,6 +136,9 @@ NBinaryJson::TBinaryJson ArrayElementToBinaryJson(const arrow::Array& array, con
         case EValueType::Double:
         case EValueType::Bool:
             return ToBinaryJson(ArrayElementToJsonValue(array, index, valueType));
+        default:
+            AFL_VERIFY(false)("unhandled value_type", (ui32)valueType);
+            return NBinaryJson::TBinaryJson();
     }
 }
 

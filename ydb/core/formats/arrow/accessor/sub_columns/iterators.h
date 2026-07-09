@@ -158,14 +158,9 @@ public:
 
     // The ordered iterator (compaction's reader) expects BinaryJson. BinaryJson columns pass their
     // bytes through directly; native columns are re-encoded into an owned buffer.
-    std::string_view GetValueAsBinaryJson() {
+    NBinaryJson::TBinaryJson GetValueAsBinaryJson() {
         AFL_VERIFY(IsValidFlag);
-        if (ValueType == EValueType::BinaryJson) {
-            const auto view = static_cast<const arrow::BinaryArray&>(*CurrentArray).GetView(LocalIndex);
-            return std::string_view(view.data(), view.size());
-        }
-        auto binaryJson = ArrayElementToBinaryJson(*CurrentArray, LocalIndex, ValueType);
-        return std::string_view(binaryJson.data(), binaryJson.size());
+        return ArrayElementToBinaryJson(*CurrentArray, LocalIndex, ValueType);
     }
 
     NJson::TJsonValue GetValue() const;

@@ -174,9 +174,8 @@ public:
         }
     };
 
-    // allowDictionary is set only for the separated columns (the Others store is always plain).
     TDictStats BuildStats(
-        const std::vector<TColumnElements*>& keys, const TSettings& settings, const ui32 recordsCount, const bool allowDictionary) const {
+        const std::vector<TColumnElements*>& keys, const TSettings& settings, const ui32 recordsCount, const bool separateColumns) const {
         auto builder = TDictStats::MakeBuilder();
         for (auto&& i : keys) {
             const ui32 presentCount = i->GetRecordIndexes().size();
@@ -188,17 +187,18 @@ public:
                     }
                 }
             };
-            IChunkedArray::EType accessorType = IChunkedArray::EType::Array;
-            if (settings.IsSparsed(presentCount, recordsCount)) {
-                accessorType = IChunkedArray::EType::SparsedArray;
-            } else if (allowDictionary && settings.IsDictionary(presentCount, enumerateValues)) {
-                accessorType = IChunkedArray::EType::Dictionary;
-            }
             // Native scalar storage applies only to separated columns (allowDictionary marks them);
             // the Others store is always BinaryJson.
             EValueType valueType = EValueType::BinaryJson;
-            if (allowDictionary && settings.GetEnableNativeScalarColumns()) {
+            if (separateColumns && settings.GetEnableNativeScalarColumns()) {
                 valueType = DetectValueTypeForArray(i->GetValues());
+            }
+            IChunkedArray::EType accessorType = IChunkedArray::EType::Array;
+            if (settings.IsSparsed(presentCount, recordsCount)) {
+                accessorType = IChunkedArray::EType::SparsedArray;
+            } else if (separateColumns && DictionaryApplicableForValueType(valueType) &&
+                       settings.IsDictionary(presentCount, enumerateValues)) {
+                accessorType = IChunkedArray::EType::Dictionary;
             }
             builder.Add(i->GetKeyName(), presentCount, i->GetDataSize(), accessorType, valueType);
         }

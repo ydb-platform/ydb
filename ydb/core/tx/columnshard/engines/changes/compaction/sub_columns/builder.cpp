@@ -62,9 +62,7 @@ void TMergedBuilder::FlushData() {
         if (ColumnBuilders[idx].GetFilledRecordsCount()) {
             auto accessor = ColumnBuilders[idx].Finish(RecordIndex);
             accessor = MaybeDictionaryEncode(accessor, ColumnBuilders[idx].GetFilledRecordsCount());
-            // Phase 2 reverts native columns to BinaryJson on compaction: the ordered iterator feeds
-            // BinaryJson-normalized values here, so the merged column is always BinaryJson. Preserving
-            // native storage across compaction is a later phase.
+            // For now compaction reencodes all columns into BinaryJson
             statsBuilder.Add(ResultColumnStats.GetColumnName(idx), ColumnBuilders[idx].GetFilledRecordsCount(),
                 ColumnBuilders[idx].GetFilledRecordsSize(), accessor->GetType(), NArrow::NAccessor::NSubColumns::EValueType::BinaryJson);
             arrays.emplace_back(std::move(accessor));

@@ -345,7 +345,7 @@ NYql::TAstParseResult MakeRejectedSyntaxResult(const TString& message) {
 
 TQueryAst ParseQuery(const TString& queryText, const TMaybe<Ydb::Query::Syntax>& syntax, bool isSql, TKqpTranslationSettingsBuilder& settingsBuilder) {
     if (syntax && *syntax == Ydb::Query::Syntax::SYNTAX_PG) {
-        return TQueryAst(std::make_shared<NYql::TAstParseResult>(MakeRejectedSyntaxResult("PostgreSQL syntax is not supported")), {}, true, false, {});
+        return TQueryAst(std::make_shared<NYql::TAstParseResult>(MakeRejectedSyntaxResult("PostgreSQL syntax is not supported")), {}, {}, false, {});
     }
 
     bool deprecatedSQL;

@@ -1421,21 +1421,21 @@ void TDirectBlockGroup::OnConnectionEstablished(
             Oracle.OnDDiskConnected(index, TInstant::Now());
         }
         // INVARIANT: PBuffer does NOT require a session/lock
-    } else if (IsInitialized()) {
-        LOG_ERROR(
-            *ActorSystem,
-            NKikimrServices::NBS_PARTITION,
-            "%s connection failed for host %s (post-init): %s",
-            LogTitle.GetWithTime().c_str(),
-            PrintHostIndex(static_cast<THostIndex>(index)).c_str(),
-            FormatError(error).c_str());
+    } else if (IsBlockedStatus(result.GetStatus())) {
+        // Terminal: our tablet generation is stale. Suicide, no reconnect.
+        HandleBlockedGeneration(index, "Connect", result.GetStatus());
+        // Unblock waiters on ConnectFuture with the error.
+        connection.ConnectPromise.SetValue(error);
+        return;
     } else {
-        if (IsBlockedStatus(result.GetStatus())) {
-            // Terminal: our tablet generation is stale. Suicide, no reconnect.
-            HandleBlockedGeneration(index, "Connect", result.GetStatus());
-            // Unblock waiters on ConnectFuture with the error.
-            connection.ConnectPromise.SetValue(error);
-            return;
+        if (IsInitialized()) {
+            LOG_ERROR(
+                *ActorSystem,
+                NKikimrServices::NBS_PARTITION,
+                "%s connection failed for host %s (post-init): %s",
+                LogTitle.GetWithTime().c_str(),
+                PrintHostIndex(static_cast<THostIndex>(index)).c_str(),
+                FormatError(error).c_str());
         }
         // TODO (future phase): handle non-BLOCKED connect errors
         // (ERROR/unavailability) via reconnect.

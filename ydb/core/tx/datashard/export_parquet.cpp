@@ -130,8 +130,6 @@ TDataFormatParquet(TParquetExportSettings&& settings)
     , OutStream(std::make_shared<TCheckpointOutputStream>())
 {
     Y_ENSURE(RowGroupSize > 0);
-    Y_ENSURE(RowGroupSize <= TParquetExportSettings::MaxRowGroupSize,
-        "Parquet RowGroupSize " << RowGroupSize << " exceeds the maximum allowed value " << TParquetExportSettings::MaxRowGroupSize);
 }
 
 ~TDataFormatParquet() = default;
@@ -200,9 +198,8 @@ TMaybe<TBuffer> Flush(bool last) override {
 
 void Clear() override {
     ErrorString.clear();
-    if (BatchBuilder) {
-        BatchBuilder->FlushBatch(true, false);
-    }
+    BatchBuilder.reset();
+    Schema.reset();
     ArrowWriter.reset();
     OutStream.reset(new TCheckpointOutputStream());
 }

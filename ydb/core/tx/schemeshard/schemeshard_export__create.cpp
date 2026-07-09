@@ -199,23 +199,18 @@ struct TSchemeShard::TExport::TTxCreate: public TSchemeShard::TXxport::TTxBase {
             }
             if constexpr (std::is_same_v<TSettings, Ydb::Export::ExportToS3Settings>) {
                 if (settings.format_case() == Ydb::Export::ExportToS3Settings::kParquet) {
-                    const ui32 rowGroupSize = settings.parquet().row_group_size();
-                    if (rowGroupSize > 0) {
-                        const ui64 maxRowGroupSize = NDataShard::TParquetExportSettings::MaxRowGroupSize;
-                        if (rowGroupSize > maxRowGroupSize) {
-                            return Reply(
-                                std::move(response),
-                                Ydb::StatusIds::BAD_REQUEST,
-                                TStringBuilder() << "Parquet row_group_size " << rowGroupSize
-                                    << " exceeds the maximum allowed value " << maxRowGroupSize
-                            );
-                        }
-                    }
                     if (!AppData()->FeatureFlags.GetEnableExportInParquet()) {
                         return Reply(
                             std::move(response),
                             Ydb::StatusIds::UNSUPPORTED,
                             "Parquet export to S3 is disabled by feature flag EnableExportInParquet"
+                        );
+                    }
+                    if (settings.has_encryption_settings()) {
+                        return Reply(
+                            std::move(response),
+                            Ydb::StatusIds::BAD_REQUEST,
+                            "Encryption is not supported for Parquet export"
                         );
                     }
                 }

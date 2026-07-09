@@ -170,38 +170,6 @@ Y_UNIT_TEST_SUITE(ExportParquetTest) {
         UNIT_ASSERT_VALUES_EQUAL(values->GetString(2), "valueC");
     }
 
-    // RowGroupSize exceeding TParquetExportSettings::MaxRowGroupSize must be rejected.
-    Y_UNIT_TEST(ShouldRejectTooLargeRowGroupSize, EParquetExportSettings) {
-        const auto settings = Arg<0>();
-
-        TTestActorRuntime runtime;
-        runtime.Initialize(TAppPrepare().Unwrap());
-
-        bool caught = false;
-        auto produce = [&]() {
-            IExport::TTableColumns columns;
-            columns[0] = TUserTable::TUserColumn(NScheme::TTypeInfo(NScheme::NTypeIds::Uint32), "", "key", true);
-
-            NKikimrSchemeOp::TBackupTask task;
-            ConfigureParquetBackupTask(task, settings, TParquetExportSettings::MaxRowGroupSize + 1);
-
-            try {
-                TS3Export exportTask(task, columns);
-                exportTask.CreateBuffer();
-            } catch (const yexception& e) {
-                caught = true;
-                UNIT_ASSERT_C(TString(e.what()).Contains("exceeds the maximum allowed value"),
-                    "Unexpected exception message: " << e.what());
-            }
-        };
-
-        const auto edge = runtime.AllocateEdgeActor();
-        runtime.Register(new TCbActor(produce, edge));
-        runtime.GrabEdgeEventRethrow<NActors::TEvents::TEvWakeup>(edge);
-
-        UNIT_ASSERT_C(caught, "Expected Y_ENSURE to throw for RowGroupSize > MaxRowGroupSize");
-    }
-
     // A small row group size forces multiple Parquet row groups; the file must still
     // round-trip every row correctly.
     Y_UNIT_TEST(ShouldProduceValidParquetWithSmallRowGroup, EParquetExportSettings) {

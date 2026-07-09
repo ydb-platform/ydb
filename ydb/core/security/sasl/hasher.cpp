@@ -15,6 +15,8 @@
 #include <ydb/library/login/sasl/scram.h>
 #include <ydb/library/services/services.pb.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::SASL_AUTH
+
 
 namespace NKikimr::NSasl {
 
@@ -40,17 +42,13 @@ public:
         auto saslPrepRC = NLogin::NSasl::SaslPrep(StaticCreds.Username, prepUsername);
         if (saslPrepRC != NLogin::NSasl::ESaslPrepReturnCodes::Success) {
             response->Error = "Unsupported characters in username";
-            LOG_ERROR_S(ctx, NKikimrServices::SASL_AUTH,
-                "Hasher# " << ctx.SelfID.ToString() <<
-                ", username check failed" <<
-                ", reason: " << response->Error
-            );
+            YDB_LOG_ERROR_CTX(ctx, "Username check failed",
+                {"hasher", ctx.SelfID},
+                {"reason", response->Error});
 
-            LOG_DEBUG_S(ctx, NKikimrServices::SASL_AUTH,
-                "Hasher# " << ctx.SelfID.ToString() <<
-                ", Send TEvComputedHashes: " <<
-                "{ error: " << response->Error << " }"
-            );
+            YDB_LOG_DEBUG_CTX(ctx, "Send TEvComputedHashes",
+                {"hasher", ctx.SelfID},
+                {"error", response->Error});
 
             Send(Sender, response.release());
             return Die(ctx);
@@ -62,17 +60,13 @@ public:
         if (!passwordCheckResult.Success) {
             response->Error = passwordCheckResult.Error;
 
-            LOG_ERROR_S(ctx, NKikimrServices::SASL_AUTH,
-                "Hasher# " << ctx.SelfID.ToString() <<
-                ", password check failed" <<
-                ", reason: " << response->Error
-            );
+            YDB_LOG_ERROR_CTX(ctx, "Password check failed",
+                {"hasher", ctx.SelfID},
+                {"reason", response->Error});
 
-            LOG_DEBUG_S(ctx, NKikimrServices::SASL_AUTH,
-                "Hasher# " << ctx.SelfID.ToString() <<
-                ", Send TEvComputedHashes: " <<
-                "{ error: " << response->Error << " }"
-            );
+            YDB_LOG_DEBUG_CTX(ctx, "Send TEvComputedHashes",
+                {"hasher", ctx.SelfID},
+                {"error", response->Error});
 
             Send(Sender, response.release());
             return Die(ctx);
@@ -115,10 +109,8 @@ public:
         }
 
         if (!response->Error.empty()) {
-            LOG_ERROR_S(ctx, NKikimrServices::SASL_AUTH,
-                "Hasher# " << ctx.SelfID.ToString() <<
-                ", " << response->Error
-            );
+            YDB_LOG_ERROR_CTX(ctx, response->Error,
+                {"hasher", ctx.SelfID});
 
             hashes = NJson::TJsonValue();
             response->ArgonHash.clear();
@@ -129,14 +121,12 @@ public:
             response->Hashes = Base64Encode(NJson::WriteJson(hashes, false));
         }
 
-        LOG_DEBUG_S(ctx, NKikimrServices::SASL_AUTH,
-            "Hasher# " << ctx.SelfID.ToString() <<
-            ", Send TEvComputedHashes: " <<
-            "{ error: " << response->Error <<
-            ", username: " << response->PreparedUsername <<
-            ", hashes: " << Base64StrictDecode(response->Hashes) <<
-            ", argon hash: " << response->ArgonHash << " }"
-        );
+        YDB_LOG_DEBUG_CTX(ctx, "Send TEvComputedHashes: argon",
+            {"hasher", ctx.SelfID},
+            {"error", response->Error},
+            {"username", response->PreparedUsername},
+            {"hashes", Base64StrictDecode(response->Hashes)},
+            {"hash", response->ArgonHash});
 
         Send(Sender, response.release());
         return Die(ctx);

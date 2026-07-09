@@ -1,0 +1,13 @@
+# YDB
+
+> Open source distributed SQL database with strong consistency, ACID transactions, and horizontal scalability.
+
+## Documentation indexes (main)
+
+- [English documentation index](https://ydb.tech/docs/en/llms.txt)
+- [Russian documentation index](https://ydb.tech/docs/ru/llms.txt)
+
+## Full documentation (main)
+
+- [English full documentation](https://ydb.tech/docs/en/llms-full.txt)
+- [Russian full documentation](https://ydb.tech/docs/ru/llms-full.txt)

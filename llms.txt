@@ -1,13 +1,15 @@
 # YDB
 
 > Open source distributed SQL database with strong consistency, ACID transactions, and horizontal scalability.
+>
+> This index points to documentation built from the `main` branch. On ydb.tech, URLs without `?version=main` redirect to the default stable release (currently v26.1).
 
 ## Documentation indexes (main)
 
-- [English documentation index](https://ydb.tech/docs/en/llms.txt)
-- [Russian documentation index](https://ydb.tech/docs/ru/llms.txt)
+- [English documentation index](https://ydb.tech/docs/en/llms.txt?version=main)
+- [Russian documentation index](https://ydb.tech/docs/ru/llms.txt?version=main)
 
 ## Full documentation (main)
 
-- [English full documentation](https://ydb.tech/docs/en/llms-full.txt)
-- [Russian full documentation](https://ydb.tech/docs/ru/llms-full.txt)
+- [English full documentation](https://ydb.tech/docs/en/llms-full.txt?version=main)
+- [Russian full documentation](https://ydb.tech/docs/ru/llms-full.txt?version=main)

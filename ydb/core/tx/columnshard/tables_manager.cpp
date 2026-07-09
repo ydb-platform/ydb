@@ -440,16 +440,27 @@ void TTablesManager::DropTable(
     auto* table = Tables.FindPtr(pathId);
     AFL_VERIFY(table);
     const bool isReadOnly = table->IsReadOnly(schemeShardLocalPathId);
+    const bool isPartialDrop = table->GetPathIds().size() > 1;
     table->SetDropVersion(schemeShardLocalPathId, version);
     if (table->IsDropped()) {
-        AFL_VERIFY(PathsToDrop[version].emplace(pathId).second);
+        AFL_VERIFY(PathsToDrop[table->GetDropVersionVerified()].emplace(pathId).second);
     }
     if (isReadOnly) {
         RebuildReadOnlyTablesSnapshots();
-    } else {
+    } else if (!isPartialDrop) {
         Schema::SaveTableDropVersion(db, pathId, version.GetPlanStep(), version.GetTxId());
     }
-    Schema::SaveTableDropVersionV1(db, schemeShardLocalPathId, pathId, version.GetPlanStep(), version.GetTxId());
+    if (isPartialDrop) {
+        if (!isReadOnly) {
+            Schema::EraseTableInfo(db, pathId);
+        }
+        Schema::EraseTableInfoV1(db, pathId, schemeShardLocalPathId);
+        table->Remove(schemeShardLocalPathId);
+        AFL_VERIFY(SchemeShardLocalToInternal.erase(schemeShardLocalPathId));
+        NYDBTest::TControllers::GetColumnShardController()->OnDeletePathId(TabletId, TUnifiedPathId::BuildValid(pathId, schemeShardLocalPathId));
+    } else {
+        Schema::SaveTableDropVersionV1(db, schemeShardLocalPathId, pathId, version.GetPlanStep(), version.GetTxId());
+    }
 }
 
 void TTablesManager::DropPreset(const ui32 presetId, const NOlap::TSnapshot& version, NIceDb::TNiceDb& db) {

@@ -61,6 +61,7 @@ public:
     // Return true if idleness check should be performed
     [[nodiscard]] bool ProcessIdlenessCheck(TInstant notifyTime);
 
+    [[nodiscard]] const TString& GetLogPrefix() const;
     void SetLogPrefix(const TString& logPrefix);
 
     void Out(IOutputStream& str) const;

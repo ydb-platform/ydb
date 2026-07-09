@@ -17,6 +17,8 @@
 #endif
 #include <library/cpp/xml/document/xml-document.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT ::NKikimrServices::YQ_TEST_CONNECTION
+
 namespace {
 
 struct TEvPrivate {
@@ -96,7 +98,11 @@ public:
 
     void Bootstrap() {
         Become(&TTestObjectStorageConnectionActor::StateFunc);
-        TC_LOG_D(Scope << " " << User << " " << NKikimr::MaskTicket(Token) << " Starting test object storage connection actor. Actor id: " << SelfId());
+        YDB_LOG_DEBUG("Starting test object storage connection actor",
+            {"scope", Scope},
+            {"user", User},
+            {"ticket", NKikimr::MaskTicket(Token)},
+            {"selfId", SelfId()});
         try {
             SendDiscover();
         } catch (...) {
@@ -186,14 +192,22 @@ private:
     }
 
     void ReplyError(const TString& message) {
-        TC_LOG_D(Scope << " " << User << " " << NKikimr::MaskTicket(Token) << " Invalid access for object storage connection: " << message);
+        YDB_LOG_DEBUG("Invalid access for object storage",
+            {"scope", Scope},
+            {"user", User},
+            {"ticket", NKikimr::MaskTicket(Token)},
+            {"error", message});
         Counters->Error->Inc();
         Send(Sender, new NFq::TEvTestConnection::TEvTestConnectionResponse(NYql::TIssues{MakeErrorIssue(NFq::TIssuesIds::BAD_REQUEST, "Object Storage: " + message)}), 0, Cookie);
         DestroyActor(false /* success */);
     }
 
     void ReplyOk(const TString& requestId) {
-        TC_LOG_T(Scope << " " << User << " " << NKikimr::MaskTicket(Token) << " Access is valid for object storage connection, request id: [" << requestId << "]");
+        YDB_LOG_TRACE("Access is valid for object storage connection",
+            {"scope", Scope},
+            {"user", User},
+            {"ticket", NKikimr::MaskTicket(Token)},
+            {"requestId", requestId});
         Counters->Ok->Inc();
         Send(Sender, new NFq::TEvTestConnection::TEvTestConnectionResponse(FederatedQuery::TestConnectionResult{}), 0, Cookie);
         DestroyActor();

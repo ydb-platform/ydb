@@ -45,6 +45,10 @@ TIntrusivePtr<TOpFilter> FuseFilters(const TIntrusivePtr<TOpFilter>& top, const 
 namespace NKikimr {
 namespace NKqp {
 
+bool TExpandCBOTreeRule::QuickMatch(const TIntrusivePtr<IOperator>& input) const {
+    return input->Kind == EOperator::Join;
+}
+
 /**
  * Expanding CBO tree is more tricky:
  *  - We can have a join that joins a CBOtree with something else, and there could be a filter in between that we

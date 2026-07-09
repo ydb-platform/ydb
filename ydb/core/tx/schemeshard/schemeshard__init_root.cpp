@@ -377,7 +377,8 @@ struct TSchemeShard::TTxInitTenantSchemeShard : public TSchemeShard::TRwTxBase {
         Self->ParentDomainEffectiveACLVersion = effectiveACLVersion;
         Self->ParentDomainCachedEffectiveACL.Init(Self->ParentDomainEffectiveACL);
 
-        newPath->CachedEffectiveACL.Update(Self->ParentDomainCachedEffectiveACL, newPath->ACL, newPath->IsContainer());
+        newPath->CachedEffectiveACL.Update(Self->ParentDomainCachedEffectiveACL, newPath->ACL,
+            newPath->IsContainer(), /*isTenantRoot*/ true);
 
         TPathId resourcesDomainId = Self->ParentDomainId;
         if (record.HasResourcesDomainOwnerId() && record.HasResourcesDomainPathId()) {

@@ -32,6 +32,7 @@
 
 /ydb/core/fq/ @ydb-platform/fq
 /ydb/core/kqp/ @ydb-platform/qp
+/ydb/core/kqp/federated_query/ @ydb-platform/fq
 /ydb/core/kqp/ut/federated_query @ydb-platform/fq
 /ydb/core/kqp/ut/olap/ @ydb-platform/cs
 /ydb/core/kqp/ut/indexes/ @ydb-platform/qp
@@ -77,7 +78,7 @@
 /ydb/core/health_check @ydb-platform/core
 /ydb/core/kesus @ydb-platform/core
 /ydb/core/mind/hive @ydb-platform/core
-/ydb/core/mind/node_broker* @ydb-platform/core @snaury
+/ydb/core/mind/node_broker* @ydb-platform/core
 /ydb/core/protos/counters_replication.proto @ydb-platform/core
 /ydb/core/protos/replication.proto @ydb-platform/core
 /ydb/core/quoter @ydb-platform/core
@@ -137,6 +138,7 @@
 /ydb/library/aclib @ydb-platform/Security
 /ydb/library/login @ydb-platform/Security
 /ydb/library/security @ydb-platform/Security
+/ydb/services/scheme_secret @ydb-platform/Security
 /ydb/services/ydb/ydb_ldap_login_ut.cpp @ydb-platform/Security
 /ydb/services/ydb/ydb_register_node_ut.cpp @ydb-platform/Security
 /ydb/core/sys_view/common/registry.h @ydb-platform/Security

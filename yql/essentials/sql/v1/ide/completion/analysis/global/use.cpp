@@ -58,7 +58,7 @@ public:
 
         if (SQLv1::Pure_column_or_namedContext* named = ctx->pure_column_or_named()) {
             if (auto id = GetId(named)) {
-                cluster = std::move(*id);
+                cluster = *id;
             }
         }
 

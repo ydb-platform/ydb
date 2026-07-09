@@ -45,4 +45,20 @@ message TPBufferConfig
 
     // default true
     optional bool EnableWritesBatching = 11;
+
+    // Reserve free sectors for higher-priority barrier movement and fast erase operations.
+    // default 256, equal to the default disk operations max inflight size
+    optional uint32 MinFreeSectorsReserve = 12;
+
+    // Allocate a new chunk proactively when free space drops below this percentage
+    // of the currently owned capacity. 0 disables proactive allocation. Default 10%.
+    optional uint32 PreallocateFreeSpaceThresholdPercent = 13;
+
+    // Deallocate a chunk proactively when free space is over this percentage
+    // of the currently owned capacity. 100% disables proactive deallocation. Default 90%.
+    optional uint32 DeallocateFreeSpaceThresholdPercent = 14;
+
+    // Deallocate a chunk proactively when it has been freed for this many seconds.
+    // Default 30 seconds.
+    optional uint32 DeallocateThresholdSeconds = 15;
 }

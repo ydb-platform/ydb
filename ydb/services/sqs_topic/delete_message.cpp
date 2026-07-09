@@ -170,12 +170,21 @@ namespace NKikimr::NSqsTopic::V1 {
                     this->ReplyWithError(MakeError(NSQS::NErrors::INTERNAL_FAILURE, std::format("Message id not found")));
                     return;
                 }
-                if (message.Success) {
-                    Success_.insert(*id);
-                    ++successCount;
-                } else {
-                    Failed_[*id] = MakeError(NSQS::NErrors::INVALID_PARAMETER_VALUE, {});
-                    ++failedCount;
+                switch (message.Status) {
+                    case NPQ::NMLP::EOperationResult::Success:
+                        Success_.insert(*id);
+                        ++successCount;
+                        break;
+                    case NPQ::NMLP::EOperationResult::NotFound:
+                        // Ignore missing/already-deleted handle, like AWS SQS and native YMQ do.
+                        Success_.insert(*id);
+                        ++successCount;
+                        break;
+                    case NPQ::NMLP::EOperationResult::NotInFlight:
+                    case NPQ::NMLP::EOperationResult::Failed:
+                        Failed_[*id] = MakeError(NSQS::NErrors::INTERNAL_FAILURE, {});
+                        ++failedCount;
+                        break;
                 }
             }
 

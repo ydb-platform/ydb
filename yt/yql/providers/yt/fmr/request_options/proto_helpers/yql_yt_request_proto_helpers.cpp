@@ -51,6 +51,7 @@ NProto::TYtTableRef YtTableRefToProto(const TYtTableRef& ytTableRef) {
     if (ytTableRef.FilePath) {
         protoYtTableRef.SetFilePath(*ytTableRef.FilePath);
     }
+    protoYtTableRef.SetTableIndex(ytTableRef.TableIndex);
     return protoYtTableRef;
 }
 
@@ -60,6 +61,7 @@ TYtTableRef YtTableRefFromProto(const NProto::TYtTableRef protoYtTableRef) {
     if (protoYtTableRef.HasFilePath()) {
         ytTableRef.FilePath = protoYtTableRef.GetFilePath();
     }
+    ytTableRef.TableIndex = protoYtTableRef.GetTableIndex();
     return ytTableRef;
 }
 
@@ -71,6 +73,9 @@ NProto::TYtTableTaskRef YtTableTaskRefToProto(const TYtTableTaskRef& ytTableTask
     for (auto& filePath: ytTableTaskRef.FilePaths) {
         protoYtTableTaskRef.AddFilePath(filePath);
     }
+    for (auto& tableIndex: ytTableTaskRef.TableIndices) {
+        protoYtTableTaskRef.AddTableIndex(tableIndex);
+    }
     return protoYtTableTaskRef;
 }
 
@@ -81,6 +86,9 @@ TYtTableTaskRef YtTableTaskRefFromProto(const NProto::TYtTableTaskRef protoYtTab
     }
     for (auto& filePath: protoYtTableTaskRef.GetFilePath()) {
         ytTableTaskRef.FilePaths.emplace_back(filePath);
+    }
+    for (auto& tableIndex: protoYtTableTaskRef.GetTableIndex()) {
+        ytTableTaskRef.TableIndices.emplace_back(tableIndex);
     }
     return ytTableTaskRef;
 }
@@ -133,6 +141,7 @@ NProto::TFmrTableRef FmrTableRefToProto(const TFmrTableRef& fmrTableRef) {
         protoFmrTableRef.AddSortOrder(sortOrderProto);
     }
     protoFmrTableRef.SetColumnGroups(fmrTableRef.SerializedColumnGroups);
+    protoFmrTableRef.SetTableIndex(fmrTableRef.TableIndex);
     return protoFmrTableRef;
 }
 
@@ -149,6 +158,7 @@ TFmrTableRef FmrTableRefFromProto(const NProto::TFmrTableRef protoFmrTableRef) {
         fmrTableRef.SortOrder.emplace_back(static_cast<ESortOrder>(sortOrder));
     }
     fmrTableRef.SerializedColumnGroups = protoFmrTableRef.GetColumnGroups();
+    fmrTableRef.TableIndex = protoFmrTableRef.GetTableIndex();
     return fmrTableRef;
 }
 
@@ -192,6 +202,7 @@ NProto::TFmrTableInputRef FmrTableInputRefToProto(const TFmrTableInputRef& fmrTa
     if (fmrTableInputRef.LastRowKeys) {
         protoFmrTableInputRef.SetLastRowKeys(*fmrTableInputRef.LastRowKeys);
     }
+    protoFmrTableInputRef.SetTableIndex(fmrTableInputRef.TableIndex);
     return protoFmrTableInputRef;
 }
 
@@ -216,6 +227,7 @@ TFmrTableInputRef FmrTableInputRefFromProto(const NProto::TFmrTableInputRef& pro
         : Nothing();
     fmrTableInputRef.FirstRowKeys = protoFmrTableInputRef.HasFirstRowKeys() ? TMaybe<TString>(protoFmrTableInputRef.GetFirstRowKeys()) : Nothing();
     fmrTableInputRef.LastRowKeys = protoFmrTableInputRef.HasLastRowKeys() ? TMaybe<TString>(protoFmrTableInputRef.GetLastRowKeys()) : Nothing();
+    fmrTableInputRef.TableIndex = protoFmrTableInputRef.GetTableIndex();
     return fmrTableInputRef;
 }
 

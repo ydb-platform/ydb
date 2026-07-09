@@ -453,7 +453,6 @@ TProgram::TProgram(
         if (UrlListerManager_) {
             UrlListerManager_ = NCommon::WrapUrlListerManagerWithQContext(UrlListerManager_, qContext);
         }
-        UdfResolver_ = NCommon::WrapUdfResolverWithQContext(UdfResolver_, QContext_);
         if (QContext_.CanWrite() && GatewaysConfig_) {
             auto data = GatewaysConfig_->SerializeAsString();
             QContext_.GetWriter()->Put({.Component = FacadeComponent, .Label = GatewaysLabel}, data).GetValueSync();
@@ -2201,6 +2200,10 @@ TTypeAnnotationContextPtr TProgram::BuildTypeAnnotationContext(const TString& us
             FileStorage_,
             UrlPreprocessing_,
             tokenResolver);
+    }
+
+    if (QContext_) {
+        typeAnnotationContext->UdfResolver = NCommon::WrapUdfResolverWithQContext(typeAnnotationContext->UdfResolver, QContext_);
     }
 
     if (auto* urlListerManager = typeAnnotationContext->UrlListerManager.Get()) {

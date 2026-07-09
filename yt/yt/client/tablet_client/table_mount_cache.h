@@ -139,7 +139,7 @@ struct TTableMountInfo final
     bool IsChaosReplica() const;
     bool IsHunkStorage() const;
 
-    TTabletInfoPtr GetTabletByIndexOrThrow(int tabletIndex) const;
+    TTabletInfoPtr GetTabletByIndexOrThrow(i64 tabletIndex) const;
     int GetTabletIndexForKey(NTableClient::TUnversionedValueRange key) const;
     int GetTabletIndexForKey(NTableClient::TLegacyKey key) const;
     TTabletInfoPtr GetTabletForKey(NTableClient::TUnversionedValueRange key) const;

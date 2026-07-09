@@ -38,6 +38,8 @@ struct IPartitionDirectService
     virtual void UpdateVChunkConfig(
         const NStorage::NPartitionDirect::TVChunkConfig& cfg) = 0;
 
+    virtual void RequestAddHost(size_t directBlockGroupId) = 0;
+
     // Generates the next tablet-wide write LSN. Called by a vchunk on its
     // executor thread when it starts processing a write, so generation and
     // dirty-map registration happen on the same thread. Also drives periodic

@@ -41,7 +41,7 @@ class StressUtilDeployer:
         self.cluster_path = cluster_path
         self.yaml_config = yaml_config
         self.static_location = static_location
-        self.nodes = YdbCluster.get_cluster_nodes()
+        self.nodes = YdbCluster.get_cluster_nodes(load_kafka_port=True)
         patch_max_suffix(1000000)
 
         # Collect unique hosts and their corresponding nodes

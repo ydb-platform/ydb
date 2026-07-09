@@ -10,7 +10,7 @@
 #include <yt/yql/providers/yt/fmr/yt_job_service/interface/yql_yt_job_service.h>
 #include <yt/yql/providers/yt/fmr/job_factory/impl/yql_yt_job_factory_impl.h>
 #include <yt/yql/providers/yt/fmr/job/impl/yql_yt_sorted_merge_reader.h>
-#include <yt/yql/providers/yt/fmr/job/impl/yql_yt_raw_table_queue.h>
+#include <yt/yql/providers/yt/fmr/utils/yql_yt_raw_table_queue.h>
 
 namespace NYql::NFmr {
 

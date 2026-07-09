@@ -198,6 +198,7 @@ bool GatherJoinInputsForAllNodes(const TExprNode::TPtr& expr, const TExprNode& r
 bool IsCachedJoinOption(TStringBuf name);
 bool IsCachedJoinLinkOption(TStringBuf name);
 
+TExprNode::TPtr PushAnyInEquiJoin(TExprContext& ctx, const NNodes::TCoEquiJoinTuple& joinTree, TExprNode::TPtr keyColumnsFromParent = nullptr);
 void GetPruneKeysColumnsForJoinLeaves(const NNodes::TCoEquiJoinTuple& joinTree, THashMap<TStringBuf, THashSet<TStringBuf>>& columnsForPruneKeysExtractor);
 
 TExprNode::TPtr DropAnyOverJoinInputs(TExprNode::TPtr joinTree, const TJoinLabels& labels, const THashMap<TStringBuf, THashSet<TStringBuf>>& keyColumnsByLabel, TExprContext& ctx);

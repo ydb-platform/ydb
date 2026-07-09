@@ -1,6 +1,7 @@
 #include "settings.h"
 #include "stats.h"
 
+#include <ydb/core/formats/arrow/accessor/dictionary/constructor.h>
 #include <ydb/core/formats/arrow/accessor/plain/constructor.h>
 #include <ydb/core/formats/arrow/accessor/sparsed/constructor.h>
 #include <ydb/core/formats/arrow/serializer/abstract.h>
@@ -96,13 +97,14 @@ TConstructorContainer TDictStats::GetAccessorConstructor(const ui32 columnIndex)
             return std::make_shared<NAccessor::NPlain::TConstructor>();
         case IChunkedArray::EType::SparsedArray:
             return std::make_shared<NAccessor::NSparsed::TConstructor>();
+        case IChunkedArray::EType::Dictionary:
+            return std::make_shared<NAccessor::NDictionary::TConstructor>();
         case IChunkedArray::EType::Undefined:
         case IChunkedArray::EType::SerializedChunkedArray:
         case IChunkedArray::EType::CompositeChunkedArray:
         case IChunkedArray::EType::SubColumnsArray:
         case IChunkedArray::EType::SubColumnsPartialArray:
         case IChunkedArray::EType::ChunkedArray:
-        case IChunkedArray::EType::Dictionary:
             AFL_VERIFY(false)("type", GetAccessorType(columnIndex));
             return TConstructorContainer();
     }
@@ -148,7 +150,8 @@ void TDictStats::TBuilder::Add(const TString& name, const ui32 recordsCount, con
         AFL_VERIFY(*LastKeyName < name)("last", LastKeyName)("name", name);
     }
     AFL_VERIFY(recordsCount);
-    AFL_VERIFY(accessorType == IChunkedArray::EType::Array || accessorType == IChunkedArray::EType::SparsedArray)("type", accessorType);
+    AFL_VERIFY(accessorType == IChunkedArray::EType::Array || accessorType == IChunkedArray::EType::SparsedArray ||
+               accessorType == IChunkedArray::EType::Dictionary)("type", accessorType);
     TStatusValidator::Validate(Names->Append(name.data(), name.size()));
     TStatusValidator::Validate(Records->Append(recordsCount));
     TStatusValidator::Validate(DataSize->Append(dataSize));

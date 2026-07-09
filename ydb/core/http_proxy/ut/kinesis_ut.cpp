@@ -197,23 +197,29 @@ Y_UNIT_TEST_SUITE(TestKinesisHttpProxy) {
             request = CreateDescribeStreamRequest();
             request["StreamName"] = "teststream";
             res = SendHttpRequest("/Root", ".", request, FormAuthorizationStr("ru-central-1"));
-            UNIT_ASSERT_VALUES_EQUAL(res.HttpCode, 404);
-            UNIT_ASSERT_VALUES_EQUAL(res.Description, "Not Found");
+            UNIT_ASSERT_VALUES_EQUAL(res.HttpCode, 400);
+            UNIT_ASSERT_VALUES_EQUAL(res.Description, "MissingAction");
         }
         {
             request = CreateDescribeStreamRequest();
             request["StreamName"] = "teststream";
             res = SendHttpRequest("/Root", "", request, FormAuthorizationStr("ru-central-1"));
-            UNIT_ASSERT_VALUES_EQUAL(res.HttpCode, 404);
-            UNIT_ASSERT_VALUES_EQUAL(res.Description, "Not Found");
+            UNIT_ASSERT_VALUES_EQUAL(res.HttpCode, 400);
+            UNIT_ASSERT_VALUES_EQUAL(res.Description, "MissingAction");
         }
         {
             request = CreateDescribeStreamRequest();
             request["StreamName"] = "teststream";
             res = SendHttpRequest("/Root", ".DescribeStream", request, FormAuthorizationStr("ru-central-1"));
-            UNIT_ASSERT_VALUES_EQUAL(res.HttpCode, 404);
-            UNIT_ASSERT_VALUES_EQUAL(res.Description, "Not Found");
+            UNIT_ASSERT_VALUES_EQUAL(res.HttpCode, 400);
+            UNIT_ASSERT_VALUES_EQUAL(res.Description, "MissingAction");
         }
+    }
+
+    Y_UNIT_TEST_F(CreateStreamWithNonSqsApiVersion, THttpProxyTestMock) {
+        auto res = SendHttpRequest("/Root", "legacyApi.CreateStream", CreateCreateStreamRequest(),
+                                   FormAuthorizationStr("ru-central1"));
+        UNIT_ASSERT_VALUES_EQUAL_C(res.HttpCode, 200, res.Body);
     }
 
     Y_UNIT_TEST_F(CreateStreamWithDifferentRetentions, THttpProxyTestMock) {

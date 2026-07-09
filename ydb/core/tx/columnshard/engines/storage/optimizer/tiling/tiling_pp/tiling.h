@@ -351,6 +351,23 @@ struct Tiling: ICompactionUnit<TKey, TPortion> {
     bool IsOverloaded() const {
         return OverloadPriority < DoGetUsefulMetric();
     }
+
+    // True when every portion has settled into the regular last level (LastLevel.Portions): nothing
+    // waiting in the accumulator, no intersecting candidates in the last level, and no middle levels.
+    bool HasNoIntersections() const {
+        if (!Accumulator.Portions.empty()) {
+            return false;
+        }
+        if (!LastLevel.CandidateIds.empty()) {
+            return false;
+        }
+        for (const auto& [_, middleLevel] : MiddleLevels) {
+            if (!middleLevel.PortionById.empty()) {
+                return false;
+            }
+        }
+        return true;
+    }
 };
 
 }   // namespace NKikimr::NOlap::NStorageOptimizer::NTiling

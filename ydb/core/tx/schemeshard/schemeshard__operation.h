@@ -145,6 +145,10 @@ struct TOperation: TSimpleRefCount<TOperation> {
         Barriers.erase(name);
     }
 
+    void ForceClearBarriers() {
+        Barriers.clear();
+    }
+
     TOperationId NextPartId() const {
         return TOperationId(TxId, TSubTxId(PreparedParts));
     }

@@ -1,0 +1,5 @@
+use plato;
+
+$filtered = SELECT key, value FROM Input WHERE subkey > "1";
+MATERIALIZE $filtered INTO $result;
+SELECT * FROM $result ORDER BY key;

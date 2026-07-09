@@ -7,6 +7,9 @@
 #include <ydb/library/formats/arrow/protos/accessor.pb.h>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/array/builder_base.h>
+#include <library/cpp/containers/absl/flat_hash_set.h>
+
+#include <string_view>
 
 namespace NKikimr::NArrow::NAccessor::NSubColumns {
 
@@ -16,6 +19,7 @@ private:
     YDB_ACCESSOR(ui32, ColumnsLimit, 1024);
     YDB_ACCESSOR(ui32, ChunkMemoryLimit, 50 * 1024 * 1024);
     YDB_READONLY(double, OthersAllowedFraction, 0.05);
+    YDB_ACCESSOR(double, DictionaryUniqueFraction, 0);
     YDB_ACCESSOR_DEF(TDataAdapterContainer, DataExtractor);
 
 public:
@@ -49,11 +53,12 @@ public:
 
     TSettings() = default;
     TSettings(const ui32 sparsedDetectorKff, const ui32 columnsLimit, const ui32 chunkMemoryLimit, const double othersAllowedFraction,
-        const TDataAdapterContainer& dataExtractor)
+        const TDataAdapterContainer& dataExtractor, const double dictionaryUniqueFraction = 0)
         : SparsedDetectorKff(sparsedDetectorKff)
         , ColumnsLimit(columnsLimit)
         , ChunkMemoryLimit(chunkMemoryLimit)
         , OthersAllowedFraction(othersAllowedFraction)
+        , DictionaryUniqueFraction(dictionaryUniqueFraction)
         , DataExtractor(dataExtractor) {
         AFL_VERIFY(!!DataExtractor);
         AFL_VERIFY(OthersAllowedFraction >= 0 && OthersAllowedFraction <= 1)("others_fraction", OthersAllowedFraction);
@@ -71,6 +76,7 @@ public:
         result.InsertValue("columns_limit", ColumnsLimit);
         result.InsertValue("memory_limit", ChunkMemoryLimit);
         result.InsertValue("others_allowed_fraction", OthersAllowedFraction);
+        result.InsertValue("dictionary_unique_fraction", DictionaryUniqueFraction);
         result.InsertValue("data_extractor", DataExtractor->DebugJson());
         return result;
     }
@@ -82,12 +88,48 @@ public:
         return false;
     }
 
+    // True once `enumerate` produces at least `count` distinct values; stops as early as possible.
+    // `enumerate(consumer)` must call `consumer(TStringBuf)` per value and stop once `consumer` returns false.
+    template <class TEnumerator>
+    static bool HasAtLeastUniqueValues(const ui32 count, const TEnumerator& enumerate) {
+        if (count == 0) {
+            return true;
+        }
+        absl::flat_hash_set<TStringBuf> seen;
+        seen.reserve(count);
+        bool reached = false;
+        enumerate([&](const TStringBuf value) {
+            seen.emplace(value);
+            if (seen.size() >= count) {
+                reached = true;
+                return false;
+            }
+            return true;
+        });
+        return reached;
+    }
+
+    // Dictionary-encode a column unless it has "too many" distinct values.
+    // `enumerate` feeds the values counted toward the distinct set. Short-circuits as soon as the verdict is clear.
+    template <class TEnumerator>
+    bool IsDictionary(const ui32 presentCount, const TEnumerator& enumerate) const {
+        if (DictionaryUniqueFraction == 0) {
+            return false;
+        }
+        if (DictionaryUniqueFraction == 1) {
+            return true;
+        }
+        const ui32 tooManyUnique = static_cast<ui32>(DictionaryUniqueFraction * presentCount) + 1;
+        return !HasAtLeastUniqueValues(tooManyUnique, enumerate);
+    }
+
     template <class TProto>
     void SerializeToProtoImpl(TProto& result) const {
         result.SetSparsedDetectorKff(SparsedDetectorKff);
         result.SetColumnsLimit(ColumnsLimit);
         result.SetChunkMemoryLimit(ChunkMemoryLimit);
         result.SetOthersAllowedFraction(OthersAllowedFraction);
+        result.SetDictionaryUniqueFraction(DictionaryUniqueFraction);
         DataExtractor.SerializeToProto(*result.MutableDataExtractor());
     }
 
@@ -97,6 +139,7 @@ public:
         ColumnsLimit = proto.GetColumnsLimit();
         ChunkMemoryLimit = proto.GetChunkMemoryLimit();
         OthersAllowedFraction = proto.GetOthersAllowedFraction();
+        DictionaryUniqueFraction = proto.GetDictionaryUniqueFraction();
         if (!proto.HasDataExtractor()) {
             AFL_VERIFY(DataExtractor.Initialize(TJsonScanExtractor::GetClassNameStatic()));
         } else if (!DataExtractor.DeserializeFromProto(proto.GetDataExtractor())) {

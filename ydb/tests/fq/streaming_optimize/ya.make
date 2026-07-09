@@ -3,7 +3,7 @@ PY3TEST()
 FORK_TEST_FILES()
 FORK_TESTS()
 FORK_SUBTESTS()
-SPLIT_FACTOR(4)
+SPLIT_FACTOR(8)
 
 TEST_SRCS(
     test_sql_negative.py
@@ -11,12 +11,11 @@ TEST_SRCS(
 )
 
 SIZE(MEDIUM)
-REQUIREMENTS(cpu:2)
 
 INCLUDE(${ARCADIA_ROOT}/ydb/library/yql/tools/solomon_emulator/recipe/recipe.inc)
 
 DEPENDS(
-    ydb/tests/tools/fqrun
+    ydb/tests/tools/kqprun
     yql/essentials/tools/astdiff
     yql/essentials/tools/sql2yql
     yql/essentials/tests/common/test_framework/udfs_deps

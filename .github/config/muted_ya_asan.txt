@@ -465,6 +465,7 @@ ydb/core/kqp/ut/cost KqpCost.WriteRowInsertFails-isOlap
 ydb/core/kqp/ut/federated_query/datastreams KqpFederatedQueryDatastreams.ReadFromLocalTopicsWithAuth
 ydb/core/kqp/ut/federated_query/datastreams KqpStreamingQueriesDdl.StreamingQueryWithProcess+EnableKqpConstraintsTransformer
 ydb/core/kqp/ut/federated_query/datastreams KqpStreamingQueriesSysView.ReadSysViewWithRowCountBackPressure
+ydb/core/kqp/ut/indexes/prefixed_vector KqpPrefixedVectorIndexes.PrefixedVectorEmptyIndexedTableInsert+Nullable+Covered
 ydb/core/kqp/ut/indexes/prefixed_vector KqpPrefixedVectorIndexes.PrefixedVectorIndexInsertNewPrefix-Nullable+Covered
 ydb/core/kqp/ut/indexes/prefixed_vector KqpPrefixedVectorIndexes.PrefixedVectorIndexInsertNewPrefixWithOverlap+Covered
 ydb/core/kqp/ut/indexes/prefixed_vector unittest.[*/*] chunk
@@ -473,6 +474,7 @@ ydb/core/kqp/ut/olap KqpOlapOptimizer.SpecialSliceToOneLayer
 ydb/core/kqp/ut/olap KqpOlapOptimizer.TilingPlusPlusTtlDeletion
 ydb/core/kqp/ut/pg KqpPg.TempTablesDrop
 ydb/core/kqp/ut/pg KqpPg.TempTablesWithCache
+ydb/core/kqp/ut/pg PgCatalog.CheckSetConfig
 ydb/core/kqp/ut/query KqpLimits.ComputeNodeMemoryLimit
 ydb/core/kqp/ut/rbo KqpRboOlap.BlockChannelAuto
 ydb/core/kqp/ut/rbo KqpRboOlap.BlockChannelForce

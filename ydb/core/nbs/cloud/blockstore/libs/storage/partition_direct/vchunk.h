@@ -59,6 +59,8 @@ public:
 
     void SetHostState(THostIndex hostIndex, EHostState state);
 
+    void OnHostAppended(size_t newHostCount);
+
     [[nodiscard]] const TVChunkConfig& GetConfig() const;
     [[nodiscard]] ui64 GetPBufferUsedSize(THostIndex hostIndex) const;
     [[nodiscard]] TString DebugPrintDirtyMap();
@@ -101,6 +103,7 @@ private:
         TCallContextPtr callContext,
         std::shared_ptr<TReadBlocksLocalRequest> request,
         std::shared_ptr<NWilson::TSpan> span);
+    void OnReadBlocksResponse(const IReadRequestExecutor::TResponse& response);
 
     void DoWriteBlocksLocal(std::shared_ptr<TWriteRequestBundle> bundle);
     void DoFlush(bool force);

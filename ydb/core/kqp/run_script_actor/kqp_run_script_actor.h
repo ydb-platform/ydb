@@ -1,9 +1,15 @@
 #pragma once
 
-#include <ydb/core/base/appdata.h>
-#include <ydb/core/kqp/counters/kqp_counters.h>
+#include <ydb/core/protos/kqp.pb.h>
+#include <ydb/library/actors/core/actorsystem_fwd.h>
 
-#include <ydb/library/actors/core/actor.h>
+#include <util/datetime/base.h>
+#include <util/generic/ptr.h>
+#include <util/generic/string.h>
+#include <util/system/types.h>
+
+#include <memory>
+#include <optional>
 
 namespace NKikimrConfig {
 
@@ -18,6 +24,8 @@ class StreamingDisposition;
 } // namespace NYql::NPq::NProto
 
 namespace NKikimr::NKqp {
+
+class TKqpCounters;
 
 struct TKqpRunScriptActorSettings {
     TString Database;

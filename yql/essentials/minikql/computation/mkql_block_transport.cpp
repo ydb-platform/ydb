@@ -1028,7 +1028,7 @@ private:
         if (needsOffsetAdjust) {
             auto mutableValueOffsets = NYql::NUdf::CopyBuffer(*valueOffsetsBuf, 0, blockLen * sizeof(i32), Pool_);
             auto* destOffsets = reinterpret_cast<i32*>(mutableValueOffsets->mutable_data());
-            NYql::NUdf::AdjustDenseUnionValueOffsets(
+            NYql::NUdf::AdjustDenseUnionValueOffsetsInplace(
                 TArrayRef<i32>(destOffsets, blockLen),
                 TArrayRef<const i8>(reinterpret_cast<const i8*>(typeCodesBuf->data()), blockLen),
                 ChildrenUsage_);
@@ -1169,14 +1169,14 @@ struct TDeserializerTraits {
 std::unique_ptr<IBlockSerializer> MakeBlockSerializer(const NYql::NUdf::ITypeInfoHelper& typeInfoHelper,
                                                       const NYql::NUdf::TType* type,
                                                       const TBlockSerializerParams& params) {
-    return NYql::NUdf::DispatchByArrowTraits<TSerializerTraits>(typeInfoHelper, type, nullptr, params);
+    return NYql::NUdf::DispatchByArrowTraits<TSerializerTraits>(typeInfoHelper, type, /*pgBuilder=*/nullptr, params);
 }
 
 std::unique_ptr<IBlockDeserializer> MakeBlockDeserializer(const NYql::NUdf::ITypeInfoHelper& typeInfoHelper,
                                                           const NYql::NUdf::TType* type,
                                                           const TBlockSerializerParams& params) {
     std::unique_ptr<TBlockDeserializerBase> result = NYql::NUdf::DispatchByArrowTraits<TDeserializerTraits>(
-        typeInfoHelper, type, nullptr, params);
+        typeInfoHelper, type, /*pgBuilder=*/nullptr, params);
     result->SetArrowType(NYql::NUdf::GetArrowType(typeInfoHelper, type));
     return std::move(result);
 }

@@ -581,10 +581,10 @@ private:
 
     template <typename TTokenRecord>
     void RequestAccessServiceAuthorization(const TString& key, TTokenRecord& record) const {
-        if (AppData()->FeatureFlags.GetEnableAccessServiceBulkAuthorization()) {
-            AccessServiceBulkAuthorize(key, record);
-        } else if (NebiusAccessServiceValidator) {
+        if (NebiusAccessServiceValidator) {
             NebiusAccessServiceAuthorize(key, record);
+        } else if (AppData()->FeatureFlags.GetEnableAccessServiceBulkAuthorization()) {
+            AccessServiceBulkAuthorize(key, record);
         } else {
             AccessServiceAuthorize(key, record);
         }

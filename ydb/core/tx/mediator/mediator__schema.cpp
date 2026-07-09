@@ -1,5 +1,7 @@
 #include "mediator_impl.h"
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_MEDIATOR
+
 namespace NKikimr {
 namespace NTxMediator {
 
@@ -19,8 +21,8 @@ struct TTxMediator::TTxSchema : public TTransactionBase<TTxMediator> {
     }
 
     void Complete(const TActorContext &ctx) override {
-        LOG_INFO_S(ctx, NKikimrServices::TX_MEDIATOR, "tablet# " << Self->TabletID()
-            << " TTxSchema Complete");
+        YDB_LOG_INFO_CTX(ctx, "TTxSchema Complete",
+            {"tablet", Self->TabletID()});
         Self->Execute(Self->CreateTxUpgrade(), ctx);
     }
 };

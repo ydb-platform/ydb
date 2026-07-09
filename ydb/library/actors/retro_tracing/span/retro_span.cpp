@@ -75,6 +75,9 @@ std::unique_ptr<NWilson::TSpan> TRetroSpan::MakeWilsonSpan() {
 void TRetroSpan::End() {
     EndTs = TInstant::Now();
     WriteSpan(this);
+    if (Flags & NWilson::EFlags::ACTION_ON_END) {
+        OnEnd();
+    }
 }
 
 void TRetroSpan::EndError() {
@@ -121,6 +124,13 @@ TString TRetroSpan::ToString() const {
     str << " IsEnded# " << IsEnded();
     str << "}";
     return str.Str();
+}
+
+void TRetroSpan::EnableActionOnEnd() {
+    Flags |= NWilson::EFlags::ACTION_ON_END;
+}
+
+void TRetroSpan::OnEnd() {
 }
 
 } // namespace NRetroTracing

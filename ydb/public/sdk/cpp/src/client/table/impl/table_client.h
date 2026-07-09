@@ -140,6 +140,7 @@ public:
 
     bool ReturnSession(TKqpSessionCommon* sessionImpl) override;
     void DeleteSession(TKqpSessionCommon* sessionImpl) override;
+    void PessimizeNode(std::uint64_t nodeId) override;
     ui32 GetSessionRetryLimit() const;
 
     void SetStatCollector(const NSdkStats::TStatCollector::TClientStatCollector& collector);

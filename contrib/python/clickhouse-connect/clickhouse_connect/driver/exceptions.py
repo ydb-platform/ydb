@@ -4,6 +4,26 @@ how useful that naming convention is, but the convention is used for potential i
 libraries.  In most cases docstring are taken from the DBIApi 2.0 documentation
 """
 
+import re
+
+_error_name_re = re.compile(r"\(([A-Z][A-Z0-9_]+)\)")
+
+
+def error_code_from_header(header_value: str | None) -> int | None:
+    """Parse the numeric ClickHouse error code from the exception header value."""
+    if not header_value:
+        return None
+    try:
+        return int(header_value)
+    except (TypeError, ValueError):
+        return None
+
+
+def error_name_from_body(body: str | None) -> str | None:
+    """Extract the symbolic ClickHouse error name (e.g. UNKNOWN_TABLE) from a response body."""
+    matches = _error_name_re.findall(body or "")
+    return matches[-1] if matches else None
+
 
 class ClickHouseError(Exception):
     """Exception related to operation with ClickHouse."""
@@ -16,7 +36,16 @@ class Warning(Warning, ClickHouseError):  # noqa: N818
 
 class Error(ClickHouseError):
     """Exception that is the base class of all other error exceptions
-    (not Warning)."""
+    (not Warning).
+
+    `code` is the numeric ClickHouse server error code when known, `name` the symbolic
+    name. Both are None when unavailable, e.g. transport errors or suppressed error detail.
+    """
+
+    def __init__(self, *args, code: int | None = None, name: str | None = None):
+        super().__init__(*args)
+        self.code = code
+        self.name = name
 
 
 class InterfaceError(Error):

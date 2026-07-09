@@ -1,5 +1,7 @@
 #include "gen_restarts.h"
 
+#define YDB_LOG_THIS_FILE_COMPONENT NActorsServices::TEST
+
 TConfiguration CreateErasureNone() {
     return TConfiguration(TAllPDisksConfiguration::MkOneTmp(512u << 10u, 16ull << 30ull, "ROT"),
             1, 1, NKikimr::TBlobStorageGroupType::ErasureNone);
@@ -49,7 +51,7 @@ void ChaoticWriteRestartWrite(const TChaoticWriteRestartWriteSettings &settings,
     TChaoticManyPutsTest w(settings.Parallel, settings.MsgNum, settings.MsgSize, cls1, settings.WorkingTime,
         settings.RequestTimeout);
     bool success1 = Conf.Run<TChaoticManyPutsTest>(&w, testTimeout);
-    LOG_NOTICE(*Conf.ActorSystem1, NActorsServices::TEST, "Chaotic write done");
+    YDB_LOG_NOTICE_CTX(*Conf.ActorSystem1, "Chaotic write done");
     UNIT_ASSERT(success1);
     Conf.Shutdown();
 
@@ -58,7 +60,7 @@ void ChaoticWriteRestartWrite(const TChaoticWriteRestartWriteSettings &settings,
     TChaoticManyPutsTest x(settings.Parallel, 1, settings.MsgSize, cls2, settings.WorkingTime,
         settings.RequestTimeout);
     bool success2 = Conf.Run<TChaoticManyPutsTest>(&x, testTimeout);
-    LOG_NOTICE(*Conf.ActorSystem1, NActorsServices::TEST, "System has been restarted");
+    YDB_LOG_NOTICE_CTX(*Conf.ActorSystem1, "System has been restarted");
     UNIT_ASSERT(success2);
     Conf.Shutdown();
 }

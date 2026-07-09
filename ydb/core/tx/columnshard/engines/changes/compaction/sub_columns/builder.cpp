@@ -1,10 +1,43 @@
 #include "builder.h"
 
+#include <ydb/core/formats/arrow/accessor/common/chunk_data.h>
+#include <ydb/core/formats/arrow/accessor/dictionary/constructor.h>
 #include <ydb/core/formats/arrow/accessor/sub_columns/accessor.h>
 #include <ydb/core/formats/arrow/accessor/sub_columns/constructor.h>
+#include <ydb/core/formats/arrow/serializer/abstract.h>
 #include <ydb/core/tx/columnshard/engines/changes/compaction/abstract/merger.h>
 
+#include <contrib/libs/apache/arrow/cpp/src/arrow/array/array_binary.h>
+
 namespace NKikimr::NOlap::NCompaction::NSubColumns {
+
+std::shared_ptr<NArrow::NAccessor::IChunkedArray> TMergedBuilder::MaybeDictionaryEncode(
+    const std::shared_ptr<NArrow::NAccessor::IChunkedArray>& accessor, const ui32 filledRecordsCount) const {
+    const auto enumerateNotNull = [&accessor](const auto& consumer) {
+        auto chunked = accessor->GetChunkedArray();
+        for (int c = 0; c < chunked->num_chunks(); ++c) {
+            const auto* binary = dynamic_cast<const arrow::BinaryArray*>(chunked->chunk(c).get());
+            if (!binary) {
+                continue;
+            }
+            for (int64_t i = 0; i < binary->length(); ++i) {
+                if (binary->IsNull(i)) {
+                    continue;
+                }
+                auto view = binary->GetView(i);
+                if (!consumer(TStringBuf(view.data(), view.size()))) {
+                    return;
+                }
+            }
+        }
+    };
+    if (!Settings.IsDictionary(filledRecordsCount, enumerateNotNull)) {
+        return accessor;
+    }
+    const NArrow::NAccessor::TChunkConstructionData cData(
+        accessor->GetRecordsCount(), nullptr, arrow::binary(), NArrow::NSerialization::TSerializerContainer::GetDefaultSerializer());
+    return NArrow::NAccessor::NDictionary::TConstructor().Construct(accessor, cData).DetachResult();
+}
 
 TColumnPortionResult TMergedBuilder::Finish(const TColumnMergeContext& cmContext) {
     if (RecordIndex) {
@@ -27,9 +60,11 @@ void TMergedBuilder::FlushData() {
     TDictStats::TBuilder statsBuilder;
     for (ui32 idx = 0; idx < ColumnBuilders.size(); ++idx) {
         if (ColumnBuilders[idx].GetFilledRecordsCount()) {
+            auto accessor = ColumnBuilders[idx].Finish(RecordIndex);
+            accessor = MaybeDictionaryEncode(accessor, ColumnBuilders[idx].GetFilledRecordsCount());
             statsBuilder.Add(ResultColumnStats.GetColumnName(idx), ColumnBuilders[idx].GetFilledRecordsCount(),
-                ColumnBuilders[idx].GetFilledRecordsSize(), ResultColumnStats.GetAccessorType(idx));
-            arrays.emplace_back(ColumnBuilders[idx].Finish(RecordIndex));
+                ColumnBuilders[idx].GetFilledRecordsSize(), accessor->GetType());
+            arrays.emplace_back(std::move(accessor));
         }
     }
     auto stats = statsBuilder.Finish();
@@ -55,6 +90,8 @@ void TMergedBuilder::Initialize() {
             case NArrow::NAccessor::IChunkedArray::EType::SubColumnsArray:
             case NArrow::NAccessor::IChunkedArray::EType::SubColumnsPartialArray:
             case NArrow::NAccessor::IChunkedArray::EType::ChunkedArray:
+            // Dictionary is never planned here by construction: GetAccessorType() defers it to
+            // MaybeDictionaryEncode after materialization, so the plan only yields Array/Sparsed.
             case NArrow::NAccessor::IChunkedArray::EType::Dictionary:
                 AFL_VERIFY(false);
         }

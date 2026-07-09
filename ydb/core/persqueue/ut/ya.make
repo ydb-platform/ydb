@@ -27,7 +27,7 @@ PEERDIR(
     ydb/public/sdk/cpp/src/client/persqueue_public/ut/ut_utils
 
     ydb/core/tx/schemeshard/ut_helpers
-    ydb/library/kafka
+    ydb/public/sdk/cpp/src/library/kafka
 )
 
 YQL_LAST_ABI_VERSION()
@@ -51,6 +51,8 @@ SRCS(
     partition_scale_manager_graph_cmp_ut.cpp
     utils_ut.cpp
     events_ut.cpp
+    write_id_ut.cpp
+    pqdata_transaction_compat_ut.cpp
 )
 
 RESOURCE(

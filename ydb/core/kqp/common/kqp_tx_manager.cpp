@@ -341,6 +341,20 @@ public:
         ValidSnapshot = hasSnapshot;
     }
 
+    void SetIsolationLevel(NKqpProto::EIsolationLevel level) override {
+        IsolationLevel = level;
+    }
+
+    NKqpProto::EIsolationLevel GetIsolationLevel() const override {
+        return IsolationLevel;
+    }
+
+    bool CanUseImmediateCommit() const override {
+        return IsSingleShard() && !HasOlapTable() 
+            && GetTopicOperations().GetSize() <= 1
+            && IsolationLevel != NKqpProto::ISOLATION_LEVEL_STRICT_SERIALIZABLE;
+    }
+
     bool BrokenLocks() const override {
         return LocksIssue.has_value() && !(HasSnapshot() && IsReadOnly());
     }
@@ -560,7 +574,7 @@ public:
 
         ShardsToWait = ShardsIds;
 
-        AFL_ENSURE(ReceivingShards.empty() || HasTopics() || !IsSingleShard() || HasOlapTable());
+        AFL_ENSURE(ReceivingShards.empty() || !CanUseImmediateCommit());
     }
 
     TCommitInfo GetCommitInfo() override {
@@ -685,6 +699,7 @@ private:
     bool ReadOnly = true;
     bool ValidSnapshot = false;
     bool HasOlapTableShard = false;
+    NKqpProto::EIsolationLevel IsolationLevel = NKqpProto::ISOLATION_LEVEL_UNDEFINED;
     std::optional<NYql::TIssue> LocksIssue;
     std::optional<ui64> VictimQuerySpanId_;
 

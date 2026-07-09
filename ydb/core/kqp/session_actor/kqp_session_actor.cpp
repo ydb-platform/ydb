@@ -1690,7 +1690,7 @@ public:
         AFL_ENSURE(txCtx.TxManager);
         const bool broken = !!txCtx.TxManager->GetLockIssue();
 
-        if (!txCtx.DeferredEffects.Empty() && broken) {
+        if ((!txCtx.DeferredEffects.Empty() || txCtx.HasUnflushedEffectsInBuffer) && broken) {
             EmitVictimTliLog(
                 txCtx.TxManager->GetVictimQuerySpanId(),
                 std::nullopt,
@@ -1918,7 +1918,8 @@ public:
         }
 
         request.AcquireLocksTxId = txCtx.LockHandle.GetLockId();
-        request.UseImmediateEffects = true;
+        request.FlushEffects = true;
+        txCtx.HasUnflushedEffectsInBuffer = false;
         request.PerShardKeysSizeLimitBytes = Config->_CommitPerShardKeysSizeLimitBytes.Get().GetRef();
 
         txCtx.HasImmediateEffects = true;
@@ -2059,8 +2060,20 @@ public:
             request.AcquireLocksTxId = txCtx.LockHandle.GetLockId();
 
             if (!txCtx.CanDeferEffects()) {
-                request.UseImmediateEffects = true;
+                request.FlushEffects = true;
+            } else {
+                // When CanDeferEffects() is true, GetCurrentPhyTx() defers all
+                // effect-only txs (ResultsSize() == 0), so the remaining tx
+                // must have results (RETURNING clause).
+                AFL_ENSURE(tx->ResultsSize() > 0);
             }
+        }
+
+        if (request.FlushEffects || commit) {
+            txCtx.HasUnflushedEffectsInBuffer = false;
+        } else if (tx && tx->GetHasEffects()) {
+            // Has unflushed effects in buffer (used for RETURNING)
+            txCtx.HasUnflushedEffectsInBuffer = true;
         }
 
         LWTRACK(KqpSessionPhyQueryProposeTx,

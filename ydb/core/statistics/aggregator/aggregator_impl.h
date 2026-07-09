@@ -10,7 +10,6 @@
 #include <ydb/core/base/hive.h>
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/base/tablet_pipecache.h>
-#include <ydb/core/statistics/common.h>
 #include <ydb/core/statistics/events.h>
 
 #include <ydb/core/cms/console/configs_dispatcher.h>
@@ -259,8 +258,8 @@ private:
 
             default:
                 if (!HandleDefaultEvents(ev, SelfId())) {
-                    LOG_CRIT(TlsActivationContext->AsActorContext(), NKikimrServices::STATISTICS,
-                        "TStatisticsAggregator StateWork unexpected event 0x%08" PRIx32, ev->GetTypeRewrite());
+                    YDB_LOG_CRIT_CTX_COMP(TlsActivationContext->AsActorContext(), NKikimrServices::STATISTICS, "TStatisticsAggregator StateWork unexpected event",
+                        {"eventType", ev->GetTypeRewrite()});
                 }
         }
     }

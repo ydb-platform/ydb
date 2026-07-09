@@ -57,6 +57,9 @@ public:
     // Number of consecutive successful completions since the last error
     // (reset to 0 on the first error after a success streak).
     [[nodiscard]] size_t GetConsecutiveSuccessCount() const;
+    // Number of consecutive failed completions since the last success
+    // (reset to 0 on the first success after a error streak).
+    [[nodiscard]] size_t GetConsecutiveErrorCount() const;
 
     // Number of currently inflight requests of a given operation type for
     // this host (i.e. OnRequest calls without a matching OnSuccess/OnError).

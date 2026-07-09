@@ -84,7 +84,7 @@ aws --endpoint "$ENDPOINT" sqs get-queue-url \
 
 Где:
 
-- `{queue_name}` — значение параметра `--queue-name`, имя SQS-очереди в формате `{topic_name}@{consumer_name}`. Если [разделяемый (общий) читатель](../../concepts/datamodel/topic.md#shared-consumer) имеет имя `ydb-sqs-consumer`, достаточно указать только `{topic_name}`;
+- `{queue_name}` — значение параметра `--queue-name`, имя Amazon SQS-очереди в формате `{topic_name}@{consumer_name}`. Если [разделяемый (общий) читатель](../../concepts/datamodel/topic.md#shared-consumer) имеет имя `ydb-sqs-consumer`, достаточно указать только `{topic_name}`;
 - `{topic_name}` — имя топика с путём от корня базы данных, в которой он создан, например `production/order` (топик `order` в директории `production`);
 - `{consumer_name}` — имя [разделяемого (общего) читателя](../../concepts/datamodel/topic.md#shared-consumer) на топике, например `ydb-sqs-consumer`.
 

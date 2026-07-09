@@ -64,27 +64,12 @@ TDBGWriteBlocksToManyPBuffersResponse MakeWriteToManyPBuffersResponse(
     return result;
 }
 
-EHostHealthView MapHealth(EHostHealth health)
-{
-    switch (health) {
-        case EHostHealth::Online:
-            return EHostHealthView::Online;
-        case EHostHealth::Sufferer:
-            return EHostHealthView::Sufferer;
-        case EHostHealth::TemporaryOffline:
-            return EHostHealthView::TemporaryOffline;
-        case EHostHealth::Offline:
-            return EHostHealthView::Offline;
-    }
-    return EHostHealthView::Offline;
-}
-
 THostSnapshot MakeHostSnapshot(const TOracleHostStat& stat)
 {
     return {
         .Index = stat.Index,
         .State = stat.State,
-        .Health = MapHealth(stat.Health),
+        .Health = stat.Health,
         .InflightByOperation = stat.InflightByOperation,
         .Errors = stat.Errors,
         .PBufferUsedSize = stat.PBufferUsedSize,

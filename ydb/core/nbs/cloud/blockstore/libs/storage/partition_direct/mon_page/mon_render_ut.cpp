@@ -34,14 +34,15 @@ Y_UNIT_TEST_SUITE(TMonRenderTest)
         THostSnapshot online{
             .Index = 0,
             .State = EHostState::Online,
-            .Health = EHostHealthView::Online,
+            .Health = EHostHealth::Online,
             .InflightByOperation = inflightByOperation,
-            .Errors = {.ConsecutiveErrorCount = 1},
+            .Errors =
+                {.ConsecutiveErrorCount = 1, .ConsecutiveSuccessCount = 7},
             .PBufferUsedSize = 4096,
         };
         THostSnapshot sufferer{
             .Index = 1,
-            .Health = EHostHealthView::Sufferer,
+            .Health = EHostHealth::Sufferer,
         };
         return {
             .Index = index,
@@ -97,6 +98,7 @@ Y_UNIT_TEST_SUITE(TMonRenderTest)
         UNIT_ASSERT_STRING_CONTAINS(html, "page=dbg&dbg=1");
         UNIT_ASSERT_STRING_CONTAINS(html, "1 Online");
         UNIT_ASSERT_STRING_CONTAINS(html, "1 Sufferer");
+        UNIT_ASSERT_STRING_CONTAINS(html, "Consecutive success");
     }
 
     Y_UNIT_TEST(DbgDetailShowsHostsTable)

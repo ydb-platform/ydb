@@ -2,8 +2,10 @@
 
 #include <library/cpp/monlib/service/pages/templates.h>
 
+#include <util/generic/map.h>
 #include <util/stream/str.h>
 #include <util/string/builder.h>
+#include <util/string/cast.h>
 #include <util/string/subst.h>
 
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
@@ -44,75 +46,15 @@ const char* PageTitle(EMonPage page)
     return "";
 }
 
-const char* OperationName(EOperation operation)
-{
-    switch (operation) {
-        case EOperation::ReadFromPBuffer:
-            return "ReadFromPBuffer";
-        case EOperation::ReadFromDDisk:
-            return "ReadFromDDisk";
-        case EOperation::WriteToPBuffer:
-            return "WriteToPBuffer";
-        case EOperation::WriteToManyPBuffers:
-            return "WriteToManyPBuffers";
-        case EOperation::WriteToDDisk:
-            return "WriteToDDisk";
-        case EOperation::Flush:
-            return "Flush";
-        case EOperation::FlushCrossNode:
-            return "FlushCrossNode";
-        case EOperation::Erase:
-            return "Erase";
-        case EOperation::BarrierErase:
-            return "BarrierErase";
-        case EOperation::Count_:
-            return "?";
-    }
-    return "?";
-}
-
-const char* HostStateName(EHostState state)
-{
-    switch (state) {
-        case EHostState::Online:
-            return "Online";
-        case EHostState::TemporaryOffline:
-            return "TemporaryOffline";
-        case EHostState::Offline:
-            return "Offline";
-    }
-    return "?";
-}
-
-const char* HealthName(EHostHealthView health)
-{
-    switch (health) {
-        case EHostHealthView::Online:
-            return "Online";
-        case EHostHealthView::Sufferer:
-            return "Sufferer";
-        case EHostHealthView::TemporaryOffline:
-            return "TemporaryOffline";
-        case EHostHealthView::Offline:
-            return "Offline";
-        case EHostHealthView::Count_:
-            return "?";
-    }
-    return "?";
-}
-
 // "6 Online" or "4 Online / 2 Sufferer".
-TString HealthRollup(const std::array<size_t, EHostHealthViewCount>& counts)
+TString HealthRollup(const TMap<EHostHealth, size_t>& counts)
 {
     TStringBuilder sb;
-    for (size_t i = 0; i < counts.size(); ++i) {
-        if (counts[i] == 0) {
-            continue;
-        }
+    for (const auto& [health, count]: counts) {
         if (!sb.empty()) {
             sb << " / ";
         }
-        sb << counts[i] << " " << HealthName(static_cast<EHostHealthView>(i));
+        sb << count << " " << ToString(health);
     }
     return sb.empty() ? TString("-") : TString(sb);
 }
@@ -253,16 +195,22 @@ void RenderDbgList(
                     TABLEH () {
                         str << "Consecutive errors";
                     }
+                    TABLEH () {
+                        str << "Consecutive success";
+                    }
                 }
             }
             TABLEBODY () {
                 for (const auto& dbg: dbgs) {
-                    std::array<size_t, EHostHealthViewCount> healthCounts{};
+                    TMap<EHostHealth, size_t> healthCounts;
                     size_t inflight = 0;
                     size_t consecutiveErrors = 0;
+                    size_t consecutiveSuccesses = 0;
                     for (const auto& host: dbg.Hosts) {
-                        ++healthCounts[static_cast<size_t>(host.Health)];
+                        ++healthCounts[host.Health];
                         consecutiveErrors += host.Errors.ConsecutiveErrorCount;
+                        consecutiveSuccesses +=
+                            host.Errors.ConsecutiveSuccessCount;
                         for (size_t operation = 0; operation < OperationCount;
                              ++operation)
                         {
@@ -289,6 +237,9 @@ void RenderDbgList(
                         }
                         TABLED () {
                             str << consecutiveErrors;
+                        }
+                        TABLED () {
+                            str << consecutiveSuccesses;
                         }
                     }
                 }
@@ -326,12 +277,14 @@ void RenderDbgDetail(
                     TABLEH () {
                         str << "Consecutive errors";
                     }
+                    TABLEH () {
+                        str << "Consecutive success";
+                    }
                     for (size_t operation = 0; operation < OperationCount;
                          ++operation)
                     {
                         TABLEH () {
-                            str << OperationName(
-                                static_cast<EOperation>(operation));
+                            str << ToString(static_cast<EOperation>(operation));
                         }
                     }
                 }
@@ -343,16 +296,19 @@ void RenderDbgDetail(
                             str << (int)host.Index;
                         }
                         TABLED () {
-                            str << HostStateName(host.State);
+                            str << ToString(host.State);
                         }
                         TABLED () {
-                            str << HealthName(host.Health);
+                            str << ToString(host.Health);
                         }
                         TABLED () {
                             str << host.PBufferUsedSize;
                         }
                         TABLED () {
                             str << host.Errors.ConsecutiveErrorCount;
+                        }
+                        TABLED () {
+                            str << host.Errors.ConsecutiveSuccessCount;
                         }
                         for (size_t operation = 0; operation < OperationCount;
                              ++operation)

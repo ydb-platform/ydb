@@ -3,6 +3,7 @@
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/host.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/host_stat.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/host_state.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/oracle.h>
 
 #include <util/generic/string.h>
 #include <util/generic/vector.h>
@@ -35,26 +36,11 @@ struct TFastPathServiceInfo
     size_t DbgCount = 0;
 };
 
-// Mirror of model EHostHealth, to avoid the Oracle header dependency.
-enum class EHostHealthView
-{
-    Online,
-    Sufferer,
-    TemporaryOffline,
-    Offline,
-
-    // Must remain the last entry. Used to size per-health containers.
-    Count_,
-};
-
-inline constexpr size_t EHostHealthViewCount =
-    static_cast<size_t>(EHostHealthView::Count_);
-
 struct THostSnapshot
 {
     THostIndex Index = InvalidHostIndex;
     EHostState State = EHostState::Online;
-    EHostHealthView Health = EHostHealthView::Online;
+    EHostHealth Health = EHostHealth::Online;
     TInflightByOperation InflightByOperation{};
     THostStat::TErrorsInfo Errors;
     ui64 PBufferUsedSize = 0;

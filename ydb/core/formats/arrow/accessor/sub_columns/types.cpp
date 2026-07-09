@@ -51,7 +51,8 @@ std::shared_ptr<arrow::DataType> GetArrowTypeForValueType(const EValueType value
             return arrow::float64();
         case EValueType::Bool:
             return arrow::boolean();
-        AFL_VERIFY(false)("unhandled value_type", (ui32)valueType);
+        default:
+            AFL_VERIFY(false)("unhandled value_type", (ui32)valueType);
             return arrow::binary();
     }
 }

@@ -58,13 +58,16 @@ void TColumnElements::BuildPlainAccessor(const ui32 recordsCount, const EValueTy
                 });
             break;
         case EValueType::Double:
-            Accessor = BuildTypedPlain<arrow::DoubleType>(Values, RecordIndexes, recordsCount, DataSize,
+            // No need to reserve by size for fixed-size arrays
+            Accessor = BuildTypedPlain<arrow::DoubleType>(Values, RecordIndexes, recordsCount, 0,
                 &ExtractDoubleScalar);
             break;
         case EValueType::Bool:
-            Accessor = BuildTypedPlain<arrow::BooleanType>(Values, RecordIndexes, recordsCount, DataSize,
+            Accessor = BuildTypedPlain<arrow::BooleanType>(Values, RecordIndexes, recordsCount, 0,
                 &ExtractBoolScalar);
             break;
+        default:
+            AFL_VERIFY(valueType == EValueType::String)("value_type", (ui32)valueType);
     }
 }
 

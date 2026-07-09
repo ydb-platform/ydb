@@ -926,6 +926,8 @@ void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvStartSession::TPtr& ev) {
         return;
     }
 
+    std::shared_ptr<NYdb::ICredentialsProviderFactory> credentialsProviderFactory;
+
     for (auto partitionId : ev->Get()->Record.GetPartitionIds()) {
         TActorId sessionActorId;
         TTopicSessionKey topicKey{source.GetReadGroup(), source.GetEndpoint(), source.GetDatabase(), source.GetTopicPath(), partitionId};
@@ -933,6 +935,12 @@ void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvStartSession::TPtr& ev) {
         Y_ENSURE(topicSessionInfo.Sessions.size() <= 1);
 
         if (topicSessionInfo.Sessions.empty()) {
+            if (!credentialsProviderFactory) {
+                credentialsProviderFactory = CreateCredentialsProviderFactoryForStructuredToken(
+                    CredentialsFactory,
+                    ev->Get()->Record.GetToken(),
+                    source.GetAddBearerToToken());
+            }
             LOG_ROW_DISPATCHER_DEBUG("Create new session: read group " << source.GetReadGroup() << " topic " << source.GetTopicPath() 
                 << " part id " << partitionId);
             sessionActorId = ActorFactory->RegisterTopicSession(
@@ -946,10 +954,7 @@ void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvStartSession::TPtr& ev) {
                 CompileServiceActorId,
                 partitionId,
                 Driver,
-                CreateCredentialsProviderFactoryForStructuredToken(
-                    CredentialsFactory,
-                    ev->Get()->Record.GetToken(),
-                    source.GetAddBearerToToken()),
+                credentialsProviderFactory,
                 Counters,
                 CountersRoot,
                 PqGateway,

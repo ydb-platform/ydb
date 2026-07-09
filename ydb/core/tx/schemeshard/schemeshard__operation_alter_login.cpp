@@ -37,6 +37,11 @@ public:
                 case NKikimrSchemeOp::TAlterLogin::kCreateUser: {
                     const auto& createUser = alterLogin.GetCreateUser();
 
+                    if (!createUser.HasHashedPassword() || createUser.HasPassword()) {
+                        result->SetStatus(NKikimrScheme::StatusPreconditionFailed, "Plain password is no longer supported, use hashed password instead");
+                        break;
+                    }
+
                     NLogin::TLoginProvider::TCreateUserRequest request;
                     request.User = createUser.GetUser();
                     request.HashedPassword = createUser.GetHashedPassword();
@@ -71,6 +76,11 @@ public:
                 }
                 case NKikimrSchemeOp::TAlterLogin::kModifyUser: {
                     const auto& modifyUser = alterLogin.GetModifyUser();
+
+                    if (modifyUser.HasPassword()) {
+                        result->SetStatus(NKikimrScheme::StatusPreconditionFailed, "Plain password is no longer supported, use hashed password instead");
+                        break;
+                    }
 
                     NLogin::TLoginProvider::TModifyUserRequest request;
 

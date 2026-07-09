@@ -663,6 +663,7 @@ message TOlapIndexDescription {
 }
 
 enum EMultiColumnStatisticsType {
+    UNSPECIFIED = 0;
     COUNT_MIN_SKETCH = 1;
 }
 

@@ -220,7 +220,7 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
 
         // Config should stay the same since new config is not persisted yet.
         UNIT_ASSERT_VALUES_EQUAL(
-            "[100] "
+            "[0/100] "
             "PBuffer{Primary;Primary;Primary;HandOff;HandOff} "
             "DDisk{Primary;Primary;Primary;None;None} "
             "Enabled{+++++}",
@@ -245,7 +245,7 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
 
         // Config should be updated.
         UNIT_ASSERT_VALUES_EQUAL(
-            "[100] "
+            "[0/100] "
             "PBuffer{Primary;Primary;Primary;HandOff;HandOff} "
             "DDisk{Primary;Primary;Primary;None;None} "
             "Enabled{-++++}",
@@ -283,7 +283,7 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
 
         // Config should be updated.
         UNIT_ASSERT_VALUES_EQUAL(
-            "[100] "
+            "[0/100] "
             "PBuffer{Primary;Primary;Primary;HandOff;HandOff} "
             "DDisk{Primary;Primary;Primary;None;None} "
             "Enabled{+++++}",
@@ -442,7 +442,7 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
 
         // Config should stay the same since new config is not persisted yet.
         UNIT_ASSERT_VALUES_EQUAL(
-            "[100] "
+            "[0/100] "
             "PBuffer{Primary;Primary;Primary;HandOff;HandOff} "
             "DDisk{Primary;Primary;Primary;None;None} "
             "Enabled{+++++}",
@@ -468,7 +468,7 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
 
         // Config should be updated.
         UNIT_ASSERT_VALUES_EQUAL(
-            "[100] "
+            "[0/100] "
             "PBuffer{HandOff;Primary;Primary;Primary;HandOff} "
             "DDisk{None;Primary;Primary;Primary;None} "
             "Enabled{-+++[0]+}",
@@ -507,7 +507,7 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
 
         // Config should be updated.
         UNIT_ASSERT_VALUES_EQUAL(
-            "[100] "
+            "[0/100] "
             "PBuffer{HandOff;Primary;Primary;Primary;HandOff} "
             "DDisk{None;Primary;Primary;Primary;None} "
             "Enabled{++++[0]+}",
@@ -541,7 +541,7 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
 
         // Config should be updated.
         UNIT_ASSERT_VALUES_EQUAL(
-            "[100] "
+            "[0/100] "
             "PBuffer{HandOff;Primary;Primary;Primary;HandOff} "
             "DDisk{None;Primary;Primary;Primary;None} "
             "Enabled{+++++}",

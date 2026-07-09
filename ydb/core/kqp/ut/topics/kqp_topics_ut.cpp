@@ -522,6 +522,15 @@ Y_UNIT_TEST(DeferredPublication_Publish_SingleDestination) {
         NKikimrKqp::TTopicDeferredPublicationRequest::Publish, false);
 }
 
+Y_UNIT_TEST(DeferredPublication_GetExtIdReturnsEmptyWhenOmitted) {
+    NTopic::TTopicOperations topicOps;
+    topicOps.AddDeferredPublicationOperation("topic", 0, 1'000'000,
+        NKikimrKqp::TTopicDeferredPublicationRequest::Publish, 42, "");
+
+    UNIT_ASSERT(topicOps.HasDeferredPublicationOperations());
+    UNIT_ASSERT_VALUES_EQUAL(topicOps.GetDeferredPublicationExtId(), "");
+}
+
 Y_UNIT_TEST(DeferredPublication_Cancel_MultipleDestinations) {
     const TString TOPIC_A = "topic_A";
     const TString TOPIC_B = "topic_B";

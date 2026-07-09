@@ -562,9 +562,8 @@ ui64 TTopicOperations::GetDeferredPublicationIntId() const
 const TString& TTopicOperations::GetDeferredPublicationExtId() const
 {
     Y_ENSURE(HasDeferredPublicationOperations());
-    Y_ENSURE(DeferredPublicationExtId_.Defined());
-
-    return *DeferredPublicationExtId_;
+    static const TString emptyExtPublicationId;
+    return DeferredPublicationExtId_.GetOrElse(emptyExtPublicationId);
 }
 
 bool TTopicOperations::TabletHasReadOperations(ui64 tabletId) const

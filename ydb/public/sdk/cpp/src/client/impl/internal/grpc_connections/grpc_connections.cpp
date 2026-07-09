@@ -4,7 +4,6 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/exceptions/exceptions.h>
 #include <ydb/public/sdk/cpp/src/client/impl/observability/constants.h>
 
-#include <future>
 #include <string>
 #include <thread>
 #include <utility>
@@ -14,23 +13,31 @@ namespace NYdb::inline Dev {
 
 namespace {
     thread_local ui32 SdkResponseCallbackDepth = 0;
-    thread_local std::shared_ptr<std::promise<void>> SdkResponseCallbackDonePromise;
-    thread_local std::shared_future<void> SdkResponseCallbackDone;
 
     template<class TCallback>
-    void RunAfterCurrentSdkCallback(TCallback&& callback) {
-        auto callbackDone = SdkResponseCallbackDone;
-
+    void RunAfterCurrentSdkCallback(std::shared_ptr<TDriverStopState> stopState, TCallback&& callback) {
+        // A fresh detached thread that runs to completion and exits: deferring onto a single
+        // long-lived worker instead was tried and regressed (a permanently-blocked worker
+        // faults at process teardown). Teardown-from-callback is rare, so on-demand is fine.
         try {
-            std::thread([callback = std::forward<TCallback>(callback), callbackDone = std::move(callbackDone)]() mutable {
-                if (callbackDone.valid()) {
-                    callbackDone.wait();
+            std::thread([stopState = std::move(stopState), callback = std::forward<TCallback>(callback)]() mutable {
+                // Wait until every in-flight SDK callback (including the one that scheduled
+                // us) has returned before touching the driver, so we never free it or join
+                // its threads from under a live callback frame.
+                if (stopState) {
+                    stopState->WaitCallbacksDrained();
                 }
                 callback();
             }).detach();
         } catch (...) {
             Y_ABORT("Failed to defer YDB driver action from SDK callback thread");
         }
+    }
+
+    TQueueClientCallbackGuardFactory MakeSdkCallbackGuardFactory(std::shared_ptr<TDriverStopState> stopState) {
+        return [stopState = std::move(stopState)] {
+            return std::make_unique<TSdkCallbackGuard>(stopState);
+        };
     }
 
     class TSdkQueueClientContext final : public NYdbGrpc::IQueueClientContext {
@@ -52,10 +59,7 @@ namespace {
         }
 
         TQueueClientCallbackGuardFactory GetCallbackGuardFactory() override {
-            auto stopState = StopState_;
-            return [stopState = std::move(stopState)] {
-                return std::make_unique<TSdkCallbackGuard>(stopState);
-            };
+            return MakeSdkCallbackGuardFactory(StopState_);
         }
 
         grpc::CompletionQueue* CompletionQueue() override {
@@ -97,14 +101,6 @@ void TDriverStopState::LeaveCallback() noexcept {
     }
 }
 
-void TDriverStopState::StartStopping() noexcept {
-    Stopping_.store(true, std::memory_order_release);
-}
-
-bool TDriverStopState::IsStopping() const noexcept {
-    return Stopping_.load(std::memory_order_acquire);
-}
-
 void TDriverStopState::WaitCallbacksDrained() {
     std::unique_lock lock(Mutex_);
     Drained_.wait(lock, [this] {
@@ -124,9 +120,8 @@ TSdkCallbackGuard::TSdkCallbackGuard(std::shared_ptr<TDriverStopState> stopState
     : StopState_(std::move(stopState))
 {
     Entered_ = !StopState_ || StopState_->TryEnterCallback();
-    if (Entered_ && ++SdkResponseCallbackDepth == 1) {
-        SdkResponseCallbackDonePromise = std::make_shared<std::promise<void>>();
-        SdkResponseCallbackDone = SdkResponseCallbackDonePromise->get_future().share();
+    if (Entered_) {
+        ++SdkResponseCallbackDepth;
     }
 }
 
@@ -135,11 +130,7 @@ TSdkCallbackGuard::~TSdkCallbackGuard() {
         return;
     }
 
-    if (--SdkResponseCallbackDepth == 0) {
-        SdkResponseCallbackDonePromise->set_value();
-        SdkResponseCallbackDonePromise.reset();
-        SdkResponseCallbackDone = {};
-    }
+    --SdkResponseCallbackDepth;
 
     if (StopState_) {
         StopState_->LeaveCallback();
@@ -390,12 +381,13 @@ bool TGRpcConnectionsImpl::IsCurrentThreadInSdkCallback() noexcept {
     return SdkResponseCallbackDepth != 0;
 }
 
-void TGRpcConnectionsImpl::StopFromCallback(std::shared_ptr<TGRpcConnectionsImpl> self, bool wait) {
-    // Waiting on an SDK callback thread may deadlock the response path needed to finish stop.
-    RunAfterCurrentSdkCallback(
-        [self = std::move(self), wait]() mutable {
-            self->Stop(wait);
-        });
+void TGRpcConnectionsImpl::DeferOrRunNow(std::shared_ptr<TDriverStopState> stopState, std::function<void()> action) {
+    if (!IsCurrentThreadInSdkCallback() && !NYdbGrpc::IsGRpcCompletionThread()) {
+        action();
+        return;
+    }
+
+    RunAfterCurrentSdkCallback(std::move(stopState), std::move(action));
 }
 
 void TGRpcConnectionsDeleter::operator()(TGRpcConnectionsImpl* connections) const noexcept {
@@ -403,27 +395,18 @@ void TGRpcConnectionsDeleter::operator()(TGRpcConnectionsImpl* connections) cons
         return;
     }
 
-    if (!TGRpcConnectionsImpl::IsCurrentThreadInSdkCallback() && !NYdbGrpc::IsGRpcCompletionThread()) {
+    TGRpcConnectionsImpl::DeferOrRunNow(connections->StopState_, [connections] {
         delete connections;
-        return;
-    }
-
-    RunAfterCurrentSdkCallback(
-        [connections] {
-            delete connections;
-        });
+    });
 }
 
 void TGRpcConnectionsImpl::AddPeriodicTask(TPeriodicCb&& cb, TDeadline::Duration period) {
     std::shared_ptr<IQueueClientContext> context;
     if (!TryCreateContext(context)) {
         NYdb::NIssue::TIssues issues;
-        TSdkCallbackGuard guard(StopState_);
-        if (guard.IsEntered()) {
-            cb(std::move(issues), EStatus::CLIENT_INTERNAL_ERROR);
-        } else {
-            cb(std::move(issues), EStatus::CLIENT_CANCELLED);
-        }
+        RunGuarded(StopState_,
+            [&] { cb(std::move(issues), EStatus::CLIENT_INTERNAL_ERROR); },
+            [&] { cb(std::move(issues), EStatus::CLIENT_CANCELLED); });
     } else {
         auto action = MakeIntrusive<TPeriodicAction>(
             std::move(cb),
@@ -437,12 +420,9 @@ void TGRpcConnectionsImpl::AddPeriodicTask(TPeriodicCb&& cb, TDeadline::Duration
 void TGRpcConnectionsImpl::PostToResponseQueue(std::function<void()>&& f) {
     auto stopState = StopState_;
     ResponseQueue_->Post([f = std::move(f), stopState = std::move(stopState)]() mutable {
-        TSdkCallbackGuard guard(stopState);
-        if (!guard.IsEntered()) {
-            return;
-        }
-        auto callback = std::move(f);
-        callback();
+        RunGuarded(stopState,
+            [&] { auto callback = std::move(f); callback(); },
+            [] {});
     });
 }
 
@@ -531,10 +511,7 @@ IQueueClientContextPtr TGRpcConnectionsImpl::CreateContext() {
 }
 
 TQueueClientCallbackGuardFactory TGRpcConnectionsImpl::GetCallbackGuardFactory() {
-    auto stopState = StopState_;
-    return [stopState = std::move(stopState)] {
-        return std::make_unique<TSdkCallbackGuard>(stopState);
-    };
+    return MakeSdkCallbackGuardFactory(StopState_);
 }
 
 bool TGRpcConnectionsImpl::TryCreateContext(IQueueClientContextPtr& context) {
@@ -553,7 +530,6 @@ void TGRpcConnectionsImpl::WaitIdle() {
 }
 
 void TGRpcConnectionsImpl::Stop(bool wait) {
-    StopState_->StartStopping();
     auto stopState = StopState_;
     StateTracker_.SendNotification(
         TDbDriverState::ENotifyType::STOP,
@@ -720,16 +696,15 @@ const TLog& TGRpcConnectionsImpl::GetLog() const {
 void TGRpcConnectionsImpl::EnqueueResponse(IObjectInQueue* action) {
     auto stopState = StopState_;
     ResponseQueue_->Post([action, stopState = std::move(stopState)]() {
-        TSdkCallbackGuard guard(stopState);
-        if (!guard.IsEntered()) {
-            if (auto* response = dynamic_cast<TQueueResponse*>(action)) {
-                response->Cancel();
-            } else {
-                delete action;
-            }
-            return;
-        }
-        action->Process(nullptr);
+        RunGuarded(stopState,
+            [&] { action->Process(nullptr); },
+            [&] {
+                if (auto* response = dynamic_cast<TQueueResponse*>(action)) {
+                    response->Cancel();
+                } else {
+                    delete action;
+                }
+            });
     });
 }
 

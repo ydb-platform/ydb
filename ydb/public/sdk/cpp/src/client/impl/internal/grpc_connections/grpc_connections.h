@@ -50,14 +50,10 @@ public:
     bool TryEnterCallback() noexcept;
     void LeaveCallback() noexcept;
 
-    void StartStopping() noexcept;
-    bool IsStopping() const noexcept;
-
     void WaitCallbacksDrained();
     void MarkStopped() noexcept;
 
 private:
-    std::atomic<bool> Stopping_{false};
     std::mutex Mutex_;
     std::condition_variable Drained_;
     ui64 InFlightCallbacks_ = 0;
@@ -76,6 +72,19 @@ private:
     bool Entered_ = false;
 };
 
+// Runs onEntered() while the driver is not stopping, otherwise onStopped().
+// The single choke point behind every SDK-level guarded callback: it decides
+// run-vs-substitute and keeps the in-flight-callback drain counter correct.
+template<class TOnEntered, class TOnStopped>
+void RunGuarded(const std::shared_ptr<TDriverStopState>& stopState, TOnEntered&& onEntered, TOnStopped&& onStopped) {
+    TSdkCallbackGuard guard(stopState);
+    if (guard.IsEntered()) {
+        std::forward<TOnEntered>(onEntered)();
+    } else {
+        std::forward<TOnStopped>(onStopped)();
+    }
+}
+
 std::string GetAuthInfo(TDbDriverStatePtr p);
 std::string CreateSDKBuildInfo();
 
@@ -85,14 +94,18 @@ class TGRpcConnectionsImpl
 {
     friend class TDeferredAction;
     friend class TDriver;
+    friend struct TGRpcConnectionsDeleter;
 public:
     TGRpcConnectionsImpl(std::shared_ptr<IConnectionsParams> params);
     ~TGRpcConnectionsImpl();
 
     static bool IsCurrentThreadInSdkCallback() noexcept;
 
-private:
-    void StopFromCallback(std::shared_ptr<TGRpcConnectionsImpl> self, bool wait);
+    // Runs action() now if the caller is on a normal thread, otherwise defers it to a
+    // fresh thread that first waits for all in-flight callbacks to drain. Used for
+    // Stop()/delete triggered from within a callback, where running inline would
+    // deadlock (self-join) or free the driver under a live callback frame.
+    static void DeferOrRunNow(std::shared_ptr<TDriverStopState> stopState, std::function<void()> action);
 
 public:
     void AddPeriodicTask(TPeriodicCb&& cb, TDeadline::Duration period) override;
@@ -208,12 +221,9 @@ public:
         TPlainStatus status,
         const std::shared_ptr<TDriverStopState>& stopState)
     {
-        TSdkCallbackGuard guard(stopState);
-        if (guard.IsEntered()) {
-            callback(response, std::move(status));
-        } else {
-            callback(nullptr, MakeClientStoppedStatus());
-        }
+        RunGuarded(stopState,
+            [&] { callback(response, std::move(status)); },
+            [&] { callback(nullptr, MakeClientStoppedStatus()); });
     }
 
     template<typename TCallback, typename TProcessor>
@@ -223,12 +233,9 @@ public:
         TProcessor processor,
         const std::shared_ptr<TDriverStopState>& stopState)
     {
-        TSdkCallbackGuard guard(stopState);
-        if (guard.IsEntered()) {
-            callback(std::move(status), std::move(processor));
-        } else {
-            callback(MakeClientStoppedStatus(), nullptr);
-        }
+        RunGuarded(stopState,
+            [&] { callback(std::move(status), std::move(processor)); },
+            [&] { callback(MakeClientStoppedStatus(), nullptr); });
     }
 
     template<typename TService, typename TCallback>
@@ -239,12 +246,9 @@ public:
         TEndpointKey endpoint,
         const std::shared_ptr<TDriverStopState>& stopState)
     {
-        TSdkCallbackGuard guard(stopState);
-        if (guard.IsEntered()) {
-            callback(std::move(status), std::move(serviceConnection), std::move(endpoint));
-        } else {
-            callback(MakeClientStoppedStatus(), std::unique_ptr<TServiceConnection<TService>>{nullptr}, TEndpointKey{});
-        }
+        RunGuarded(stopState,
+            [&] { callback(std::move(status), std::move(serviceConnection), std::move(endpoint)); },
+            [&] { callback(MakeClientStoppedStatus(), std::unique_ptr<TServiceConnection<TService>>{nullptr}, TEndpointKey{}); });
     }
 
     template<typename TRequest>
@@ -593,12 +597,9 @@ public:
                             };
                             processor->AddFinishedCallback(std::move(finishedCallback));
                             TPlainStatus status(std::move(grpcStatus), endpoint.GetEndpoint(), {});
-                            TSdkCallbackGuard guard(stopState);
-                            if (guard.IsEntered()) {
-                                responseCb(std::move(status), std::move(processor));
-                            } else {
-                                responseCb(MakeClientStoppedStatus(), nullptr);
-                            }
+                            RunGuarded(stopState,
+                                [&] { responseCb(std::move(status), std::move(processor)); },
+                                [&] { responseCb(MakeClientStoppedStatus(), nullptr); });
                         } else {
                             dbState->StatCollector.IncReqFailDueTransportError();
                             dbState->StatCollector.IncTransportErrorsByHost(endpoint.GetEndpoint());
@@ -606,12 +607,9 @@ public:
                                 dbState->EndpointPool.BanEndpoint(endpoint.GetEndpoint());
                             }
                             TPlainStatus status(std::move(grpcStatus), endpoint.GetEndpoint(), {});
-                            TSdkCallbackGuard guard(stopState);
-                            if (guard.IsEntered()) {
-                                responseCb(std::move(status), nullptr);
-                            } else {
-                                responseCb(MakeClientStoppedStatus(), nullptr);
-                            }
+                            RunGuarded(stopState,
+                                [&] { responseCb(std::move(status), nullptr); },
+                                [&] { responseCb(MakeClientStoppedStatus(), nullptr); });
                         }
                     };
 
@@ -687,12 +685,9 @@ public:
                                 };
                                 processor->AddFinishedCallback(std::move(finishedCallback));
                                 TPlainStatus status(std::move(grpcStatus), endpoint.GetEndpoint(), {});
-                                TSdkCallbackGuard guard(stopState);
-                                if (guard.IsEntered()) {
-                                    connectedCallback(std::move(status), std::move(processor));
-                                } else {
-                                    connectedCallback(MakeClientStoppedStatus(), nullptr);
-                                }
+                                RunGuarded(stopState,
+                                    [&] { connectedCallback(std::move(status), std::move(processor)); },
+                                    [&] { connectedCallback(MakeClientStoppedStatus(), nullptr); });
                             } else {
                                 dbState->StatCollector.IncReqFailDueTransportError();
                                 dbState->StatCollector.IncTransportErrorsByHost(endpoint.GetEndpoint());
@@ -700,12 +695,9 @@ public:
                                     dbState->EndpointPool.BanEndpoint(endpoint.GetEndpoint());
                                 }
                                 TPlainStatus status(std::move(grpcStatus), endpoint.GetEndpoint(), {});
-                                TSdkCallbackGuard guard(stopState);
-                                if (guard.IsEntered()) {
-                                    connectedCallback(std::move(status), nullptr);
-                                } else {
-                                    connectedCallback(MakeClientStoppedStatus(), nullptr);
-                                }
+                                RunGuarded(stopState,
+                                    [&] { connectedCallback(std::move(status), nullptr); },
+                                    [&] { connectedCallback(MakeClientStoppedStatus(), nullptr); });
                             }
                         };
 
@@ -825,26 +817,25 @@ private:
                 asyncResult.first.Subscribe([this, callback = std::move(callback), needUpdateChannels, dbState, preferredEndpoint, endpointPolicy, stopState = std::move(stopState)]
                     (const NThreading::TFuture<TEndpointUpdateResult>& future) mutable {
                     --QueuedRequests_;
-                    TSdkCallbackGuard guard(stopState);
-                    if (!guard.IsEntered()) {
-                        callback(MakeClientStoppedStatus(), TConnection{nullptr}, TEndpointKey{});
-                        return;
-                    }
-                    const auto& updateResult = future.GetValue();
-                    if (needUpdateChannels) {
+                    RunGuarded(stopState,
+                        [&] {
+                            const auto& updateResult = future.GetValue();
+                            if (needUpdateChannels) {
 #ifndef YDB_GRPC_BYPASS_CHANNEL_POOL
-                        DeleteChannels(updateResult.Removed);
+                                DeleteChannels(updateResult.Removed);
 #endif
-                    }
-                    auto discoveryStatus = updateResult.DiscoveryStatus;
-                    if (discoveryStatus.Status == EStatus::SUCCESS) {
-                        WithServiceConnection<TService>(std::move(callback), dbState, preferredEndpoint, endpointPolicy);
-                    } else {
-                        callback(
-                            TPlainStatus(discoveryStatus.Status, std::move(discoveryStatus.Issues)),
-                            TConnection{nullptr},
-                            TEndpointKey{});
-                    }
+                            }
+                            auto discoveryStatus = updateResult.DiscoveryStatus;
+                            if (discoveryStatus.Status == EStatus::SUCCESS) {
+                                WithServiceConnection<TService>(std::move(callback), dbState, preferredEndpoint, endpointPolicy);
+                            } else {
+                                callback(
+                                    TPlainStatus(discoveryStatus.Status, std::move(discoveryStatus.Issues)),
+                                    TConnection{nullptr},
+                                    TEndpointKey{});
+                            }
+                        },
+                        [&] { callback(MakeClientStoppedStatus(), TConnection{nullptr}, TEndpointKey{}); });
                 });
             }
             return;

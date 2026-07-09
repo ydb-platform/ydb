@@ -193,6 +193,7 @@ public:
     EScan Seek(TLead& lead, ui64) override {
         lead.To(Scheme->Tags(), {}, ESeek::Lower);
         Buffer->Clear();
+        Buffer->ColumnsOrder(Scheme->Tags());
 
         State.Set(ES_INITIALIZED);
         MaybeReady();

@@ -29,8 +29,10 @@ struct TPersQueueReadBalancer::TTxInit : public ITransaction {
             auto partsRowset = db.Table<Schema::Partitions>().Range().Select();
             auto groupsRowset = db.Table<Schema::Groups>().Range().Select();
             auto tabletsRowset = db.Table<Schema::Tablets>().Range().Select();
+            auto receiveAttemptsRowset = db.Table<Schema::ReceiveAttemptPartitions>().Range().Select();
 
-            if (!dataRowset.IsReady() || !partsRowset.IsReady() || !groupsRowset.IsReady() || !tabletsRowset.IsReady())
+            if (!dataRowset.IsReady() || !partsRowset.IsReady() || !groupsRowset.IsReady() || !tabletsRowset.IsReady()
+                || !receiveAttemptsRowset.IsReady())
                 return false;
 
             while (!dataRowset.EndOfSet()) { //found out topic info
@@ -94,6 +96,17 @@ struct TPersQueueReadBalancer::TTxInit : public ITransaction {
 
                 Self->TabletsInfo[tabletId] = info;
                 if (!tabletsRowset.Next())
+                    return false;
+            }
+
+            while (!receiveAttemptsRowset.EndOfSet()) {
+                Self->MLPBalancer->RestoreReceiveAttemptPartition(
+                    receiveAttemptsRowset.GetValue<Schema::ReceiveAttemptPartitions::Consumer>(),
+                    receiveAttemptsRowset.GetValue<Schema::ReceiveAttemptPartitions::ReceiveAttemptId>(),
+                    receiveAttemptsRowset.GetValue<Schema::ReceiveAttemptPartitions::PartitionId>(),
+                    TInstant::Seconds(receiveAttemptsRowset.GetValue<Schema::ReceiveAttemptPartitions::Expiry>())
+                );
+                if (!receiveAttemptsRowset.Next())
                     return false;
             }
 

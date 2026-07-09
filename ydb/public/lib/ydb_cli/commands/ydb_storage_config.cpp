@@ -61,8 +61,8 @@ void TCommandStorageConfigFetch::Parse(TConfig& config) {
 }
 
 int TCommandStorageConfigFetch::Run(TConfig& config) {
-    auto driver = std::make_unique<NYdb::TDriver>(CreateDriver(config));
-    auto client = NYdb::NConfig::TConfigClient(*driver);
+    auto driver = CreateDriver(config);
+    auto client = NYdb::NConfig::TConfigClient(driver);
 
     NYdb::NConfig::TFetchAllConfigsSettings settings;
 
@@ -158,8 +158,8 @@ void TCommandStorageConfigReplace::Parse(TConfig& config) {
 }
 
 int TCommandStorageConfigReplace::Run(TConfig& config) {
-    std::unique_ptr<NYdb::TDriver> driver = std::make_unique<NYdb::TDriver>(CreateDriver(config));
-    auto client = NYdb::NConfig::TConfigClient(*driver);
+    auto driver = CreateDriver(config);
+    auto client = NYdb::NConfig::TConfigClient(driver);
 
     auto status = [&]() {
         if (SwitchDedicatedStorageSection && !*SwitchDedicatedStorageSection) {

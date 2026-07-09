@@ -218,6 +218,8 @@ message TPartitionConfig {
     repeated uint32 DropByKeyFilterPrefixLengths = 28; // Bloom filter prefix lengths to drop
     // For unique indexes - number of leading PK columns which should have unique values (for correct locking)
     optional uint32 UniqueIndexKeySize = 29;
+    // For fulltext indexes - to determine if the table is an impl table of an index
+    optional ESpecialTableType SpecialTableType = 30;
 }
 
 message TByKeyFilterPrefix {
@@ -471,8 +473,7 @@ message TTableDescription {
      */
     optional TTableDetailedMetricsSettings DetailedMetricsSettings = 51;
 
-    // For fulltext indexes - to determine if the table is an impl table of an index
-    optional ESpecialTableType TableType = 52;
+    reserved 52;
 }
 
 message TCompressionOptions {
@@ -686,6 +687,8 @@ message TCompactionLevelConstructorContainer {
         optional uint64 Concurrency = 6;
         optional uint64 CompactionTaskMemoryLimit = 7;
         optional uint64 CompactionTaskPortionsCountLimit = 8;
+        optional bool CompactAtLevel = 9 [default = false];
+        optional uint64 SkipLevelMinBlobSize = 10;
     }
 
     message TOneLayer {
@@ -776,11 +779,17 @@ message TMetadataManagerConstructorContainer {
     }
 }
 
+message TInsertOptions {
+    optional bool BuildIndexesEnabled = 1 [default = false];
+    optional uint64 BuildIndexesMinBlobBytes = 2 [default = 0];
+}
+
 message TColumnTableSchemeOptions {
     optional bool SchemeNeedActualization = 1 [default = false];
     optional TCompactionPlannerConstructorContainer CompactionPlannerConstructor = 3;
     optional TMetadataManagerConstructorContainer MetadataManagerConstructor = 4;
     optional string ScanReaderPolicyName = 5;
+    optional TInsertOptions InsertOptions = 6;
 }
 
 message TColumnTableSchema {
@@ -826,6 +835,7 @@ message TColumnTableRequestedOptions {
     optional TCompactionPlannerConstructorContainer CompactionPlannerConstructor = 3;
     optional TMetadataManagerConstructorContainer MetadataManagerConstructor = 4;
     optional string ScanReaderPolicyName = 5;
+    optional TInsertOptions InsertOptions = 6;
 }
 
 message TAlterColumnTableSchema {

@@ -4294,6 +4294,135 @@ Y_UNIT_TEST(AlterTableDropIndexIsCorrect) {
     UNIT_ASSERT_C(result.IsOk(), result.Issues.ToString());
 }
 
+Y_UNIT_TEST(CreateTableWithStatisticsIsSupported) {
+    auto res = SqlToYql(R"sql(
+        USE ydb;
+        CREATE TABLE table (
+            k Uint64 NOT NULL,
+            a Uint64,
+            b Utf8,
+            PRIMARY KEY (k),
+            STATISTICS s ON (a, b) WITH (COUNT_MIN_SKETCH)
+        );
+    )sql");
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+        if (word == "Write") {
+            UNIT_ASSERT_STRING_CONTAINS(line, "statisticsName");
+            UNIT_ASSERT_STRING_CONTAINS(line, "statisticsColumns");
+            UNIT_ASSERT_STRING_CONTAINS(line, "statisticsTypes");
+            UNIT_ASSERT_STRING_CONTAINS(line, "COUNT_MIN_SKETCH");
+        }
+    };
+    TWordCountHive elementStat = {"Write"};
+    VerifyProgram(res, elementStat, verifyLine);
+    UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
+}
+
+Y_UNIT_TEST(CreateTableWithStatisticsOnUnknownColumnFails) {
+    ExpectFailWithError(R"sql(
+        USE ydb;
+        CREATE TABLE table (
+            k Uint64 NOT NULL,
+            a Uint64,
+            PRIMARY KEY (k),
+            STATISTICS s ON (missing) WITH (COUNT_MIN_SKETCH)
+        );
+    )sql", "<main>:7:30: Error: Undefined column: missing\n");
+}
+
+Y_UNIT_TEST(CreateTableWithStatisticsWithoutWithIsSupported) {
+    auto res = SqlToYql(R"sql(
+        USE ydb;
+        CREATE TABLE table (
+            k Uint64 NOT NULL,
+            a Uint64,
+            b Utf8,
+            PRIMARY KEY (k),
+            STATISTICS s ON (a, b)
+        );
+    )sql");
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+}
+
+Y_UNIT_TEST(CreateTableWithStatisticsEmptyWithFails) {
+    // Empty WITH () is rejected by the grammar: the statistic type list must be non-empty.
+    ExpectFailWithFuzzyError(R"sql(
+        USE ydb;
+        CREATE TABLE table (
+            k Uint64 NOT NULL,
+            a Uint64,
+            PRIMARY KEY (k),
+            STATISTICS s ON (a) WITH ()
+        );
+    )sql", "<main>:7:38: Error: mismatched input");
+}
+
+Y_UNIT_TEST(AlterTableAddStatisticsIsSupported) {
+    auto res = SqlToYql(R"sql(
+        USE ydb;
+        ALTER TABLE table
+            ADD STATISTICS s1 ON (a, b) WITH (COUNT_MIN_SKETCH),
+            ADD STATISTICS s2 ON (a) WITH (COUNT_MIN_SKETCH);
+    )sql");
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+        if (word == "Write") {
+            UNIT_ASSERT_STRING_CONTAINS(line, "addStatistics");
+        }
+    };
+    TWordCountHive elementStat = {"Write"};
+    VerifyProgram(res, elementStat, verifyLine);
+}
+
+Y_UNIT_TEST(AlterTableAddStatisticsDuplicateFails) {
+    ExpectFailWithError(R"sql(
+        USE ydb;
+        ALTER TABLE table
+            ADD STATISTICS s1 ON (a) WITH (COUNT_MIN_SKETCH),
+            ADD STATISTICS s1 ON (b) WITH (COUNT_MIN_SKETCH);
+    )sql", "<main>:5:28: Error: Statistics s1 must be defined once\n");
+}
+
+Y_UNIT_TEST(AlterTableAddStatisticsWithoutWithIsSupported) {
+    auto res = SqlToYql(R"sql(
+        USE ydb;
+        ALTER TABLE table
+            ADD STATISTICS s1 ON (a, b);
+    )sql");
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+}
+
+Y_UNIT_TEST(AlterTableAddStatisticsEmptyWithFails) {
+    // Empty WITH () is rejected by the grammar: the statistic type list must be non-empty.
+    ExpectFailWithFuzzyError(R"sql(
+        USE ydb;
+        ALTER TABLE table
+            ADD STATISTICS s1 ON (a) WITH ();
+    )sql", "<main>:4:43: Error: mismatched input");
+}
+
+Y_UNIT_TEST(AlterTableDropStatisticsIsSupported) {
+    auto res = SqlToYql("USE ydb; ALTER TABLE table DROP STATISTICS s");
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+        if (word == "Write") {
+            UNIT_ASSERT_STRING_CONTAINS(line, "dropStatistics");
+        }
+    };
+    TWordCountHive elementStat = {"Write"};
+    VerifyProgram(res, elementStat, verifyLine);
+}
+
+Y_UNIT_TEST(StatisticsKeywordIsNotReserved) {
+    // STATISTICS is a non-reserved keyword and must remain usable as an identifier.
+    UNIT_ASSERT(SqlToYql("SELECT 1 AS statistics;").IsOk());
+    UNIT_ASSERT(SqlToYql("USE ydb; SELECT statistics FROM plato.Input;").IsOk());
+}
+
 Y_UNIT_TEST(CreateTableWithLocalBloomFilterAndDropIndexIsCorrect) {
     const auto result = SqlToYql(R"sql(
         USE ydb;
@@ -13635,6 +13764,69 @@ Y_UNIT_TEST(FromQuotedTableWithImmediateCluster) {
     UNIT_ASSERT_VALUES_EQUAL(stat["YqlSelect"], 1);
     UNIT_ASSERT_VALUES_EQUAL(stat["Read!"], 1);
     UNIT_ASSERT_STRING_CONTAINS(program, R"('((Right! yql_read0) '"/Root/Yql/Select" '()))");
+}
+
+Y_UNIT_TEST(FromQuotedTableWithImmediateClusterWithTablePrefixPath) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::NFeature::YqlSelect.MinLangVer;
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        USE plato;
+        PRAGMA YqlSelect = 'force';
+        PRAGMA TablePathPrefix = '/Root/Yql';
+        SELECT a, b FROM Select;
+    )sql", settings);
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TWordCountHive stat = {"YqlSelect", "Read!"};
+
+    TString program = VerifyProgram(res, stat);
+    UNIT_ASSERT_VALUES_EQUAL(stat["YqlSelect"], 1);
+    UNIT_ASSERT_VALUES_EQUAL(stat["Read!"], 1);
+    UNIT_ASSERT_STRING_CONTAINS(program, R"((Key '('table (String '"/Root/Yql/Select"))) (Void) '()))");
+}
+
+Y_UNIT_TEST(FromNamedNodeWithQuotedTableWithImmediateClusterWithTablePrefixPath) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::NFeature::YqlSelect.MinLangVer;
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        USE plato;
+        PRAGMA YqlSelect = 'force';
+        PRAGMA TablePathPrefix = '/Root/Yql';
+        $x = SELECT a FROM Select;
+        SELECT $x;
+    )sql", settings);
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TWordCountHive stat = {"YqlSelect", "Read!"};
+    TString program = VerifyProgram(res, stat);
+    UNIT_ASSERT_VALUES_EQUAL(stat["YqlSelect"], 3);
+    UNIT_ASSERT_VALUES_EQUAL(stat["Read!"], 1);
+    UNIT_ASSERT_STRING_CONTAINS(program, R"((Key '('table (String '"/Root/Yql/Select"))) (Void) '()))");
+}
+
+// The test checks that the prefix is not added for temporary tables.
+Y_UNIT_TEST(FromTmpTableWithImmediateClusterWithTablePrefixPath) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::NFeature::YqlSelect.MinLangVer;
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        USE plato;
+        PRAGMA YqlSelect = 'force';
+        PRAGMA TablePathPrefix = '/Root';
+        INSERT INTO @tmp (a) VALUES (1);
+        COMMIT;
+        SELECT a FROM @tmp;
+    )sql", settings);
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TWordCountHive stat = {"YqlSelect", "Read!", "TempTable"};
+    TString program = VerifyProgram(res, stat);
+    UNIT_ASSERT_VALUES_EQUAL(stat["YqlSelect"], 1);
+    UNIT_ASSERT_VALUES_EQUAL(stat["Read!"], 1);
+    UNIT_ASSERT_VALUES_EQUAL(stat["TempTable"], 2);
+    UNIT_ASSERT_STRING_CONTAINS(program, R"(TempTable '"tmp")");
 }
 
 Y_UNIT_TEST(FromTmpTableWithImmediateCluster) {

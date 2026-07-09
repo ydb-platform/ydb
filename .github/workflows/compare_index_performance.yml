@@ -3,10 +3,18 @@ name: compare_index_performance
 on:
   workflow_dispatch:
     inputs:
+      pull_number:
+        description: 'Pull request number to test the current side against, ex: 12345 (empty = current branch)'
+        required: false
+        default: ''
       duration:
         description: 'Duration of each workload run in seconds'
         required: false
         default: '100'
+      iterations:
+        description: 'Number of iterations per workload (median reported)'
+        required: false
+        default: '10'
       build_preset:
         description: 'Build preset (must match S3 prebuilt binary)'
         required: false
@@ -37,10 +45,6 @@ on:
         description: 'Number of query vectors for vector select'
         required: false
         default: '1000'
-      iterations:
-        description: 'Number of iterations per workload (median reported)'
-        required: false
-        default: '20'
       warmup:
         description: 'Warmup duration in seconds before each measured run'
         required: false
@@ -65,10 +69,11 @@ on:
         description: 'Comma-separated table_service_config options for current branch (e.g. enable_vector_index_read=true)'
         required: false
         default: ''
-      pull_number:
-        description: 'Pull request number to test the current side against, ex: 12345 (empty = current branch)'
+      build_baseline:
+        description: 'Build baseline ydbd from the exact resolved commit instead of downloading a prebuilt S3 binary'
         required: false
-        default: ''
+        type: boolean
+        default: true
 
 jobs:
   compare:
@@ -113,6 +118,21 @@ jobs:
         with:
           ref: ${{ steps.resolve-ref.outputs.checkout_ref }}
 
+      - name: Build baseline ydbd
+        id: build-baseline
+        if: ${{ inputs.build_baseline != 'false' }}
+        env:
+          BASELINE_SHA: ${{ steps.resolve-ref.outputs.baseline_sha }}
+          INPUT_BUILD_PRESET: ${{ inputs.build_preset || 'release' }}
+        run: |
+          git fetch --depth=1 origin "$BASELINE_SHA"
+          git worktree add ../baseline "$BASELINE_SHA"
+          cd ../baseline
+          ./ya make --build "$INPUT_BUILD_PRESET" ydb/apps/ydbd
+          BINARY=$(find . -name ydbd -path '*/ydb/apps/ydbd/ydbd' -not -path '*/ydb/apps/ydbd/ydbd/*' 2>/dev/null | head -1)
+          BINARY=$(realpath "$BINARY")
+          echo "binary=$BINARY" >> "$GITHUB_OUTPUT"
+
       - name: Run performance comparison
         env:
           INPUT_DURATION: ${{ inputs.duration || '100' }}
@@ -121,7 +141,7 @@ jobs:
           INPUT_WORKLOAD: ${{ inputs.workload || 'all' }}
           INPUT_ROWS: ${{ inputs.rows || '10000' }}
           INPUT_TARGETS: ${{ inputs.targets || '1000' }}
-          INPUT_ITERATIONS: ${{ inputs.iterations || '20' }}
+          INPUT_ITERATIONS: ${{ inputs.iterations || '10' }}
           INPUT_WARMUP: ${{ inputs.warmup || '30' }}
           INPUT_THREADS: ${{ inputs.threads || '10' }}
           INPUT_MAIN_FEATURE_FLAGS: ${{ inputs.main_feature_flags || '' }}
@@ -130,10 +150,15 @@ jobs:
           INPUT_CURRENT_TABLE_SERVICE_CONFIG: ${{ inputs.current_table_service_config || '' }}
           INPUT_BASELINE_SHA: ${{ steps.resolve-ref.outputs.baseline_sha }}
           INPUT_CURRENT_SHA: ${{ steps.resolve-ref.outputs.checkout_ref }}
+          INPUT_BASELINE_YDBD: ${{ steps.build-baseline.outputs.binary }}
         run: |
           # The feature-flag / table_service_config inputs are comma-separated
           # strings; the test splits them itself, so they are passed through as-is.
-          ./ya make --build "$INPUT_BUILD_PRESET" -tA \
+          EXTRA_PARAMS=""
+          if [[ -n "$INPUT_BASELINE_YDBD" ]]; then
+            EXTRA_PARAMS="--test-param compare_baseline_ydbd=$INPUT_BASELINE_YDBD"
+          fi
+          ./ya make --build "$INPUT_BUILD_PRESET" -tA --test-disable-timeout \
             ydb/tests/stress/compare_index_performance/tests \
             --test-param compare_duration="$INPUT_DURATION" \
             --test-param compare_build_preset="$INPUT_BUILD_PRESET" \
@@ -149,7 +174,8 @@ jobs:
             --test-param compare_baseline_table_service_config="$INPUT_MAIN_TABLE_SERVICE_CONFIG" \
             --test-param compare_current_table_service_config="$INPUT_CURRENT_TABLE_SERVICE_CONFIG" \
             --test-param compare_baseline_sha="$INPUT_BASELINE_SHA" \
-            --test-param compare_current_sha="$INPUT_CURRENT_SHA"
+            --test-param compare_current_sha="$INPUT_CURRENT_SHA" \
+            $EXTRA_PARAMS
 
       - name: Post results to job summary
         if: always()

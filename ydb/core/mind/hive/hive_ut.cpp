@@ -4355,10 +4355,16 @@ Y_UNIT_TEST_SUITE(THiveTest) {
 
         runtime.LocationCallback = GetLocation;
 
-        Setup(runtime, false);
+        Setup(runtime, true, 1, [](TAppPrepare& app) {
+            app.HiveConfig.SetDataCenterChangeReactionPeriod(0);
+        });
         //const int nodeBase = runtime.GetNodeId(0);
         CreateLocal(runtime, 0);
         CreateLocal(runtime, 1);
+        SendKillLocal(runtime, 2);
+        SendKillLocal(runtime, 3);
+        SendKillLocal(runtime, 4);
+        SendKillLocal(runtime, 5);
         TActorId senderA = runtime.AllocateEdgeActor();
         const ui64 hiveTablet = MakeDefaultHiveID();
         const ui64 testerTablet = MakeTabletID(false, 1);
@@ -5815,7 +5821,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
             THolder<TEvHive::TEvTabletMetrics> metrics = MakeHolder<TEvHive::TEvTabletMetrics>();
             NKikimrHive::TTabletMetrics* cpu = metrics->Record.AddTabletMetrics();
             cpu->SetTabletID(tabletId);
-            cpu->MutableResourceUsage()->SetCPU(500'000);
+            cpu->MutableResourceUsage()->SetCPU(1'500'000);
 
             runtime.SendToPipe(hiveTablet, senderA, metrics.Release());
         }
@@ -9260,7 +9266,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
             THolder<TEvHive::TEvTabletMetrics> metrics = MakeHolder<TEvHive::TEvTabletMetrics>();
             NKikimrHive::TTabletMetrics* cpu = metrics->Record.AddTabletMetrics();
             cpu->SetTabletID(tabletId);
-            cpu->MutableResourceUsage()->SetCPU(2'000'000);
+            cpu->MutableResourceUsage()->SetCPU(6'000'000);
 
             runtime.SendToPipe(hiveTablet, senderA, metrics.Release());
         }

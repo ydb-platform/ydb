@@ -497,6 +497,8 @@ void TColumnShard::EnqueueBackgroundActivities(const bool periodic) {
     SetupMetadata();
     SetupTtl();
     SetupGC();
+
+    RecheckForcedCompactions(NActors::TActivationContext::AsActorContext());
 }
 
 namespace {
@@ -1089,6 +1091,100 @@ void TColumnShard::Handle(TEvPrivate::TEvStartCompaction::TPtr& ev, const TActor
     StartCompaction(ev->Get()->GetGuard());
 }
 
+void TColumnShard::Handle(TEvDataShard::TEvCompactTable::TPtr& ev, const TActorContext& ctx) {
+    const auto& record = ev->Get()->Record;
+    const auto pathId = TPathId::FromProto(record.GetPathId());
+
+    const auto reply = [&](const NKikimrTxDataShard::TEvCompactTableResult::EStatus status) {
+        auto response = MakeHolder<TEvDataShard::TEvCompactTableResult>(TabletID(), pathId, status);
+        ctx.Send(ev->Sender, response.Release(), 0, ev->Cookie);
+    };
+
+    // Forced compaction is only supported for standalone column tables, not for column stores.
+    if (TablesManager.IsStoreTablet()) {
+        LOG_S_WARN("Forced compaction is not supported for column store: tablet# " << TabletID() << ", pathId# " << pathId
+                                                                                   << ", requested from# " << ev->Sender);
+        reply(NKikimrTxDataShard::TEvCompactTableResult::NOT_NEEDED);
+        return;
+    }
+
+    if (!TablesManager.HasPrimaryIndex()) {
+        LOG_S_WARN("Forced compaction failed, no primary index: tablet# " << TabletID() << ", pathId# " << pathId << ", requested from# "
+                                                                          << ev->Sender);
+        reply(NKikimrTxDataShard::TEvCompactTableResult::NOT_NEEDED);
+        return;
+    }
+
+    const auto internalPathId = TablesManager.ResolveInternalPathIdOptional(TSchemeShardLocalPathId::FromRawValue(pathId.LocalPathId), true);
+    auto& engine = TablesManager.GetPrimaryIndexAsVerified<NOlap::TColumnEngineForLogs>();
+    auto granule = internalPathId ? engine.GetGranuleOptional(*internalPathId) : nullptr;
+    if (!granule) {
+        LOG_S_WARN("Forced compaction of unknown path: tablet# " << TabletID() << ", pathId# " << pathId << ", requested from# " << ev->Sender);
+        reply(NKikimrTxDataShard::TEvCompactTableResult::NOT_NEEDED);
+        return;
+    }
+
+    const auto noIntersections = granule->GetOptimizerPlanner().CheckNoIntersections();
+    if (noIntersections.IsFail()) {
+        // The optimizer does not support forced compaction (i.e. it is not tiling++).
+        LOG_S_WARN("Forced compaction is not supported: tablet# " << TabletID() << ", pathId# " << pathId << ", reason# "
+                                                                  << noIntersections.GetErrorMessage() << ", requested from# " << ev->Sender);
+        reply(NKikimrTxDataShard::TEvCompactTableResult::NOT_NEEDED);
+        return;
+    }
+
+    if (*noIntersections) {
+        LOG_S_DEBUG("Forced compaction already done: tablet# " << TabletID() << ", pathId# " << pathId << ", requested from# " << ev->Sender);
+        reply(NKikimrTxDataShard::TEvCompactTableResult::OK);
+        return;
+    }
+
+    // Portions still intersect: hold the request and reply once the table settles. Background
+    // compaction is kicked for this path; RecheckForcedCompactions() answers the waiter later.
+    LOG_S_DEBUG("Forced compaction registered: tablet# " << TabletID() << ", pathId# " << pathId << ", requested from# " << ev->Sender);
+    ForcedCompactionWaiters[*internalPathId].push_back({ ev->Sender, ev->Cookie, pathId });
+    SetupCompaction({ *internalPathId });
+}
+
+void TColumnShard::RecheckForcedCompactions(const TActorContext& ctx) {
+    if (ForcedCompactionWaiters.empty()) {
+        return;
+    }
+    if (!TablesManager.HasPrimaryIndex()) {
+        return;
+    }
+    auto& engine = TablesManager.GetPrimaryIndexAsVerified<NOlap::TColumnEngineForLogs>();
+    std::vector<TInternalPathId> finished;
+    for (const auto& [internalPathId, waiters] : ForcedCompactionWaiters) {
+        auto granule = engine.GetGranuleOptional(internalPathId);
+        std::optional<NKikimrTxDataShard::TEvCompactTableResult::EStatus> status;
+        if (!granule) {
+            // The table has gone away (e.g. dropped): fail the pending requests.
+            status = NKikimrTxDataShard::TEvCompactTableResult::FAILED;
+        } else {
+            const auto noIntersections = granule->GetOptimizerPlanner().CheckNoIntersections();
+            if (noIntersections.IsFail()) {
+                status = NKikimrTxDataShard::TEvCompactTableResult::NOT_NEEDED;
+            } else if (*noIntersections) {
+                status = NKikimrTxDataShard::TEvCompactTableResult::OK;
+            }
+        }
+        if (!status) {
+            continue;
+        }
+        for (const auto& waiter : waiters) {
+            LOG_S_DEBUG("Forced compaction finished: tablet# " << TabletID() << ", pathId# " << waiter.SchemePathId << ", status# "
+                                                               << (int)*status << ", reply to# " << waiter.Sender);
+            auto response = MakeHolder<TEvDataShard::TEvCompactTableResult>(TabletID(), waiter.SchemePathId, *status);
+            ctx.Send(waiter.Sender, response.Release(), 0, waiter.Cookie);
+        }
+        finished.push_back(internalPathId);
+    }
+    for (const auto& internalPathId : finished) {
+        ForcedCompactionWaiters.erase(internalPathId);
+    }
+}
+
 void TColumnShard::Handle(TEvPrivate::TEvMetadataAccessorsInfo::TPtr& ev, const TActorContext& /*ctx*/) {
     AFL_VERIFY(ev->Get()->GetGeneration() == Generation())("ev", ev->Get()->GetGeneration())("tablet", Generation());
     ev->Get()->GetProcessor()->ApplyResult(
@@ -1129,14 +1225,15 @@ void TColumnShard::Handle(NActors::TEvents::TEvUndelivered::TPtr& ev, const TAct
 }
 
 void TColumnShard::Handle(TEvTxProcessing::TEvReadSet::TPtr& ev, const TActorContext& ctx) {
+    auto& txController = GetProgressTxController();
     const ui64 txId = ev->Get()->Record.GetTxId();
     const ui64 tabletDest = ev->Get()->Record.GetTabletProducer();
-    if (!GetProgressTxController().GetTxOperatorOptional(txId)) {
+    auto op = txController.GetTxOperatorAs<TEvWriteCommitSyncTransactionOperator>(txId, ETxOperatorStatus::Any, /*optional*/ true);
+    if (!op) {
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "read_set_ignored")("proto", ev->Get()->Record.DebugString());
         TEvWriteCommitSyncTransactionOperator::SendBrokenFlagAck(*this, ev->Get()->Record.GetStep(), txId, tabletDest);
         return;
     }
-    auto op = GetProgressTxController().GetTxOperatorVerifiedAs<TEvWriteCommitSyncTransactionOperator>(txId);
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "read_set")("proto", ev->Get()->Record.DebugString())("lock_id", op->GetLockId());
     NKikimrTx::TReadSetData data;
     AFL_VERIFY(data.ParseFromArray(ev->Get()->Record.GetReadSet().data(), ev->Get()->Record.GetReadSet().size()));
@@ -1145,13 +1242,14 @@ void TColumnShard::Handle(TEvTxProcessing::TEvReadSet::TPtr& ev, const TActorCon
 }
 
 void TColumnShard::Handle(TEvTxProcessing::TEvReadSetAck::TPtr& ev, const TActorContext& ctx) {
-    auto opPtr = GetProgressTxController().GetTxOperatorOptional(ev->Get()->Record.GetTxId());
-    if (!opPtr) {
+    auto& txController = GetProgressTxController();
+    const ui64 txId = ev->Get()->Record.GetTxId();
+    auto op = txController.GetTxOperatorAs<TEvWriteCommitSyncTransactionOperator>(txId, ETxOperatorStatus::Any, /*optional*/ true);
+    if (!op) {
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "missed_read_set_ack")("proto", ev->Get()->Record.DebugString())(
             "tx_id", ev->Get()->Record.GetTxId());
         return;
     }
-    auto op = TValidator::CheckNotNull(dynamic_pointer_cast<TEvWriteCommitSyncTransactionOperator>(opPtr));
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "read_set_ack")("proto", ev->Get()->Record.DebugString())("lock_id", op->GetLockId());
     auto tx = op->CreateReceiveResultAckTx(*this, ev->Get()->Record.GetTabletConsumer());
     Execute(tx.release(), ctx);
@@ -1659,6 +1757,7 @@ void TColumnShard::Enqueue(STFUNC_SIG) {
         HFunc(TEvPrivate::TEvAskTabletDataAccessors, Handle);
         HFunc(TEvTxProxySchemeCache::TEvWatchNotifyUpdated, Handle);
         HFunc(TEvTxProxySchemeCache::TEvWatchNotifyUnavailable, Handle);
+        HFunc(TEvColumnShard::TEvNotifyTxCompletion, Handle);
         default:
             AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "unexpected event in enqueue");
             return NTabletFlatExecutor::TTabletExecutedFlat::Enqueue(ev);

@@ -8,6 +8,7 @@
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/api/service.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/core/tablet.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/model/log_title.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/host.h>
 
 #include <ydb/core/nbs/cloud/storage/core/libs/common/error.h>
 #include <ydb/core/nbs/cloud/storage/core/libs/coroutine/executor_pool.h>
@@ -21,6 +22,8 @@
 
 #include <ydb/library/actors/core/mon.h>
 #include <ydb/library/services/services.pb.h>
+
+#include <optional>
 
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
@@ -49,8 +52,20 @@ private:
     NActors::TActorId BSControllerPipeClient;
 
     NActors::TActorId LoadActorAdapter;
-    bool DdiskBlockGroupAllocated = false;
+    bool DDiskBlockGroupAllocated = false;
     std::shared_ptr<TFastPathService> FastPathService;
+
+    TDirectBlockGroupsConnections DirectBlockGroupsConnections;
+
+    struct TAddHostInFlight
+    {
+        size_t DirectBlockGroupId = 0;
+        THostIndex NewHostIndex = InvalidHostIndex;
+        NActors::TActorId BSPipeClient;
+    };
+
+    // At most one add-host runs at a time across the whole partition.
+    std::optional<TAddHostInFlight> AddHostInFlight;
 
 public:
     TPartitionActor(
@@ -96,7 +111,25 @@ private:
 
     void AllocateDDiskBlockGroup(const NActors::TActorContext& ctx);
 
+    void SendAllocateDDiskForAddHost(
+        const NActors::TActorContext& ctx,
+        size_t dbgId,
+        THostIndex newHostIndex);
+
     void HandleControllerAllocateDDiskBlockGroupResult(
+        const NKikimr::TEvBlobStorage::
+            TEvControllerAllocateDDiskBlockGroupResult::TPtr& ev,
+        const NActors::TActorContext& ctx);
+
+    // Sets up the group from the first (bulk) allocation response.
+    void HandleInitialAllocationResult(
+        const NKikimr::TEvBlobStorage::
+            TEvControllerAllocateDDiskBlockGroupResult::TPtr& ev,
+        const NActors::TActorContext& ctx);
+
+    // Applies a single add-host allocation response: validate, append the new
+    // connection, and persist it via TAddHostToDBG.
+    void HandleAddHostAllocationResult(
         const NKikimr::TEvBlobStorage::
             TEvControllerAllocateDDiskBlockGroupResult::TPtr& ev,
         const NActors::TActorContext& ctx);
@@ -125,6 +158,21 @@ private:
     void HandleFastPathServiceStopped(
         const TEvPartitionDirectPrivate::TEvFastPathServiceStopped::TPtr& ev,
         const NActors::TActorContext& ctx);
+
+    void HandleAddHostToDBG(
+        const TEvPartitionDirectPrivate::TEvAddHostToDBG::TPtr& ev,
+        const NActors::TActorContext& ctx);
+
+    // Rejects (logs + notifies the DBG) and returns false if the AddHost
+    // request is invalid; true if it may proceed.
+    bool ValidateAddHostToDBGRequest(
+        const NActors::TActorContext& ctx,
+        size_t dbgId);
+
+    void RejectAddHost(
+        const NActors::TActorContext& ctx,
+        size_t dbgId,
+        const TString& message);
 
     void Start(
         const NActors::TActorContext& ctx,

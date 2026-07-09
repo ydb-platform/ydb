@@ -1,0 +1,6 @@
+use plato;
+
+-- Materialize full table, then select only some columns.
+-- Without prune_unused_columns, all columns must be preserved in the materialized table.
+MATERIALIZE Input INTO $result;
+SELECT key, value FROM $result ORDER BY key;

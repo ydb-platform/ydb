@@ -28,7 +28,7 @@ std::optional<THashMap<TString, THashSet<TString>>> GetRequiredPaths<TTag>(
 template <>
 bool Rewrite(TTag, TTxTransaction& tx) {
     auto now = NBackup::ToX509String(TlsActivationContext->AsActorContext().Now());
-    tx.MutableBackupIncrementalBackupCollection()->SetTargetDir(now + "_incremental");
+    tx.MutableBackupIncrementalBackupCollection()->SetTargetDir(NBackup::IncrementalBackupDirName(now));
     return true;
 }
 

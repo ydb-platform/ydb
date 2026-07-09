@@ -1,5 +1,6 @@
 #include "schemeshard_backup.h"
 #include "schemeshard_impl.h"
+#include "schemeshard_restore_incremental_progress.h"
 
 #include <ydb/core/backup/impl/logging.h>
 
@@ -23,20 +24,7 @@ public:
     }
 
     void Fill(NKikimrBackup::TBackupCollectionRestore& restore, const TIncrementalRestoreState& restoreInfo) {
-        restore.SetId(restoreInfo.OriginalOperationId);
-        restore.SetStatus(Ydb::StatusIds::SUCCESS);
-
-        // Calculate progress based on incremental backup processing and overall state
-        if (restoreInfo.IncrementalBackups.empty()) {
-            restore.SetProgress(Ydb::Backup::RestoreProgress::PROGRESS_PREPARING);
-            restore.SetProgressPercent(0);
-        } else {
-            // Once incremental backups are defined and processing has started,
-            // consider the restore operation complete from the user's perspective
-            // Internal operations may still be running, but the main orchestration is done
-            restore.SetProgress(Ydb::Backup::RestoreProgress::PROGRESS_DONE);
-            restore.SetProgressPercent(100);
-        }
+        FillRestoreProgress(restore, restoreInfo);
     }
 
     bool Reply(const Ydb::StatusIds::StatusCode status = Ydb::StatusIds::SUCCESS, const TString& errorMessage = TString())

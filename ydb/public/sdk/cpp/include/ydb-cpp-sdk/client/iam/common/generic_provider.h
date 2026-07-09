@@ -14,6 +14,7 @@
 
 #include <chrono>
 #include <format>
+#include <functional>
 #include <string>
 #include <condition_variable>
 #include <mutex>
@@ -288,7 +289,6 @@ private:
 
         void ProcessIamResponse(grpc::Status&& status, TResponse&& result) {
             bool setFirstTokenReady = false;
-            std::string firstTokenReadyError;
 
             {
                 std::lock_guard guard(Lock_);
@@ -299,11 +299,6 @@ private:
                         << ". GrpcStatusCode: " << static_cast<int>(status.error_code())
                         << " Message: \"" << status.error_message()
                         << "\" iam-endpoint: \"" << IamEndpoint_.Endpoint << "\"";
-
-                    if (!FirstTokenReadySet_) {
-                        FirstTokenReadySet_ = true;
-                        firstTokenReadyError = LastRequestError_;
-                    }
 
                     RescheduleOnFailure();
                 } else {
@@ -325,8 +320,6 @@ private:
 
             if (setFirstTokenReady) {
                 FirstTokenReady_.SetValue();
-            } else if (!firstTokenReadyError.empty()) {
-                FirstTokenReady_.SetException(firstTokenReadyError.c_str());
             }
         }
 
@@ -502,6 +495,22 @@ public:
         });
     }
 
+    std::string GetClientIdentity() const override final {
+        return TStringBuilder()
+            << "TIamJwtCredentialsProviderFactory"
+            << '\t' << Params_.Endpoint
+            << '\t' << Params_.RefreshPeriod
+            << '\t' << Params_.RequestTimeout
+            << '\t' << Params_.EnableSsl
+            << '\t' << Params_.CaCerts
+            << '\t' << Params_.JwtParams.AccountId
+            << '\t' << Params_.JwtParams.KeyId
+            << '\t' << Params_.JwtParams.PubKey.size()
+            << '\t' << std::hash<std::string>{}(Params_.JwtParams.PubKey)
+            << '\t' << Params_.JwtParams.PrivKey.size()
+            << '\t' << std::hash<std::string>{}(Params_.JwtParams.PrivKey);
+    }
+
 private:
     TIamJwtParams Params_;
 };
@@ -547,6 +556,18 @@ public:
             future.GetValue();
             return provider;
         });
+    }
+
+    std::string GetClientIdentity() const override final {
+        return TStringBuilder()
+            << "TIamOAuthCredentialsProviderFactory"
+            << '\t' << Params_.Endpoint
+            << '\t' << Params_.RefreshPeriod
+            << '\t' << Params_.RequestTimeout
+            << '\t' << Params_.EnableSsl
+            << '\t' << Params_.CaCerts
+            << '\t' << Params_.OAuthToken.size()
+            << '\t' << Params_.OAuthToken;
     }
 
 private:

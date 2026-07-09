@@ -13,6 +13,7 @@
 #include <util/system/spinlock.h>
 
 #include <condition_variable>
+#include <exception>
 #include <mutex>
 #include <thread>
 
@@ -504,18 +505,97 @@ private:
 };
 
 class TOauth2TokenExchangeFactory: public ICredentialsProviderFactory {
+    struct TState {
+        explicit TState(const TOauth2TokenExchangeParams& params)
+            : Params(params)
+        {
+        }
+
+        const TPrivateOauth2TokenExchangeParams Params;
+        std::mutex Lock;
+        TCredentialsProviderPtr Provider;
+        NThreading::TFuture<TCredentialsProviderPtr> ProviderFuture;
+    };
+
 public:
     explicit TOauth2TokenExchangeFactory(const TOauth2TokenExchangeParams& params)
-        : Provider(std::make_shared<TOauth2TokenExchangeProvider>(params))
+        : State_(std::make_shared<TState>(params))
     {
     }
 
     TCredentialsProviderPtr CreateProvider() const override {
-        return Provider;
+        return CreateProviderAsync().GetValue();
+    }
+
+    NThreading::TFuture<TCredentialsProviderPtr> CreateProviderAsync() const override {
+        return CreateProviderAsync(std::weak_ptr<ICoreFacility>{});
+    }
+
+    NThreading::TFuture<TCredentialsProviderPtr> CreateProviderAsync(std::weak_ptr<ICoreFacility>) const override {
+        auto promise = NThreading::NewPromise<TCredentialsProviderPtr>();
+        auto future = promise.GetFuture();
+
+        {
+            std::lock_guard lock(State_->Lock);
+            if (State_->Provider) {
+                return NThreading::MakeFuture(State_->Provider);
+            }
+            if (State_->ProviderFuture.Initialized()) {
+                return State_->ProviderFuture;
+            }
+            State_->ProviderFuture = future;
+        }
+
+        std::thread([state = State_, promise]() mutable {
+            try {
+                TCredentialsProviderPtr provider = std::make_shared<TOauth2TokenExchangeProvider>(state->Params);
+                {
+                    std::lock_guard lock(state->Lock);
+                    state->Provider = provider;
+                }
+                promise.SetValue(std::move(provider));
+            } catch (...) {
+                {
+                    std::lock_guard lock(state->Lock);
+                    if (!state->Provider) {
+                        state->ProviderFuture = {};
+                    }
+                }
+                promise.SetException(std::current_exception());
+            }
+        }).detach();
+
+        return future;
+    }
+
+    std::string GetClientIdentity() const override {
+        const auto& params = State_->Params;
+        TStringBuilder identity;
+        identity << "TOauth2TokenExchangeFactory"
+            << '\t' << params.TokenEndpoint_
+            << '\t' << params.GrantType_
+            << '\t' << params.RequestedTokenType_
+            << '\t' << params.SocketTimeout_
+            << '\t' << params.ConnectTimeout_
+            << '\t' << params.SyncUpdateTimeout_;
+
+        auto appendVector = [&identity](const auto& values) {
+            identity << '\t' << values.size();
+            for (const auto& value : values) {
+                identity << '\t' << value;
+            }
+        };
+
+        appendVector(params.Resource_);
+        appendVector(params.Audience_);
+        appendVector(params.Scope_);
+        identity << '\t' << static_cast<const void*>(params.SubjectTokenSource_.get())
+            << '\t' << static_cast<const void*>(params.ActorTokenSource_.get());
+        return identity;
     }
 
 private:
-    std::shared_ptr<TOauth2TokenExchangeProvider> Provider;
+    std::shared_ptr<TState> State_;
 };
 
 } // namespace

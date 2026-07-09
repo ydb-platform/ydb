@@ -720,7 +720,9 @@ TCallMeta TGRpcConnectionsImpl::MakeCallMeta(const TRpcRequestSettings& requestS
     TCallMeta meta;
     meta.Timeout = requestSettings.Deadline;
 #ifndef YDB_GRPC_UNSECURE_AUTH
-    meta.CallCredentials = dbState->CallCredentials;
+    if (requestSettings.UseAuth) {
+        meta.CallCredentials = dbState->CallCredentials;
+    }
 #else
     auto credentialsProvider = dbState->GetCredentialsProvider();
     if (requestSettings.UseAuth && credentialsProvider && credentialsProvider->IsValid()) {

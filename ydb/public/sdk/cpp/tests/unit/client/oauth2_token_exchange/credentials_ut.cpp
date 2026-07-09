@@ -108,6 +108,21 @@ struct TTestConfigFile : public TJsonFiller<TTestConfigFile> {
 };
 
 Y_UNIT_TEST_SUITE(TestTokenExchange) {
+    Y_UNIT_TEST(FactoryConstructionDoesNotExchangeToken) {
+        TTestTokenExchangeServer server;
+        server.Check.ExpectRequest = false;
+
+        server.Run(
+            [&]() {
+                auto factory = CreateOauth2TokenExchangeCredentialsProviderFactory(
+                    TOauth2TokenExchangeParams()
+                        .TokenEndpoint(server.GetEndpoint())
+                        .SubjectTokenSource(CreateFixedTokenSource("test_token", "test_token_type")));
+                (void)factory;
+            }
+        );
+    }
+
     void Exchanges(bool fromConfig) {
         TTestTokenExchangeServer server;
         server.Check.ExpectedInputParams.emplace("grant_type", "urn:ietf:params:oauth:grant-type:token-exchange");

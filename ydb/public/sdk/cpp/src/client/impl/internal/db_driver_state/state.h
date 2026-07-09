@@ -61,7 +61,6 @@ public:
     const std::string DiscoveryEndpoint;
     const EDiscoveryMode DiscoveryMode;
     const TSslCredentials SslCredentials;
-    std::shared_ptr<ICredentialsProvider> CredentialsProvider;
     IInternalClient* Client;
     TEndpointPool EndpointPool;
     // StopCb allow client to subscribe for notifications from lower layer
@@ -79,6 +78,7 @@ public:
     NThreading::TFuture<void> CredentialsReady;
 
 private:
+    std::shared_ptr<ICredentialsProvider> CredentialsProvider;
     mutable std::once_flag ClientTlsValidationOnceFlag_;
     mutable bool ClientTlsCredentialsValid_ = true;
     mutable std::string ClientTlsValidationDetail_;

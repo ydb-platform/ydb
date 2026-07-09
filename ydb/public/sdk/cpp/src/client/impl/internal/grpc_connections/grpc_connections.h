@@ -58,13 +58,46 @@ inline TPlainStatus CredentialsInitDeadlineExceededStatus() {
         "Request deadline exceeded while waiting for credentials");
 }
 
-template <typename TCallbackFactory, typename TScheduleDelayedTask>
+inline TPlainStatus CredentialsInitCancelledStatus() {
+    return TPlainStatus(EStatus::CLIENT_CANCELLED,
+        "Client is stopped");
+}
+
+template <typename TCallback>
+class TDeferredCredentialsCallback {
+public:
+    explicit TDeferredCredentialsCallback(TCallback&& callback)
+        : Callback_(std::move(callback))
+    {}
+
+    void Complete(std::optional<TPlainStatus> status) {
+        std::optional<TCallback> callback;
+        {
+            std::lock_guard lock(Lock_);
+            if (Done_) {
+                return;
+            }
+            Done_ = true;
+            callback.emplace(std::move(*Callback_));
+            Callback_.reset();
+        }
+        (*callback)(std::move(status));
+    }
+
+private:
+    std::mutex Lock_;
+    bool Done_ = false;
+    std::optional<TCallback> Callback_;
+};
+
+template <typename TCallbackFactory, typename TScheduleDelayedTask, typename TSubscribeCancel>
 bool DeferUntilCredentialsReady(
     const TDbDriverStatePtr& dbState,
     bool useAuth,
     TDeadline deadline,
     TCallbackFactory&& callbackFactory,
-    TScheduleDelayedTask&& scheduleDelayedTask)
+    TScheduleDelayedTask&& scheduleDelayedTask,
+    TSubscribeCancel&& subscribeCancel)
 {
     if (!useAuth) {
         return false;
@@ -77,31 +110,31 @@ bool DeferUntilCredentialsReady(
 
     if (!credentialsReady.IsReady()) {
         auto callbackValue = callbackFactory();
-        auto callback = std::make_shared<decltype(callbackValue)>(std::move(callbackValue));
-        auto done = std::make_shared<std::atomic_bool>(false);
+        auto callback = std::make_shared<TDeferredCredentialsCallback<decltype(callbackValue)>>(std::move(callbackValue));
 
-        credentialsReady.Subscribe([callback, done](const NThreading::TFuture<void>& future) mutable {
-            if (done->exchange(true)) {
-                return;
-            }
+        credentialsReady.Subscribe([callback](const NThreading::TFuture<void>& future) mutable {
             try {
                 future.GetValue();
             } catch (const std::exception& e) {
-                (*callback)(CredentialsInitFailedStatus(e));
+                callback->Complete(CredentialsInitFailedStatus(e));
                 return;
             } catch (...) {
-                (*callback)(CredentialsInitFailedStatus());
+                callback->Complete(CredentialsInitFailedStatus());
                 return;
             }
-            (*callback)(std::nullopt);
+            callback->Complete(std::nullopt);
         });
 
+        if (!subscribeCancel([callback]() mutable {
+            callback->Complete(CredentialsInitCancelledStatus());
+        })) {
+            callback->Complete(CredentialsInitCancelledStatus());
+            return true;
+        }
+
         if (!(deadline == TDeadline::Max())) {
-            scheduleDelayedTask([callback, done]() mutable {
-                if (done->exchange(true)) {
-                    return;
-                }
-                (*callback)(CredentialsInitDeadlineExceededStatus());
+            scheduleDelayedTask([callback]() mutable {
+                callback->Complete(CredentialsInitDeadlineExceededStatus());
             }, deadline);
         }
 
@@ -224,6 +257,47 @@ public:
     static void SetGrpcKeepAlive(NYdbGrpc::TGRpcClientConfig& config, const TDeadline::Duration& timeout, bool permitWithoutCalls);
 
     static void SetGrpcCompressionAlgorithm(NYdbGrpc::TGRpcClientConfig& config, EGrpcCompressionAlgorithm algorithm);
+
+    bool SubscribeCancel(const IQueueClientContextPtr& context, TSimpleCb&& callback) {
+        if (!context) {
+            return false;
+        }
+        context->SubscribeCancel(std::move(callback));
+        return true;
+    }
+
+    template <typename TCallbackFactory>
+    bool MaybeDeferUntilCredentialsReady(
+        const TDbDriverStatePtr& dbState,
+        const TRpcRequestSettings& requestSettings,
+        IQueueClientContextPtr& context,
+        TCallbackFactory&& callbackFactory)
+    {
+        IQueueClientContextPtr contextForCancel = context;
+
+        if (requestSettings.UseAuth) {
+            auto credentialsReady = dbState->GetCredentialsReady();
+            if (credentialsReady.Initialized() && !credentialsReady.IsReady()) {
+                if (!TryCreateContext(context)) {
+                    callbackFactory()(CredentialsInitCancelledStatus());
+                    return true;
+                }
+                contextForCancel = context;
+            }
+        }
+
+        return DeferUntilCredentialsReady(
+            dbState,
+            requestSettings.UseAuth,
+            requestSettings.Deadline,
+            std::forward<TCallbackFactory>(callbackFactory),
+            [this](TSimpleCb&& cb, TDeadline deadline) {
+                ScheduleDelayedTask(std::move(cb), deadline);
+            },
+            [this, contextForCancel = std::move(contextForCancel)](TSimpleCb&& cb) {
+                return SubscribeCancel(contextForCancel, std::move(cb));
+            });
+    }
 
     template<typename TService>
     std::pair<std::unique_ptr<TServiceConnection<TService>>, TEndpointKey> GetServiceConnection(
@@ -389,7 +463,7 @@ public:
         using TConnection = std::unique_ptr<TServiceConnection<TService>>;
         Y_ABORT_UNLESS(dbState);
 
-        if (DeferUntilCredentialsReady(dbState, requestSettings.UseAuth, requestSettings.Deadline, [&]() mutable {
+        if (MaybeDeferUntilCredentialsReady(dbState, requestSettings, context, [&]() mutable {
             return [this, requestWrapper = std::move(requestWrapper), userResponseCb = std::move(userResponseCb),
                     rpc, dbState, requestSettings, context = std::move(context)]
                 (std::optional<TPlainStatus> status) mutable {
@@ -405,8 +479,6 @@ public:
                         requestSettings,
                         std::move(context));
                 };
-        }, [this](TSimpleCb&& cb, TDeadline deadline) {
-            ScheduleDelayedTask(std::move(cb), deadline);
         })) {
             return;
         }
@@ -648,7 +720,7 @@ public:
         using TConnection = std::unique_ptr<TServiceConnection<TService>>;
         using TProcessor = typename NYdbGrpc::IStreamRequestReadProcessor<TResponse>::TPtr;
 
-        if (DeferUntilCredentialsReady(dbState, requestSettings.UseAuth, requestSettings.Deadline, [&]() mutable {
+        if (MaybeDeferUntilCredentialsReady(dbState, requestSettings, context, [&]() mutable {
             return [this, request, responseCb = std::move(responseCb), rpc, dbState, requestSettings, context = std::move(context)]
                 (std::optional<TPlainStatus> status) mutable {
                     if (status) {
@@ -663,8 +735,6 @@ public:
                         requestSettings,
                         std::move(context));
                 };
-        }, [this](TSimpleCb&& cb, TDeadline deadline) {
-            ScheduleDelayedTask(std::move(cb), deadline);
         })) {
             return;
         }
@@ -756,7 +826,7 @@ public:
         using TConnection = std::unique_ptr<TServiceConnection<TService>>;
         using TProcessor = typename NYdbGrpc::IStreamRequestReadWriteProcessor<TRequest, TResponse>::TPtr;
 
-        if (DeferUntilCredentialsReady(dbState, requestSettings.UseAuth, requestSettings.Deadline, [&]() mutable {
+        if (MaybeDeferUntilCredentialsReady(dbState, requestSettings, context, [&]() mutable {
             return [this, connectedCallback = std::move(connectedCallback), rpc, dbState, requestSettings, context = std::move(context)]
                 (std::optional<TPlainStatus> status) mutable {
                     if (status) {
@@ -770,8 +840,6 @@ public:
                         requestSettings,
                         std::move(context));
                 };
-        }, [this](TSimpleCb&& cb, TDeadline deadline) {
-            ScheduleDelayedTask(std::move(cb), deadline);
         })) {
             return;
         }

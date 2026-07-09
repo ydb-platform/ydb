@@ -5,11 +5,13 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/core_facility/core_facility.h>
 #include <ydb/public/api/grpc/ydb_auth_v1.grpc.pb.h>
 
+#include <util/string/builder.h>
 #include <util/string/cast.h>
 
 #include <jwt-cpp/jwt.h>
 
 #include <exception>
+#include <functional>
 
 using namespace std::chrono_literals;
 
@@ -264,6 +266,7 @@ public:
     virtual std::shared_ptr<ICredentialsProvider> CreateProvider() const override;
     virtual std::shared_ptr<ICredentialsProvider> CreateProvider(std::weak_ptr<ICoreFacility> facility) const override;
     virtual NThreading::TFuture<TCredentialsProviderPtr> CreateProviderAsync(std::weak_ptr<ICoreFacility> facility) const override;
+    virtual std::string GetClientIdentity() const override;
 
 private:
     TLoginCredentialsParams Params_;
@@ -290,6 +293,14 @@ NThreading::TFuture<TCredentialsProviderPtr> TLoginCredentialsProviderFactory::C
         future.GetValue();
         return result;
     });
+}
+
+std::string TLoginCredentialsProviderFactory::GetClientIdentity() const {
+    return TStringBuilder()
+        << "TLoginCredentialsProviderFactory"
+        << '\t' << Params_.User
+        << '\t' << Params_.Password.size()
+        << '\t' << std::hash<std::string>{}(Params_.Password);
 }
 
 std::shared_ptr<ICredentialsProviderFactory> CreateLoginCredentialsProviderFactory(TLoginCredentialsParams params) {

@@ -21,6 +21,7 @@ namespace NYdb::NTest {
 class TIamTokenServiceStub final : public yandex::cloud::iam::v1::IamTokenService::Service {
 public:
     void SetResponseToken(const std::string& token, int64_t expiresAtSeconds = 4102444800);
+    void SetInitialFailures(int count, grpc::Status status);
 
     grpc::Status Create(
         grpc::ServerContext*,
@@ -35,6 +36,8 @@ private:
     mutable std::mutex Lock_;
     std::string IamToken_;
     int64_t ExpiresAtSeconds_ = 4102444800;
+    int InitialFailures_ = 0;
+    grpc::Status FailureStatus_;
     int RequestCount_ = 0;
     yandex::cloud::iam::v1::CreateIamTokenRequest LastRequest_;
     bool HasLastRequest_ = false;

@@ -62,9 +62,7 @@ TDbDriverState::TDbDriverState(
 }
 
 void TDbDriverState::SetCredentialsProvider(std::shared_ptr<ICredentialsProvider> credentialsProvider) {
-#ifndef YDB_GRPC_UNSECURE_AUTH
     auto authenticatorProvider = credentialsProvider;
-#endif
     std::atomic_store(&CredentialsProvider, std::move(credentialsProvider));
 #ifndef YDB_GRPC_UNSECURE_AUTH
     CallCredentials = grpc::MetadataCredentialsFromPlugin(
@@ -75,9 +73,13 @@ void TDbDriverState::SetCredentialsProvider(std::shared_ptr<ICredentialsProvider
 NThreading::TFuture<void> TDbDriverState::InitCredentials(
     std::shared_ptr<ICredentialsProviderFactory> credentialsProviderFactory
 ) {
-    auto self = shared_from_this();
-    std::weak_ptr<ICoreFacility> facility = self;
+    std::weak_ptr<TDbDriverState> weakSelf = shared_from_this();
+    std::weak_ptr<ICoreFacility> facility = weakSelf;
     auto provider = co_await credentialsProviderFactory->CreateProviderAsync(std::move(facility));
+    auto self = weakSelf.lock();
+    if (!self) {
+        co_return;
+    }
     self->SetCredentialsProvider(std::move(provider));
     co_return;
 }

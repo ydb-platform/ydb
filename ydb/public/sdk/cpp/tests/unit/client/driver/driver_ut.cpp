@@ -1,4 +1,5 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/credentials/credentials.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/exceptions/exceptions.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/type_switcher.h>
 
@@ -14,6 +15,7 @@
 #include <util/generic/mapfindptr.h>
 
 #include <atomic>
+#include <stdexcept>
 
 #include <google/protobuf/text_format.h>
 
@@ -76,6 +78,37 @@ namespace {
         builder.RegisterService(&service);
         return builder.BuildAndStart();
     }
+
+    class TNeverReadyCredentialsProviderFactory final : public ICredentialsProviderFactory {
+    public:
+        TNeverReadyCredentialsProviderFactory()
+            : Promise_(NThreading::NewPromise<TCredentialsProviderPtr>())
+            , Future_(Promise_.GetFuture())
+        {
+        }
+
+        TCredentialsProviderPtr CreateProvider() const override {
+            throw std::runtime_error("synchronous provider creation is not expected");
+        }
+
+        NThreading::TFuture<TCredentialsProviderPtr> CreateProviderAsync(std::weak_ptr<ICoreFacility> facility) const override {
+            Facility_ = std::move(facility);
+            return Future_;
+        }
+
+        std::string GetClientIdentity() const override {
+            return "never-ready-credentials-provider";
+        }
+
+        bool IsFacilityExpired() const {
+            return Facility_.expired();
+        }
+
+    private:
+        NThreading::TPromise<TCredentialsProviderPtr> Promise_;
+        NThreading::TFuture<TCredentialsProviderPtr> Future_;
+        mutable std::weak_ptr<ICoreFacility> Facility_;
+    };
 
 } // namespace
 
@@ -157,6 +190,43 @@ Y_UNIT_TEST_SUITE(CppGrpcClientSimpleTest) {
 
         client.CreateSession().Apply(handler).GetValueSync();
         UNIT_ASSERT_EQUAL(counter, 5);
+    }
+
+    Y_UNIT_TEST(StopCancelsRequestWaitingForCredentials) {
+        auto driver = TDriver(
+            TDriverConfig()
+                .SetEndpoint("localhost:1")
+                .SetDatabase("/Root")
+                .SetDiscoveryMode(EDiscoveryMode::Off)
+                .SetCredentialsProviderFactory(std::make_shared<TNeverReadyCredentialsProviderFactory>()));
+        auto client = NTable::TTableClient(driver);
+
+        auto sessionFuture = client.CreateSession();
+
+        UNIT_ASSERT(!sessionFuture.Wait(TDuration::MilliSeconds(100)));
+
+        driver.Stop(true);
+
+        UNIT_ASSERT(sessionFuture.Wait(TDuration::Seconds(5)));
+        auto result = sessionFuture.ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::CLIENT_CANCELLED);
+    }
+
+    Y_UNIT_TEST(DestroyDriverReleasesStateWaitingForCredentials) {
+        auto credentialsFactory = std::make_shared<TNeverReadyCredentialsProviderFactory>();
+
+        {
+            auto driver = TDriver(
+                TDriverConfig()
+                    .SetEndpoint("localhost:1")
+                    .SetDatabase("/Root")
+                    .SetDiscoveryMode(EDiscoveryMode::Off)
+                    .SetCredentialsProviderFactory(credentialsFactory));
+
+            UNIT_ASSERT(!credentialsFactory->IsFacilityExpired());
+        }
+
+        UNIT_ASSERT(credentialsFactory->IsFacilityExpired());
     }
 
     Y_UNIT_TEST(TokenCharacters) {

@@ -111,6 +111,28 @@ TEST(GrpcIamCredentialsProvider, CreateProviderAsyncDoesNotBlockOnFirstToken) {
     server.Stop();
 }
 
+TEST(GrpcIamCredentialsProvider, CreateProviderAsyncWaitsThroughInitialIamFailure) {
+    TIamTokenServiceStub iamStub;
+    iamStub.SetResponseToken("unit-test-iam-token");
+    iamStub.SetInitialFailures(1, grpc::Status(grpc::StatusCode::UNAVAILABLE, "temporary"));
+    TIamGrpcServer server(&iamStub);
+    ASSERT_TRUE(server.Start());
+
+    TIamOAuth params = MakeOAuthParams(server.Endpoint());
+    auto factory = std::make_shared<TIamOAuthCredentialsProviderFactory<
+        CreateIamTokenRequest, CreateIamTokenResponse, IamTokenService>>(params);
+
+    auto providerFuture = factory->CreateProviderAsync();
+
+    ASSERT_TRUE(providerFuture.Wait(TDuration::Seconds(5)))
+        << "future should become ready after IAM retry succeeds";
+    auto provider = providerFuture.GetValue();
+    EXPECT_EQ(provider->GetAuthInfo(), "unit-test-iam-token");
+    EXPECT_GE(iamStub.GetRequestCount(), 2);
+
+    server.Stop();
+}
+
 namespace {
 
 class TSlowBlockingAuthProvider final : public ICredentialsProvider {

@@ -10,6 +10,12 @@ void TIamTokenServiceStub::SetResponseToken(const std::string& token, int64_t ex
     ExpiresAtSeconds_ = expiresAtSeconds;
 }
 
+void TIamTokenServiceStub::SetInitialFailures(int count, grpc::Status status) {
+    std::lock_guard lock(Lock_);
+    InitialFailures_ = count;
+    FailureStatus_ = std::move(status);
+}
+
 grpc::Status TIamTokenServiceStub::Create(
     grpc::ServerContext*,
     const yandex::cloud::iam::v1::CreateIamTokenRequest* request,
@@ -19,6 +25,10 @@ grpc::Status TIamTokenServiceStub::Create(
     ++RequestCount_;
     LastRequest_ = *request;
     HasLastRequest_ = true;
+    if (InitialFailures_ > 0) {
+        --InitialFailures_;
+        return FailureStatus_;
+    }
     response->set_iam_token(IamToken_);
     response->mutable_expires_at()->set_seconds(ExpiresAtSeconds_);
     response->mutable_expires_at()->set_nanos(0);

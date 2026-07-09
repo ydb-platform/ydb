@@ -175,7 +175,6 @@ TYsonString MergeYsonStrings(
         ForceYPath(rootNode, path);
         NYTree::SetNodeByYPath(rootNode, path, NYTree::GetEphemeralNodeFactory()->CreateMap());
     }
-    // TODO(babenko): migrate to std::string
     std::string result;
     size_t sizeEstimate = std::accumulate(
         ysonStringBufs.begin(),

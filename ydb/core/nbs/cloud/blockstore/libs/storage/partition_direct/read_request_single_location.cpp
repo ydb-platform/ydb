@@ -185,14 +185,14 @@ void TReadSingleLocationRequestExecutor::Reply(NProto::TError error)
         LOG_ERROR(
             *ActorSystem,
             NKikimrServices::NBS_PARTITION,
-            "%s Error: %s",
+            "%s [!] Reply error: %s",
             LogTitle.GetWithTime().c_str(),
             FormatError(error).c_str());
     } else {
         LOG_DEBUG(
             *ActorSystem,
             NKikimrServices::NBS_PARTITION,
-            "%s OK",
+            "%s Reply OK",
             LogTitle.GetWithTime().c_str());
     }
 

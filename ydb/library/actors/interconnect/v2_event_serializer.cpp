@@ -29,7 +29,18 @@ namespace NActors {
     size_t TEventSerializer::ProduceOutputStream(TMutableContiguousSpan *buffer, std::vector<TContiguousSpan> *out) {
         size_t totalBytesProduced = 0;
 
-        while (!PerChannelQuotaHeap.empty()) {
+        // we can't emit anything useful once the output buffer can't hold at least a chunk header along with a whole
+        // some useful data, so we stop here to avoid spinning without making any progress
+        while (!PerChannelQuotaHeap.empty() && buffer->size() >= MinUsefulQuota) {
+            // if even the channel with the most quota can't emit a whole event header, replenish quota for every channel
+            // back to the default value; this keeps the bandwidth distributed equally and guarantees that the channel we
+            // are about to serve always has enough quota to make progress
+            if (PerChannelQuotaHeap.front().Quota < MinUsefulQuota) {
+                for (auto& item : PerChannelQuotaHeap) {
+                    item.Quota = DefaultQuota;
+                }
+            }
+
             // get the channel/quota pair for the channel with the most quota available
             TPerChannelQuota& q = PerChannelQuotaHeap.front();
 
@@ -48,12 +59,7 @@ namespace NActors {
                 // adjust quota
                 PerChannelQuotaHeap.back().Quota -= numBytesProduced;
                 std::ranges::push_heap(PerChannelQuotaHeap, std::less<ui16>{}, &TPerChannelQuota::Quota);
-            }
-            if (!PerChannelQuotaHeap.empty() && !PerChannelQuotaHeap.front().Quota) {
-                // quota for all the channels have been exhausted, we have to reset quota to default values
-                for (auto& item : PerChannelQuotaHeap) {
-                    item.Quota = DefaultQuota;
-                }
+                Y_ABORT_UNLESS(numBytesProduced); // ensure we had progress
             }
         }
 
@@ -125,7 +131,7 @@ namespace NActors {
             // prepare chunk header depending on the state
             TChunkHeader *chunkHeader = nullptr;
             if (queue.SerializeStage != ESerializeStage::kInitial) {
-                if (Min(buffer->size(), maxBytesToProduce) <= sizeof(TChunkHeader)) {
+                if (buffer->size() < sizeof(TChunkHeader) || maxBytesToProduce < MinUsefulQuota) {
                     break; // not even a chance to put something useful
                 }
 
@@ -139,6 +145,8 @@ namespace NActors {
                     .Channel = ev.GetChannel(),
                 };
             }
+
+            bool quit = false;
 
             switch (queue.SerializeStage) {
                 case ESerializeStage::kInitial:
@@ -183,18 +191,28 @@ namespace NActors {
                     }
                     break;
 
-                case ESerializeStage::kChunkSerializer:
+                case ESerializeStage::kChunkSerializer: {
                     // serialize as much as we can
+                    bool progress = false;
                     for (const auto [data, size] : queue.CoroutineChunkSerializer.FeedBuf(buffer, maxBytesToProduce)) {
                         produceOutputSpan(TContiguousSpan(data, size));
                         chunkHeader->TypeLength += size;
+                        Y_ABORT_UNLESS(size);
+                        progress = true;
                     }
 
                     // check if we have finished serializing this event
                     if (queue.CoroutineChunkSerializer.IsComplete()) {
                         queue.SerializeStage = ESerializeStage::kHeader;
+                    } else if (!progress) {
+                        // we didn't serialize anything but the chunk header, so we should exit the loop after dropping
+                        // the header
+                        Y_ABORT_UNLESS(!chunkHeader->GetLength());
+                        Y_ABORT_UNLESS(!buffer->size());
+                        quit = true;
                     }
                     break;
+                }
 
                 case ESerializeStage::kHeader: {
                     const size_t numDataBytes = Min(
@@ -203,6 +221,7 @@ namespace NActors {
                         sizeof(TEventHeader) - queue.EventHeaderOffset
                     );
                     chunkHeader->TypeLength += numDataBytes;
+                    Y_ABORT_UNLESS(chunkHeader->GetLength() == numDataBytes);
 
                     void *ptr = takeInBuffer(numDataBytes);
                     memcpy(ptr, reinterpret_cast<const char*>(&queue.EventHeader) + queue.EventHeaderOffset, numDataBytes);
@@ -223,17 +242,45 @@ namespace NActors {
                 }
             }
 
-            if (chunkHeader && !(chunkHeader->TypeLength & TChunkHeader::LengthMask)) {
-                // drop useless chunk header (when we have produced empty event, for instance)
+            if (chunkHeader && !chunkHeader->GetLength()) {
+                // drop useless chunk header (when we have produced empty event, for instance); note that the chunk
+                // header may have been concatenated with a preceding output span, so we trim it off the tail instead of
+                // assuming it occupies a whole span
                 Y_ABORT_UNLESS(!out->empty());
-                const TContiguousSpan span = out->back();
-                Y_ABORT_UNLESS(span.size() == sizeof(TChunkHeader));
-                Y_ABORT_UNLESS(span.data() + span.size() == buffer->data());
-                out->pop_back();
-                *buffer = {buffer->data() - span.size(), buffer->size() + span.size()};
-                maxBytesToProduce += span.size();
-                numBytesProduced -= span.size();
-                queue.EventProducedSize -= span.size();
+                TContiguousSpan& last = out->back();
+                Y_ABORT_UNLESS(last.size() >= sizeof(TChunkHeader));
+                Y_ABORT_UNLESS(last.data() + last.size() == buffer->data());
+                Y_ABORT_UNLESS(last.data() + last.size() - sizeof(TChunkHeader) == reinterpret_cast<const char*>(chunkHeader));
+                if (last.size() == sizeof(TChunkHeader)) {
+                    out->pop_back();
+                } else {
+                    last = {last.data(), last.size() - sizeof(TChunkHeader)};
+                }
+                *buffer = {buffer->data() - sizeof(TChunkHeader), buffer->size() + sizeof(TChunkHeader)};
+                maxBytesToProduce += sizeof(TChunkHeader);
+                numBytesProduced -= sizeof(TChunkHeader);
+                queue.EventProducedSize -= sizeof(TChunkHeader);
+            } else if (chunkHeader) {
+                // find chunk header in out
+                for (size_t i = 0; i < out->size(); ++i) {
+                    const void *begin = (*out)[i].data();
+                    const void *end = (*out)[i].data() + (*out)[i].size();
+                    if (chunkHeader >= begin && chunkHeader + 1 <= end) {
+                        size_t numBytesAfter = (const char*)end - (const char*)(chunkHeader + 1);
+                        while (++i < out->size()) {
+                            const void *begin = (*out)[i].data();
+                            const void *end = (*out)[i].data() + (*out)[i].size();
+                            Y_ABORT_UNLESS(!(chunkHeader >= begin && chunkHeader + 1 <= end));
+
+                            numBytesAfter += (*out)[i].size();
+                        }
+                        Y_ABORT_UNLESS(numBytesAfter == chunkHeader->GetLength());
+                    }
+                }
+            }
+
+            if (quit) {
+                break;
             }
         }
 
@@ -251,7 +298,7 @@ namespace NActors {
             Accum.begin().ExtractPlainDataAndAdvance(&header, sizeof(header));
 
             // check if the whole chunks fits the accumulator
-            if (const size_t length = header.TypeLength & TChunkHeader::LengthMask; Accum.size() >= sizeof(TChunkHeader) + length) {
+            if (const size_t length = header.GetLength(); Accum.size() >= sizeof(TChunkHeader) + length) {
                 // remove the just-parsed header
                 Accum.EraseFront(sizeof(header));
 
@@ -262,29 +309,35 @@ namespace NActors {
                         Accum.ExtractFront(length, &queue.Accum);
                         break;
 
-                    case TChunkHeader::kEventHeader: {
-                        TEventHeader header;
-                        if (length == sizeof(header)) {
-                            const bool success = Accum.ExtractFrontPlain(&header, sizeof(header));
-                            Y_ABORT_UNLESS(success);
-                            queue.EvSerInfo.IsExtendedFormat = header.Flags & IEventHandle::FlagExtendedFormat;
+                    case TChunkHeader::kEventHeader:
+                        if (queue.EventHeaderOffset + length > sizeof(TEventHeader)) {
+                            Y_ABORT("unsupported header");
+                        }
+
+                        Accum.ExtractFrontPlain(reinterpret_cast<char*>(&queue.EventHeader) + queue.EventHeaderOffset, length);
+                        queue.EventHeaderOffset += length;
+                        if (queue.EventHeaderOffset == sizeof(TEventHeader)) {
+                            queue.EventHeaderOffset = 0;
+
+                            queue.EvSerInfo.IsExtendedFormat = queue.EventHeader.Flags & IEventHandle::FlagExtendedFormat;
                             eventProcessor->PushEvent(std::make_unique<IEventHandle>(
                                 TActorId(), // session id will be filled later
-                                header.Type,
-                                header.Flags & ~IEventHandle::FlagExtendedFormat,
-                                header.Recipient,
-                                header.Sender,
+                                queue.EventHeader.Type,
+                                queue.EventHeader.Flags & ~IEventHandle::FlagExtendedFormat,
+                                queue.EventHeader.Recipient,
+                                queue.EventHeader.Sender,
                                 MakeIntrusive<TEventSerializedData>(
                                     std::exchange(queue.Accum, {}),
                                     std::exchange(queue.EvSerInfo, {})),
-                                header.Cookie,
+                                queue.EventHeader.Cookie,
                                 TScopeId(),
-                                NWilson::TTraceId(header.TraceId)));
-                        } else {
-                            Y_ABORT("unsupported header");
+                                NWilson::TTraceId(queue.EventHeader.TraceId)));
                         }
+
                         break;
-                    }
+
+                    default:
+                        Y_ABORT("unsupported type");
                 }
             } else {
                 break;

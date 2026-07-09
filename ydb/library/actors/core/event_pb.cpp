@@ -106,13 +106,16 @@ namespace NActors {
         Y_ABORT_UNLESS(!AbortFlag);
 
         // number of bytes we can allocate right now
-        const size_t maxBytes = Min(Buffer.size(), TotalSizeRemain);
+        size_t maxBytes = Min(Buffer.size(), TotalSizeRemain);
 
         if (!maxBytes) {
             InnerContext.SwitchTo(BufFeedContext);
             if (CancelFlag || AbortFlag) {
                 return false;
             }
+
+            // recalculate actual value as it has changed
+            maxBytes = Min(Buffer.size(), TotalSizeRemain);
         }
 
         Y_ABORT_UNLESS(maxBytes);

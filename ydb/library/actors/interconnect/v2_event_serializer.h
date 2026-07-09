@@ -34,6 +34,8 @@ namespace NActors {
                 kEventChunk = 0x0000,
                 kEventHeader = 0x4000,
             };
+
+            size_t GetLength() const { return TypeLength & LengthMask; }
         };
 #pragma pack(pop)
 
@@ -44,6 +46,10 @@ namespace NActors {
         };
         std::vector<TPerChannelQuota> PerChannelQuotaHeap;
         static constexpr ui16 DefaultQuota = 4096;
+
+        static constexpr size_t MinUsefulQuota = sizeof(TChunkHeader) + sizeof(ui32);
+
+        static_assert(MinUsefulQuota <= DefaultQuota);
 
         static constexpr size_t NumDefaultChannels = 16;
 
@@ -99,17 +105,19 @@ namespace NActors {
     class TEventDeserializer {
         static constexpr size_t NumDefaultChannels = 16;
 
+        using TEventHeader = TEventSerializer::TEventHeader;
+        using TChunkHeader = TEventSerializer::TChunkHeader;
+
         struct TPerChannelQueue {
             TRope Accum;
             TEventSerializationInfo EvSerInfo;
+            TEventHeader EventHeader;
+            size_t EventHeaderOffset = 0;
         };
         std::array<TPerChannelQueue, NumDefaultChannels> PerChannelQueue;
         THashMap<ui16, TPerChannelQueue> PerChannelQueueMap;
 
         TRope Accum;
-
-        using TEventHeader = TEventSerializer::TEventHeader;
-        using TChunkHeader = TEventSerializer::TChunkHeader;
 
     public:
         struct IEventProcessor {

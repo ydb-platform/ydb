@@ -686,14 +686,6 @@ namespace NSchemeShardUT_Private {
         const TString& user, NLoginProto::ESaslAuthMech::SaslAuthMech authMech,
         NLoginProto::EHashType::HashType hashType, const TString& hash, const TString& authMessage = "");
 
-    NKikimrScheme::TEvLoginResult LoginFinalize(
-        TTestActorRuntime& runtime,
-        const NLogin::TLoginProvider::TLoginUserRequest& request,
-        const NLogin::TLoginProvider::TPasswordCheckResult& checkResult,
-        const TString& passwordHash,
-        const bool needUpdateCache
-    );
-
     void ModifyUser(TTestActorRuntime& runtime, ui64 txId, const TString& database, std::function<void(::NKikimrSchemeOp::TLoginModifyUser*)>&& initiator);
 
     void ChangeIsEnabledUser(TTestActorRuntime& runtime, ui64 txId, const TString& database,

@@ -20,7 +20,7 @@ bool IsTokenCorrect(const std::string& in) {
 
 std::string GetAuthInfo(TDbDriverStatePtr p) {
     try {
-        auto token = p->CredentialsProvider->GetAuthInfo();
+        auto token = p->CredentialsProvider->GetAuthInfo(true);
         if (!IsTokenCorrect(token)) {
             throw TAuthenticationError("token is incorrect, illegal characters found");
         }

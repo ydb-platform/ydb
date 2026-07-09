@@ -28,9 +28,9 @@ TS3Credentials::TS3Credentials(ISecuredServiceAccountCredentialsFactory::TPtr fa
     CredentialsProvider = providerFactory->CreateProvider();  // Heavy operation, BLOCKs thread until TA reply
 }
 
-TS3Credentials::TAuthInfo TS3Credentials::GetAuthInfo() const {
+TS3Credentials::TAuthInfo TS3Credentials::GetAuthInfo(bool throwOnError) const {
     if (CredentialsProvider) {
-        return TS3Credentials::TAuthInfo{.Token = CredentialsProvider->GetAuthInfo()};
+        return TS3Credentials::TAuthInfo{.Token = CredentialsProvider->GetAuthInfo(throwOnError)};
     }
     return AuthInfo;
 }
@@ -67,7 +67,7 @@ TString TS3Credentials::TAuthInfo::GetToken() const {
 
 TS3Credentials::TAuthInfo GetAuthInfo(ISecuredServiceAccountCredentialsFactory::TPtr factory, const TString& structuredTokenJson) {
     const TS3Credentials credentials(factory, structuredTokenJson);
-    return credentials.GetAuthInfo();
+    return credentials.GetAuthInfo(false);
 }
 
 }

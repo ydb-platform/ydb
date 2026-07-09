@@ -28,7 +28,7 @@ std::optional<TString> AcquireSecurityToken(TClientCommand::TConfig& config) {
         auto loginProvider = credentialsProviderFactory->CreateProvider(client.GetCoreFacility());
         try {
             // Note: may throw exceptions
-            config.SecurityToken = loginProvider->GetAuthInfo();
+            config.SecurityToken = loginProvider->GetAuthInfo(true);
         } catch (...) {
             connection.Stop();
             throw;

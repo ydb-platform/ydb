@@ -32,7 +32,8 @@ public:
     TReadSession(const TReadSessionSettings& settings,
                  std::shared_ptr<TPersQueueClient::TImpl> client,
                  std::shared_ptr<TGRpcConnectionsImpl> connections,
-                 TDbDriverStatePtr dbDriverState);
+                 TDbDriverStatePtr dbDriverState,
+                 bool dummy);
 
     ~TReadSession();
 

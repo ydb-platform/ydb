@@ -355,7 +355,7 @@ private:
 
         TString authToken;
         try {
-            authToken = CredentialsProvider->GetAuthInfo();
+            authToken = CredentialsProvider->GetAuthInfo(true);
         } catch (const std::exception& ex) {
             TIssues issues { TIssue(TStringBuilder() << "Failed to get auth token: " << ex.what()) };
             Callbacks->OnAsyncOutputError(OutputIndex, issues, NYql::NDqProto::StatusIds::EXTERNAL_ERROR);

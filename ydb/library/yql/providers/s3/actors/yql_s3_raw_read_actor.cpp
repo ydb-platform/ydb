@@ -182,7 +182,7 @@ public:
         auto url = Url + object.GetPath();
         auto id = object.GetPathIndex();
         const TString requestId = CreateGuidAsString();
-        const auto& authInfo = Credentials.GetAuthInfo();
+        const auto& authInfo = Credentials.GetAuthInfo(false);
         LOG_D("TS3ReadActor", "Download: " << url << ", ID: " << id << ", request id: [" << requestId << "]");
         Gateway->Download(
             NS3Util::UrlEscapeRet(url),

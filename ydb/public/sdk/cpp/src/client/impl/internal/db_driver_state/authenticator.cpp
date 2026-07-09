@@ -16,7 +16,7 @@ grpc::Status TYdbAuthenticator::GetMetadata(
     std::multimap<grpc::string, grpc::string>* metadata
 ) {
     try {
-        metadata->insert(std::make_pair(YDB_AUTH_TICKET_HEADER, CredentialsProvider_->GetAuthInfo()));
+        metadata->insert(std::make_pair(YDB_AUTH_TICKET_HEADER, CredentialsProvider_->GetAuthInfo(true)));
     } catch (const std::exception& e) {
         return grpc::Status(
             grpc::StatusCode::UNAUTHENTICATED,

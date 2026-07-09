@@ -10,7 +10,7 @@ namespace NYdb::inline Dev {
 class ICredentialsProvider {
 public:
     virtual ~ICredentialsProvider() = default;
-    virtual std::string GetAuthInfo() const = 0;
+    virtual std::string GetAuthInfo(bool throwOnError) const = 0;
     virtual bool IsValid() const = 0;
 };
 

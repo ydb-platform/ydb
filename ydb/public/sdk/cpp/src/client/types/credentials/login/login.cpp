@@ -40,7 +40,7 @@ std::chrono::system_clock::time_point GetTokenExpiresAt(const std::string& token
 class TLoginCredentialsProvider : public ICredentialsProvider {
 public:
     TLoginCredentialsProvider(std::weak_ptr<ICoreFacility> facility, TLoginCredentialsParams params);
-    virtual std::string GetAuthInfo() const override;
+    virtual std::string GetAuthInfo(bool throwOnError) const override;
     virtual bool IsValid() const override;
 
 private:
@@ -107,7 +107,7 @@ bool TLoginCredentialsProvider::IsValid() const {
     return true;
 }
 
-std::string TLoginCredentialsProvider::GetAuthInfo() const {
+std::string TLoginCredentialsProvider::GetAuthInfo(bool /*throwOnError*/) const {
     if (TokenParsed_ == TokenReceived_) {
         return GetTokenOrError();
     } else {

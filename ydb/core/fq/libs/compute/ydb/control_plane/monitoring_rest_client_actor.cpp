@@ -51,7 +51,7 @@ public:
                 .AddUrlParam("path", Database)
                 .Build()
         );
-        auto ticket = CredentialsProvider->GetAuthInfo();
+        auto ticket = CredentialsProvider->GetAuthInfo(false);
         YDB_LOG_DEBUG("[ydb] using ticket",
             {"httpRequest", httpRequest->GetObfuscatedData()},
             {"token", NKikimr::MaskTicket(ticket)});

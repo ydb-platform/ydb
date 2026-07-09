@@ -115,7 +115,7 @@ public:
             forwardRequest->Request.mutable_attributes()->emplace("database_id", databaseId);
         }
         forwardRequest->Request.set_path(request.Path);
-        SetYdbRequestToken(*forwardRequest, CredentialsProvider->GetAuthInfo());
+        SetYdbRequestToken(*forwardRequest, CredentialsProvider->GetAuthInfo(false));
         forwardRequest->Headers.emplace(NYdb::YDB_DATABASE_HEADER, request.BasePath);
         TEvPrivate::TEvCreateDatabaseRequest::TPtr forwardEvent = (NActors::TEventHandle<TEvPrivate::TEvCreateDatabaseRequest>*)new IEventHandle(SelfId(), SelfId(), forwardRequest.release(), 0, Cookie);
         TCmsGrpcClient::MakeCall<TCreateDatabaseGrpcRequest>(std::move(forwardEvent));
@@ -199,7 +199,7 @@ public:
 
     void Handle(TEvYdbCompute::TEvListDatabasesRequest::TPtr& ev) {
         auto forwardRequest = std::make_unique<TEvPrivate::TEvListDatabasesRequest>();
-        SetYdbRequestToken(*forwardRequest, CredentialsProvider->GetAuthInfo());
+        SetYdbRequestToken(*forwardRequest, CredentialsProvider->GetAuthInfo(false));
         forwardRequest->Headers.emplace(NYdb::YDB_DATABASE_HEADER, ev->Get()->Database);
 
         TEvPrivate::TEvListDatabasesRequest::TPtr forwardEvent = (NActors::TEventHandle<TEvPrivate::TEvListDatabasesRequest>*)new IEventHandle(SelfId(), SelfId(), forwardRequest.release(), 0, Cookie);

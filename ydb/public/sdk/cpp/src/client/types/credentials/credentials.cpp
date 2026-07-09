@@ -8,7 +8,7 @@ public:
     TInsecureCredentialsProvider()
     {}
 
-    std::string GetAuthInfo() const override {
+    std::string GetAuthInfo(bool /*throwOnError*/) const override {
         return std::string();
     }
 
@@ -41,7 +41,7 @@ public:
         : Token(token)
     {}
 
-    std::string GetAuthInfo() const override {
+    std::string GetAuthInfo(bool /*throwOnError*/) const override {
         return Token;
     }
 

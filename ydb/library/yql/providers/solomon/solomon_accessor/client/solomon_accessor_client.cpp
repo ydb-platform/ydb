@@ -561,7 +561,7 @@ private:
 
         TString authToken;
         try {
-            authToken = CredentialsProvider->GetAuthInfo();
+            authToken = CredentialsProvider->GetAuthInfo(true);
         } catch (const std::exception& ex) {
             return TStringBuilder() << "Couldn't get auth info: " << ex.what();
         }

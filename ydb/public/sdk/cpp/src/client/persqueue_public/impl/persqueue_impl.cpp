@@ -17,7 +17,7 @@ std::shared_ptr<IReadSession> TPersQueueClient::TImpl::CreateReadSession(const T
             maybeSettings->EventHandlers_.HandlersExecutor(Settings.DefaultHandlersExecutor_);
         }
     }
-    auto session = std::make_shared<TReadSession>(maybeSettings.value_or(settings), shared_from_this(), Connections_, DbDriverState_);
+    auto session = std::make_shared<TReadSession>(maybeSettings.value_or(settings), shared_from_this(), Connections_, DbDriverState_, false);
     session->Start();
     return std::move(session);
 }

@@ -64,7 +64,7 @@ public:
     void Handle(TEvYdbCompute::TEvCpuLoadRequest::TPtr& ev) {
         auto forwardRequest = std::make_unique<TEvPrivate::TEvSelfCheckRequest>();
         forwardRequest->Request.set_return_verbose_status(true);
-        SetYdbRequestToken(*forwardRequest, CredentialsProvider->GetAuthInfo());
+        SetYdbRequestToken(*forwardRequest, CredentialsProvider->GetAuthInfo(false));
         TEvPrivate::TEvSelfCheckRequest::TPtr forwardEvent = (NActors::TEventHandle<TEvPrivate::TEvSelfCheckRequest>*)new IEventHandle(SelfId(), SelfId(), forwardRequest.release(), 0, Cookie);
         MakeCall<TSelfCheckGrpcRequest>(std::move(forwardEvent));
         Requests[Cookie++] = ev;

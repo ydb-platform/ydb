@@ -297,7 +297,7 @@ public:
     ~TS3Lister() override = default;
 private:
     static void SubmitRequestIntoGateway(TListingContext& ctx) {
-        const auto& authInfo = ctx.ListingRequest.Credentials.GetAuthInfo();
+        const auto& authInfo = ctx.ListingRequest.Credentials.GetAuthInfo(false);
         IHTTPGateway::THeaders headers = IHTTPGateway::MakeYcHeaders(ctx.RequestId, authInfo.GetToken(), {}, authInfo.GetAwsUserPwd(), authInfo.GetAwsSigV4());
 
         // We have to sort the cgi parameters for the correct aws signature

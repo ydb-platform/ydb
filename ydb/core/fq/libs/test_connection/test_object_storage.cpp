@@ -160,7 +160,7 @@ private:
     void SendDiscover() {
         const auto structedToken = NYql::ComposeStructuredTokenJsonForServiceAccount(ClusterConfig.GetServiceAccountId(), ClusterConfig.GetServiceAccountIdSignature(), ClusterConfig.GetToken());
         const auto credentialsProviderFactory = CreateCredentialsProviderFactoryForStructuredToken(CredentialsFactory, structedToken);
-        const auto authToken = credentialsProviderFactory->CreateProvider()->GetAuthInfo();
+        const auto authToken = credentialsProviderFactory->CreateProvider()->GetAuthInfo(true);
 
         TString requestId = CreateGuidAsString();
         NYql::IHTTPGateway::THeaders headers = NYql::IHTTPGateway::MakeYcHeaders(requestId, TString{authToken}, {});

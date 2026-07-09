@@ -133,6 +133,18 @@ static bool HasTopicKafkaOperations(const TTopicOperations& ops)
         || (ops.HasWriteOperations() && !ops.HasDeferredPublicationOperations());
 }
 
+static void EnsureNoDeferredPublicationOperations(const TTopicOperations& ops)
+{
+    Y_ENSURE(!ops.HasDeferredPublicationOperations(),
+        "Topic/Kafka operations cannot be mixed with DeferredPublication");
+}
+
+static void EnsureNoTopicKafkaOperations(const TTopicOperations& ops)
+{
+    Y_ENSURE(!HasTopicKafkaOperations(ops),
+        "DeferredPublication cannot be mixed with Topic/Kafka operations");
+}
+
 //
 // TConsumerOperations
 //
@@ -587,6 +599,7 @@ void TTopicOperations::AddOperation(const TString& topic,
                                     const TString& readSessionId
                                     )
 {
+    EnsureNoDeferredPublicationOperations(*this);
     TTopicPartition key{topic, partition};
     Operations_[key].AddOperation(topic,
                                   partition,
@@ -602,6 +615,7 @@ void TTopicOperations::AddOperation(const TString& topic,
 void TTopicOperations::AddOperation(const TString& topic, ui32 partition,
                                     TMaybe<ui32> supportivePartition)
 {
+    EnsureNoDeferredPublicationOperations(*this);
     TTopicPartition key{topic, partition};
     Operations_[key].AddOperation(topic, partition, supportivePartition);
     HasWriteOperations_ = true;
@@ -609,6 +623,7 @@ void TTopicOperations::AddOperation(const TString& topic, ui32 partition,
 
 void TTopicOperations::AddKafkaApiWriteOperation(const TString& topic, ui32 partition, const NKafka::TProducerInstanceId& producerInstanceId)
 {
+    EnsureNoDeferredPublicationOperations(*this);
     Y_ENSURE(!KafkaProducerInstanceId_ || *KafkaProducerInstanceId_ == producerInstanceId);
 
     if (KafkaProducerInstanceId_.Empty()) {
@@ -623,6 +638,7 @@ void TTopicOperations::AddKafkaApiWriteOperation(const TString& topic, ui32 part
 
 void TTopicOperations::AddKafkaApiReadOperation(const TString& topic, ui32 partition, const TString& consumerName, ui64 offset)
 {
+    EnsureNoDeferredPublicationOperations(*this);
     TTopicPartition key{topic, partition};
     Operations_[key].AddKafkaApiReadOperation(topic, partition, consumerName, offset);
     HasReadOperations_ = true;
@@ -637,6 +653,7 @@ void TTopicOperations::AddDeferredPublicationOperation(
     ui64 intPublicationId,
     const TString& extPublicationId)
 {
+    EnsureNoTopicKafkaOperations(*this);
     UpdateDeferredPublicationIntId(DeferredPublicationIntId_, intPublicationId);
     UpdateDeferredPublicationExtId(DeferredPublicationExtId_, extPublicationId);
 

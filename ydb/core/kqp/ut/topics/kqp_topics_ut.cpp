@@ -645,6 +645,27 @@ Y_UNIT_TEST(DeferredPublication_MergeRejectsTopicWrite) {
     UNIT_ASSERT_EXCEPTION(lhs.Merge(rhs), yexception);
 }
 
+Y_UNIT_TEST(DeferredPublication_AddRejectsTopicWriteAfterDeferred) {
+    NTopic::TTopicOperations topicOps;
+    AddDeferredPublicationOperation(topicOps, "topic_A", 0, 100,
+        NKikimrKqp::TTopicDeferredPublicationRequest::Publish, 11, "ext-11");
+
+    UNIT_ASSERT_EXCEPTION(
+        AddWriteOperation(topicOps, "topic_B", 1, 100'001),
+        yexception);
+}
+
+Y_UNIT_TEST(DeferredPublication_AddRejectsDeferredAfterTopicWrite) {
+    NTopic::TTopicOperations topicOps;
+    AddWriteOperation(topicOps, "topic_A", 0, 100'001);
+    topicOps.SetTabletId("topic_A", 0, 100);
+
+    UNIT_ASSERT_EXCEPTION(
+        AddDeferredPublicationOperation(topicOps, "topic_B", 1, 200,
+            NKikimrKqp::TTopicDeferredPublicationRequest::Publish, 11, "ext-11"),
+        yexception);
+}
+
 Y_UNIT_TEST(DeferredPublication_ValidateRejectsUnspecifiedOp) {
     NKikimrKqp::TTopicDeferredPublicationRequest request;
     request.SetOp(NKikimrKqp::TTopicDeferredPublicationRequest::Unspecified);

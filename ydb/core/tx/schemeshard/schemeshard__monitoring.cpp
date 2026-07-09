@@ -2465,6 +2465,7 @@ private:
 // request from Complete() — so success is reported only after the binding is durable.
 struct TSchemeShard::TTxMoveShardToStoragePool : public NTabletFlatExecutor::TTransactionBase<TSchemeShard> {
     TEvPrivate::TEvMoveShardToStoragePool::TPtr Ev;
+    bool Persisted = false;
 
     TTxMoveShardToStoragePool(TSchemeShard* self, TEvPrivate::TEvMoveShardToStoragePool::TPtr& ev)
         : TBase(self)
@@ -2486,6 +2487,7 @@ struct TSchemeShard::TTxMoveShardToStoragePool : public NTabletFlatExecutor::TTr
         NIceDb::TNiceDb db(txc.DB);
         info->BindedChannels = Ev->Get()->NewBindings;
         Self->PersistChannelsBinding(db, shardIdx, info->BindedChannels);
+        Persisted = true;
 
         LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
             "TTxMoveShardToStoragePool: persisted new channel bindings for shard " << shardIdx);
@@ -2493,6 +2495,15 @@ struct TSchemeShard::TTxMoveShardToStoragePool : public NTabletFlatExecutor::TTr
     }
 
     void Complete(const TActorContext& ctx) override {
+        if (!Persisted) {
+            // Shard was deleted between the Hive ack and this transaction; Hive did apply the move
+            // but SchemeShard can no longer record it. Report partial success so the operator knows.
+            ctx.Send(Ev->Get()->HttpSender, new NMon::TEvRemoteBinaryInfoRes(
+                "HTTP/1.1 409 Conflict\r\nConnection: Close\r\n\r\n"
+                "Hive acknowledged the move but the shard was deleted before the bindings could be "
+                "persisted; the recorded bindings were not updated\r\n"));
+            return;
+        }
         // Binding durable now: answer with the Hive reply the actor captured.
         ctx.Send(Ev->Get()->HttpSender, new NMon::TEvRemoteJsonInfoRes(Ev->Get()->HiveReply));
     }

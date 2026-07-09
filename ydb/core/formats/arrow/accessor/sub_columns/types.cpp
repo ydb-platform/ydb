@@ -61,15 +61,11 @@ bool DictionaryApplicableForValueType(const EValueType valueType) {
         case EValueType::BinaryJson:
         case EValueType::String:
             return true;
-        // Integral types trade fixed-size position in array for fixed-size index.
-        // May still be good for compression, but requires further experiments
-        // and probably a separate threshold from strings
         default:
             return false;
     }
 }
 
-// Element type to represent result of merging arrays with arg types
 EValueType MergeValueTypes(const std::optional<EValueType>& acc, const EValueType next) {
     if (!acc) {
         return next;

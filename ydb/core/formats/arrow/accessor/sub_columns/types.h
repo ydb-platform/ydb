@@ -21,16 +21,19 @@ enum class EValueType : ui8 {
 
 std::shared_ptr<arrow::DataType> GetArrowTypeForValueType(const EValueType valueType);
 
-// Dictionary encoding only pays off for the binary-backed types (BinaryJson blobs and raw strings);
-// for the compact native Double/Bool arrays it is excessive, so they stay plain.
+
+// Dictionary encoding only enabled for the binary-backed types (BinaryJson blobs and raw strings).
+// Integral types would trade fixed-size position in array for fixed-size dictionary ref.
+// May still be good for compression, but requires further experiments.
 bool DictionaryApplicableForValueType(const EValueType valueType);
 
+// Element type to represent result of merging arrays with arg types
 EValueType MergeValueTypes(const std::optional<EValueType>& acc, const EValueType next);
 
 EValueType DetectValueTypeForArray(const std::deque<NBinaryJson::TBinaryJson>& values);
 
 // Convert json blob to its contained scalar.
-// Verify fail if blob is not of specified type.
+// Fail on verify if blob is not of specified type.
 TStringBuf ExtractStringScalar(const NBinaryJson::TBinaryJson& blob);
 double ExtractDoubleScalar(const NBinaryJson::TBinaryJson& blob);
 bool ExtractBoolScalar(const NBinaryJson::TBinaryJson& blob);

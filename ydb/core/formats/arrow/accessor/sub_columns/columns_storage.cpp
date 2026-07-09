@@ -64,23 +64,21 @@ void TColumnsData::TIterator::InitArrays() {
         }
         const ui32 localIndex = FullArrayAddress->GetAddress().GetLocalIndex(CurrentIndex);
         ChunkAddress = FullArrayAddress->GetArray()->GetChunk(ChunkAddress, localIndex);
-        // Physical type is binary (BinaryJson/String), float64 (Double) or boolean (Bool); the value
-        // type in the stats tells the reader how to interpret this element.
-        CurrentArray = ChunkAddress->GetArray().get();
+        CurrentArrayData = ChunkAddress->GetArray().get();
         // Dictionary columns materialize (decode) to a dense array, so they are
         // read exactly like a plain Array here.
         if (FullArrayAddress->GetArray()->GetType() == IChunkedArray::EType::Array ||
             FullArrayAddress->GetArray()->GetType() == IChunkedArray::EType::Dictionary) {
-            if (CurrentArray->IsNull(localIndex)) {
+            if (CurrentArrayData->IsNull(localIndex)) {
                 Next();
             }
             break;
         } else if (FullArrayAddress->GetArray()->GetType() == IChunkedArray::EType::SparsedArray) {
-            AFL_VERIFY(localIndex < CurrentArray->length())
+            AFL_VERIFY(localIndex < CurrentArrayData->length())
                 ("localIndex", localIndex)
-                ("CurrentArray->length()", CurrentArray->length())
-                ("CurrentArray", CurrentArray->ToString());
-            if (CurrentArray->IsNull(localIndex) &&
+                ("CurrentArray->length()", CurrentArrayData->length())
+                ("CurrentArray", CurrentArrayData->ToString());
+            if (CurrentArrayData->IsNull(localIndex) &&
                 std::static_pointer_cast<TSparsedArray>(FullArrayAddress->GetArray())->GetDefaultValue() == nullptr) {
                 CurrentIndex = ChunkAddress->GetAddress().GetGlobalFinishPosition();
             } else {

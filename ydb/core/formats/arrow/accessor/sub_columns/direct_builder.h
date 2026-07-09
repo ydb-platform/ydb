@@ -187,8 +187,7 @@ public:
                     }
                 }
             };
-            // Native scalar storage applies only to separated columns (allowDictionary marks them);
-            // the Others store is always BinaryJson.
+            // Native scalar storage applies only to separated columns, the Others store is always BinaryJson.
             EValueType valueType = EValueType::BinaryJson;
             if (separateColumns && settings.GetEnableNativeScalarColumns()) {
                 valueType = DetectValueTypeForArray(i->GetValues());

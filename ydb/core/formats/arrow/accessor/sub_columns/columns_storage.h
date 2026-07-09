@@ -51,7 +51,7 @@ public:
     private:
         ui32 KeyIndex;
         std::shared_ptr<IChunkedArray> GlobalChunkedArray;
-        const arrow::Array* CurrentArray;
+        const arrow::Array* CurrentArrayData;
         std::optional<IChunkedArray::TFullChunkedArrayAddress> FullArrayAddress;
         std::optional<IChunkedArray::TFullDataAddress> ChunkAddress;
         ui32 CurrentIndex = 0;
@@ -73,26 +73,22 @@ public:
             return KeyIndex;
         }
 
-        // The current value is exposed as (array, local index); the reader interprets it per the
-        // column's value type (see types.h). The physical array is binary (String/BinaryJson),
-        // float64 (Double) or boolean (Bool).
+        // Current value is exposed as (array, local index); the reader interprets it per the
+        // column's value type.
         const arrow::Array& GetArray() const {
-            return *CurrentArray;
+            return *CurrentArrayData;
         }
         i64 GetLocalIndex() const {
             return ChunkAddress->GetAddress().GetLocalIndex(CurrentIndex);
         }
 
-        // Scalar view for the index extractor. The iterator has no value type, so this only serves
-        // BinaryJson columns (the physical array is binary); making the index path native-aware
-        // requires the value type and is done at the extractor level.
         NArrow::NAccessor::TBinaryJsonValueView GetValue() const {
-            auto view = static_cast<const arrow::BinaryArray&>(*CurrentArray).GetView(GetLocalIndex());
+            auto view = static_cast<const arrow::BinaryArray&>(*CurrentArrayData).GetView(GetLocalIndex());
             return NArrow::NAccessor::TBinaryJsonValueView(TStringBuf(view.data(), view.size()));
         }
 
         bool HasValue() const {
-            return !CurrentArray->IsNull(ChunkAddress->GetAddress().GetLocalIndex(CurrentIndex));
+            return !CurrentArrayData->IsNull(ChunkAddress->GetAddress().GetLocalIndex(CurrentIndex));
         }
 
         bool IsValid() const {
@@ -107,7 +103,7 @@ public:
             AFL_VERIFY(ChunkAddress->GetAddress().Contains(CurrentIndex));
             CurrentIndex = recordIndex;
             for (; CurrentIndex < ChunkAddress->GetAddress().GetGlobalFinishPosition(); ++CurrentIndex) {
-                if (CurrentArray->IsNull(CurrentIndex - ChunkAddress->GetAddress().GetGlobalStartPosition())) {
+                if (CurrentArrayData->IsNull(CurrentIndex - ChunkAddress->GetAddress().GetGlobalStartPosition())) {
                     continue;
                 }
                 return true;
@@ -121,7 +117,7 @@ public:
             AFL_VERIFY(ChunkAddress->GetAddress().Contains(CurrentIndex));
             ++CurrentIndex;
             for (; CurrentIndex < ChunkAddress->GetAddress().GetGlobalFinishPosition(); ++CurrentIndex) {
-                if (CurrentArray->IsNull(CurrentIndex - ChunkAddress->GetAddress().GetGlobalStartPosition())) {
+                if (CurrentArrayData->IsNull(CurrentIndex - ChunkAddress->GetAddress().GetGlobalStartPosition())) {
                     continue;
                 }
                 return true;

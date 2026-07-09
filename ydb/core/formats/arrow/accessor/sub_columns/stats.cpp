@@ -90,8 +90,7 @@ TDictStats::TDictStats(const std::shared_ptr<arrow::RecordBatch>& original)
     AFL_VERIFY(Original->column(2)->type()->id() == arrow::uint32()->id());
     AFL_VERIFY(Original->column(3)->type()->id() == arrow::uint8()->id());
     if (Original->num_columns() == 4) {
-        // Legacy stats (pre native scalar columns): synthesize an all-BinaryJson value_type column
-        // and normalize to 5 columns so every downstream user sees a uniform layout.
+        // Legacy stats (pre native scalar columns): synthesize an all-BinaryJson value_type column.
         auto valueTypeArray = NArrow::TThreadSimpleArraysCache::Get(
             arrow::uint8(), std::make_shared<arrow::UInt8Scalar>((ui8)EValueType::BinaryJson), Original->num_rows());
         Original = arrow::RecordBatch::Make(GetStatsSchema(), Original->num_rows(),
@@ -135,8 +134,6 @@ TDictStats TDictStats::DeserializeFromBlob(const TString& blob) {
     if (result.ok()) {
         return TDictStats(*result);
     }
-    // Legacy blob without the value_type column: the current schema has one extra trailing field,
-    // so the payload fails buffer/field-count validation cleanly (no silent misread). Retry legacy.
     auto legacy = serializer.Deserialize(blob, GetStatsSchemaLegacy());
     AFL_VERIFY(legacy.ok())("error", legacy.status().ToString());
     return TDictStats(*legacy);

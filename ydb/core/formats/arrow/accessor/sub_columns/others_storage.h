@@ -118,7 +118,7 @@ public:
         }
 
         // The Others store is always BinaryJson; exposed as (array, local index) like the column
-        // iterator so the general iterator reads both uniformly (see types.h).
+        // iterator so the general iterator reads both uniformly.
         const arrow::Array& GetArray() const {
             AFL_VERIFY(IsValid());
             return *Values;

@@ -95,19 +95,18 @@ public:
     private:
         YDB_READONLY(ui32, RecordsCount, 0);
         YDB_READONLY(ui32, DataSize, 0);
-        // nullopt = no column has contributed a value type yet (neutral element for the join).
-        std::optional<EValueType> ValueTypeJoin;
+        std::optional<EValueType> DeducedValueType;
 
     public:
         TRTStatsValue() = default;
-        TRTStatsValue(const ui32 recordsCount, const ui32 dataSize, const std::optional<EValueType>& valueType = std::nullopt)
+        TRTStatsValue(const ui32 recordsCount, const ui32 dataSize, const std::optional<EValueType>& valueType)
             : RecordsCount(recordsCount)
             , DataSize(dataSize)
-            , ValueTypeJoin(valueType) {
+            , DeducedValueType(valueType) {
         }
 
         EValueType GetValueType() const {
-            return ValueTypeJoin.value_or(EValueType::BinaryJson);
+            return DeducedValueType.value_or(EValueType::BinaryJson);
         }
 
         void AddValue(const std::string_view str) {
@@ -118,7 +117,7 @@ public:
         void Add(const TDictStats& stats, const ui32 idx) {
             RecordsCount += stats.GetColumnRecordsCount(idx);
             DataSize += stats.GetColumnSize(idx);
-            ValueTypeJoin = MergeValueTypes(ValueTypeJoin, stats.GetValueType(idx));
+            DeducedValueType = MergeValueTypes(DeducedValueType, stats.GetValueType(idx));
         }
 
         // Decides only the Array-vs-Sparsed axis and never returns Dictionary,
@@ -137,7 +136,7 @@ public:
         TRTStats(const TString& keyName)
             : KeyName(keyName) {
         }
-        TRTStats(const TString& keyName, const ui32 recordsCount, const ui32 dataSize, const std::optional<EValueType>& valueType = std::nullopt)
+        TRTStats(const TString& keyName, const ui32 recordsCount, const ui32 dataSize, const std::optional<EValueType>& valueType)
             : TBase(recordsCount, dataSize, valueType)
             , KeyName(keyName) {
         }
@@ -145,8 +144,8 @@ public:
         TRTStats(const std::string_view keyName)
             : KeyName(keyName.data(), keyName.size()) {
         }
-        TRTStats(const std::string_view keyName, const ui32 recordsCount, const ui32 dataSize)
-            : TBase(recordsCount, dataSize)
+        TRTStats(const std::string_view keyName, const ui32 recordsCount, const ui32 dataSize, const std::optional<EValueType>& valueType)
+            : TBase(recordsCount, dataSize, valueType)
             , KeyName(keyName.data(), keyName.size()) {
         }
 
@@ -232,7 +231,7 @@ public:
     }
 
     // Legacy schema without value_type; used only as the fallback when deserializing blobs written
-    // before native scalar columns existed (see TSubColumnsHeader::ReadHeader).
+    // before native scalar columns existed.
     static std::shared_ptr<arrow::Schema> GetStatsSchemaLegacy() {
         static arrow::FieldVector fields = { std::make_shared<arrow::Field>("name", arrow::binary()),
             std::make_shared<arrow::Field>("count", arrow::uint32()), std::make_shared<arrow::Field>("size", arrow::uint32()),

@@ -16,7 +16,7 @@ private:
     bool HasValueFlag = false;
     bool IsColumnKeyFlag = false;
     EValueType ValueType = EValueType::BinaryJson;
-    // Current value as (array, local index); the reader interprets it per ValueType (types.h).
+    // Current value as (array, local index); the reader interprets it per ValueType.
     const arrow::Array* CurrentArray = nullptr;
     i64 LocalIndex = 0;
 

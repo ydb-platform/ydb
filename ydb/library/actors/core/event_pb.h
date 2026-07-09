@@ -93,6 +93,7 @@ namespace NActors {
         void DiscardEvent() { Event = nullptr; };
         void Abort();
         std::span<TChunk> FeedBuf(void* data, size_t size);
+        std::span<TChunk> FeedBuf(TMutableContiguousSpan *buffer, size_t totalSize);
         bool IsComplete() const {
             return !Event;
         }
@@ -131,8 +132,8 @@ namespace NActors {
         TContClosure SelfClosure;
         TContMachineContext InnerContext;
         TContMachineContext *BufFeedContext = nullptr;
-        char *BufferPtr;
-        size_t SizeRemain;
+        TMutableContiguousSpan Buffer;
+        size_t TotalSizeRemain;
         std::vector<TChunk> Chunks;
         const IEventBase *Event = nullptr;
         bool CancelFlag = false;

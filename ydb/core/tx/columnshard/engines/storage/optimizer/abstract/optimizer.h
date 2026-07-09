@@ -186,6 +186,14 @@ protected:
         return TConclusionStatus::Success();
     }
 
+    // Forced-compaction support: reports whether all portions have settled into the regular last
+    // level with no remaining intersections. Fail() means the optimizer does not support forced
+    // compaction (i.e. it is not tiling++); Success(true) means there are no intersections left,
+    // Success(false) means compaction is still in progress. Only tiling++ overrides this.
+    virtual TConclusion<bool> DoCheckNoIntersections() const {
+        return TConclusionStatus::Fail("forced compaction is not supported by this optimizer");
+    }
+
 public:
     static ui64 GetNodePortionsConsumption() {
         return NodePortionsCounter.Val() * NKikimr::NOlap::TGlobalLimits::AveragePortionSizeLimit;
@@ -254,6 +262,10 @@ public:
 
     TConclusionStatus CheckWriteData() const {
         return DoCheckWriteData();
+    }
+
+    TConclusion<bool> CheckNoIntersections() const {
+        return DoCheckNoIntersections();
     }
 
     std::vector<TTaskDescription> GetTasksDescription() const {

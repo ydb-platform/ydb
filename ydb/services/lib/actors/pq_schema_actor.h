@@ -112,10 +112,10 @@ namespace NKikimr::NGRpcProxy::V1 {
                 return RespondWithCode(Ydb::StatusIds::UNAUTHORIZED);
             }
 
-            LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "SendDescribeProposeRequest "
-                << " database: " << Database
-                << " path: " << GetTopicPath()
-                << " showPrivate: " << showPrivate);
+            YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::PERSQUEUE, "SendDescribeProposeRequest",
+                {"database", Database},
+                {"path", GetTopicPath()},
+                {"showPrivate", showPrivate});
 
             navigateRequest->DatabaseName = Database;
             navigateRequest->ResultSet.emplace_back(NSchemeCache::TSchemeCacheNavigate::TEntry{
@@ -246,7 +246,9 @@ namespace NKikimr::NGRpcProxy::V1 {
             switch (ev->GetTypeRewrite()) {
                 hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle);
             default:
-                ALOG_WARN(NKikimrServices::PERSQUEUE, "unhandled eventType=" << ev->GetTypeRewrite() << " event=" << ev->GetTypeName());
+                YDB_LOG_WARN_COMP(NKikimrServices::PERSQUEUE, "Unhandled",
+                    {"eventType", ev->GetTypeRewrite()},
+                    {"event", ev->GetTypeName()});
                 AFL_VERIFY_DEBUG(false)("eventType", ev->GetTypeRewrite())("event", ev->GetTypeName());
             }
         }
@@ -303,9 +305,10 @@ namespace NKikimr::NGRpcProxy::V1 {
 
         bool OnUnhandledException(const std::exception& exc) override {
             auto ctx = *NActors::TlsActivationContext;
-            LOG_CRIT_S(ctx, NKikimrServices::PERSQUEUE,
-                TStringBuilder() << " unhandled exception " << TypeName(exc) << ": " << exc.what() << Endl
-                    << TBackTrace::FromCurrentException().PrintToString());
+            YDB_LOG_CRIT_CTX_COMP(ctx, NKikimrServices::PERSQUEUE, "Unhandled exception",
+                {"typeName", TypeName(exc)},
+                {"exception", exc.what()},
+                {"currentException", TBackTrace::FromCurrentException().PrintToString()});
 
             ReplyWithError(Ydb::StatusIds::INTERNAL_ERROR, Ydb::PersQueue::ErrorCode::ERROR, "Internal error");
 

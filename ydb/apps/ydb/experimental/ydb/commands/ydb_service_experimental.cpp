@@ -119,7 +119,8 @@ int TCommandStreamQuery::Run(TConfig& config) {
         Query = TFileInput(FileName).ReadAll();
     }
 
-    NTable::TTableClient db(CreateDriver(config));
+    auto driver = CreateDriver(config);
+    NTable::TTableClient db(driver);
     NTable::TStreamExecScanQuerySettings settings;
 
     if (ProfileFileName) {
@@ -372,7 +373,8 @@ int TCommandExplain::Run(TConfig& config) {
     TString ast;
     std::optional<NTable::TQueryStats> stats;
     if (QueryType == "scan") {
-        NTable::TTableClient client(CreateDriver(config));
+        auto driver = CreateDriver(config);
+        NTable::TTableClient client(driver);
         NTable::TStreamExecScanQuerySettings settings;
 
         if (Analyze) {
@@ -406,10 +408,11 @@ int TCommandExplain::Run(TConfig& config) {
         }
 
     } else if (QueryType == "data" && Analyze) {
+        auto driver = CreateDriver(config);
         NTable::TExecDataQuerySettings settings;
         settings.CollectQueryStats(NTable::ECollectQueryStatsMode::Full);
 
-        auto result = GetSession(config).ExecuteDataQuery(
+        auto result = GetSession(driver).ExecuteDataQuery(
             Query,
             NTable::TTxControl::BeginTx(NTable::TTxSettings::SerializableRW()).CommitTx(),
             settings
@@ -422,7 +425,8 @@ int TCommandExplain::Run(TConfig& config) {
             ast = proto.query_ast();
         }
     } else if (QueryType == "data" && !Analyze) {
-        NTable::TExplainQueryResult result = GetSession(config).ExplainDataQuery(
+        auto driver = CreateDriver(config);
+        NTable::TExplainQueryResult result = GetSession(driver).ExplainDataQuery(
             Query,
             FillSettings(NTable::TExplainDataQuerySettings())
         ).GetValueSync();
@@ -531,7 +535,8 @@ int TCommandGenerateNumbers::Run(TConfig& config) {
     settings.RowsPerRequest(RowsPerRequest);
     settings.Threads(Threads);
 
-    TGenerateClient client(CreateDriver(config), config);
+    auto driver = CreateDriver(config);
+    TGenerateClient client(driver, config);
     NStatusHelpers::ThrowOnErrorOrPrintIssues(client.Generate(Path, settings));
 
     return EXIT_SUCCESS;

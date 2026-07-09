@@ -61,9 +61,10 @@ namespace {
 template <typename TResponse>
 NThreading::TFuture<TResponse> MakeFailedResponse(TResponse response, const TFmrError& error, TStringBuf logPrefix) {
     if (error.Reason == EFmrErrorReason::FallbackOperation) {
-        YQL_CLOG(WARN, FastMapReduce) << "FMR fallback to YT: " << error.ErrorMessage;
+        YQL_CLOG(WARN, FastMapReduce) << logPrefix << "FMR fallback to YT: " << error.ErrorMessage;
+    } else {
+        YQL_CLOG(ERROR, FastMapReduce) << logPrefix << error.ErrorMessage;
     }
-    YQL_CLOG(ERROR, FastMapReduce) << logPrefix << error.ErrorMessage;
     response.ErrorMessages.emplace_back(error);
     return NThreading::MakeFuture(std::move(response));
 }
@@ -939,9 +940,6 @@ private:
 
         if (taskStatuses.contains(ETaskStatus::Failed)) {
             return EOperationStatus::Failed;
-        }
-        if (taskStatuses.contains(ETaskStatus::InProgress)) {
-            return EOperationStatus::InProgress;
         }
         if (taskStatuses.contains(ETaskStatus::InProgress)) {
             return EOperationStatus::InProgress;

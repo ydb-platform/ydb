@@ -72,15 +72,14 @@ bool TOperationsManager::Load(NTabletFlatExecutor::TTransactionContext& txc) {
         while (!rowset.EndOfSet()) {
             const ui64 lockId = rowset.GetValue<Schema::OperationTxIds::LockId>();
             const ui64 txId = rowset.GetValue<Schema::OperationTxIds::TxId>();
-            const bool broken = rowset.GetValueOrDefault<Schema::OperationTxIds::Broken>(true);
 
             auto it = LockFeatures.try_emplace(lockId, lockId, 0).first;
             auto& lock = it->second;
 
             lock.SetTxId(txId);
-            if (broken) {
-                lock.SetBroken();
-            }
+            // we cannot persist the lock state reliably and cheaply enough,
+            // so if the shard restarted/crashed/whatever, we assume the lock is broken
+            lock.SetBroken();
             AFL_VERIFY(Tx2Lock.emplace(txId, lockId).second);
             if (!rowset.Next()) {
                 return false;
@@ -91,16 +90,13 @@ bool TOperationsManager::Load(NTabletFlatExecutor::TTransactionContext& txc) {
     return true;
 }
 
-void TOperationsManager::BreakConflictingTxs(const TLockFeatures& lock, NTabletFlatExecutor::TTransactionContext& txc) {
+void TOperationsManager::BreakConflictingTxs(const TLockFeatures& lock) {
     for (auto&& lockIdToBreak : lock.GetBreakOnCommit()) {
         if (auto lockToBreak = GetLockOptional(lockIdToBreak)) {
             YDB_LOG_WARN_COMP(NKikimrServices::TX_COLUMNSHARD_TX, "",
                 {"brokenLockId", lockIdToBreak});
             if (!lockToBreak->IsBroken()) {
                 lockToBreak->SetBroken();
-                if (lockToBreak->IsTxIdAssigned()) {
-                    PersistLock(*lockToBreak, txc);
-                }
             }
         }
     }
@@ -111,9 +107,9 @@ void TOperationsManager::BreakConflictingTxs(const TLockFeatures& lock, NTabletF
     }
 }
 
-void TOperationsManager::BreakConflictingTxs(const ui64 lockId, NTabletFlatExecutor::TTransactionContext& txc) {
+void TOperationsManager::BreakConflictingTxs(const ui64 lockId) {
     auto& lock = GetLockVerified(lockId);
-    BreakConflictingTxs(lock, txc);
+    BreakConflictingTxs(lock);
 }
 
 void TOperationsManager::CommitTransactionOnExecute(
@@ -128,7 +124,7 @@ void TOperationsManager::CommitTransactionOnExecute(
         commited.emplace_back(opPtr);
     }
 
-    BreakConflictingTxs(lock, txc);
+    BreakConflictingTxs(lock);
 
     OnTransactionFinishOnExecute(commited, lock, txId, txc);
 }
@@ -240,15 +236,9 @@ std::optional<ui64> TOperationsManager::GetLockForTx(const ui64 txId) const {
 }
 
 void TOperationsManager::LinkTransactionOnExecute(TLockFeatures& lock, NTabletFlatExecutor::TTransactionContext& txc) {
-    PersistLock(lock, txc);
-    Tx2Lock[lock.GetTxId()] = lock.GetLockId();
-}
-
-void TOperationsManager::PersistLock(TLockFeatures& lock, NTabletFlatExecutor::TTransactionContext& txc) {
     NIceDb::TNiceDb db(txc.DB);
-    db.Table<Schema::OperationTxIds>()
-        .Key(lock.GetTxId(), lock.GetLockId())
-        .Update(NIceDb::TUpdate<Schema::OperationTxIds::Broken>(lock.IsBroken()));
+    db.Table<Schema::OperationTxIds>().Key(lock.GetTxId(), lock.GetLockId()).Update();
+    Tx2Lock[lock.GetTxId()] = lock.GetLockId();
 }
 
 void TOperationsManager::LinkTransactionOnComplete(const ui64 /*lockId*/, const ui64 /*txId*/) {

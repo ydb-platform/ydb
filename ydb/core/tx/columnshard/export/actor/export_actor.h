@@ -33,7 +33,6 @@ private:
     EStage Stage = EStage::Initialization;
     std::shared_ptr<NExport::TSession> ExportSession;
     TActorId Exporter;
-    TString ErrorMessage;
     static inline const ui64 FreeSpace = ((ui64)128) << 20;
     static constexpr TDuration OperationTimeout = TDuration::Minutes(240);
     static constexpr TDuration WarningInterval = TDuration::Seconds(60);

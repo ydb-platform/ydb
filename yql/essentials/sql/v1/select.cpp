@@ -905,6 +905,10 @@ public:
             options = Q(Y());
         }
 
+        if (ctx.EnableSystemColumns) {
+            sourceData = Y("RemoveSystemMembers", sourceData);
+        }
+
         Node_ = Y("let", Alias_, Y("block", Q(L(tables, Y("return", Y("Materialize!", "world", datasink, sourceData, options))))));
         IsUsed_ = true;
 

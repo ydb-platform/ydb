@@ -91,7 +91,7 @@ public:
         AFL_VERIFY(ev->GetType() == NSubscriber::EEventType::TxCompleted);
         const auto* evCompleted = static_cast<const NSubscriber::TEventTxCompleted*>(ev.get());
         AFL_VERIFY(TxIdsToWait.erase(evCompleted->GetTxId()));
-        YDB_LOG_DEBUG("Dump completed, remained",
+        YDB_LOG_DEBUG("",
             {"completed", evCompleted->GetTxId()},
             {"remained", JoinSeq(",", TxIdsToWait)});
     }

@@ -37,7 +37,7 @@ private:
                 {"event", "async_schema"},
                 {"reason", JoinSeq(",", result)});
         } else {
-            YDB_LOG_DEBUG_COMP(NKikimrServices::TX_COLUMNSHARD, "Dump event",
+            YDB_LOG_DEBUG_COMP(NKikimrServices::TX_COLUMNSHARD, "",
                 {"event", "sync_schema"});
         }
         return result;

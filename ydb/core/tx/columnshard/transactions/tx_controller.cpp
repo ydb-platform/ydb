@@ -368,7 +368,7 @@ TTxController::EPlanResult TTxController::PlanTx(const ui64 planStep, const ui64
             {"txId", txId});
         return EPlanResult::Skipped;
     } else {
-        YDB_LOG_TRACE("Dump event, txId, planStep",
+        YDB_LOG_TRACE("",
             {"event", "plan_tx"},
             {"txId", txId},
             {"planStep", it->second->MutableTxInfo().PlanStep});
@@ -407,7 +407,7 @@ std::shared_ptr<TTxController::ITransactionOperator> TTxController::StartPropose
     YDB_LOG_CREATE_CONTEXT(
         {"method", "TTxController::StartProposeOnExecute"},
         {"txInfo", txInfo.DebugString()});
-    YDB_LOG_DEBUG("Dump event",
+    YDB_LOG_DEBUG("",
         {"event", "start"});
     std::shared_ptr<TTxController::ITransactionOperator> txOperator(
         TTxController::ITransactionOperator::TFactory::Construct(txInfo.TxKind, txInfo));
@@ -442,7 +442,7 @@ std::shared_ptr<TTxController::ITransactionOperator> TTxController::StartPropose
             } else {
                 RegisterTx(txOperator, txBody, txc);
             }
-            YDB_LOG_DEBUG("Dump event, txOperator",
+            YDB_LOG_DEBUG("",
                 {"event", "registered"},
                 {"txOperator", txOperator->GetOpType()});
         } else {
@@ -458,7 +458,7 @@ void TTxController::StartProposeOnComplete(ITransactionOperator& txOperator, con
     YDB_LOG_CREATE_CONTEXT(
         {"method", "TTxController::StartProposeOnComplete"},
         {"txId", txOperator.GetTxId()});
-    YDB_LOG_DEBUG("Dump event",
+    YDB_LOG_DEBUG("",
         {"event", "start"});
     txOperator.StartProposeOnComplete(Owner, ctx);
     Counters.OnStartProposeOnComplete(txOperator.GetOpType());

@@ -102,7 +102,7 @@ public:
     virtual bool ProgressOnExecute(
         TColumnShard& owner, const NOlap::TSnapshot& version, NTabletFlatExecutor::TTransactionContext& txc) override {
         Version = version;
-        YDB_LOG_DEBUG_COMP(NKikimrServices::TX_COLUMNSHARD, "Dump progressTxId, lockId, broken",
+        YDB_LOG_DEBUG_COMP(NKikimrServices::TX_COLUMNSHARD, "",
             {"progressTxId", GetTxId()},
             {"lockId", LockId},
             {"broken", IsTxBroken()});
@@ -118,7 +118,7 @@ public:
     }
 
     virtual bool ProgressOnComplete(TColumnShard& owner, const TActorContext& ctx) override {
-        YDB_LOG_DEBUG_COMP(NKikimrServices::TX_COLUMNSHARD, "Dump progressTxId, lockId, broken",
+        YDB_LOG_DEBUG_COMP(NKikimrServices::TX_COLUMNSHARD, "",
             {"progressTxId", GetTxId()},
             {"lockId", LockId},
             {"broken", IsTxBroken()});

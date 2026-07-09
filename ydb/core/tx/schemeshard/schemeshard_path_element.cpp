@@ -150,6 +150,10 @@ bool TPathElement::IsSubDomainRoot() const {
     return PathType == EPathType::EPathTypeSubDomain || IsRoot();
 }
 
+bool TPathElement::IsPlainSubDomainRoot() const {
+    return PathType == EPathType::EPathTypeSubDomain;
+}
+
 bool TPathElement::IsExternalSubDomainRoot() const {
     return PathType == EPathType::EPathTypeExtSubDomain;
 }

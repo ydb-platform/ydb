@@ -29,5 +29,14 @@ struct TTaskResourceEstimation {
 
 TTaskResourceEstimation BuildInitialTaskResources(const NYql::NDqProto::TDqTask& task);
 
+struct TTaskResourceEstimationParams {
+    ui64 ChannelBufferSize = 0;
+    ui64 MinChannelBufferSize = 0;
+    ui64 MaxTotalChannelBuffersSize = 0;
+    ui64 MkqlHeavyProgramMemoryLimit = 0;
+    ui64 MkqlLightProgramMemoryLimit = 0;
+};
+
+void EstimateTaskResources(TTaskResourceEstimation& ret, const TTaskResourceEstimationParams& params, ui32 tasksCount);
 
 } // namespace NKikimr::NKqp

@@ -1,0 +1,20 @@
+CREATE EXTERNAL DATA SOURCE solomon WITH (
+    SOURCE_TYPE = 'Monium.Metrics',
+    LOCATION = '${SOLOMON_HTTP_ENDPOINT}',
+    GRPC_LOCATION = '${SOLOMON_GRPC_ENDPOINT}',
+    AUTH_METHOD = 'NONE',
+    USE_TLS = 'false'
+);
+
+CREATE EXTERNAL DATA SOURCE pq WITH (
+    SOURCE_TYPE = 'Ydb',
+    LOCATION = '${KQPRUN_ENDPOINT}',
+    DATABASE_NAME = '/Root',
+    AUTH_METHOD = 'NONE',
+    SHARED_READING = '${PQ_SHARED_READING}'
+);
+
+CREATE TOPIC test_topic_input;
+CREATE TOPIC test_topic_input2;
+CREATE TOPIC test_topic_output;
+CREATE TOPIC test_topic_output2;

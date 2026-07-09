@@ -4,6 +4,7 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/common_client/ssl_credentials.h>
 
 #include "actions.h"
+#include "credentials_ready.h"
 #include "params.h"
 
 #include <ydb/public/api/grpc/ydb_discovery_v1.grpc.pb.h>
@@ -17,7 +18,6 @@
 
 #include <atomic>
 #include <condition_variable>
-#include <exception>
 #include <mutex>
 #include <optional>
 
@@ -42,117 +42,6 @@ using NYdbGrpc::IQueueClientCallbackGuard;
 using NYdbGrpc::TQueueClientCallbackGuardFactory;
 
 class ICredentialsProvider;
-
-inline TPlainStatus CredentialsInitFailedStatus(const std::exception& e) {
-    return TPlainStatus(EStatus::CLIENT_UNAUTHENTICATED,
-        TStringBuilder() << "Credentials provider initialization failed. " << e.what());
-}
-
-inline TPlainStatus CredentialsInitFailedStatus() {
-    return TPlainStatus(EStatus::CLIENT_UNAUTHENTICATED,
-        "Credentials provider initialization failed");
-}
-
-inline TPlainStatus CredentialsInitDeadlineExceededStatus() {
-    return TPlainStatus(EStatus::CLIENT_DEADLINE_EXCEEDED,
-        "Request deadline exceeded while waiting for credentials");
-}
-
-inline TPlainStatus CredentialsInitCancelledStatus() {
-    return TPlainStatus(EStatus::CLIENT_CANCELLED,
-        "Client is stopped");
-}
-
-template <typename TCallback>
-class TDeferredCredentialsCallback {
-public:
-    explicit TDeferredCredentialsCallback(TCallback&& callback)
-        : Callback_(std::move(callback))
-    {}
-
-    void Complete(std::optional<TPlainStatus> status) {
-        std::optional<TCallback> callback;
-        {
-            std::lock_guard lock(Lock_);
-            if (Done_) {
-                return;
-            }
-            Done_ = true;
-            callback.emplace(std::move(*Callback_));
-            Callback_.reset();
-        }
-        (*callback)(std::move(status));
-    }
-
-private:
-    std::mutex Lock_;
-    bool Done_ = false;
-    std::optional<TCallback> Callback_;
-};
-
-template <typename TCallbackFactory, typename TScheduleDelayedTask, typename TSubscribeCancel>
-bool DeferUntilCredentialsReady(
-    const TDbDriverStatePtr& dbState,
-    bool useAuth,
-    TDeadline deadline,
-    TCallbackFactory&& callbackFactory,
-    TScheduleDelayedTask&& scheduleDelayedTask,
-    TSubscribeCancel&& subscribeCancel)
-{
-    if (!useAuth) {
-        return false;
-    }
-
-    auto credentialsReady = dbState->GetCredentialsReady();
-    if (!credentialsReady.Initialized()) {
-        return false;
-    }
-
-    if (!credentialsReady.IsReady()) {
-        auto callbackValue = callbackFactory();
-        auto callback = std::make_shared<TDeferredCredentialsCallback<decltype(callbackValue)>>(std::move(callbackValue));
-
-        credentialsReady.Subscribe([callback](const NThreading::TFuture<void>& future) mutable {
-            try {
-                future.GetValue();
-            } catch (const std::exception& e) {
-                callback->Complete(CredentialsInitFailedStatus(e));
-                return;
-            } catch (...) {
-                callback->Complete(CredentialsInitFailedStatus());
-                return;
-            }
-            callback->Complete(std::nullopt);
-        });
-
-        if (!subscribeCancel([callback]() mutable {
-            callback->Complete(CredentialsInitCancelledStatus());
-        })) {
-            callback->Complete(CredentialsInitCancelledStatus());
-            return true;
-        }
-
-        if (!(deadline == TDeadline::Max())) {
-            scheduleDelayedTask([callback]() mutable {
-                callback->Complete(CredentialsInitDeadlineExceededStatus());
-            }, deadline);
-        }
-
-        return true;
-    }
-
-    try {
-        credentialsReady.GetValue();
-    } catch (const std::exception& e) {
-        callbackFactory()(CredentialsInitFailedStatus(e));
-        return true;
-    } catch (...) {
-        callbackFactory()(CredentialsInitFailedStatus());
-        return true;
-    }
-
-    return false;
-}
 
 // Deferred callbacks
 using TDeferredResultCb = std::function<void(google::protobuf::Any*, TPlainStatus status)>;
@@ -279,14 +168,14 @@ public:
             auto credentialsReady = dbState->GetCredentialsReady();
             if (credentialsReady.Initialized() && !credentialsReady.IsReady()) {
                 if (!TryCreateContext(context)) {
-                    callbackFactory()(CredentialsInitCancelledStatus());
+                    callbackFactory()(NDeferredCredentials::InitCancelledStatus());
                     return true;
                 }
                 contextForCancel = context;
             }
         }
 
-        return DeferUntilCredentialsReady(
+        return NDeferredCredentials::DeferUntilReady(
             dbState,
             requestSettings.UseAuth,
             requestSettings.Deadline,

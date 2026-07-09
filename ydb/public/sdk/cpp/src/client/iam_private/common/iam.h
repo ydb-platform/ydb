@@ -2,7 +2,7 @@
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/iam/common/generic_provider.h>
 
-#include <exception>
+#include <library/cpp/threading/future/core/coroutine_traits.h>
 
 namespace NYdb::inline Dev {
 
@@ -71,35 +71,21 @@ public:
     }
 
     NThreading::TFuture<TCredentialsProviderPtr> CreateProviderAsync() const override {
-        auto promise = NThreading::NewPromise<TCredentialsProviderPtr>();
-        Params_.SystemServiceAccountCredentials->CreateProviderAsync().Subscribe(
-            [params = Params_, promise](const NThreading::TFuture<TCredentialsProviderPtr>& authProviderFuture) mutable {
-                try {
-                    auto authProvider = authProviderFuture.GetValue();
-                    auto outerFacility = CreateSimpleCoreFacility();
-                    auto serviceProvider = std::make_shared<TCredentialsProvider>(
-                        params,
-                        std::weak_ptr<ICoreFacility>(outerFacility),
-                        std::move(authProvider),
-                        false);
-                    auto ready = serviceProvider->GetReadyFuture();
-                    TCredentialsProviderPtr provider = std::make_shared<TOwningFacilityCredentialsProvider>(
-                        std::move(outerFacility),
-                        std::move(serviceProvider));
+        auto params = Params_;
+        auto authProvider = co_await params.SystemServiceAccountCredentials->CreateProviderAsync();
+        auto outerFacility = CreateSimpleCoreFacility();
+        auto serviceProvider = std::make_shared<TCredentialsProvider>(
+            params,
+            std::weak_ptr<ICoreFacility>(outerFacility),
+            std::move(authProvider),
+            false);
+        auto ready = serviceProvider->GetReadyFuture();
+        TCredentialsProviderPtr provider = std::make_shared<TOwningFacilityCredentialsProvider>(
+            std::move(outerFacility),
+            std::move(serviceProvider));
 
-                    ready.Subscribe([provider = std::move(provider), promise](const NThreading::TFuture<void>& readyFuture) mutable {
-                        try {
-                            readyFuture.GetValue();
-                            promise.SetValue(std::move(provider));
-                        } catch (...) {
-                            promise.SetException(std::current_exception());
-                        }
-                    });
-                } catch (...) {
-                    promise.SetException(std::current_exception());
-                }
-            });
-        return promise.GetFuture();
+        co_await ready;
+        co_return provider;
     }
 
     TCredentialsProviderPtr CreateProvider(std::weak_ptr<ICoreFacility> facility) const override {
@@ -107,18 +93,18 @@ public:
     }
 
     NThreading::TFuture<TCredentialsProviderPtr> CreateProviderAsync(std::weak_ptr<ICoreFacility> facility) const override {
-        return Params_.SystemServiceAccountCredentials->CreateProviderAsync(facility).Apply(
-            [params = Params_, facility = std::move(facility)](const NThreading::TFuture<TCredentialsProviderPtr>& authProviderFuture) mutable {
-                auto serviceProvider = std::make_shared<TCredentialsProvider>(
-                    params, std::move(facility), authProviderFuture.GetValue(), false);
-                auto ready = serviceProvider->GetReadyFuture();
-                TCredentialsProviderPtr provider = std::move(serviceProvider);
+        auto params = Params_;
+        auto authProvider = co_await params.SystemServiceAccountCredentials->CreateProviderAsync(facility);
+        auto serviceProvider = std::make_shared<TCredentialsProvider>(
+            params,
+            std::move(facility),
+            std::move(authProvider),
+            false);
+        auto ready = serviceProvider->GetReadyFuture();
+        TCredentialsProviderPtr provider = std::move(serviceProvider);
 
-                return ready.Apply([provider = std::move(provider)](const NThreading::TFuture<void>& readyFuture) mutable {
-                    readyFuture.GetValue();
-                    return provider;
-                });
-            });
+        co_await ready;
+        co_return provider;
     }
 
     std::string GetClientIdentity() const override final {

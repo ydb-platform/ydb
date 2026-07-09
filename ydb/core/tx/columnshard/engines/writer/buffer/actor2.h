@@ -7,10 +7,10 @@
 #include <ydb/core/tx/columnshard/operations/write.h>
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/struct_log/log_stack.h>
 
 #include <util/digest/numeric.h>
 #include <util/generic/string_hash.h>
-#include <ydb/library/actors/struct_log/log_stack.h>
 
 namespace NKikimr::NOlap::NWritingPortions {
 

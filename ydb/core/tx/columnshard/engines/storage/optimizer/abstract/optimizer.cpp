@@ -3,6 +3,7 @@
 #include <ydb/core/protos/config.pb.h>
 #include <ydb/core/tx/columnshard/engines/changes/abstract/abstract.h>
 #include <ydb/core/tx/columnshard/engines/portions/portion_info.h>
+
 #include <ydb/library/actors/struct_log/log_stack.h>
 
 namespace NKikimr::NOlap::NStorageOptimizer {

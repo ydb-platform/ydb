@@ -8,6 +8,7 @@
 #include <ydb/core/tx/columnshard/common/portion.h>
 
 #include <ydb/library/accessor/positive_integer.h>
+#include <ydb/library/actors/struct_log/log_stack.h>
 #include <ydb/library/conclusion/result.h>
 #include <ydb/services/bg_tasks/abstract/interface.h>
 
@@ -16,7 +17,6 @@
 
 #include <algorithm>
 #include <utility>
-#include <ydb/library/actors/struct_log/log_stack.h>
 
 namespace NKikimr::NOlap {
 class TColumnEngineChanges;

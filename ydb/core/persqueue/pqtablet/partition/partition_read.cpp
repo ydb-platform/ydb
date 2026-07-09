@@ -225,6 +225,9 @@ void TPartition::FailStaleSessionReadRequests(const TString& user, const TActorC
         response->Record.SetStatus(NMsgBusProxy::MSTATUS_ERROR);
         response->Record.SetErrorCode(NPersQueue::NErrorCode::READ_ERROR_NO_SESSION);
         response->Record.SetErrorReason(TStringBuilder() << "no such session for consumer '" << it->ClientId << "'");
+        if (it->Cookie) {
+            response->Record.MutablePartitionResponse()->SetCookie(*it->Cookie);
+        }
         ctx.Send(it->Sender, response.Release());
 
         for (auto dlIt = HasDataDeadlines.begin(); dlIt != HasDataDeadlines.end(); ++dlIt) {

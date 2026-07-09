@@ -4344,7 +4344,6 @@ void TPartition::EmulatePostProcessUserAct(const TEvPQ::TEvSetClientInfo& act,
         LOG_D("Topic '" << TopicName() << "' partition " << Partition << " user " << user
                     << " drop done"
         );
-        FailStaleSessionReadRequests(user, ctx);
         PendingUsersInfo.erase(user);
     } else if (act.Type == TEvPQ::TEvSetClientInfo::ESCI_INIT_READ_RULE) {
         LOG_D("Topic '" << TopicName() << "' partition " << Partition << " user " << user
@@ -4361,7 +4360,6 @@ void TPartition::EmulatePostProcessUserAct(const TEvPQ::TEvSetClientInfo& act,
         if (ImporantOrExtendedAvailabilityPeriod(userInfo)) {
             userInfo.Offset = GetStartOffset();
         }
-        FailStaleSessionReadRequests(user, ctx);
     } else {
         if (createSession || dropSession) {
             offset = userInfo.Offset;

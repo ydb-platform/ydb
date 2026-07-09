@@ -57,3 +57,28 @@ message TEvCreateResponse {
     optional TSetColumnConstraint SetColumnConstraint = 4;
     optional sint32 SchemeStatus = 5 [default = -1]; // flat_tx_scheme.proto - enum EStatus, -1 is inexistent enum value
 }
+
+message TEvListRequest {
+    optional string DatabaseName = 1;
+    optional uint64 PageSize = 2;
+    optional string PageToken = 3;
+}
+
+message TEvListResponse {
+    optional Ydb.StatusIds.StatusCode Status = 1;
+    repeated Ydb.Issue.IssueMessage Issues = 2;
+    repeated TSetColumnConstraint Entries = 3;
+    optional string NextPageToken = 4;
+}
+
+message TEvForgetRequest {
+    optional uint64 TxId = 1;
+    optional string DatabaseName = 2;
+    optional uint64 OperationId = 3;
+}
+
+message TEvForgetResponse {
+    optional uint64 TxId = 1;
+    optional Ydb.StatusIds.StatusCode Status = 2;
+    repeated Ydb.Issue.IssueMessage Issues = 3;
+}

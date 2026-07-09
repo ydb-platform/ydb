@@ -73,6 +73,9 @@ jobs:
             }
             core.setOutput('use', legacyBranches.includes(baseRef) ? 'false' : 'true');
 
+      - name: Disable PDF for PR build
+        run: yq -i '.["docs-viewer"].pdf = false | .singlePage = false' ydb/docs/.yfm
+
       - name: Build
         uses: diplodoc-platform/docs-build-action@v3
         with:

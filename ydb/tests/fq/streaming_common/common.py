@@ -70,6 +70,7 @@ def get_ydb_config(request):
             "enable_watermarks": enable_watermarks,
             "enable_watermarks_advanced": enable_watermarks_advanced,
             "enable_streaming_partition_balancing": enable_streaming_partition_balancing,
+            "enable_compile_cache_warmup": False,
         },
         replication_config={
             "iam_service_control": {

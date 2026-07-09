@@ -385,6 +385,9 @@ struct TReplicationWriterConfig
     //! Acquiring resources for putting blocks before invoking PutBlocks.
     bool UseProbePutBlocks;
 
+    //! If |false| all replicas receive blocks directly via PutBlocks.
+    bool UseSendBlocks;
+
     //! If |true| data node will preallocate disk space before writing.
     bool PreallocateDiskSpace;
 

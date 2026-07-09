@@ -1164,6 +1164,27 @@
                 {
                     "default": false,
                     "host": {
+                        "os": "LINUX"
+                    },
+                    "target": {
+                        "arch": "armv9a_grace",
+                        "os": "LINUX"
+                    }
+                },
+                {
+                    "default": false,
+                    "host": {
+                        "arch": "aarch64",
+                        "os": "LINUX"
+                    },
+                    "target": {
+                        "arch": "armv9a_grace",
+                        "os": "LINUX"
+                    }
+                },
+                {
+                    "default": false,
+                    "host": {
                         "arch": "ppc64le",
                         "os": "LINUX"
                     },
@@ -1929,6 +1950,27 @@
                     },
                     "target": {
                         "arch": "armv8a_cortex_a53",
+                        "os": "LINUX"
+                    }
+                },
+                {
+                    "default": true,
+                    "host": {
+                        "os": "LINUX"
+                    },
+                    "target": {
+                        "arch": "armv9a_grace",
+                        "os": "LINUX"
+                    }
+                },
+                {
+                    "default": true,
+                    "host": {
+                        "arch": "aarch64",
+                        "os": "LINUX"
+                    },
+                    "target": {
+                        "arch": "armv9a_grace",
                         "os": "LINUX"
                     }
                 },

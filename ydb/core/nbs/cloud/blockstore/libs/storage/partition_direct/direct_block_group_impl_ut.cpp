@@ -547,6 +547,171 @@ Y_UNIT_TEST_SUITE(TDirectBlockGroupTest)
         }
     }
 
+    Y_UNIT_TEST_F(
+        ShouldSendCoordinatorDDiskFirstInWriteToManyPBuffers,
+        TDBGFixture)
+    {
+        const auto coordinatorHost = THostIndex(3);
+
+        auto executor = MakeExecutor();
+        auto transport = std::make_unique<TStorageTransportMock>();
+        auto* transportPtr = transport.get();
+        auto dbg = MakeDirectBlockGroup(executor, std::move(transport));
+
+        TPartitionDirectServiceMock service(true);
+        auto initialReady = dbg->Run(&service);
+        initialReady.Wait(WaitTimeout);
+        UNIT_ASSERT(initialReady.HasValue());
+
+        TString pendingBuffer(DefaultBlockSize, 'p');
+        TGuardedSgList guardedSglist = MakeSgList(pendingBuffer);
+        THostMask hosts;
+        hosts.Set(1);
+        hosts.Set(coordinatorHost);
+        hosts.Set(4);
+
+        auto pendingWrite = RunOnExecutor(
+            executor,
+            [&]
+            {
+                NThreading::TPromise<TDBGWriteBlocksToManyPBuffersResponse>
+                    promise = NThreading::NewPromise<
+                        TDBGWriteBlocksToManyPBuffersResponse>();
+                auto future = promise.GetFuture();
+                TDirectBlockGroup::TWriteBlocksToManyPBuffersCallback cb =
+                    [promise = std::move(promise)]   //
+                    (TDBGWriteBlocksToManyPBuffersResponse r) mutable
+                {
+                    promise.SetValue(std::move(r));
+                };
+
+                dbg->WriteBlocksToManyPBuffers(
+                    0,   // VChunkIndex
+                    coordinatorHost,
+                    hosts,
+                    100,   // lsn
+                    TBlockRange64::WithLength(0, 3),
+                    TDuration::Seconds(1),
+                    guardedSglist,
+                    NWilson::TTraceId(),
+                    cb);
+                return future;
+            });
+        pendingWrite.GetValue(WaitTimeout).GetValue(WaitTimeout);
+
+        // The coordinator's PBuffer DDisk must be first in the request.
+        const auto& pbuffers = transportPtr->GetPBufferIds();
+        const auto& sentIds = transportPtr->LastWriteToManyPBuffersDiskIds;
+        UNIT_ASSERT_VALUES_EQUAL(3, sentIds.size());
+        UNIT_ASSERT_VALUES_EQUAL(
+            pbuffers[coordinatorHost].NodeId,
+            sentIds[0].GetNodeId());
+        UNIT_ASSERT_VALUES_EQUAL(
+            pbuffers[coordinatorHost].PDiskId,
+            sentIds[0].GetPDiskId());
+        UNIT_ASSERT_VALUES_EQUAL(
+            pbuffers[coordinatorHost].DDiskSlotId,
+            sentIds[0].GetDDiskSlotId());
+
+        UNIT_ASSERT_VALUES_EQUAL(pbuffers[1].NodeId, sentIds[1].GetNodeId());
+        UNIT_ASSERT_VALUES_EQUAL(pbuffers[1].PDiskId, sentIds[1].GetPDiskId());
+        UNIT_ASSERT_VALUES_EQUAL(
+            pbuffers[1].DDiskSlotId,
+            sentIds[1].GetDDiskSlotId());
+
+        UNIT_ASSERT_VALUES_EQUAL(pbuffers[4].NodeId, sentIds[2].GetNodeId());
+        UNIT_ASSERT_VALUES_EQUAL(pbuffers[4].PDiskId, sentIds[2].GetPDiskId());
+        UNIT_ASSERT_VALUES_EQUAL(
+            pbuffers[4].DDiskSlotId,
+            sentIds[2].GetDDiskSlotId());
+    }
+
+    Y_UNIT_TEST_F(
+        ShouldReplyForCoordinatorOnlyWhenNodeDisconnected,
+        TDBGFixture)
+    {
+        const auto coordinatorHost = THostIndex(2);
+
+        auto executor = MakeExecutor();
+        auto transport = std::make_unique<TStorageTransportMock>();
+        transport->WriteToManyPBufferCoordinatorOnlyStatus =
+            NKikimrBlobStorage::NDDisk::TReplyStatus::ERROR;
+        auto dbg = MakeDirectBlockGroup(executor, std::move(transport));
+
+        TPartitionDirectServiceMock service(true);
+        auto initialReady = dbg->Run(&service);
+        initialReady.Wait(WaitTimeout);
+        UNIT_ASSERT(initialReady.HasValue());
+
+        TString pendingBuffer(DefaultBlockSize, 'p');
+        TGuardedSgList guardedSglist = MakeSgList(pendingBuffer);
+        THostMask hosts;
+        hosts.Set(1);
+        hosts.Set(coordinatorHost);
+        hosts.Set(3);
+
+        auto pendingWrite = RunOnExecutor(
+            executor,
+            [&]
+            {
+                NThreading::TPromise<TDBGWriteBlocksToManyPBuffersResponse>
+                    promise = NThreading::NewPromise<
+                        TDBGWriteBlocksToManyPBuffersResponse>();
+                auto future = promise.GetFuture();
+                TDirectBlockGroup::TWriteBlocksToManyPBuffersCallback cb =
+                    [promise = std::move(promise)]   //
+                    (TDBGWriteBlocksToManyPBuffersResponse r) mutable
+                {
+                    promise.SetValue(std::move(r));
+                };
+
+                dbg->WriteBlocksToManyPBuffers(
+                    0,   // VChunkIndex
+                    coordinatorHost,
+                    hosts,
+                    100,   // lsn
+                    TBlockRange64::WithLength(0, 3),
+                    TDuration::Seconds(1),
+                    guardedSglist,
+                    NWilson::TTraceId(),
+                    cb);
+                return future;
+            });
+        auto writeResponse =
+            pendingWrite.GetValue(WaitTimeout).GetValue(WaitTimeout);
+
+        // Only the coordinator host is present in the response with an error.
+        UNIT_ASSERT_VALUES_EQUAL(1, writeResponse.Responses.size());
+        UNIT_ASSERT_VALUES_EQUAL(
+            coordinatorHost,
+            writeResponse.Responses[0].HostIndex);
+        UNIT_ASSERT_VALUES_EQUAL_C(
+            E_FAIL,
+            writeResponse.Responses[0].Error.GetCode(),
+            FormatError(writeResponse.Responses[0].Error));
+
+        // Coordinator host: the WriteToManyPBuffers inflight is drained and an
+        // error is counted.
+        {
+            const auto& hostStat =
+                dbg->GetOracle()->GetHostStatistics(coordinatorHost);
+            const auto& errorsInfo = hostStat.GetErrorsInfo(TInstant::Now());
+            UNIT_ASSERT_VALUES_EQUAL(
+                0,
+                hostStat.InflightCount(EOperation::WriteToManyPBuffers));
+            UNIT_ASSERT_VALUES_EQUAL(1, errorsInfo.ConsecutiveErrorCount);
+        }
+        // Non-coordinator hosts should not have errors or inflight changes.
+        for (auto host: {THostIndex(1), THostIndex(3)}) {
+            const auto& hostStat = dbg->GetOracle()->GetHostStatistics(host);
+            const auto& errorsInfo = hostStat.GetErrorsInfo(TInstant::Now());
+            UNIT_ASSERT_VALUES_EQUAL(
+                0,
+                hostStat.InflightCount(EOperation::WriteToManyPBuffers));
+            UNIT_ASSERT_VALUES_EQUAL(0, errorsInfo.ConsecutiveErrorCount);
+        }
+    }
+
     // BLOCKED at Connect/LOCK: the stale tablet must suicide, mark the
     // session terminally broken, reject the pending read, and never reconnect.
     Y_UNIT_TEST_F(ShouldSuicideOnBlockedConnect, TDBGFixture)

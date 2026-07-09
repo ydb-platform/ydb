@@ -17,12 +17,16 @@ public:
     NThreading::TFuture<bool> Put(const TString& group, const TString& chunkId, const TString& value) override {
         YQL_CLOG(TRACE, FastMapReduce) << "Putting key with group " << group << " and chunkId " << chunkId << " to local table data service";
         TGuard<TMutex> guard(Mutex_);
-        if (CurDataWeight_ + value.size() > MaxDataWeight_) {
+        ui64 prevSize = 0;
+        if (Data_.contains(group) && Data_[group].contains(chunkId)) {
+            prevSize = Data_[group][chunkId].size();
+        }
+        if (CurDataWeight_ - prevSize + value.size() > MaxDataWeight_) {
             YQL_CLOG(ERROR, FastMapReduce) << " Failed to put key with group " << group << " and chunkId " << chunkId << " to local table data service - max data weight" << MaxDataWeight_ << "exceeded";
             return NThreading::MakeFuture(false);
         }
         Data_[group][chunkId] = value;
-        CurDataWeight_ += value.size();
+        CurDataWeight_ = CurDataWeight_ - prevSize + value.size();
         return NThreading::MakeFuture(true);
     }
 

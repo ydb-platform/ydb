@@ -541,6 +541,121 @@ Y_UNIT_TEST_SUITE(TOracle)
             TDuration::MilliSeconds(300),
             oracle.GetWriteHedgingDelay(THostMask::MakeOne(0), true));
     }
+
+    Y_UNIT_TEST(GetFlushRequestCooldownReturnsZeroWithoutErrors)
+    {
+        NProto::TStorageServiceConfig rawConfig;
+        auto storageConfig = std::make_shared<TStorageConfig>(rawConfig);
+
+        TOracle oracle(storageConfig, nullptr);
+
+        // No errors recorded on any host -> no cooldown.
+        UNIT_ASSERT_VALUES_EQUAL(
+            TDuration::Zero(),
+            oracle.GetFlushRequestCooldown(THostMask::MakeAll(5)));
+    }
+
+    Y_UNIT_TEST(GetFlushRequestCooldownScalesWithConsecutiveErrors)
+    {
+        NProto::TStorageServiceConfig rawConfig;
+        auto storageConfig = std::make_shared<TStorageConfig>(rawConfig);
+
+        TOracle oracle(storageConfig, nullptr);
+        const auto now = TInstant::Now();
+
+        // Each consecutive error adds a 10ms penalty on host 0.
+        for (size_t errorCount = 1; errorCount <= 3; ++errorCount) {
+            oracle.OnRequestStarted(0, EOperation::WriteToPBuffer, now);
+            oracle.OnRequestFailed(0, EOperation::WriteToPBuffer, now);
+
+            UNIT_ASSERT_VALUES_EQUAL(
+                TDuration::MilliSeconds(10 * errorCount),
+                oracle.GetFlushRequestCooldown(THostMask::MakeOne(0)));
+        }
+
+        // A single success resets the consecutive error count back to zero.
+        oracle.OnRequestStarted(0, EOperation::WriteToPBuffer, now);
+        oracle.OnRequestSucceeded(
+            0,
+            EOperation::WriteToPBuffer,
+            now,
+            TDuration());
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            TDuration::Zero(),
+            oracle.GetFlushRequestCooldown(THostMask::MakeOne(0)));
+    }
+
+    Y_UNIT_TEST(GetFlushRequestCooldownReturnsMaxAcrossHosts)
+    {
+        NProto::TStorageServiceConfig rawConfig;
+        auto storageConfig = std::make_shared<TStorageConfig>(rawConfig);
+
+        TOracle oracle(storageConfig, nullptr);
+        const auto now = TInstant::Now();
+
+        // Host 1: two consecutive errors -> 20ms.
+        for (size_t i = 0; i < 2; ++i) {
+            oracle.OnRequestStarted(1, EOperation::WriteToPBuffer, now);
+            oracle.OnRequestFailed(1, EOperation::WriteToPBuffer, now);
+        }
+
+        // Host 3: four consecutive errors -> 40ms.
+        for (size_t i = 0; i < 4; ++i) {
+            oracle.OnRequestStarted(3, EOperation::WriteToPBuffer, now);
+            oracle.OnRequestFailed(3, EOperation::WriteToPBuffer, now);
+        }
+
+        // A mask covering both hosts must return the maximum cooldown.
+        UNIT_ASSERT_VALUES_EQUAL(
+            TDuration::MilliSeconds(40),
+            oracle.GetFlushRequestCooldown(
+                THostMask::MakeOne(1).Include(THostMask::MakeOne(3))));
+
+        // A mask restricted to the less-penalized host returns its own value.
+        UNIT_ASSERT_VALUES_EQUAL(
+            TDuration::MilliSeconds(20),
+            oracle.GetFlushRequestCooldown(THostMask::MakeOne(1)));
+
+        // A mask covering only error-free hosts returns zero.
+        UNIT_ASSERT_VALUES_EQUAL(
+            TDuration::Zero(),
+            oracle.GetFlushRequestCooldown(
+                THostMask::MakeOne(0).Include(THostMask::MakeOne(4))));
+    }
+
+    Y_UNIT_TEST(GetFlushRequestCooldownIsClampedToMaxReconnectDelay)
+    {
+        NProto::TStorageServiceConfig rawConfig;
+        auto storageConfig = std::make_shared<TStorageConfig>(rawConfig);
+
+        TOracle oracle(storageConfig, nullptr);
+        const auto now = TInstant::Now();
+
+        // The cooldown grows by 10ms per consecutive error and is capped at
+        // MaxReconnectDelay (10s). 10s / 10ms == 1000 errors reach the cap
+        // exactly; any additional error must not exceed it.
+        const auto maxReconnectDelay = TDuration::Seconds(10);
+        for (size_t i = 0; i < 1000; ++i) {
+            oracle.OnRequestStarted(0, EOperation::WriteToPBuffer, now);
+            oracle.OnRequestFailed(0, EOperation::WriteToPBuffer, now);
+        }
+
+        // Exactly at the cap.
+        UNIT_ASSERT_VALUES_EQUAL(
+            maxReconnectDelay,
+            oracle.GetFlushRequestCooldown(THostMask::MakeOne(0)));
+
+        // Far beyond the cap - still clamped.
+        for (size_t i = 0; i < 500; ++i) {
+            oracle.OnRequestStarted(0, EOperation::WriteToPBuffer, now);
+            oracle.OnRequestFailed(0, EOperation::WriteToPBuffer, now);
+        }
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            maxReconnectDelay,
+            oracle.GetFlushRequestCooldown(THostMask::MakeOne(0)));
+    }
 }
 
 ////////////////////////////////////////////////////////////////////////////////

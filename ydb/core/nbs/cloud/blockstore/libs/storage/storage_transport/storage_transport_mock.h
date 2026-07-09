@@ -11,6 +11,8 @@
 #include <util/generic/map.h>
 #include <util/generic/vector.h>
 
+#include <optional>
+
 namespace NYdb::NBS::NBlockStore::NStorage::NTransport {
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -45,6 +47,17 @@ public:
     TReplyStatusE WriteToPBufferStatus = TReplyStatus::OK;
     TReplyStatusE WriteToManyPBufferStatus = TReplyStatus::OK;
     TReplyStatusE SyncWithPBufferStatus = TReplyStatus::OK;
+
+    // When set, WriteToManyPBuffers replies only for the first (coordinator)
+    // DDisk in the request with the given status, emulating the node
+    // disconnection / undelivery path where the actor answers only for the
+    // coordinator.
+    std::optional<TReplyStatusE> WriteToManyPBufferCoordinatorOnlyStatus;
+
+    // Captures the ordered persistentBufferIds of the last WriteToManyPBuffers
+    // call (the first element is expected to be the coordinator's DDisk).
+    TVector<NKikimrBlobStorage::NDDisk::TDDiskId>
+        LastWriteToManyPBuffersDiskIds;
 
     // DDiskInstanceGuid reported in an immediate successful connect.
     ui64 DefaultDDiskInstanceGuid = 1;

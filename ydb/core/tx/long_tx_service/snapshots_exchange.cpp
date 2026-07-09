@@ -896,9 +896,14 @@ private:
     }
 
     void FillTreeExchangeActors(NKikimrLongTxService::TPropagationTree* tree) {
+        THashSet<ui32> nodeIds;
         for (const auto& [actorId, _] : ExchangeActorIdToDataCenterId) {
-            auto* childActorId = tree->AddChildrenActorIds();
-            ActorIdToProto(actorId, childActorId);
+            if (nodeIds.emplace(actorId.NodeId()).second) {
+                // Choose only one exchange actor per node.
+                // Two known actors at one node mean that node was restarted and message about old actor been dropped hasn't been received yet.
+                auto* childActorId = tree->AddChildrenActorIds();
+                ActorIdToProto(actorId, childActorId);
+            }
         }
     }
 

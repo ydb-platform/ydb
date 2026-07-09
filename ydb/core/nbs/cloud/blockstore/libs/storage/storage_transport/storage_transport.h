@@ -52,8 +52,8 @@ public:
     // May be called multiple times if the underlying transport delivers more
     // than one response for the same request.
     using TWriteToManyPBuffersCallback = std::function<void(
-        TEvWriteToManyPersistentBuffersResult,
-        std::shared_ptr<NWilson::TSpan>)>;
+        const TEvWriteToManyPersistentBuffersResult& result,
+        std::shared_ptr<NWilson::TSpan> span)>;
 
     IStorageTransport() = default;
 

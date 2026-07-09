@@ -98,6 +98,12 @@ TDuration TOracleMock::GetIndirectWriteReplyTimeout() const
     return PBufferReplyTimeout;
 }
 
+TDuration TOracleMock::GetFlushRequestCooldown(THostMask hosts) const
+{
+    Y_UNUSED(hosts);
+    return FlushRequestCooldown;
+}
+
 TDuration TOracleMock::GetFlushRequestTimeout() const
 {
     return FlushRequestTimeout;

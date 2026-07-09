@@ -74,7 +74,19 @@ void TICStorageTransport::WriteToManyPBuffers(
     std::shared_ptr<NWilson::TSpan> span,
     TWriteToManyPBuffersCallback callback)
 {
+    using TEvWriteToManyPersistentBuffersResult =
+        NTransport::IStorageTransport::TEvWriteToManyPersistentBuffersResult;
+
     Y_ABORT_UNLESS(connection.ConnectionType == EConnectionType::PBuffer);
+
+    auto wrappedCallback = [callback = std::move(callback), span]   //
+        (const TEvWriteToManyPersistentBuffersResult& result)
+    {
+        if (span) {
+            span->Event("Reply on actor thread");
+        }
+        callback(result, span);
+    };
 
     auto request =
         std::make_unique<TEvTransportPrivate::TEvWriteToManyPBuffers>(
@@ -86,21 +98,12 @@ void TICStorageTransport::WriteToManyPBuffers(
             std::move(persistentBufferIds),
             replyTimeout,
             data,
+            std::move(wrappedCallback),
             span ? span->GetTraceId() : NWilson::TTraceId());
 
     if (span) {
         span->Event("ActorSystem_Send");
     }
-    request->Callback =
-        [callback = std::move(callback), span = std::move(span)]   //
-        (NTransport::IStorageTransport::TEvWriteToManyPersistentBuffersResult
-             result)
-    {
-        if (span) {
-            span->Event("Reply on actor thread");
-        }
-        callback(std::move(result), span);
-    };
 
     ActorSystem->Send(ICStorageTransportActorId, request.release());
 }

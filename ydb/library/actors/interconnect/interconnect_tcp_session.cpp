@@ -27,20 +27,18 @@ namespace NActors {
         }
     }
 
-    TInterconnectSessionTCP::TInterconnectSessionTCP(TInterconnectProxyTCP* const proxy, TSessionParams params)
+    TInterconnectSessionTCP::TInterconnectSessionTCP(TInterconnectProxyTCP* const proxy)
         : TActor(&TInterconnectSessionTCP::StateFunc)
         , Created(TInstant::Now())
         , Proxy(proxy)
         , CloseOnIdleWatchdog(GetCloseOnIdleTimeout(), std::bind(&TThis::OnCloseOnIdleTimerHit, this))
         , LostConnectionWatchdog(GetLostConnectionTimeout(), std::bind(&TThis::OnLostConnectionTimerHit, this))
-        , Params(std::move(params))
         , TotalOutputQueueSize(0)
         , OutputStuckFlag(false)
         , OutputQueueUtilization(16)
         , OutputCounter(0ULL)
         , ZcProcessor(proxy->Common->Settings.SocketSendOptimization == ESocketSendOptimization::IC_MSG_ZEROCOPY)
     {
-        Proxy->Metrics->SetConnected(0);
         PartUpdateTimestamp = GetCycleCountFast();
         ReceiveContext.Reset(new TReceiveContext);
     }
@@ -55,7 +53,10 @@ namespace NActors {
         }
     }
 
-    void TInterconnectSessionTCP::Init() {
+    void TInterconnectSessionTCP::Init(const TSessionParams& params) {
+        Params = params;
+        Proxy->Metrics->SetPeerScopeId(Params.PeerScopeId);
+        Proxy->Metrics->SetConnected(0);
         auto destroyCallback = [as = TActivationContext::ActorSystem(), id = Proxy->Common->DestructorId](THolder<IEventBase> event) {
             as->Send(id, event.Release());
         };

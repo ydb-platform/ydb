@@ -234,7 +234,7 @@ private:
         TStringBuf context,
         NKikimrBlobStorage::NDDisk::TReplyStatus_E status);
 
-    bool CheckBlockedAndMaybeSuicide(
+    bool StartSuicideIfBlocked(
         THostIndex hostIndex,
         TStringBuf context,
         NKikimrBlobStorage::NDDisk::TReplyStatus_E status);

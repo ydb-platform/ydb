@@ -273,7 +273,7 @@ TDirectBlockGroup::ReadBlocksFromDDisk(
                     if (auto self = weakSelf.lock()) {
                         NProto::TError error = TranslateError(f.GetValue());
 
-                        if (self->CheckBlockedAndMaybeSuicide(
+                        if (self->StartSuicideIfBlocked(
                                 hostIndex,
                                 "ReadFromDDisk",
                                 f.GetValue().GetStatus()))
@@ -437,7 +437,7 @@ TDirectBlockGroup::WriteBlocksToDDisk(
                     if (auto self = weakSelf.lock()) {
                         NProto::TError error = TranslateError(f.GetValue());
 
-                        if (self->CheckBlockedAndMaybeSuicide(
+                        if (self->StartSuicideIfBlocked(
                                 hostIndex,
                                 "WriteToDDisk",
                                 f.GetValue().GetStatus()))
@@ -827,7 +827,7 @@ TDBGFlushResponse TDirectBlockGroup::HandleSyncWithPBufferResponse(
             FormatError(TranslateError(response)).c_str());
 
         auto error = MakeError(E_FAIL, response.GetErrorReason());
-        if (CheckBlockedAndMaybeSuicide(
+        if (StartSuicideIfBlocked(
                 ddiskHostIndex,
                 "SyncWithPBuffer",
                 response.GetStatus()))
@@ -1356,15 +1356,6 @@ void TDirectBlockGroup::OnNodeDisconnected(THostIndex hostIndex, ui32 nodeId)
 {
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
 
-    if (BlockedGenerationDetected) {
-        LOG_WARN(
-            *ActorSystem,
-            NKikimrServices::NBS_PARTITION,
-            "%s reconnect suppressed: blocked generation, suicide in progress",
-            LogTitle.GetWithTime().c_str());
-        return;
-    }
-
     LOG_WARN(
         *ActorSystem,
         NKikimrServices::NBS_PARTITION,
@@ -1637,7 +1628,7 @@ void TDirectBlockGroup::HandleBlockedGeneration(
     Service->OnBlockedGeneration(DirectBlockGroupIndex, hostIndex, reason);
 }
 
-bool TDirectBlockGroup::CheckBlockedAndMaybeSuicide(
+bool TDirectBlockGroup::StartSuicideIfBlocked(
     THostIndex hostIndex,
     TStringBuf context,
     NKikimrBlobStorage::NDDisk::TReplyStatus_E status)

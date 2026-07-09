@@ -79,7 +79,12 @@ private:
     const std::shared_ptr<NArrow::NSSA::NGraph::NExecution::TCompiledGraph> Program;
     THashMap<ui32, std::shared_ptr<TFetchingStepSignals>> Signals;
     const std::shared_ptr<TFetchingStepSignals>& GetSignals(const ui32 nodeId) const;
+<<<<<<< HEAD
     void ReportTracing(const std::shared_ptr<IDataSource>& source, const TDuration executionDurationMs, const TString& currentExecutionResult) const;
+=======
+    void ReportTracing(const std::shared_ptr<IDataSource>& source, const TDuration executionDurationMs, const TString& currentExecutionResult,
+        const ui32 nodeId, const TString& currentCategoryName, const std::shared_ptr<NArrow::NSSA::IResourceProcessor>& processor) const;
+>>>>>>> 1dac750d81f (Fix encoding compatibility test (#45915))
 
 public:
     virtual TConclusion<bool> DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& step) const override;

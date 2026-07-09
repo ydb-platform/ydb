@@ -1,6 +1,14 @@
-# Project
+# YDB
+
+Quick reference for AI agents. Run `./ya` from the **repository root**.
+
+Before changing code, read [`agents/AGENTS.md`](agents/AGENTS.md).
+Style: [`agents/CODESTYLE.md`](agents/CODESTYLE.md). Tests: [`agents/TESTS.md`](agents/TESTS.md).
 
 ## Build & Test
+
+`<folder>` is a path relative to the repository root (e.g. `ydb/core/kqp`).
+`-F *test-filter*` is a glob matching test names.
 
 ```bash
 # Build
@@ -15,11 +23,7 @@
 
 - Tests include build
 - No `-j`
-- No force rebuild
+- No force rebuild (`-r`, `-R`, or similar flags)
 - Use `2>&1 | tail` for test output
 
-## C++
-
-- Use C++20 or earlier
-
-
+Use C++20 or earlier. See [`agents/AGENTS.md`](agents/AGENTS.md) for everything else.

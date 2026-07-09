@@ -813,5 +813,9 @@ namespace NSchemeShardUT_Private {
     NKikimrSetColumnConstraint::TEvListResponse TestListSetColumnConstraint(TTestActorRuntime& runtime, ui64 schemeShard, const TString &dbName);
     NKikimrSetColumnConstraint::TEvListResponse TestListSetColumnConstraint(TTestActorRuntime& runtime, ui64 schemeShard, const TString &dbName,
             ui64 pageSize, const TString& pageToken, Ydb::StatusIds::StatusCode expectedStatus = Ydb::StatusIds::SUCCESS);
+    NKikimrSetColumnConstraint::TEvForgetResponse TestForgetSetColumnConstraint(TTestActorRuntime& runtime, ui64 schemeshardId, ui64 txId, const TString& dbName, ui64 operationId,
+            Ydb::StatusIds::StatusCode expectedStatus = Ydb::StatusIds::SUCCESS);
+    NKikimrSetColumnConstraint::TEvForgetResponse TestForgetSetColumnConstraint(TTestActorRuntime& runtime, ui64 txId, const TString& dbName, ui64 operationId,
+            Ydb::StatusIds::StatusCode expectedStatus = Ydb::StatusIds::SUCCESS);
     void TestCheckColumnsNotNull(TTestActorRuntime& runtime, const TString& tablePath, const std::map<TString, bool>& expectedColumnNotNullStates);
 } //NSchemeShardUT_Private

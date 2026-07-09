@@ -362,7 +362,7 @@ void TQueryBase::Handle(TEvQueryBasePrivate::TEvStreamQueryResultPart::TPtr& ev)
         try {
             (this->*StreamResultHandler)(std::move(ev->Get()->ResultSet));
         } catch (const std::exception& ex) {
-            Finish(StatusIds::INTERNAL_ERROR, AddRootIssue("Failed to process query result", NYql::TIssues{NYql::TIssue{ex.what()}}) );
+            Finish(StatusIds::INTERNAL_ERROR, AddRootIssue("Failed to process stream query result part", NYql::TIssues{NYql::TIssue{ex.what()}}) );
             return;
         }
     }

@@ -11,8 +11,8 @@
 #include <ydb/core/tx/limiter/grouped_memory/usage/service.h>
 
 #include <ydb/library/accessor/accessor.h>
-#include <ydb/library/signals/states.h>
 #include <ydb/library/actors/struct_log/log_stack.h>
+#include <ydb/library/signals/states.h>
 
 namespace NKikimr::NOlap::NDataFetcher {
 

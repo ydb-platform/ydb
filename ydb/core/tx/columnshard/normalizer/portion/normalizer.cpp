@@ -28,7 +28,7 @@ TConclusion<std::vector<INormalizerTask::TPtr>> TPortionsNormalizerBase::DoInit(
     NColumnShard::TTablesManager tablesManager(
         controller.GetStoragesManager(), controller.GetDataAccessorsManager(), std::make_shared<TPortionIndexStats>(), 0);
     if (!tablesManager.InitFromDB(db, nullptr)) {
-        YDB_LOG_TRACE_COMP(NActors::NStructuredLog::TLogStack::GetComponent(), "Dump normalizer, error",
+        YDB_LOG_TRACE_COMP(NActors::NStructuredLog::TLogStack::GetComponent(), "",
             {"normalizer", "TPortionsNormalizer"},
             {"error", "can't initialize tables manager"});
         return TConclusionStatus::Fail("Can't load index");

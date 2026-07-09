@@ -10,7 +10,7 @@ namespace NKikimr::NOlap {
 
 TNormalizationController::INormalizerComponent::TPtr TNormalizationController::RegisterNormalizer(INormalizerComponent::TPtr normalizer) {
     AFL_VERIFY(normalizer);
-    YDB_LOG_DEBUG("Dump event, description",
+    YDB_LOG_DEBUG("",
         {"event", "normalizer_register"},
         {"description", normalizer->DebugString()});
     Counters.emplace_back(normalizer->GetClassName());
@@ -67,7 +67,7 @@ void TNormalizationController::OnNormalizerFinished(NIceDb::TNiceDb& db) const {
     if (auto seqId = GetNormalizer()->GetSequentialId()) {
         NColumnShard::Schema::SaveSpecialValue(db, NColumnShard::Schema::EValueIds::LastNormalizerSequentialId, *seqId);
     }
-    YDB_LOG_DEBUG("Dump event, description, id",
+    YDB_LOG_DEBUG("",
         {"event", "normalizer_finished"},
         {"description", GetNormalizer()->DebugString()},
         {"id", GetNormalizer()->GetSequentialId()});

@@ -78,13 +78,13 @@ public:
         using namespace NColumnShard;
         NIceDb::TNiceDb db(txc.DB);
         for (auto& key : VersionsToRemove) {
-            YDB_LOG_DEBUG("Dump event, version",
+            YDB_LOG_DEBUG("",
                 {"event", "Removing schema version in TSchemaVersionNormalizer"},
                 {"version", key.GetVersion()});
             db.Table<Schema::SchemaPresetVersionInfo>().Key(key.Id, key.Step, key.TxId).Delete();
         }
         for (auto& key : TableVersionsToRemove) {
-            YDB_LOG_DEBUG("Dump event, pathId, planStep, txId",
+            YDB_LOG_DEBUG("",
                 {"event", "Removing table version in TSchemaVersionNormalizer"},
                 {"pathId", key.PathId},
                 {"planStep", key.Step},

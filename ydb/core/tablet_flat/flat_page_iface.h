@@ -150,7 +150,8 @@ namespace NPage {
         TxIdStats = 11, /* Stats for uncommitted TxIds at compaction time */
         TxStatus = 12, /* Status of committed/removed transactions */
         BTreeIndex = 13,
-        Skip = 14,  /* v2: absorbs the byte range of excluded data/btree pages in TMeta */
+        BTreeIndexV2 = 14,
+        Skip = 15,     /* Absorbs excluded data/btree pages in TMeta */
     };
 
     struct TPageLocation {

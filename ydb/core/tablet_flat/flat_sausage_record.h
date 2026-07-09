@@ -64,6 +64,8 @@ namespace NPageCollection {
             return Index.size() - 1;
         }
 
+        ui64 GetOffset() const noexcept { return Offset; }
+
         void PushInplace(ui32 page, TArrayRef<const char> body)
         {
             Y_ENSURE(Index && page == Index.size() - 1);

@@ -854,7 +854,7 @@ private:
     /// V2 nodes produce byte-offset TPageLocation; V1 nodes produce TPageId
     static TPageRef BuildPageRef(const TBtreeIndexNode& node, TRecIdx pos, bool isLeafLevel) {
         if (node.GetStoredVersion() == TBtreeIndexNode::FormatVersionV2) {
-            auto type = isLeafLevel ? NPage::EPage::DataPage : NPage::EPage::BTreeIndex;
+            auto type = isLeafLevel ? NPage::EPage::DataPage : NPage::EPage::BTreeIndexV2;
             return node.GetChildLocationV2(pos, type);
         }
         return node.GetChildPageId(pos);

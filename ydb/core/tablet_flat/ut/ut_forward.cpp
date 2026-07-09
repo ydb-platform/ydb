@@ -218,8 +218,7 @@ namespace {
         }
 
         NTable::NPage::TPageLocation GetLocation(ui32 pageId) const override {
-            auto* data = Store->GetPage(Room, pageId);
-            return NTable::NPage::TPageLocation::FromPageIndex(pageId, data->size(), NTable::NPage::EPage::Undef, Store->GetPageChecksum(Room, pageId));
+            return Store->GetPageLocation(Room, pageId);
         }
     };
 
@@ -245,7 +244,8 @@ namespace {
 
         TCacheWrap& Get(TPageId pageId, bool has, bool grow, bool need, NFwd::TStat stat)
         {
-            auto got = Cache->Get(this, TPageOffset::FromPageIndex(pageId), Part->GetPageType(pageId, { }), AheadLo);
+            auto loc = Part->GetPageLocation(pageId, { });
+            auto got = Cache->Get(this, loc.Offset, loc.Type, AheadLo);
 
             if (has != bool(got.Page) || grow != got.Grow || need != got.Need){
                 Log()
@@ -277,7 +277,7 @@ namespace {
             NTest::TTestEnv testEnv;
             size_t i = 0;
             for (auto& loc : std::exchange(Queue, TDeque<TPageLocation>{})) {
-                UNIT_ASSERT_VALUES_EQUAL_C(loc.Offset.AsPageIndex(), pageIds[i++], CurrentStepStr());
+                UNIT_ASSERT_VALUES_EQUAL_C(loc.Offset, Part->GetPageLocation(pageIds[i++], { }).Offset, CurrentStepStr());
                 load.emplace_back(loc, *testEnv.TryGetPage(Part.Get(), loc, { }));
             }
 
@@ -301,7 +301,7 @@ namespace {
             UNIT_ASSERT_VALUES_EQUAL_C(Queue.size(), pageIds.size(), CurrentStepStr());
             for (size_t i = 0; i < Queue.size(); i++) {
                 UNIT_ASSERT_VALUES_EQUAL_C(Queue[i].Offset,
-                    NFwd::TPageOffset::FromPageIndex(pageIds[i]), CurrentStepStr());
+                    Part->GetPageLocation(pageIds[i], { }).Offset, CurrentStepStr());
             }
 
             UNIT_ASSERT_VALUES_EQUAL_C(Cache->Stat, stat, CurrentStepStr());
@@ -314,10 +314,11 @@ namespace {
             TVector<NPageCollection::TLoadedPage> load;
             NTest::TTestEnv testEnv;
             for (auto pageId : pageIds) {
+                NFwd::TPageOffset offset = Part->GetPageLocation(pageId, { }).Offset;
                 TPageLocation location;
                 bool found = false;
                 for (auto it = Queue.begin(); it != Queue.end(); it++) {
-                    if (it->Offset == NFwd::TPageOffset::FromPageIndex(pageId)) {
+                    if (it->Offset == offset) {
                         found = true;
                         location = *it;
                         Queue.erase(it);
@@ -341,14 +342,20 @@ namespace {
 
         TCacheWrap& CheckLocator(TVector<TPageId> pageIds)
         {
-            TVector<TPageId> actual;
-            for (const auto& it : IndexPageLocator.GetMap()) {
-                actual.push_back(it.first.AsPageIndex());
+            TVector<NFwd::TPageOffset> expected;
+            for (auto pageId : pageIds) {
+                expected.push_back(Part->GetPageLocation(pageId, { }).Offset);
             }
 
-            std::sort(pageIds.begin(), pageIds.end());
+            TVector<NFwd::TPageOffset> actual;
+            for (const auto& it : IndexPageLocator.GetMap()) {
+                actual.push_back(it.first);
+            }
 
-            UNIT_ASSERT_VALUES_EQUAL_C(actual, pageIds, CurrentStepStr());
+            std::sort(expected.begin(), expected.end());
+            std::sort(actual.begin(), actual.end());
+
+            UNIT_ASSERT_VALUES_EQUAL_C(actual, expected, CurrentStepStr());
 
             return *this;
         }
@@ -1018,6 +1025,7 @@ Y_UNIT_TEST_SUITE(NFwd_TBTreeIndexCache) {
         NPage::TConf conf;
 
         conf.WriteBTreeIndex = true;
+        conf.WriteBTreeIndexV2 = false;
         conf.WriteFlatIndex = false;
         conf.Group(0).PageRows = 2;
         conf.Group(0).BTreeIndexNodeKeysMin = conf.Group(0).BTreeIndexNodeKeysMax = 2;
@@ -1712,6 +1720,10 @@ struct TCacheWrapV2 : public NTest::TSteps<TCacheWrapV2>, protected NFwd::IPageL
 
     TCacheWrapV2& Forward(const TVector<NFwd::TPageOffset>& offsets)
     {
+        if (std::exchange(Grow, false)) {
+            Cache->Forward(this, AheadHi);
+        }
+
         UNIT_ASSERT_VALUES_EQUAL_C(Queue.size(), offsets.size(), CurrentStepStr());
         for (size_t i = 0; i < Queue.size(); i++) {
             UNIT_ASSERT_VALUES_EQUAL_C(Queue[i].Offset, offsets[i], CurrentStepStr());
@@ -2083,6 +2095,130 @@ Y_UNIT_TEST_SUITE(NFwd_TBTreeIndexCacheV2) {
             wrap.To(2).Get(layout[1][0].Offset, EPage::BTreeIndex, false, true, true);
             wrap.To(3).Apply({layout[1][0].Offset});
         }
+    }
+
+    // ForwardTwice: Fill twice — second Fill with Grow=true should be a no-op
+    Y_UNIT_TEST(V2_ForwardTwice)
+    {
+        const auto eggs = CookPartV2();
+        const auto part = eggs.Lone();
+        const auto& meta = part->IndexPages.BTreeGroups[0];
+
+        auto layout = DiscoverV2Layout(*part, meta);
+        TCacheWrapV2 wrap(part, nullptr, 200, 350);
+        const auto& root = layout[0][0];
+
+        // level 0: Fill root, then Fill again (Grow=true → Forward → no-op)
+        wrap.To(0).Get(root.Offset, EPage::BTreeIndex, false, false, true);
+        wrap.To(1).Fill({root.Offset});
+        wrap.Grow = true;
+        wrap.To(1).Fill({});
+
+        // level 1: same pattern — Fill L1, then Fill again
+        if (layout.size() > 1 && layout[1].size() > 1) {
+            TVector<TPageOffset> l1Offsets;
+            for (auto& c : layout[1]) l1Offsets.push_back(c.Offset);
+
+            wrap.To(2).Get(layout[1][0].Offset, EPage::BTreeIndex, false, true, true);
+            wrap.To(3).Fill(l1Offsets);
+            wrap.Grow = true;
+            wrap.To(3).Fill({});
+        }
+    }
+
+    // Skip_Done_None: walk root → L1, then verify all L1 pages cached.
+    // This tests the "done" state: pages added by Forward during Fill
+    // are resolved without additional round-trips.
+    Y_UNIT_TEST(V2_Skip_Done_None)
+    {
+        const auto eggs = CookPartV2();
+        const auto part = eggs.Lone();
+        const auto& meta = part->IndexPages.BTreeGroups[0];
+
+        auto layout = DiscoverV2Layout(*part, meta);
+        TCacheWrapV2 wrap(part, nullptr, 200, 350);
+        const auto& root = layout[0][0];
+
+        wrap.To(0).Get(root.Offset, EPage::BTreeIndex, false, false, true);
+        wrap.To(1).Fill({root.Offset});
+
+        if (layout.size() > 1 && layout[1].size() >= 2) {
+            // Request first L1 page, Fill all L1 (Forward adds remaining siblings)
+            wrap.To(2).Get(layout[1][0].Offset, EPage::BTreeIndex, false, true, true);
+            TVector<TPageOffset> l1Offsets;
+            for (auto& c : layout[1]) l1Offsets.push_back(c.Offset);
+            wrap.To(3).Fill(l1Offsets);
+
+            // All L1 pages are now cached (both the requested one and forwarded siblings)
+            for (auto& entry : layout[1]) {
+                wrap.To(4).Get(entry.Offset, EPage::BTreeIndex, true, false, true);
+            }
+        }
+    }
+
+    // Skip_Wait: Forward() triggers Cache->Forward which adds remaining L1
+    // pages to queue. Fill then loads all. Mirrors V1 Skip_Wait pattern.
+    Y_UNIT_TEST(V2_Skip_Wait)
+    {
+        const auto eggs = CookPartV2();
+        const auto part = eggs.Lone();
+        const auto& meta = part->IndexPages.BTreeGroups[0];
+
+        auto layout = DiscoverV2Layout(*part, meta);
+        TCacheWrapV2 wrap(part, nullptr, 200, 350);
+        const auto& root = layout[0][0];
+
+        wrap.To(0).Get(root.Offset, EPage::BTreeIndex, false, false, true);
+        wrap.To(1).Fill({root.Offset});
+
+        if (layout.size() < 2 || layout[1].empty()) return;
+        EPage l1Type = (layout.size() == 2) ? EPage::DataPage : EPage::BTreeIndex;
+
+        // Get first L1 with grow=true → sets Grow flag
+        wrap.To(2).Get(layout[1][0].Offset, l1Type, false, true, true);
+
+        // Collect L1 offsets
+        TVector<TPageOffset> l1Offsets;
+        for (auto& c : layout[1]) l1Offsets.push_back(c.Offset);
+
+        // Forward() now triggers Cache->Forward (Grow was set by Get above).
+        // This adds remaining L1 siblings to the queue (wait state).
+        wrap.To(3).Forward(l1Offsets);
+
+        // Fill loads all from queue
+        wrap.To(4).Fill(l1Offsets);
+
+        // Verify cached
+        wrap.To(5).Get(layout[1][0].Offset, l1Type, true, false, true);
+    }
+
+    // Skip_Keep: Fill root → Fill L1 → verify all cached.
+    // Mirrors V1 Skip_Keep: pages forwarded by Fill are resolved.
+    Y_UNIT_TEST(V2_Skip_Keep)
+    {
+        const auto eggs = CookPartV2();
+        const auto part = eggs.Lone();
+        const auto& meta = part->IndexPages.BTreeGroups[0];
+
+        auto layout = DiscoverV2Layout(*part, meta);
+        TCacheWrapV2 wrap(part, nullptr, 200, 350);
+        const auto& root = layout[0][0];
+
+        wrap.To(0).Get(root.Offset, EPage::BTreeIndex, false, false, true);
+        wrap.To(1).Fill({root.Offset});
+
+        if (layout.size() < 2 || layout[1].size() < 2) return;
+        EPage l1Type = (layout.size() == 2) ? EPage::DataPage : EPage::BTreeIndex;
+
+        // Get first L1 with grow=true → Fill adds all via Forward
+        wrap.To(2).Get(layout[1][0].Offset, l1Type, false, true, true);
+        TVector<TPageOffset> l1Offsets;
+        for (auto& c : layout[1]) l1Offsets.push_back(c.Offset);
+        wrap.To(3).Fill(l1Offsets);
+
+        // Verify all L1 pages are cached
+        wrap.To(4).Get(layout[1][0].Offset, l1Type, true, false, true);
+        wrap.To(5).Get(layout[1][1].Offset, l1Type, true, false, true);
     }
 }
 

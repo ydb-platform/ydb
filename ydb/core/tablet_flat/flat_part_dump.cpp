@@ -177,7 +177,8 @@ namespace {
         if (part.IndexPages.HasBTree()) {
             auto meta = part.IndexPages.GetBTree({});
             if (meta.LevelCount) {
-                BTreeIndexNode(part, meta.ToChild());
+                auto rootLoc = part.IndexPages.GetRootLocation(&part, {});
+                BTreeIndexNode(part, rootLoc, meta.ToString(), /* level */ 0, /* totalLevels */ meta.LevelCount);
             } else {
                 Out
                     << " + BTreeIndex{Empty, "
@@ -297,7 +298,7 @@ namespace {
         Out << "}";
     }
 
-    void TDump::BTreeIndexNode(const TPart &part, NPage::TBtreeIndexNode::TChild meta, ui32 level)
+    void TDump::BTreeIndexNode(const TPart &part, NPage::TPageLocation loc, const TString &parent, ui32 level, ui32 totalLevels)
     {
         TVector<TCell> key(Reserve(part.Scheme->Groups[0].KeyTypes.size()));
 
@@ -306,15 +307,20 @@ namespace {
             intend += " |";
         }
 
-        auto dumpChild = [&] (NPage::TBtreeIndexNode::TChild child) {
-            if (part.GetPageType(child.GetPageId(), {}) == EPage::BTreeIndex) {
-                BTreeIndexNode(part, child, level + 1);
+        bool isLeafLevel = (totalLevels <= 1);
+
+        auto dumpChild = [&](const NPage::TBtreeIndexNode &node, NPage::TRecIdx pos) {
+            auto childRef = NTable::BuildPageRef(node, pos, isLeafLevel);
+            auto childLoc = NTable::ResolvePageLocation(&part, childRef, {});
+            if (childLoc.Type == NPage::EPage::BTreeIndexV2 ||
+                childLoc.Type == NPage::EPage::BTreeIndex) {
+                BTreeIndexNode(part, childLoc, node.ChildToString(pos), level + 1, totalLevels - 1);
             } else {
-                Out << intend << " | " << child.ToString() << Endl;
+                Out << intend << " | " << node.ChildToString(pos) << Endl;
             }
         };
 
-        auto page = Env->TryGetPage(&part, part.GetPageLocation(meta.GetPageId(), {}), {});
+        auto page = Env->TryGetPage(&part, loc, {});
         if (!page) {
             Out << intend << " | -- the rest of the index pages aren't loaded" << Endl;
             return;
@@ -326,11 +332,11 @@ namespace {
 
         Out
             << intend
-            << " + BTreeIndex{" << meta.ToString() << "}"
+            << " + BTreeIndex{" << parent << "}"
             << " Label{" << (ui16)label.Type << " rev " << label.Format << ", " << label.Size << "b}"
             << Endl;
 
-        dumpChild(node.GetChild(0));
+        dumpChild(node, 0);
 
         for (NPage::TRecIdx i : xrange(node.GetKeysCount())) {
             Out << intend << " | > ";
@@ -344,7 +350,7 @@ namespace {
 
             Key(key, *part.Scheme);
             Out << Endl;
-            dumpChild(node.GetChild(i + 1));
+            dumpChild(node, i + 1);
         }
 
         Out << Endl;

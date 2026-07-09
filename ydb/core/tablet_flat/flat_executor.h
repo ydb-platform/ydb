@@ -574,8 +574,8 @@ class TExecutor
     void UpdateCachePagesForDatabase(bool pendingOnly = false);
     void RequestStickyPagesForPartStore(NTable::TPartView& partView, const THashSet<NTable::TTag>& stickyColumns);
 
-    void StartStickyBTreePreload(const NTable::TPartStore& partStore, NTable::NPage::TGroupId dataGroupId,
-                                 const NTable::NPage::TBtreeIndexMeta& meta);
+    void StartStickyBTreePreload(const NTable::TPartStore& partStore,
+        const TVector<std::pair<NTable::NPage::TGroupId, const NTable::NPage::TBtreeIndexMeta*>>& groups);
     void DriveStickyBTreePreload(struct TStickyPreloadState* state);
     void DropStickyBTreePreloadState(struct TStickyPreloadState* state);
 

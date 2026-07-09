@@ -452,7 +452,10 @@ namespace {
                         Y_ENSURE(ready != EReady::Page);
                         break;
                     }
-                    absoluteId[absoluteId.size()] = static_cast<ui64>(groupIndex->GetLocation().Offset);
+                    auto location = groupIndex->GetLocation();
+                    absoluteId[absoluteId.size()] = location.Offset.IsByteOffset()
+                        ? Eggs.Lone()->Store->ResolveByteOffset(groupId.Index, location.Offset.AsByteOffset())
+                        : location.Offset.AsPageIndex();
                 }
 
                 TSet<TPageId> actualValue;

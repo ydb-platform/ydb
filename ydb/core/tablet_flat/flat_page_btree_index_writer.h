@@ -119,7 +119,7 @@ namespace NKikimr::NTable::NPage {
 
             WriteUnaligned<TLabel>(
                 Advance(sizeof(TLabel)),
-                TLabel::Encode(EPage::BTreeIndex,
+                TLabel::Encode(PageType(),
                                WriteV2 ? TBtreeIndexNode::FormatVersionV2 : TBtreeIndexNode::FormatVersion, pageSize));
 
             auto &header = Place<THeader>();
@@ -313,6 +313,8 @@ namespace NKikimr::NTable::NPage {
         const TIntrusiveConstPtr<TPartScheme> Scheme;
         const TGroupId GroupId;
         const TPartScheme::TGroupInfo& GroupInfo;
+
+        EPage PageType() const noexcept { return WriteV2 ? EPage::BTreeIndexV2 : EPage::BTreeIndex; }
 
     private:
         size_t FixedKeySize;
@@ -526,7 +528,7 @@ namespace NKikimr::NTable::NPage {
 
             auto page = Writer.Finish();
             IndexSize += page.size();
-            auto location = pager.Write(std::move(page), EPage::BTreeIndex, 0);
+            auto location = pager.Write(std::move(page), Writer.PageType(), 0);
 
             if (levelIndex + 1 == Levels.size()) {
                 Levels.emplace_back();
@@ -575,7 +577,7 @@ namespace NKikimr::NTable::NPage {
         }
 
         static TBtreeIndexMeta MakeMeta(const TChildV2& c, ui32 levelCount, ui64 indexSize) {
-            auto type = levelCount == 0 ? EPage::DataPage : EPage::BTreeIndex;
+            auto type = levelCount == 0 ? EPage::DataPage : EPage::BTreeIndexV2;
             return {/*V1Root=*/Max<TPageId>(), /*V2Root=*/c.GetLocation(type),
                     c.GetRowCount(), c.GetDataSize(), c.GetGroupDataSize(),
                     c.GetErasedRowCount(),

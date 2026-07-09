@@ -24,7 +24,8 @@ namespace NTest {
 
     public:
         static bool IsByteOffsetType(NPage::EPage type) noexcept {
-            return type == NPage::EPage::DataPage || type == NPage::EPage::BTreeIndex;
+            return type == NPage::EPage::DataPage || type == NPage::EPage::BTreeIndex ||
+                   type == NPage::EPage::BTreeIndexV2;
         }
 
         using TData = const TSharedData;
@@ -473,13 +474,7 @@ namespace NTest {
         }
 
         NTable::NPage::TPageLocation GetLocation(ui32 pageId) const override {
-            Y_ENSURE(pageId < Store->PageCollectionPagesCount(Room),
-                "GetLocation OOB: pageId=" << pageId << " room=" << Room
-                << " total=" << Store->PageCollectionPagesCount(Room));
-            auto type = Store->GetPageType(Room, pageId);
-            auto size = Store->GetPageSize(Room, pageId);
-            auto crc32 = Store->GetPageChecksum(Room, pageId);
-            return NTable::NPage::TPageLocation::FromPageIndex(pageId, size, type, crc32);
+            return Store->GetPageLocation(Room, pageId);
         }
     };
 

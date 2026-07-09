@@ -324,5 +324,6 @@ message TFeatureFlags {
     optional bool EnableFulltextIndexPrefix = 282 [default = false];
     optional bool EnableAccessServiceV2Interface = 283 [default = false, (RequireRestart) = true];
     optional bool EnableLocalDBBtreeIndexV2 = 284 [default = false];
-    optional bool PreferLocalDBBtreeIndexV2 = 285 [default = false];
+    // When EnableLocalDBBtreeIndexV2 is on complete it with V1 shadow index off
+    optional bool EnableLocalDBBtreeIndexV1Shadow = 285 [default = true];
 }

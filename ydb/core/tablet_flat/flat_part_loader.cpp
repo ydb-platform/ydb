@@ -83,12 +83,12 @@ void TLoader::StageParseMeta()
         }
 
         auto loadMeta = [](const NProto::TBTreeIndexMeta& proto) -> NPage::TBtreeIndexMeta {
-            auto rootType = proto.GetLevelCount() == 0 ? NPage::EPage::DataPage : NPage::EPage::BTreeIndex;
+            auto v2RootType = proto.GetLevelCount() == 0 ? NPage::EPage::DataPage : NPage::EPage::BTreeIndexV2;
             auto v1Root = proto.HasRootPageId()
                 ? proto.GetRootPageId()
                 : Max<TPageId>();
             auto v2Root = proto.HasRootOffset()
-                ? NPage::TBtreeIndexMeta::RootLocationV2(proto.GetRootOffset(), proto.GetRootSize(), proto.GetRootCrc32(), rootType)
+                ? NPage::TBtreeIndexMeta::RootLocationV2(proto.GetRootOffset(), proto.GetRootSize(), proto.GetRootCrc32(), v2RootType)
                 : NPage::TPageLocation::Max();
             Y_ENSURE(v1Root != Max<TPageId>() || v2Root, "TBtreeIndexMeta has neither RootPageId nor RootOffset");
             return {v1Root, v2Root, proto.GetRowCount(), proto.GetDataSize(), proto.GetGroupDataSize(), proto.GetErasedRowCount(),
@@ -120,27 +120,28 @@ void TLoader::StageParseMeta()
             FlatHistoricIndexes.clear();
         }
         if (!AppData()->FeatureFlags.GetEnableLocalDBBtreeIndexV2()) {
-            auto isV2Root = [](const NPage::TBtreeIndexMeta& m) { return m.HasV2Root() && !m.HasV1Root(); };
-            BTreeGroupIndexes.erase(std::remove_if(BTreeGroupIndexes.begin(), BTreeGroupIndexes.end(), isV2Root),
-                                    BTreeGroupIndexes.end());
-            BTreeHistoricIndexes.erase(std::remove_if(BTreeHistoricIndexes.begin(), BTreeHistoricIndexes.end(),
-                                                      isV2Root), BTreeHistoricIndexes.end());
-        }
-
-        if (!AppData()->FeatureFlags.GetPreferLocalDBBtreeIndexV2()) {
-            /* When the v2 preference is off (default), strip v2 roots from dual-root
-               entries so the v1 root is used at read time. V2-only entries are already
-               removed above when EnableLocalDBBtreeIndexV2 is off. */
+            /* V2 read is disabled: revert every part back to its V1 index */
             for (auto& meta : BTreeGroupIndexes) {
-                if (meta.HasV1Root() && meta.HasV2Root()) {
-                    meta.V2Root = NPage::TPageLocation::Max();
+                if (meta.HasV2Root()) {
+                    if (meta.HasV1Root()) {
+                        meta.V2Root = NPage::TPageLocation::Max();
+                    }
                 }
             }
             for (auto& meta : BTreeHistoricIndexes) {
-                if (meta.HasV1Root() && meta.HasV2Root()) {
-                    meta.V2Root = NPage::TPageLocation::Max();
+                if (meta.HasV2Root()) {
+                    if (meta.HasV1Root()) {
+                        meta.V2Root = NPage::TPageLocation::Max();
+                    }
                 }
             }
+
+            /* Without a V1 b-tree the part has no usable index — this is the documented V2-only risk. */
+            //auto isV2OnlyRoot = [](const NPage::TBtreeIndexMeta& m) { return m.HasV2Root() && !m.HasV1Root(); };
+            //BTreeGroupIndexes.erase(std::remove_if(BTreeGroupIndexes.begin(), BTreeGroupIndexes.end(), isV2OnlyRoot),
+            //                        BTreeGroupIndexes.end());
+            //BTreeHistoricIndexes.erase(std::remove_if(BTreeHistoricIndexes.begin(), BTreeHistoricIndexes.end(),
+            //                                          isV2OnlyRoot), BTreeHistoricIndexes.end());
         }
 
     } else { /* legacy page collection w/o layout data, (Evolution < 14) */

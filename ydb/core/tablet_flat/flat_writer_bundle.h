@@ -32,13 +32,14 @@ namespace NWriter {
             const auto none = NTable::NPage::ECache::None;
             const auto regular = NTable::NPage::ECacheMode::Regular;
 
+            bool V2OnlyMode = conf.WriteBTreeIndexV2 && !conf.KeepBTreeIndexV1Shadow;
             Blocks.resize(Groups.size() + 1);
             for (size_t group : xrange(Groups.size())) {
                 Blocks[group].Reset(new TBlocks(this, Groups[group].Channel, Groups[group].Cache,
                                                 Groups[group].CacheMode, Groups[group].MaxBlobSize,
-                                                conf.StickyFlatIndex, false, conf.WriteBTreeIndexV2));
+                                                conf.StickyFlatIndex, false, V2OnlyMode));
             }
-            // Outer Blob Collection (v2 — still uses page-index addressing)
+            // Outer Blob Collection is still page-index addressing in V2
             Blocks[Groups.size()].Reset(new TBlocks(this, conf.OuterChannel, none, regular, Groups[0].MaxBlobSize, conf.StickyFlatIndex, true));
 
             Growth = new NTable::TScreen::TCook;

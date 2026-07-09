@@ -30,7 +30,7 @@ NPage::TPageLocation RootLocation(const TPart* part, const TBtreeIndexMeta& meta
 // For V1 nodes, the location is resolved through Part->GetPageLocation().
 NPage::TPageLocation ChildLocation(const TPart* part, const TBtreeIndexNode& node, TRecIdx pos, bool isLeafLevel, TGroupId groupId) {
     if (node.GetStoredVersion() == TBtreeIndexNode::FormatVersionV2) {
-        auto type = isLeafLevel ? NPage::EPage::DataPage : NPage::EPage::BTreeIndex;
+        auto type = isLeafLevel ? NPage::EPage::DataPage : NPage::EPage::BTreeIndexV2;
         return node.GetChildLocationV2(pos, type);
     }
     return part->GetPageLocation(node.GetChildPageId(pos), isLeafLevel ? groupId : TGroupId{});

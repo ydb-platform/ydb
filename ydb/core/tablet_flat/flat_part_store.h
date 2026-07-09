@@ -151,11 +151,13 @@ public:
         Y_ENSURE(room < PageCollections.size());
 
         auto& pageCollection = *PageCollections[room]->PageCollection;
-        auto total = pageCollection.Total();
-
+        auto total = pageCollection.MetaPages();
+        auto meta =  IndexPages.HasBTree() ? &IndexPages.GetBTree(NTable::NPage::TGroupId(room)) : nullptr;
+        bool skipV1 = meta && meta->HasV2Root() && meta->HasV1Root();
         TVector<TPageLocation> pages(Reserve(total));
         for (ui32 i = 0; i < total; ++i) {
-            if (pageCollection.Page(i).Type == ui32(EPage::Skip))
+            if (pageCollection.Page(i).Type == ui32(EPage::Skip)
+                || (skipV1 && pageCollection.Page(i).Type == ui32(EPage::BTreeIndex)))
                 continue;
             pages.push_back(pageCollection.GetLocation(i));
         }

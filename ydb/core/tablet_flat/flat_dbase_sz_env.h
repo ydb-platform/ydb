@@ -39,6 +39,7 @@ namespace NTable {
             switch (location.Type) {
                 case EPage::FlatIndex:
                 case EPage::BTreeIndex:
+                case EPage::BTreeIndexV2:
                     // need index pages to continue counting
                     // do not count index
                     // if these pages are not in memory, data won't be counted in precharge

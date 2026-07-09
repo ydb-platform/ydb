@@ -418,6 +418,7 @@ namespace NFwd {
         ui32 GetLevel(TPageOffset offset, EPage type) {
             switch (type) {
                 case EPage::BTreeIndex:
+                case EPage::BTreeIndexV2:
                     return IndexPageLocator.GetLevel(offset);
                 case EPage::DataPage:
                     return Levels.size() - 1;
@@ -535,7 +536,8 @@ namespace NFwd {
             Y_ENSURE(!level.Queue.empty());
             auto& front = level.Queue.front();
 
-            auto type = &level == &Levels.back() ? EPage::DataPage : EPage::BTreeIndex;
+            auto type = &level == &Levels.back() ? EPage::DataPage
+                : (Meta.HasV2Root() ? EPage::BTreeIndexV2 : EPage::BTreeIndex);
             head->AddToQueue(front.Offset, type, front.PageSize, front.Crc32);
 
             Stat.Fetch += front.PageSize;

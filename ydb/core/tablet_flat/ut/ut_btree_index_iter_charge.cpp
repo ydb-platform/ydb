@@ -128,6 +128,7 @@ namespace {
 
     TPartEggs MakePart(TTestParams params) {
         NPage::TConf conf;
+        conf.WriteBTreeIndexV2 = false;
         switch (params.Levels) {
         case 0:
             conf.Group(0).PageRows = 999;
@@ -1242,6 +1243,7 @@ Y_UNIT_TEST_SUITE(TPartGroupBtreeIndexIterV2) {
         conf.WriteBTreeIndex = true;
         conf.WriteBTreeIndexV2 = true;
         conf.WriteFlatIndex = false;
+        conf.KeepBTreeIndexV1Shadow = false;
         return conf;
     }
 
@@ -1394,6 +1396,7 @@ namespace {
         conf.WriteBTreeIndex = true;
         conf.WriteBTreeIndexV2 = true;
         conf.WriteFlatIndex = false;
+        conf.KeepBTreeIndexV1Shadow = false;
         switch (params.Levels) {
         case 0:
             conf.Group(0).PageRows = 999;
@@ -1571,6 +1574,41 @@ Y_UNIT_TEST_SUITE(TChargeBTreeIndexV2) {
         CheckV2ChargeWithLimit({.Levels = 3});
         CheckV2ChargeWithLimit({.Levels = 1});
     }
+
+    Y_UNIT_TEST(NoNodes_Groups_History_V2) {
+        CheckV2ChargeBasic({.Levels = 0, .Groups = true, .History = true});
+        CheckV2VsV1Charge({.Levels = 0, .Groups = true, .History = true});
+    }
+
+    Y_UNIT_TEST(OneNode_Groups_V2) {
+        CheckV2ChargeBasic({.Levels = 1, .Groups = true});
+        CheckV2VsV1Charge({.Levels = 1, .Groups = true});
+    }
+
+    Y_UNIT_TEST(OneNode_Groups_History_V2) {
+        CheckV2ChargeBasic({.Levels = 1, .Groups = true, .History = true});
+        CheckV2VsV1Charge({.Levels = 1, .Groups = true, .History = true});
+    }
+
+    Y_UNIT_TEST(FewNodes_Groups_V2) {
+        CheckV2ChargeBasic({.Levels = 3, .Groups = true});
+        CheckV2VsV1Charge({.Levels = 3, .Groups = true});
+    }
+
+    Y_UNIT_TEST(FewNodes_History_V2) {
+        CheckV2ChargeBasic({.Levels = 3, .History = true});
+        CheckV2VsV1Charge({.Levels = 3, .History = true});
+    }
+
+    Y_UNIT_TEST(FewNodes_Sticky_V2) {
+        CheckV2ChargeBasic({.Levels = 3, .StickSomePages = true});
+        CheckV2VsV1Charge({.Levels = 3, .StickSomePages = true});
+    }
+
+    Y_UNIT_TEST(FewNodes_Groups_History_Sticky_V2) {
+        CheckV2ChargeBasic({.Levels = 3, .Groups = true, .History = true, .StickSomePages = true});
+        CheckV2VsV1Charge({.Levels = 3, .Groups = true, .History = true, .StickSomePages = true});
+    }
 }
 
 // ========================================================================
@@ -1703,6 +1741,64 @@ Y_UNIT_TEST_SUITE(TPartBtreeIndexIterationV2) {
 
     Y_UNIT_TEST(FewNodes_Groups_History_V2) {
         CheckPart({.Levels = 3, .Groups = true, .History = true});
+    }
+
+    Y_UNIT_TEST(OneNode_Slices_V2) {
+        for (auto slices : xrange<ui32>(TTestParams::ESlices::None + 1, TTestParams::ESlices::End)) {
+            CheckPart({.Levels = 1, .Slices = TTestParams::ESlices(slices)});
+        }
+    }
+
+    Y_UNIT_TEST(OneNode_Groups_Slices_V2) {
+        for (auto slices : xrange<ui32>(TTestParams::ESlices::None + 1, TTestParams::ESlices::Many + 1)) {
+            CheckPart({.Levels = 1, .Groups = true, .Slices = TTestParams::ESlices(slices)});
+        }
+    }
+
+    Y_UNIT_TEST(OneNode_History_Slices_V2) {
+        for (auto slices : xrange<ui32>(TTestParams::ESlices::None + 1, TTestParams::ESlices::Many + 1)) {
+            CheckPart({.Levels = 1, .History = true, .Slices = TTestParams::ESlices(slices)});
+        }
+    }
+
+    Y_UNIT_TEST(OneNode_Groups_History_Slices_V2) {
+        for (auto slices : xrange<ui32>(TTestParams::ESlices::None + 1, TTestParams::ESlices::Many + 1)) {
+            CheckPart({.Levels = 1, .Groups = true, .History = true, .Slices = TTestParams::ESlices(slices)});
+        }
+    }
+
+    Y_UNIT_TEST(FewNodes_Sticky_V2) {
+        CheckPart({.Levels = 3, .StickSomePages = true});
+    }
+
+    Y_UNIT_TEST(FewNodes_Slices_V2) {
+        for (auto slices : xrange<ui32>(TTestParams::ESlices::None + 1, TTestParams::ESlices::End)) {
+            CheckPart({.Levels = 3, .Slices = TTestParams::ESlices(slices)});
+        }
+    }
+
+    Y_UNIT_TEST(FewNodes_Groups_Slices_V2) {
+        for (auto slices : xrange<ui32>(TTestParams::ESlices::None + 1, TTestParams::ESlices::Many + 1)) {
+            CheckPart({.Levels = 3, .Groups = true, .Slices = TTestParams::ESlices(slices)});
+        }
+    }
+
+    Y_UNIT_TEST(FewNodes_History_Slices_V2) {
+        for (auto slices : xrange<ui32>(TTestParams::ESlices::None + 1, TTestParams::ESlices::Many + 1)) {
+            CheckPart({.Levels = 3, .History = true, .Slices = TTestParams::ESlices(slices)});
+        }
+    }
+
+    Y_UNIT_TEST(FewNodes_Groups_History_Slices_V2) {
+        for (auto slices : xrange<ui32>(TTestParams::ESlices::None + 1, TTestParams::ESlices::Many + 1)) {
+            CheckPart({.Levels = 3, .Groups = true, .History = true, .Slices = TTestParams::ESlices(slices)});
+        }
+    }
+
+    Y_UNIT_TEST(FewNodes_Groups_History_Slices_Sticky_V2) {
+        for (auto slices : xrange<ui32>(TTestParams::ESlices::None + 1, TTestParams::ESlices::Many + 1)) {
+            CheckPart({.Levels = 3, .Groups = true, .History = true, .Slices = TTestParams::ESlices(slices), .StickSomePages = true});
+        }
     }
 }
 

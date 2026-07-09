@@ -119,14 +119,12 @@ ui32 TMeta::SkippedPages() const noexcept
         return 0;
 
     ui32 skipped = 0;
-    /* Skip entries are contiguous at the start — the writer flushes
-       pending skip ranges before any structural page entry.
-       Crc32 stores the net page contribution (pages - 1) for new-format
-       entries, or 0 for old-format entries with no info. */
+    /* Crc32 stores pages - 1 per skip entry (not the raw count, see TRecord::PushSkip); the off-by-one
+       is deliberate — each skip entry itself is counted in MetaPages(), so
+       Total = MetaPages + SkippedPages gives the correct full page count. */
     for (ui32 i = 0; i < Header->Pages; i++) {
-        if (Extra[i].Type != ui32(NTable::NPage::EPage::Skip))
-            break;
-        skipped += Extra[i].Crc32;
+        if (Extra[i].Type == ui32(NTable::NPage::EPage::Skip))
+            skipped += Extra[i].Crc32;
     }
     return skipped;
 }

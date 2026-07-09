@@ -197,6 +197,11 @@ namespace NKikimr::NTable::NPage {
             TPageLocation GetLocation(EPage type) const noexcept {
                 return {Offset_, Size_, type, Crc32_};
             }
+
+            TString ToString() const {
+                return TStringBuilder() << "Offset: " << GetOffset() << " Size: " << GetSize()
+                    << " RowCount: " << GetRowCount() << " DataSize: " << GetDataSize();
+            }
         } Y_PACKED;
 
         static_assert(sizeof(TShortChildV2) == 36, "Invalid TBtreeIndexNode TShortChildV2 size");
@@ -250,6 +255,17 @@ namespace NKikimr::NTable::NPage {
 
             TPageLocation GetLocation(EPage type) const noexcept {
                 return {Offset_, Size_, type, Crc32_};
+            }
+
+            TString ToString() const {
+                TStringBuilder result;
+                result << "Offset: " << GetOffset() << " Size: " << GetSize()
+                    << " RowCount: " << GetRowCount() << " DataSize: " << GetDataSize();
+                if (GetGroupDataSize()) {
+                    result << " GroupDataSize: " << GetGroupDataSize();
+                }
+                result << " ErasedRowCount: " << GetErasedRowCount();
+                return result;
             }
         } Y_PACKED;
 
@@ -416,8 +432,10 @@ namespace NKikimr::NTable::NPage {
         TBtreeIndexNode(TSharedData raw)
             : Raw(std::move(raw))
         {
-            const auto data = NPage::TLabelWrapper().Read(Raw, EPage::BTreeIndex);
+            const auto data = NPage::TLabelWrapper().Read(Raw, EPage::Undef);
 
+            Y_ENSURE(data.Type == EPage::BTreeIndex || data.Type == EPage::BTreeIndexV2,
+                "Page blob has an unexpected label type");
             Y_ENSURE(data == ECodec::Plain);
             Y_ENSURE(data.Version == FormatVersion || data.Version == FormatVersionV2,
                 "Unexpected btree index version " << data.Version);
@@ -517,13 +535,13 @@ namespace NKikimr::NTable::NPage {
         const TChildV2& GetChildV2(TRecIdx pos) const noexcept
         {
             Y_DEBUG_ABORT_UNLESS(StoredVersion == FormatVersionV2, "GetChildV2 on v1 node");
-            return *reinterpret_cast<const TChildV2*>(Children + pos * ChildStructSize());
+            return *TDeref<const TChildV2>::At(Children, pos * ChildStructSize());
         }
 
         const TShortChildV2& GetShortChildV2(TRecIdx pos) const noexcept
         {
             Y_DEBUG_ABORT_UNLESS(StoredVersion == FormatVersionV2, "GetShortChildV2 on v1 node");
-            return *reinterpret_cast<const TShortChildV2*>(Children + pos * ChildStructSize());
+            return *TDeref<const TShortChildV2>::At(Children, pos * ChildStructSize());
         }
 
         TRowId GetChildRowCount(TRecIdx pos) const noexcept
@@ -550,6 +568,16 @@ namespace NKikimr::NTable::NPage {
             Y_DEBUG_ABORT_UNLESS(StoredVersion == FormatVersionV2, "GetChildLocationV2 on v1 node");
             return IsShortChildFormat() ? GetShortChildV2(pos).GetLocation(type)
                                         : GetChildV2(pos).GetLocation(type);
+        }
+
+        /// Returns the child's ToString — version-aware (V1 → TChild, V2 → TChildV2).
+        TString ChildToString(TRecIdx pos) const {
+            if (StoredVersion == FormatVersionV2) {
+                return IsShortChildFormat() ? GetShortChildV2(pos).ToString()
+                                            : GetChildV2(pos).ToString();
+            }
+            return IsShortChildFormat() ? GetShortChild(pos).ToString()
+                                        : GetChild(pos).ToString();
         }
 
         /// Version-aware data size access for short children.
@@ -756,7 +784,7 @@ namespace NKikimr::NTable::NPage {
         const THeader* Header = nullptr;
         const void* Keys = nullptr;
         const TRecordsEntry* Offsets = nullptr;
-        const char* Children = nullptr;
+        const void* Children = nullptr;
         ui16 StoredVersion = FormatVersion;
     };
 

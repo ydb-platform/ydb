@@ -344,7 +344,7 @@ private:
     /// For v1 nodes, the location is resolved through Part->GetPageLocation().
     TPageLocation ChildLocation(const TBtreeIndexNode& node, TRecIdx pos, bool isLeafLevel) const {
         if (node.GetStoredVersion() == TBtreeIndexNode::FormatVersionV2) {
-            auto type = isLeafLevel ? NPage::EPage::DataPage : NPage::EPage::BTreeIndex;
+            auto type = isLeafLevel ? NPage::EPage::DataPage : NPage::EPage::BTreeIndexV2;
             return node.GetChildLocationV2(pos, type);
         }
         return Part->GetPageLocation(node.GetChildPageId(pos), isLeafLevel ? GroupId : TGroupId{});

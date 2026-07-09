@@ -17,7 +17,7 @@ namespace NTest {
 
     namespace {
         bool IsIndexPage(EPage type) noexcept {
-            return type == EPage::FlatIndex || type == EPage::BTreeIndex;
+            return type == EPage::FlatIndex || type == EPage::BTreeIndex || type == EPage::BTreeIndexV2;
         }
     }
 
@@ -111,7 +111,7 @@ namespace NTest {
         {
             auto pass = ShouldPass((const void*)part,
                 static_cast<ui64>(THash<TPageOffset>()(location.Offset)) ^ (ui64(groupId.Raw()) << 48),
-                location.Type == EPage::FlatIndex || location.Type == EPage::BTreeIndex);
+                location.Type == EPage::FlatIndex || location.Type == EPage::BTreeIndex || location.Type == EPage::BTreeIndexV2);
 
             return pass ? TTestEnv::TryGetPage(part, location, groupId) : nullptr;
         }

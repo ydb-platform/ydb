@@ -22,7 +22,7 @@ namespace NFwd {
 
     namespace {
         bool IsIndexPage(EPage type) noexcept {
-            return type == EPage::FlatIndex || type == EPage::BTreeIndex;
+            return type == EPage::FlatIndex || type == EPage::BTreeIndex || type == EPage::BTreeIndexV2;
         }
     }
 

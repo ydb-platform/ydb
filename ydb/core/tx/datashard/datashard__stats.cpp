@@ -89,7 +89,7 @@ public:
         auto partStore = CheckedCast<const TPartStore*>(part);
         auto info = partStore->PageCollections.at(groupId.Index).Get();
         auto type = location.Type;
-        Y_ENSURE(type == EPage::FlatIndex || type == EPage::BTreeIndex);
+        Y_ENSURE(type == EPage::FlatIndex || type == EPage::BTreeIndex || type == EPage::BTreeIndexV2);
 
         auto& partPages = Pages[part];
         auto page = partPages.FindPtr(location.Offset);

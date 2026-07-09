@@ -116,6 +116,84 @@ Y_UNIT_TEST_SUITE(TLegacy) {
         fnIterate(eggs.At(0), newLay.RowScheme(), sizesWithDefaults);
     }
 
+    // Drives TStatsScreenedPartIterator -> CreateStatsPartGroupIterator ->
+    // TStatsPartGroupBtreeIndexIter on a part built with the given conf.
+    // Returns (rowCount, dataSize) accumulated over the full scan.
+    static std::pair<ui64, ui64> StatsScanBtreeIndex(
+            TIntrusiveConstPtr<TPartStore> part, TIntrusiveConstPtr<TRowScheme> scheme) {
+        TDataStats stats = { };
+        TTestEnv env;
+        TStatsScreenedPartIterator idxIter(TPartView{part, nullptr, nullptr}, &env,
+            scheme->Keys, nullptr, nullptr, 0, 0);
+
+        UNIT_ASSERT_VALUES_EQUAL(idxIter.Start(), EReady::Data);
+        while (idxIter.IsValid()) {
+            UNIT_ASSERT(idxIter.Next(stats) != EReady::Page);
+        }
+        return {stats.RowCount, stats.DataSize.Size};
+    }
+
+    // V2 twin of the b-tree group stats iterator: same data written as V1 and V2
+    // b-tree parts must yield identical row count and data size. Exercises
+    // TStatsPartGroupBtreeIndexIter on a V2-only part (byte-offset root +
+    // inline child locations), which previously crashed on RootPageIdV1().
+    Y_UNIT_TEST(StatsBtreeIndexV2Iter) {
+        TLayoutCook lay;
+        lay
+            .Col(0, 0,  NScheme::NTypeIds::Uint64)
+            .Col(0, 1,  NScheme::NTypeIds::Uint32)
+            .Col(0, 2,  NScheme::NTypeIds::Uint32)
+            .Key({ 0, 1 });
+
+        auto makeConf = [&](bool v2) {
+            NPage::TConf conf(true, 4096);
+            conf.Group(0).BTreeIndexNodeTargetSize = 512; // force a multi-level tree
+            conf.Group(0).BTreeIndexNodeKeysMin = 2;
+            conf.Group(0).BTreeIndexNodeKeysMax = 4;
+            conf.WriteBTreeIndex = true;
+            conf.WriteBTreeIndexV2 = v2;
+            if (v2) {
+                conf.KeepBTreeIndexV1Shadow = false; // true V2-only: no V1 shadow root
+            }
+            conf.WriteFlatIndex = false; // b-tree only -> selects the btree group iter
+            return conf;
+        };
+
+        const ui64 X1 = 0, X2 = 3000;
+
+        TPartCook cookV1(lay, makeConf(false));
+        TPartCook cookV2(lay, makeConf(true));
+        for (ui64 key1 = X1; key1 <= X2; key1++) {
+            ui32 key2 = 3333;
+            cookV1.AddN(key1, key2, key2);
+            cookV2.AddN(key1, key2, key2);
+        }
+
+        TPartEggs eggsV1 = cookV1.Finish();
+        TPartEggs eggsV2 = cookV2.Finish();
+        UNIT_ASSERT_C(eggsV1.Parts.size() == 1, "Unexpected " << eggsV1.Parts.size() << " V1 results");
+        UNIT_ASSERT_C(eggsV2.Parts.size() == 1, "Unexpected " << eggsV2.Parts.size() << " V2 results");
+
+        // sanity: the V2 part really is a V2-only b-tree (byte-offset root)
+        const auto& metaV2 = eggsV2.At(0)->IndexPages.GetBTree({});
+        const auto& metaV1 = eggsV1.At(0)->IndexPages.GetBTree({});
+        UNIT_ASSERT_C(metaV2.HasV2Root(), "V2 part must carry a byte-offset root");
+        UNIT_ASSERT_C(!metaV2.HasV1Root(), "V2-only part must not carry a V1 root");
+        // the tree must have index levels so Start() actually walks children
+        UNIT_ASSERT_C(metaV1.LevelCount == metaV2.LevelCount,
+            "V1/V2 level count mismatch: " << metaV1.LevelCount << " vs " << metaV2.LevelCount);
+        UNIT_ASSERT_C(metaV2.LevelCount > 0,
+            "need a multi-level tree to exercise child traversal, got LevelCount=" << metaV2.LevelCount);
+
+        auto [rowsV1, sizeV1] = StatsScanBtreeIndex(eggsV1.At(0), eggsV1.Scheme);
+        auto [rowsV2, sizeV2] = StatsScanBtreeIndex(eggsV2.At(0), eggsV2.Scheme);
+
+        UNIT_ASSERT_VALUES_EQUAL_C(rowsV2, rowsV1,
+            "V2 row count " << rowsV2 << " must match V1 " << rowsV1);
+        UNIT_ASSERT_VALUES_EQUAL_C(sizeV2, sizeV1,
+            "V2 data size " << sizeV2 << " must match V1 " << sizeV1);
+    }
+
     Y_UNIT_TEST(ScreenedIndexIter) {
         TNullOutput devNull;
         IOutputStream& dbgOut = devNull; //*/ Cerr;

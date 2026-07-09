@@ -49,7 +49,7 @@ public:
                         auto node = NPage::TBtreeIndexNode(*data);
                         bool childrenAreData = (LevelCount_ > 0 && level + 1 >= LevelCount_);
                         if (!(skipDataPages && childrenAreData)) {
-                            auto childType = childrenAreData ? NPage::EPage::DataPage : NPage::EPage::BTreeIndex;
+                            auto childType = childrenAreData ? NPage::EPage::DataPage : NPage::EPage::BTreeIndexV2;
                             for (NPage::TRecIdx pos : xrange(node.GetChildrenCount())) {
                                 Levels[level + 1].push_back(node.GetChildLocationV2(pos, childType));
                             }

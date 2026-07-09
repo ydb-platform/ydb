@@ -15,7 +15,7 @@ namespace NPageCollection {
             , Channel(channel)
             , CookieAllocator(cookieAllocator)
             , Record(cookieAllocator.GroupBy(channel))
-            , V2Mode(v2Mode)
+            , V2OnlyMode(v2Mode)
         {
 
         }
@@ -42,16 +42,10 @@ namespace NPageCollection {
                 }
             }
 
-            /* In v2 mode, data/btree pages are not recorded individually.
-               Their bytes go to the blob buffer but no TEntry/TExtra entry
-               is created. The cumulative byte range is captured later by a
-               skip entry via PushSkipEntry(), which also records how many
-               pages it absorbs. The count is carried out of the writer so
-               the page collection can report the real page count (structural
-               + skip-absorbed) to the shared cache, which exceeds the shrunk
-               TMeta structural count. The on-disk TMeta blob itself stays
-               structural-only — v1 and v2 share the same header/layout. */
-            if (V2Mode && (type == ui32(NTable::NPage::EPage::DataPage) || type == ui32(NTable::NPage::EPage::BTreeIndex))) {
+            bool pageSkipped = (type == ui32(NTable::NPage::EPage::BTreeIndexV2) ||
+                                (V2OnlyMode && type == ui32(NTable::NPage::EPage::DataPage)));
+            /* No TEntry/TExtra entry created */
+            if (pageSkipped) {
                 SkippedBytes += body.size();
                 SkippedPages += 1;
                 if (crc32)
@@ -64,10 +58,8 @@ namespace NPageCollection {
 
         void PushSkipEntry()
         {
-            Y_ENSURE(V2Mode);
-
             if (SkippedBytes > 0) {
-                Record.PushSkip(SkippedBytes, (ui32)NTable::NPage::EPage::Skip, SkippedPages);
+                Record.PushSkip(Record.GetOffset() + SkippedBytes, (ui32)NTable::NPage::EPage::Skip, SkippedPages);
                 SkippedBytes = 0;
                 SkippedPages = 0;
             }
@@ -135,7 +127,7 @@ namespace NPageCollection {
         TCookieAllocator &CookieAllocator;
         TVector<TGlob> Blobs;
         NPageCollection::TRecord Record;
-        bool V2Mode = false;
+        bool V2OnlyMode = false;
         ui64 SkippedBytes = 0;
         ui32 SkippedPages = 0;
     };

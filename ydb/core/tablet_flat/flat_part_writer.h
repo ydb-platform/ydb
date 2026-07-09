@@ -19,6 +19,8 @@
 #include <ydb/core/util/intrusive_heap.h>
 #include <util/system/sanitizers.h>
 
+#include <optional>
+
 namespace NKikimr {
 namespace NTable {
 
@@ -565,14 +567,22 @@ namespace NTable {
                 Current.BTreeGroupIndexes.clear();
                 Current.BTreeHistoricIndexes.clear();
                 if (WriteBTreeIndex) {
+                    /* When dual-write is active, also finish the V1 shadow */
+                    auto finishBTree = [&](TGroupState& g) -> NPage::TBtreeIndexMeta {
+                        auto meta = g.BTreeIndex.Finish(Pager);
+                        if (g.BTreeIndexV1Shadow) {
+                            meta.V1Root = g.BTreeIndexV1Shadow->Finish(Pager).RootPageIdV1();
+                        }
+                        return meta;
+                    };
                     Current.BTreeGroupIndexes.reserve(Groups.size());
                     for (auto& g : Groups) {
-                        Current.BTreeGroupIndexes.push_back(g.BTreeIndex.Finish(Pager));
+                        Current.BTreeGroupIndexes.push_back(finishBTree(g));
                     }
                     if (Current.HistoryWritten > 0) {
                         Current.BTreeHistoricIndexes.reserve(Histories.size());
                         for (auto& g : Histories) {
-                            Current.BTreeHistoricIndexes.push_back(g.BTreeIndex.Finish(Pager));
+                            Current.BTreeHistoricIndexes.push_back(finishBTree(g));
                         }
                     }
                 }
@@ -631,11 +641,17 @@ namespace NTable {
                     g.Data.Reset();
                     g.FlatIndex.Reset();
                     g.BTreeIndex.Reset();
+                    if (g.BTreeIndexV1Shadow) {
+                        g.BTreeIndexV1Shadow->Reset();
+                    }
                 }
                 for (auto& g : Histories) {
                     g.Data.Reset();
                     g.FlatIndex.Reset();
                     g.BTreeIndex.Reset();
+                    if (g.BTreeIndexV1Shadow) {
+                        g.BTreeIndexV1Shadow->Reset();
+                    }
                 }
                 FrameL.Reset();
                 FrameS.Reset();
@@ -888,12 +904,19 @@ namespace NTable {
                 if (WriteBTreeIndex) {
                     if (dataPage.BaseRow()) {
                         g.BTreeIndex.AddKey(Key);
+                        if (g.BTreeIndexV1Shadow) {
+                            g.BTreeIndexV1Shadow->AddKey(Key);
+                        }
                     }
                     if (groupId.IsMain()) {
                         if (WriteBTreeIndexV2) {
                             g.BTreeIndex.AddChild(NPage::TBtreeIndexNode::TChildV2{
                                 location.Offset, location.Size, location.Crc32, dataPage->Count, raw.size(),
                                 Current.BTreeGroupDataSize, Current.BTreeIndexErasedRowCount});
+                            if (g.BTreeIndexV1Shadow) {
+                                g.BTreeIndexV1Shadow->AddChild({page, dataPage->Count, raw.size(),
+                                          Current.BTreeGroupDataSize, Current.BTreeIndexErasedRowCount});
+                            }
                         } else {
                             g.BTreeIndex.AddChild({page, dataPage->Count, raw.size(), Current.BTreeGroupDataSize,
                                                    Current.BTreeIndexErasedRowCount});
@@ -904,6 +927,9 @@ namespace NTable {
                         if (WriteBTreeIndexV2) {
                             g.BTreeIndex.AddShortChild(NPage::TBtreeIndexNode::TShortChildV2{
                                 location.Offset, location.Size, location.Crc32, dataPage->Count, raw.size()});
+                            if (g.BTreeIndexV1Shadow) {
+                                g.BTreeIndexV1Shadow->AddShortChild({page, dataPage->Count, raw.size()});
+                            }
                         } else {
                             g.BTreeIndex.AddShortChild({page, dataPage->Count, raw.size()});
                         }
@@ -911,6 +937,9 @@ namespace NTable {
                         Current.BTreeGroupDataSize += raw.size();
                     }
                     g.BTreeIndex.Flush(Pager);
+                    if (g.BTreeIndexV1Shadow) {
+                        g.BTreeIndexV1Shadow->Flush(Pager);
+                    }
                 }
 
                 // N.B. hack to save the last row/key for the main group
@@ -1179,6 +1208,7 @@ namespace NTable {
             NPage::TDataPageWriter Data;
             NPage::TFlatIndexWriter FlatIndex;
             NPage::TBtreeIndexBuilder BTreeIndex;
+            std::optional<NPage::TBtreeIndexBuilder> BTreeIndexV1Shadow;
 
             NPage::TDataPageWriter::TSizeInfo NextDataSize;
             TPgSize NextIndexSize;
@@ -1198,6 +1228,11 @@ namespace NTable {
                              conf.Groups[groupId.Index].BTreeIndexNodeKeysMin,
                              conf.Groups[groupId.Index].BTreeIndexNodeKeysMax, conf.WriteBTreeIndexV2)
             {
+                if (conf.KeepBTreeIndexV1Shadow && conf.WriteBTreeIndexV2) {
+                    BTreeIndexV1Shadow.emplace(scheme, groupId, conf.Groups[groupId.Index].BTreeIndexNodeTargetSize,
+                                              conf.Groups[groupId.Index].BTreeIndexNodeKeysMin,
+                                              conf.Groups[groupId.Index].BTreeIndexNodeKeysMax, /*writeV2=*/false);
+                }
             }
         };
 

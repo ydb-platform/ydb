@@ -168,6 +168,7 @@ struct TQueryReplayEvents {
         ReadColumnsMismatch,
         ExtraWriting,
         WriteColumnsMismatch,
+        WriteTypesMismatch,
         UncategorizedPlanMismatch,
         Unspecified,
     };

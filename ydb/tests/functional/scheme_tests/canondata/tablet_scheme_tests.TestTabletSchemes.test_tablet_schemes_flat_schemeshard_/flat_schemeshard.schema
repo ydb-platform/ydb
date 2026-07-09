@@ -6905,11 +6905,6 @@
         ],
         "ColumnsAdded": [
             {
-                "ColumnId": 7,
-                "ColumnName": "IsReadOnly",
-                "ColumnType": "Bool"
-            },
-            {
                 "ColumnId": 1,
                 "ColumnName": "PathId",
                 "ColumnType": "Uint64"
@@ -6938,19 +6933,30 @@
                 "ColumnId": 6,
                 "ColumnName": "IsRestore",
                 "ColumnType": "Bool"
+            },
+            {
+                "ColumnId": 7,
+                "ColumnName": "IsReadOnly",
+                "ColumnType": "Bool"
+            },
+            {
+                "ColumnId": 8,
+                "ColumnName": "MultiColumnStatistics",
+                "ColumnType": "String"
             }
         ],
         "ColumnsDropped": [],
         "ColumnFamilies": {
             "0": {
                 "Columns": [
-                    7,
                     1,
                     2,
                     3,
                     4,
                     5,
-                    6
+                    6,
+                    7,
+                    8
                 ],
                 "RoomID": 0,
                 "Codec": 0,
@@ -6978,6 +6984,11 @@
             1
         ],
         "ColumnsAdded": [
+            {
+                "ColumnId": 7,
+                "ColumnName": "MultiColumnStatistics",
+                "ColumnType": "String"
+            },
             {
                 "ColumnId": 1,
                 "ColumnName": "PathId",
@@ -7013,6 +7024,7 @@
         "ColumnFamilies": {
             "0": {
                 "Columns": [
+                    7,
                     1,
                     2,
                     3,

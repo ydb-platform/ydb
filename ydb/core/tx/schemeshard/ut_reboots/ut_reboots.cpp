@@ -735,6 +735,35 @@ Y_UNIT_TEST_SUITE(TConsistentOpsWithReboots) {
             }
         });
     }
+
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(AlterTableKeepsMultiColumnStatistics, 2, 1, false) {
+        t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
+            {
+                TInactiveZone inactive(activeZone);
+                TestCreateTable(runtime, ++t.TxId, "/MyRoot", R"(
+                    Name: "StatsTable"
+                    Columns { Name: "key" Type: "Uint32" }
+                    Columns { Name: "value" Type: "Utf8" }
+                    KeyColumnNames: ["key"]
+                    MultiColumnStatistics { Name: "s1" ColumnNames: "value" Types: COUNT_MIN_SKETCH }
+                )");
+                t.TestEnv->TestWaitNotification(runtime, t.TxId);
+            }
+
+            t.TestEnv->ReliablePropose(runtime, AlterTableRequest(++t.TxId, "/MyRoot",
+                                                                  R"(Name: "StatsTable" Columns { Name: "extra" Type: "Uint64" })"),
+                                       {NKikimrScheme::StatusAccepted, NKikimrScheme::StatusMultipleModifications, NKikimrScheme::StatusPreconditionFailed});
+            t.TestEnv->TestWaitNotification(runtime, t.TxId);
+
+            {
+                TInactiveZone inactive(activeZone);
+                TestDescribeResult(DescribePath(runtime, "/MyRoot/StatsTable", true, true), {
+                    NLs::PathExist,
+                    NLs::CheckMultiColumnStatistics("s1", {"value"}, {NKikimrSchemeOp::EMultiColumnStatisticsType::COUNT_MIN_SKETCH}),
+                });
+            }
+        });
+    }
 }
 
 Y_UNIT_TEST_SUITE(TSolomonReboots) {

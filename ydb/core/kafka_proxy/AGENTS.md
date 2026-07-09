@@ -13,5 +13,5 @@ Depends on `persqueue/public/`, not `pqtablet/` / `pqrb/` internals.
 
 Tests: `./ya make --build relwithdebinfo -tA ydb/core/kafka_proxy`
 
-Style/workflow: [`agents/CODESTYLE.md`](../../../agents/CODESTYLE.md) ·
-[`agents/AGENTS.md`](../../../agents/AGENTS.md) · [`agents/TESTS.md`](../../../agents/TESTS.md)
+Style/workflow: [`agents/CODESTYLE.md`](../../agents/CODESTYLE.md) ·
+[`agents/AGENTS.md`](../../agents/AGENTS.md) · [`agents/TESTS.md`](../../agents/TESTS.md)

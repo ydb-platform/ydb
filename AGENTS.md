@@ -2,8 +2,9 @@
 
 Quick reference for AI agents. Run `./ya` from the **repository root**.
 
-Before changing code, read [`agents/AGENTS.md`](agents/AGENTS.md).
-Style: [`agents/CODESTYLE.md`](agents/CODESTYLE.md). Tests: [`agents/TESTS.md`](agents/TESTS.md).
+Before changing code, read [`ydb/agents/AGENTS.md`](ydb/agents/AGENTS.md).
+Style: [`ydb/agents/CODESTYLE.md`](ydb/agents/CODESTYLE.md).
+Tests: [`ydb/agents/TESTS.md`](ydb/agents/TESTS.md).
 
 ## Build & Test
 
@@ -26,4 +27,4 @@ Style: [`agents/CODESTYLE.md`](agents/CODESTYLE.md). Tests: [`agents/TESTS.md`](
 - No force rebuild (`-r`, `-R`, or similar flags)
 - Use `2>&1 | tail` for test output
 
-Use C++20 or earlier. See [`agents/AGENTS.md`](agents/AGENTS.md) for everything else.
+Use C++20 or earlier. See [`ydb/agents/AGENTS.md`](ydb/agents/AGENTS.md) for everything else.

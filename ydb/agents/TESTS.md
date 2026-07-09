@@ -21,7 +21,7 @@ where UNITTEST is used in the same area.
 - Use the `unittest` framework (`unittest.IsolatedAsyncioTestCase` for async code).
 - Register Python test files in `TEST_SRCS()` in the module's `ya.make`.
 - Third-party packages come from `contrib/python`.
-- See [`ydb/tools/mnc/AGENTS.md`](../ydb/tools/mnc/AGENTS.md) for MNC-specific
+- See [`ydb/tools/mnc/AGENTS.md`](../tools/mnc/AGENTS.md) for MNC-specific
   Python test conventions.
 
 ## Functional tests
@@ -39,7 +39,7 @@ Upgrade/downgrade tests live under `ydb/tests/compatibility/`.
 
 - Place each test module in the folder matching the feature area.
 - Use existing fixtures and follow the layout described in
-  [`ydb/tests/compatibility/README.md`](../ydb/tests/compatibility/README.md).
+  [`ydb/tests/compatibility/README.md`](../tests/compatibility/README.md).
 
 ## Running tests
 

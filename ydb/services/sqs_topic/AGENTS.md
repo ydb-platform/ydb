@@ -16,5 +16,5 @@ Depends on `persqueue/public/`, not `pqtablet/` / `pqrb/` internals.
 Tests: `./ya make --build relwithdebinfo -tA ydb/services/sqs_topic`
 Functional: `ydb/tests/functional/sqs/`
 
-Style/workflow: [`agents/CODESTYLE.md`](../../../agents/CODESTYLE.md) ·
-[`agents/AGENTS.md`](../../../agents/AGENTS.md) · [`agents/TESTS.md`](../../../agents/TESTS.md)
+Style/workflow: [`agents/CODESTYLE.md`](../../agents/CODESTYLE.md) ·
+[`agents/AGENTS.md`](../../agents/AGENTS.md) · [`agents/TESTS.md`](../../agents/TESTS.md)

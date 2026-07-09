@@ -35,4 +35,4 @@ Protocol layers (each has its own `AGENTS.md`):
 ## Tests
 
 `./ya make --build relwithdebinfo -tA ydb/core/persqueue` (or a narrower `ut/`).
-See [`agents/TESTS.md`](../../../agents/TESTS.md).
+See [`agents/TESTS.md`](../../agents/TESTS.md).

@@ -12,5 +12,5 @@ Depends on `persqueue/public/` and `events/`, not `pqtablet/` / `pqrb/` internal
 
 Tests: `./ya make --build relwithdebinfo -tA ydb/services/persqueue_v1`
 
-Style/workflow: [`agents/CODESTYLE.md`](../../../agents/CODESTYLE.md) ·
-[`agents/AGENTS.md`](../../../agents/AGENTS.md) · [`agents/TESTS.md`](../../../agents/TESTS.md)
+Style/workflow: [`agents/CODESTYLE.md`](../../agents/CODESTYLE.md) ·
+[`agents/AGENTS.md`](../../agents/AGENTS.md) · [`agents/TESTS.md`](../../agents/TESTS.md)

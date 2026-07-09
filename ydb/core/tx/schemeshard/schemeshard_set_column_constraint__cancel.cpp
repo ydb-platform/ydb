@@ -38,6 +38,14 @@ public:
         }
 
         auto& operationInfo = *operationInfoPtr->get();
+        const TPathId subdomainPathId = database.GetPathIdForDomain();
+
+        if (operationInfo.DomainPathId != subdomainPathId) {
+            return Reply(
+                Ydb::StatusIds::NOT_FOUND,
+                TStringBuilder() << "SetColumnConstraint operation with id <" << BuildId << "> not found in database <" << record.GetDatabaseName() << ">"
+            );
+        }
 
         if (operationInfo.IsCloseToCompletion()) {
             return Reply(
@@ -70,7 +78,7 @@ public:
     void DoComplete(const TActorContext&) override {}
 };
 
-ITransaction* TSchemeShard::CreateTxSetColumnConstraintCancel(TEvSetColumnConstraint::TEvCancelRequest::TPtr& ev) {
+ITransaction* TSchemeShard::CreateTxCancelSetColumnConstraint(TEvSetColumnConstraint::TEvCancelRequest::TPtr& ev) {
     return new TIndexBuilder::TTxCancelSetColumnConstraint(this, ev);
 }
 

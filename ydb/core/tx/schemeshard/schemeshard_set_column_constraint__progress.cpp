@@ -642,13 +642,6 @@ public:
             << "; OperationState = " << ToString(operationInfo.OperationState)
             << "; IsCancelled = " << operationInfo.IsCancelled);
 
-        // Note on cancellation:
-        // When IsCancelled is set in early stages (Locking/LockingNullWrites/Validating),
-        // we immediately skip to Finishing to release locks without setting the constraint.
-        // - Finishing: AlterMainTableUnlockNullWritesPropose does NOT set NOT NULL (checked via !IsCancelled)
-        // - Unlocking: releases locks normally
-        // - Done: operation completes without setting the constraint
-
         switch (operationInfo.OperationState) {
             case TSetColumnConstraintOperationInfo::EOperationState::Invalid: {
                 Y_UNREACHABLE();

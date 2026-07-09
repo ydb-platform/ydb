@@ -280,7 +280,7 @@ void TSchemeShard::Handle(TEvSetColumnConstraint::TEvListRequest::TPtr& ev, cons
 }
 
 void TSchemeShard::Handle(TEvSetColumnConstraint::TEvCancelRequest::TPtr& ev, const TActorContext& ctx) {
-    Execute(CreateTxSetColumnConstraintCancel(ev), ctx);
+    Execute(CreateTxCancelSetColumnConstraint(ev), ctx);
 }
 
 void TSchemeShard::Handle(TEvDataShard::TEvValidateRowConditionResponse::TPtr& ev, const TActorContext& ctx) {

@@ -1022,7 +1022,7 @@ struct TSetColumnConstraintOperationInfo: public TIndexBuildInfo {
         return OperationState == EOperationState::Done;
     }
 
-    bool IsCloseToCompletion() {
+    bool IsCloseToCompletion() const {
         return OperationState == EOperationState::Done
             || OperationState == EOperationState::Unlocking
             || OperationState == EOperationState::Finishing;

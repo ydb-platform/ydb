@@ -173,6 +173,8 @@ message TQueryRequest {
     reserved 19; // (deprecated) StatsMode
     optional NYql.NDqProto.EDqStatsMode StatsMode = 20; // deprecated
     optional Ydb.Table.QueryStatsCollection.Mode CollectStats = 21;
+    // QUERY_ACTION_TOPIC carries exactly one topic API per request: Topic, Kafka, or DeferredPublication.
+    // Breaking change: fields 22 and 37 were independent optionals; oneof keeps the last tag on wire if both are set.
     oneof TopicRequestOperations {
         TTopicOperationsRequest TopicOperations = 22;
         TKafkaApiOperationsRequest KafkaApiOperations = 37;

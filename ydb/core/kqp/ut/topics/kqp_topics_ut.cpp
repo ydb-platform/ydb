@@ -561,8 +561,10 @@ Y_UNIT_TEST(DeferredPublication_GetSendingTabletIds_IncludesWriteOnlyTablet) {
     topicOps.SetSkipConflictCheck(true);
     topicOps.SetTrackProducerId(false);
 
-    AddDeferredPublicationOperation(topicOps, TOPIC, 0, TABLETID,
+    topicOps.AddDeferredPublicationOperation(TOPIC, 0, TABLETID,
         NKikimrKqp::TTopicDeferredPublicationRequest::Publish, 1, "ext");
+
+    UNIT_ASSERT(topicOps.CalcSkipConflictCheck());
 
     const auto sendTabletIds = topicOps.GetSendingTabletIds();
     UNIT_ASSERT_EQUAL(sendTabletIds.size(), 1);

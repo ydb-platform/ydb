@@ -3,6 +3,7 @@
 #include <ydb/core/http_proxy/http_req.h>
 #include <ydb/core/persqueue/public/constants.h>
 #include <ydb/core/testlib/test_client.h>
+#include <ydb/core/ymq/actor/auth_factory.h>
 #include <ydb/core/ymq/actor/metering.h>
 #include <ydb/core/ymq/base/limits.h>
 #include <ydb/library/testlib/service_mocks/access_service_mock.h>
@@ -16,6 +17,7 @@
 #include <library/cpp/string_utils/base64/base64.h>
 #include <library/cpp/testing/unittest/registar.h>
 
+#include <mutex>
 #include <optional>
 #include <thread>
 
@@ -137,6 +139,44 @@ Y_UNIT_TEST_SUITE(TestYmqHttpProxy) {
         const auto json = ParseSqsResponse(protocol, res.Body);
         UNIT_ASSERT_VALUES_EQUAL(GetByPath<TString>(json, "__type"), "AWS.SimpleQueueService.NonExistentQueue");
     }
+
+    class TCapturingSqsAuthFactory final : public NKikimr::NSQS::IAuthFactory {
+    public:
+        explicit TCapturingSqsAuthFactory(NKikimr::NSQS::IAuthFactory& delegate)
+            : Delegate_(delegate)
+        {}
+
+        void Initialize(
+            NActors::TActorSystemSetup::TLocalServices& services,
+            const TAppData& appData,
+            const TSqsConfig& config) override
+        {
+            Delegate_.Initialize(services, appData, config);
+        }
+
+        void RegisterAuthActor(NActors::TActorSystem& system, NKikimr::NSQS::TAuthActorData&& data) override {
+            {
+                std::lock_guard<std::mutex> guard(Mutex_);
+                CapturedSourceAddress_ = TString(data.SourceAddress);
+            }
+
+            Delegate_.RegisterAuthActor(system, std::move(data));
+        }
+
+        TCredentialsFactoryPtr CreateCredentialsProviderFactory(const TSqsConfig& config) override {
+            return Delegate_.CreateCredentialsProviderFactory(config);
+        }
+
+        TString GetCapturedSourceAddress() const {
+            std::lock_guard<std::mutex> guard(Mutex_);
+            return CapturedSourceAddress_;
+        }
+
+    private:
+        NKikimr::NSQS::IAuthFactory& Delegate_;
+        mutable std::mutex Mutex_;
+        TString CapturedSourceAddress_;
+    };
 
     TString CreateQueueForAuthMatrix(THttpProxyTestMock& fixture, ESqsProtocol protocol, bool withFolderId) {
         auto createQueueReq = THttpProxyTestMock::CreateSqsCreateQueueRequest();
@@ -891,6 +931,37 @@ Y_UNIT_TEST_SUITE(TestYmqHttpProxy) {
         UNIT_ASSERT(NJson::ReadJsonTree(sendMessageRes.Body, &sendMessageJson));
         UNIT_ASSERT(!GetByPath<TString>(sendMessageJson, "MD5OfMessageBody").empty());
         UNIT_ASSERT(!GetByPath<TString>(sendMessageJson, "MessageId").empty());
+    }
+
+    Y_UNIT_TEST_F(TestHttpProxySetsAuthSourceAddressFromForwardedFor, THttpProxyTestMock) {
+        PrepareConfigs(KikimrServer.Get());
+        auto& appData = KikimrServer->GetRuntime()->GetAppData();
+        appData.FeatureFlags.SetEnableSQSMigrationTopicCreation(true);
+        appData.FeatureFlags.SetEnableSQSMigrationCompatibility(true);
+        auto* previousAuthFactory = appData.SqsAuthFactory;
+
+        TCapturingSqsAuthFactory authFactory(*previousAuthFactory);
+        appData.SqsAuthFactory = &authFactory;
+        struct TRestoreAuthFactory {
+            TAppData& AppData;
+            NKikimr::NSQS::IAuthFactory* PreviousAuthFactory;
+
+            ~TRestoreAuthFactory() {
+                AppData.SqsAuthFactory = PreviousAuthFactory;
+            }
+        } restoreAuthFactory{appData, previousAuthFactory};
+
+        const TString sourceAddress = "203.0.113.42";
+        auto createQueueReq = CreateSqsCreateQueueRequest();
+        createQueueReq["QueueName"] = "HttpProxySourceAddressQueue";
+        const TString authorization = TStringBuilder()
+            << "X-YaCloud-SubjectToken: proxy_sa@builtin"
+            << "\r\nX-Forwarded-For:" << sourceAddress;
+
+        auto createQueueRes = SendHttpRequest("/Root", "AmazonSQS.CreateQueue", std::move(createQueueReq), authorization);
+        UNIT_ASSERT_VALUES_EQUAL_C(createQueueRes.HttpCode, 200, createQueueRes.Body);
+
+        UNIT_ASSERT_VALUES_EQUAL(authFactory.GetCapturedSourceAddress(), sourceAddress);
     }
 
     Y_UNIT_TEST_F(TestSendMessageWithIAMWithoutFolderId_TableImplementation, THttpProxyTestMock) {

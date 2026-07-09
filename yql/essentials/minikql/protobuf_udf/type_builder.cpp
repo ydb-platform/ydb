@@ -101,7 +101,7 @@ void TTypeBuilder::Build(const Descriptor* descriptor, TProtoInfo* info) {
     Info_->EnumFormat = EnumFormat_;
     Info_->Recursion = Recursion_;
     Info_->YtMode = YtMode_;
-    Info_->StructType = GenerateTypeInfo(descriptor, false);
+    Info_->StructType = GenerateTypeInfo(descriptor, /*defaultYtSerialize=*/false);
     Info_->OptionalLists = OptionalLists_;
     Info_->SyntaxAware = SyntaxAware_;
     Info_->StringType = StringType_;
@@ -179,8 +179,8 @@ TType* TTypeBuilder::GenerateTypeInfo(const Descriptor* descriptor, bool default
                         Y_ENSURE(mapMessage->field_count() == 2);
                         flags |= EFieldFlag::Dict;
                         type = Builder_.Dict()
-                                   ->Key(GetUnderlyingType(mapMessage->map_key(), false))
-                                   .Value(wrapRecursiveType(GetUnderlyingType(mapMessage->map_value(), true), flags, /*wrapWithModifiers=*/false))
+                                   ->Key(GetUnderlyingType(mapMessage->map_key(), /*defaultYtSerialize=*/false))
+                                   .Value(wrapRecursiveType(GetUnderlyingType(mapMessage->map_value(), /*defaultYtSerialize=*/true), flags, /*wrapWithModifiers=*/false))
                                    .Build();
                         message->DictTypes[fd->number()] = type;
                         if (NYT::NDetail::EProtobufMapMode::OptionalDict == ytOpts->MapMode) {
@@ -219,10 +219,10 @@ TType* TTypeBuilder::GenerateTypeInfo(const Descriptor* descriptor, bool default
                                             << ", field: " << fd->name();
                 }
             } else {
-                type = GetUnderlyingType(fd, false);
+                type = GetUnderlyingType(fd, /*defaultYtSerialize=*/false);
             }
         } else {
-            type = GetUnderlyingType(fd, false);
+            type = GetUnderlyingType(fd, /*defaultYtSerialize=*/false);
         }
 
         if (!flags.HasFlags(EFieldFlag::Dict)) {

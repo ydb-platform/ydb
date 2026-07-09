@@ -145,7 +145,7 @@ TWorkerFactory<TBase>::TWorkerFactory(TWorkerFactoryOptions options, EProcessorM
                             options.SyntaxVersion, options.Modules,
                             options.InputSpec, options.OutputSpec, processorMode, typeCtx.Get());
 
-        RawOutputType_ = GetSequenceItemType(ExprRoot_->Pos(), ExprRoot_->GetTypeAnn(), true, ExprContext_);
+        RawOutputType_ = GetSequenceItemType(ExprRoot_->Pos(), ExprRoot_->GetTypeAnn(), /*allowMultiIO=*/true, ExprContext_);
 
         // Deduce output type if it wasn't provided by output spec
 
@@ -196,7 +196,7 @@ TIntrusivePtr<TTypeAnnotationContext> TWorkerFactory<TBase>::PrepareTypeContext(
     typeContext->UserDataStorage = MakeIntrusive<TUserDataStorage>(nullptr, UserData_, nullptr, nullptr);
     typeContext->Modules = moduleResolver;
     typeContext->BlockEngineMode = BlockEngineMode_;
-    auto configProvider = CreateConfigProvider(*typeContext, nullptr, "");
+    auto configProvider = CreateConfigProvider(*typeContext, /*config=*/nullptr, "");
     typeContext->AddDataSource(ConfigProviderName, configProvider);
     typeContext->Initialize(ExprContext_);
     typeContext->SqlFlags = GetSqlFlags(BlockEngineMode_);
@@ -302,7 +302,7 @@ TExprNode::TPtr TWorkerFactory<TBase>::Compile(
     // Translate AST into expression
 
     TExprNode::TPtr exprRoot;
-    if (!CompileExpr(*astRes.Root, exprRoot, ExprContext_, typeContext->Modules.get(), nullptr, 0, syntaxVersion)) {
+    if (!CompileExpr(*astRes.Root, exprRoot, ExprContext_, typeContext->Modules.get(), /*urlListerManager=*/nullptr, 0, syntaxVersion)) {
         TStringStream astStr;
         astRes.Root->PrettyPrintTo(astStr, TAstPrintFlags::ShortQuote | TAstPrintFlags::PerLine);
         ythrow TCompileError(astStr.Str(), GetIssues().ToString()) << "failed to compile";
@@ -321,7 +321,7 @@ TExprNode::TPtr TWorkerFactory<TBase>::Compile(
         }
 
         TStringStream out;
-        NYson::TYsonWriter writer(&out, NYson::EYsonFormat::Text, ::NYson::EYsonType::Node, true);
+        NYson::TYsonWriter writer(&out, NYson::EYsonFormat::Text, ::NYson::EYsonType::Node, /*enableRaw=*/true);
         writer.OnBeginMap();
 
         writer.OnKeyedItem("Data");
@@ -342,12 +342,12 @@ TExprNode::TPtr TWorkerFactory<TBase>::Compile(
             NativeYtTypeFlags_,
             DeterministicTimeProviderSeed_,
             LangVer_,
-            true,
+            /*insideEvaluation=*/true,
             RuntimeSettings_);
 
         with_lock (graph.ScopedAlloc) {
             const auto value = graph.ComputationGraph->GetValue();
-            NCommon::WriteYsonValue(writer, value, const_cast<NKikimr::NMiniKQL::TType*>(graph.OutputType), nullptr);
+            NCommon::WriteYsonValue(writer, value, const_cast<NKikimr::NMiniKQL::TType*>(graph.OutputType), /*structPositions=*/nullptr);
         }
         writer.OnEndMap();
 
@@ -436,7 +436,7 @@ TExprNode::TPtr TWorkerFactory<TBase>::Compile(
     pipeline.Add(MakePeepholeOptimization(typeContext),
                  "PeepHole", EYqlIssueCode::TIssuesIds_EIssueCode_DEFAULT_ERROR,
                  "Peephole optimizations");
-    pipeline.AddCheckExecution(false);
+    pipeline.AddCheckExecution(/*checkWorld=*/false);
 
     // Apply optimizations
 
@@ -460,7 +460,7 @@ TExprNode::TPtr TWorkerFactory<TBase>::Compile(
 
     if (exprOut) {
         *exprOut << "After optimization:" << Endl;
-        ConvertToAst(*exprRoot, ExprContext_, 0, true).Root->PrettyPrintTo(*exprOut, TAstPrintFlags::PerLine | TAstPrintFlags::ShortQuote | TAstPrintFlags::AdaptArbitraryContent);
+        ConvertToAst(*exprRoot, ExprContext_, 0, /*refAtoms=*/true).Root->PrettyPrintTo(*exprOut, TAstPrintFlags::PerLine | TAstPrintFlags::ShortQuote | TAstPrintFlags::AdaptArbitraryContent);
     }
     return exprRoot;
 }

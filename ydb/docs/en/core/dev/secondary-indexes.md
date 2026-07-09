@@ -64,21 +64,17 @@ An experimental capability to automatically select a secondary index for use in 
 
 Explicitly specifying the `VIEW` section takes priority over the optimizer's decision to use secondary indexes. That is, the query
 
-
 ```yql
 SELECT * FROM `Table` VIEW Index
 ```
-
 
 is guaranteed to perform selection using the `Index` index.
 
 To explicitly specify reading using the primary key, use the following construct:
 
-
 ```yql
 SELECT * FROM `Table` VIEW PRIMARY KEY
 ```
-
 
 #### Criteria for selecting a secondary index
 
@@ -90,18 +86,15 @@ Selection between reading using an index and reading using the primary key is ba
 2. Length of the point prefix of the predicate for the corresponding table's key. That is, the predicate constrains a set of columns that are the first components of the key with point conditions: `=`, `IN`, `IS NULL`. Priority is given to indexes for which all indexed columns are fixed, or to the main table if the entire primary key is point-fixed.
 3. Number of columns used in the read range bounds. In the following query to the `Table` table with primary key (Key1, Key2, Key3)
 
-
 ```yql
 SELECT * FROM `Table` WHERE (Key1, Key2, Key3) < ($param1, $param2, $param3) AND (Key1, Key2) > ($param4, $param5)
 ```
-
 
 reading will be performed in the range `(($param4, $param5), ($param1, $param2, $param3))`, and thus the number of used columns will be 3. Similarly, preference is given to indexes for which all indexed columns are used.
 
 Read methods are ranked against each other according to criterion 2, with ties broken by criterion 3, and criterion 1 is additionally taken into account.
 
 #### Examples of automatic index selection
-
 
 ```yql
 CREATE TABLE `Table` (
@@ -117,7 +110,6 @@ CREATE TABLE `Table` (
 );
 
 ```
-
 
 `SELECT * FROM Table WHERE SubKey1 = $p1 and SubKey2 > $p2` — `Index12` will be used. The range expression is `(($p1; $p2), ($p1)]`. The point prefix length for `Index12` is 1; for other indexes, it is 0.
 

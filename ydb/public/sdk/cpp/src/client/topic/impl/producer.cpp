@@ -13,6 +13,39 @@ namespace NYdb::inline Dev::NTopic {
 namespace {
 
 static constexpr auto PARTITION_KEY_META_KEY = "__partition_key";
+static constexpr size_t DESCRIBE_TOPIC_ATTEMPTS = 3;
+static constexpr TDuration DESCRIBE_TOPIC_RETRY_DELAY = TDuration::MilliSeconds(100);
+
+TDescribeTopicResult DescribeTopicWithRetries(
+    TTopicClient::TImpl* client,
+    const std::string& path,
+    const TDescribeTopicSettings& settings,
+    const TDbDriverStatePtr& dbDriverState,
+    const std::string& logPrefix) {
+    for (size_t attempt = 1; attempt <= DESCRIBE_TOPIC_ATTEMPTS; ++attempt) {
+        auto result = client->DescribeTopic(path, settings).GetValueSync();
+        if (result.IsSuccess() && !result.GetTopicDescription().GetPartitions().empty()) {
+            return result;
+        }
+
+        if (attempt == DESCRIBE_TOPIC_ATTEMPTS) {
+            return result;
+        }
+
+        TStringBuilder message;
+        message << logPrefix << "DescribeTopic returned ";
+        if (result.IsSuccess()) {
+            message << "no partitions";
+        } else {
+            message << "status " << result.GetStatus();
+        }
+        message << ", retry attempt " << attempt;
+        LOG_LAZY(dbDriverState->Log, TLOG_DEBUG, message);
+        Sleep(DESCRIBE_TOPIC_RETRY_DELAY);
+    }
+
+    Y_UNREACHABLE();
+}
 
 } // namespace
 
@@ -1609,11 +1642,15 @@ TProducer::TProducer(
     }
 
     TDescribeTopicSettings describeTopicSettings;
-    auto topicConfig = client->DescribeTopic(settings.Path_, describeTopicSettings).GetValueSync();
+    auto topicConfig = DescribeTopicWithRetries(client.get(), settings.Path_, describeTopicSettings, DbDriverState, LogPrefix());
     auto partitions = topicConfig.GetTopicDescription().GetPartitions();
     std::sort(partitions.begin(), partitions.end(), [](const auto& a, const auto& b) -> bool {
         return a.GetPartitionId() < b.GetPartitionId();
     });
+
+    if (partitions.empty()) {
+        ythrow TContractViolation("Topic has no partitions");
+    }
 
     auto partitionChooserStrategy = settings.PartitionChooserStrategy_;
     auto strategy = topicConfig.GetTopicDescription().GetPartitioningSettings().GetAutoPartitioningSettings().GetStrategy();
@@ -1658,6 +1695,7 @@ TProducer::TProducer(
         case TProducerSettings::EPartitionChooserStrategy::Bound:
             PartitioningKeyHasher = settings.PartitioningKeyHasher_;
             PartitionChooser = std::make_unique<TBoundPartitionChooser>(this);
+
             for (size_t i = 0; i < partitions.size(); ++i) {
                 const auto& partition = partitions[i];
                 if (i > 0 && !partition.GetFromBound().has_value() && !partition.GetToBound().has_value()) {
@@ -2259,7 +2297,9 @@ std::pair<std::uint32_t, std::string> TProducer::TBoundPartitionChooser::ChooseP
 TProducer::THashPartitionChooser::THashPartitionChooser(std::vector<std::uint32_t>&& partitions)
     : Partitions(std::move(partitions))
 {
-    Y_ABORT_UNLESS(!Partitions.empty(), "THashPartitionChooser requires at least one partition");
+    if (Partitions.empty()) {
+        ythrow TContractViolation("THashPartitionChooser requires at least one partition");
+    }
 }
 
 std::pair<std::uint32_t, std::string> TProducer::THashPartitionChooser::ChoosePartition(const std::string_view key) {

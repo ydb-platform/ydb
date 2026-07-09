@@ -81,6 +81,9 @@ std::shared_ptr<arrow::ArrayData> SliceUnion(
     TVector<size_t> sizeToTrimOnCurrentSlice(numChildren, 0);
     for (size_t i = 0; i < size; ++i) {
         const size_t childIndex = typeCodes[i];
+        Y_DEBUG_ABORT_UNLESS(valueOffsets[i] == 0, "The initial offset value is expected to be zero. "
+                                                   "Subsequent values will be determined "
+                                                   "based on the type codes present in the child tree structure.");
         valueOffsets[i] = sizeToTrimOnCurrentSlice[childIndex];
         sizeToTrimOnCurrentSlice[childIndex]++;
         unionState.CurrentCount--;

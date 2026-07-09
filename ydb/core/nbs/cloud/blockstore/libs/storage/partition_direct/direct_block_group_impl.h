@@ -11,6 +11,7 @@
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/host_stat.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/host_state.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/oracle.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/mon_page/mon_model.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/storage_transport/ddisk_helpers.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/storage_transport/storage_transport.h>
 
@@ -135,6 +136,8 @@ public:
 
     bool IsDDiskSessionBroken(size_t hostIndex) const;
     bool IsBlockedGenerationDetected() const;
+    
+    NThreading::TFuture<TDbgSnapshot> BuildMonSnapshot() override;
 
     // IHostStateController implementation
     void SetHostState(
@@ -261,6 +264,8 @@ private:
         NKikimrBlobStorage::NDDisk::TReplyStatus_E status);
 
     TDBGDumpResponse DoDebugPrintDirtyMap();
+
+    TDbgSnapshot DoBuildMonSnapshot();
 
     NActors::TActorSystem* const ActorSystem = nullptr;
     const TStorageConfigPtr StorageConfig;

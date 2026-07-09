@@ -5,6 +5,8 @@
 #include <ydb/core/tx/columnshard/common/snapshot.h>
 #include <ydb/core/tx/columnshard/common/tablet_id.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD
+
 namespace NKikimr::NColumnShard {
 
 bool TBackupTransactionOperator::DoParse(TColumnShard& owner, const TString& data) {
@@ -18,8 +20,11 @@ bool TBackupTransactionOperator::DoParse(TColumnShard& owner, const TString& dat
 
     if (const auto* completedTx = owner.LastCompletedBackupTransactionsByTxId.FindPtr(GetTxId())) {
         if (completedTx->GetOpResult().GetSuccess()) {
-            AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("event", "backup_already_completed")("tx_id", GetTxId())(
-                "success", completedTx->GetOpResult().GetSuccess())("explain", completedTx->GetOpResult().GetExplain());
+            YDB_LOG_INFO("",
+                {"event", "backup_already_completed"},
+                {"txId", GetTxId()},
+                {"success", completedTx->GetOpResult().GetSuccess()},
+                {"explain", completedTx->GetOpResult().GetExplain()});
             AlreadyCompleted = true;
         }
         return true;
@@ -27,7 +32,9 @@ bool TBackupTransactionOperator::DoParse(TColumnShard& owner, const TString& dat
 
     TConclusion<NOlap::NExport::TIdentifier> id = NOlap::NExport::TIdentifier::BuildFromProto(txBody);
     if (!id) {
-        AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "cannot_parse_id")("problem", id.GetErrorMessage());
+        YDB_LOG_ERROR("",
+            {"event", "cannot_parse_id"},
+            {"problem", id.GetErrorMessage()});
         return false;
     }
     auto schema = owner.TablesManager.GetPrimaryIndex()->GetVersionedIndex().GetSchemaVerified(
@@ -55,7 +62,8 @@ TBackupTransactionOperator::TProposeResult TBackupTransactionOperator::DoStartPr
     if (!owner.GetBackgroundSessionsManager()->HasTask(task)) {
         TxAddTask = owner.GetBackgroundSessionsManager()->TxAddTask(task);
         if (!TxAddTask) {
-            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "cannot_add_task");
+            YDB_LOG_ERROR("",
+                {"event", "cannot_add_task"});
             return TProposeResult(NKikimrTxColumnShard::EResultStatus::ERROR, "Cannot add backup task");
         }
         AFL_VERIFY(TxAddTask->Execute(txc, NActors::TActivationContext::AsActorContext()));

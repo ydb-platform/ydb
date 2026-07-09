@@ -414,6 +414,32 @@ TFastPathServiceInfo TFastPathService::GetMonInfo() const
     };
 }
 
+NThreading::TFuture<TVector<TDbgSnapshot>> TFastPathService::GatherMonSnapshots(
+    std::optional<size_t> dbgIndex) const
+{
+    TVector<NThreading::TFuture<TDbgSnapshot>> futures;
+    if (dbgIndex) {
+        if (*dbgIndex < DirectBlockGroups.size()) {
+            futures.push_back(DirectBlockGroups[*dbgIndex]->BuildMonSnapshot());
+        }
+    } else {
+        for (const auto& dbg: DirectBlockGroups) {
+            futures.push_back(dbg->BuildMonSnapshot());
+        }
+    }
+
+    return NThreading::WaitAll(futures).Apply(
+        [futures](const auto&)
+        {
+            TVector<TDbgSnapshot> snapshots;
+            snapshots.reserve(futures.size());
+            for (const auto& future: futures) {
+                snapshots.push_back(future.GetValue());
+            }
+            return snapshots;
+        });
+}
+
 void TFastPathService::MaybeTriggerPBufferCleanup(ui64 lsn)
 {
     const ui64 step = StorageConfig->GetPBufferCleanupLsnStep();

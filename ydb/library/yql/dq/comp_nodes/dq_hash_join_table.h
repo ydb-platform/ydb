@@ -118,6 +118,14 @@ class TNeumannJoinTable : public NNonCopyable::TMoveOnly {
         return Table_.RequiredMemoryForBuild(nTuples);
     }
 
+    Y_FORCE_INLINE void PrefetchLookupDirectory(TSingleTuple row) {
+        Table_.PrefetchApplyDirectory(row.PackedData);
+    }
+
+    Y_FORCE_INLINE void PrefetchLookupBuffer(TSingleTuple row) {
+        Table_.PrefetchApplyBuffer(row.PackedData);
+    }
+
     void Lookup(TSingleTuple row, std::invocable<TSingleTuple> auto consume) {
         if (Empty()){
             return;
@@ -146,7 +154,7 @@ class TNeumannJoinTable : public NNonCopyable::TMoveOnly {
 
   private:
     IBlockLayoutConverter::TPackResult BuildData_;
-    NKikimr::NMiniKQL::NPackedTuple::TNeumannHashTable<false, false> Table_;
+    NKikimr::NMiniKQL::NPackedTuple::TNeumannHashTable<false, true> Table_;
     size_t RowWidth_ = 0;
     bool TrackUsed_ = false;
     TMKQLVector<ui8> Used_;

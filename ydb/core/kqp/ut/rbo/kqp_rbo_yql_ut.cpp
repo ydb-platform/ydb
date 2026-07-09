@@ -302,7 +302,7 @@ TIntrusivePtr<TOpRead> MakeTestRead(const TVector<TInfoUnit>& outputIUs, TPositi
         nullptr,
         nullptr,
         nullptr,
-        nullptr,
+        std::nullopt,
         std::nullopt,
         ESortDir::None,
         TPhysicalOpProps{},
@@ -517,7 +517,9 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
 
     void CreateExplainPlanTestTables(TKikimrRunner& kikimr) {
         auto db = kikimr.GetTableClient();
-        auto session = db.CreateSession().GetValueSync().GetSession();
+        auto sessionResult = db.CreateSession().GetValueSync();
+        UNIT_ASSERT_C(sessionResult.IsSuccess(), sessionResult.GetIssues().ToString());
+        auto session = sessionResult.GetSession();
         auto result = session.ExecuteSchemeQuery(R"(
             CREATE TABLE `/Root/t1` (
                 a Int64	NOT NULL,
@@ -531,6 +533,49 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
                 b Int64,
                 c Int64,
                 primary key(a)
+            ) WITH (STORE = column);
+        )").GetValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+    }
+
+    void BulkUpsertExplainPlanTestRows(TKikimrRunner& kikimr) {
+        auto db = kikimr.GetTableClient();
+
+        NYdb::TValueBuilder rows;
+        rows.BeginList();
+        for (i64 i = 1; i <= 12; ++i) {
+            rows.AddListItem()
+                .BeginStruct()
+                .AddMember("a").Int64(i)
+                .AddMember("b").Int64(i * 10)
+                .AddMember("c").Int64(i * 100)
+                .EndStruct();
+        }
+        rows.EndList();
+
+        auto result = db.BulkUpsert("/Root/t1", rows.Build()).GetValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+    }
+
+    void CreateOriginalRowsHintTables(TKikimrRunner& kikimr) {
+        auto db = kikimr.GetTableClient();
+        auto sessionResult = db.CreateSession().GetValueSync();
+        UNIT_ASSERT_C(sessionResult.IsSuccess(), sessionResult.GetIssues().ToString());
+        auto session = sessionResult.GetSession();
+        auto result = session.ExecuteSchemeQuery(R"(
+            CREATE TABLE `/Root/R` (
+                id Int64 NOT NULL,
+                primary key(id)
+            ) WITH (STORE = column);
+
+            CREATE TABLE `/Root/S` (
+                id Int64 NOT NULL,
+                primary key(id)
+            ) WITH (STORE = column);
+
+            CREATE TABLE `/Root/T` (
+                id Int64 NOT NULL,
+                primary key(id)
             ) WITH (STORE = column);
         )").GetValueSync();
         UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
@@ -554,6 +599,10 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
 
         NYdb::NQuery::TSession& GetSession() {
             return Session;
+        }
+
+        TKikimrRunner& GetKikimr() {
+            return Kikimr;
         }
 
     private:
@@ -606,6 +655,62 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         UNIT_ASSERT_C(!GetStringField(*joinOp, "JoinAlgo").empty(), plan);
         const auto condition = GetStringField(*joinOp, "Condition");
         UNIT_ASSERT_C(condition.Contains("t1.a") && condition.Contains("t2.b") && condition.Contains(" = "), plan);
+    }
+
+    Y_UNIT_TEST(ExplainReadRowsHints) {
+        TExplainPlanTestContext testContext;
+        auto& session = testContext.GetSession();
+        auto plan = ExecuteExplain(session, R"(
+            PRAGMA YqlSelect = 'force';
+            PRAGMA ydb.OptimizerHints = '
+                Rows(left_alias # 123)
+                Rows(t2 # 456)
+            ';
+            select left_alias.a, right_alias.b
+            from `/Root/t1` as left_alias
+            inner join `/Root/t2` as right_alias on left_alias.a = right_alias.b;
+        )");
+
+        const auto simplifiedPlan = GetSimplifiedPlan(plan);
+        const auto* leftRead = FindOperatorByStringField(simplifiedPlan, "Table", "t1");
+        const auto* rightRead = FindOperatorByStringField(simplifiedPlan, "Table", "t2");
+
+        UNIT_ASSERT_C(leftRead, plan);
+        UNIT_ASSERT_C(rightRead, plan);
+        UNIT_ASSERT_VALUES_EQUAL_C(GetStringField(*leftRead, "E-Rows"), "123", plan);
+        UNIT_ASSERT_VALUES_EQUAL_C(GetStringField(*rightRead, "E-Rows"), "456", plan);
+    }
+
+    Y_UNIT_TEST(ExplainOriginalRowsHints) {
+        TExplainPlanTestContext testContext;
+        CreateOriginalRowsHintTables(testContext.GetKikimr());
+        auto& session = testContext.GetSession();
+        auto plan = ExecuteExplain(session, R"(
+            PRAGMA YqlSelect = 'force';
+            PRAGMA ydb.OptimizerHints =
+            '
+                Rows(R # 20e8)
+                Rows(T # 777)
+                Rows(S # 30e8)
+                Rows(R T # 1)
+                Rows(R S # 10e8)
+            ';
+            SELECT * FROM
+                `/Root/R` AS R INNER JOIN `/Root/S` AS S on R.id = S.id
+                    INNER JOIN `/Root/T` AS T on R.id = T.id;
+        )");
+
+        const auto simplifiedPlan = GetSimplifiedPlan(plan);
+        const auto* readR = FindOperatorByStringField(simplifiedPlan, "Table", "R");
+        const auto* readS = FindOperatorByStringField(simplifiedPlan, "Table", "S");
+        const auto* readT = FindOperatorByStringField(simplifiedPlan, "Table", "T");
+
+        UNIT_ASSERT_C(readR, plan);
+        UNIT_ASSERT_C(readS, plan);
+        UNIT_ASSERT_C(readT, plan);
+        UNIT_ASSERT_VALUES_EQUAL_C(GetStringField(*readR, "E-Rows"), "2000000000", plan);
+        UNIT_ASSERT_VALUES_EQUAL_C(GetStringField(*readS, "E-Rows"), "3000000000", plan);
+        UNIT_ASSERT_VALUES_EQUAL_C(GetStringField(*readT, "E-Rows"), "777", plan);
     }
 
     Y_UNIT_TEST(EliminateUnusedLeftJoin) {
@@ -665,6 +770,56 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         UNIT_ASSERT_VALUES_EQUAL_C(GetStringField(*readOp, "Limit"), "5", pushedReadPlan);
         UNIT_ASSERT_C(StringArrayFieldContains(*readOp, "ReadColumns", "a"), pushedReadPlan);
         UNIT_ASSERT_C(StringArrayFieldContains(*readOp, "ReadColumns", "b"), pushedReadPlan);
+    }
+
+    Y_UNIT_TEST(ExplainRangePushdown) {
+        TExplainPlanTestContext testContext;
+        auto& session = testContext.GetSession();
+        auto plan = ExecuteExplain(session, R"(
+            PRAGMA YqlSelect = 'force';
+            SELECT t1.a, t1.b FROM `/Root/t1` AS t1 WHERE t1.a > 5;
+        )");
+        const auto simplifiedPlan = GetSimplifiedPlan(plan);
+        const auto* readOp = FindOperatorByStringField(simplifiedPlan, "Name", "TableRangeScan");
+        UNIT_ASSERT_C(readOp, plan);
+        UNIT_ASSERT_VALUES_EQUAL_C(GetStringField(*readOp, "Table"), "t1", plan);
+        UNIT_ASSERT_C(StringArrayFieldContains(*readOp, "ReadRangesKeys", "a"), plan);
+        UNIT_ASSERT_C(StringArrayFieldContains(*readOp, "ReadColumns", "a (5, +∞)"), plan);
+        UNIT_ASSERT_C(StringArrayFieldContains(*readOp, "ReadColumns", "b"), plan);
+        UNIT_ASSERT_C(!readOp->GetMapSafe().contains("Predicate"), plan);
+        UNIT_ASSERT_C(!readOp->GetMapSafe().contains("ReadRangesPointPrefixLen"), plan);
+
+        auto disjointPlan = ExecuteExplain(session, R"(
+            PRAGMA YqlSelect = 'force';
+            SELECT t1.a, t1.b FROM `/Root/t1` AS t1 WHERE t1.a < 5 OR t1.a >= 10;
+        )");
+        const auto simplifiedDisjointPlan = GetSimplifiedPlan(disjointPlan);
+        const auto* disjointReadOp = FindOperatorByStringField(simplifiedDisjointPlan, "Name", "TableRangeScan");
+        UNIT_ASSERT_C(disjointReadOp, disjointPlan);
+        UNIT_ASSERT_C(StringArrayFieldContains(*disjointReadOp, "ReadColumns", "a (-∞, 5)"), disjointPlan);
+        UNIT_ASSERT_C(StringArrayFieldContains(*disjointReadOp, "ReadColumns", "a [10, +∞)"), disjointPlan);
+        UNIT_ASSERT_C(StringArrayFieldContains(*disjointReadOp, "ReadColumns", "b"), disjointPlan);
+        UNIT_ASSERT_C(!disjointReadOp->GetMapSafe().contains("Predicate"), disjointPlan);
+        UNIT_ASSERT_C(!disjointReadOp->GetMapSafe().contains("ReadRangesPointPrefixLen"), disjointPlan);
+    }
+
+    Y_UNIT_TEST(ExplainAnalyzeRangePushdown) {
+        TExplainPlanTestContext testContext;
+        BulkUpsertExplainPlanTestRows(testContext.GetKikimr());
+        auto& session = testContext.GetSession();
+        auto plan = ExecuteExplainAnalyze(session, R"(
+            PRAGMA YqlSelect = 'force';
+            SELECT count(*) FROM `/Root/t1` AS t1 WHERE t1.a > 5;
+        )");
+        const auto simplifiedPlan = GetSimplifiedPlan(plan);
+        const auto* readOp = FindOperatorByStringField(simplifiedPlan, "Name", "TableRangeScan");
+        UNIT_ASSERT_C(readOp, plan);
+        UNIT_ASSERT_C(StringArrayFieldContains(*readOp, "ReadRangesKeys", "a"), plan);
+        UNIT_ASSERT_C(StringArrayFieldContains(*readOp, "ReadColumns", "a (5, +∞)"), plan);
+        UNIT_ASSERT_C(readOp->GetMapSafe().contains("A-Rows"), plan);
+        UNIT_ASSERT_C(readOp->GetMapSafe().at("A-Rows").GetDoubleSafe() > 0, plan);
+        UNIT_ASSERT_C(readOp->GetMapSafe().contains("A-Size"), plan);
+        UNIT_ASSERT_C(readOp->GetMapSafe().at("A-Size").GetDoubleSafe() > 0, plan);
     }
 
     Y_UNIT_TEST(ExplainAggregate) {
@@ -3822,6 +3977,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         UNIT_ASSERT_VALUES_EQUAL(rewrittenAggregate->KeyColumns.size(), 1);
         UNIT_ASSERT(rewrittenAggregate->KeyColumns.front() == TInfoUnit("key"));
 
+        ComputeRequiredProps(root, /*props=*/0, testContext.RboCtx, "Focused push rename");
         const auto aggregateOutput = rewrittenAggregate->GetOutputIUs();
         UNIT_ASSERT(std::find(aggregateOutput.begin(), aggregateOutput.end(), TInfoUnit("total")) != aggregateOutput.end());
         UNIT_ASSERT(std::find(aggregateOutput.begin(), aggregateOutput.end(), TInfoUnit("sum_value")) == aggregateOutput.end());

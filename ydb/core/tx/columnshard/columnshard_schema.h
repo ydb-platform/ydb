@@ -491,10 +491,10 @@ struct Schema: NIceDb::Schema {
 
         struct LockId: Column<2, NScheme::NTypeIds::Uint64> {};
 
-        // do not use tag 3 until 28-1, it was removed in 26-3
+        struct Broken_Deprecated: Column<3, NScheme::NTypeIds::Bool> {};
 
         using TKey = TableKey<TxId, LockId>;
-        using TColumns = TableColumns<TxId, LockId>;
+        using TColumns = TableColumns<TxId, LockId, Broken_Deprecated>;
     };
 
     struct TierBlobsDraft: NIceDb::Schema::Table<(ui32)ETierTables::TierBlobsDraft> {

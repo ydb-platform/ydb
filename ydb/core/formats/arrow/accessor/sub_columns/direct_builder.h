@@ -8,9 +8,13 @@
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/array/builder_base.h>
 #include <contrib/libs/xxhash/xxhash.h>
+#include <util/generic/hash_set.h>
 #include <util/string/join.h>
+
+#include <optional>
 #include <yql/essentials/types/binary_json/format.h>
 #include <yql/essentials/types/binary_json/write.h>
+
 
 namespace NKikimr::NArrow::NAccessor {
 class TSubColumnsArray;
@@ -34,6 +38,7 @@ public:
 
     void BuildSparsedAccessor(const ui32 recordsCount);
     void BuildPlainAccessor(const ui32 recordsCount);
+    void BuildDictionaryAccessor(const ui32 recordsCount);
 
     TColumnElements(const TStringBuf key)
         : KeyName(key) {
@@ -168,12 +173,27 @@ public:
         }
     };
 
-    TDictStats BuildStats(const std::vector<TColumnElements*>& keys, const TSettings& settings, const ui32 recordsCount) const {
+    // allowDictionary is set only for the separated columns (the Others store is always plain).
+    TDictStats BuildStats(
+        const std::vector<TColumnElements*>& keys, const TSettings& settings, const ui32 recordsCount, const bool allowDictionary) const {
         auto builder = TDictStats::MakeBuilder();
         for (auto&& i : keys) {
-            builder.Add(i->GetKeyName(), i->GetRecordIndexes().size(), i->GetDataSize(),
-                settings.IsSparsed(i->GetRecordIndexes().size(), recordsCount) ? IChunkedArray::EType::SparsedArray
-                                                                               : IChunkedArray::EType::Array);
+            const ui32 presentCount = i->GetRecordIndexes().size();
+            // All stored values count toward the distinct set, nulls included (a null is one value).
+            const auto enumerateValues = [i](const auto& consumer) {
+                for (const auto& v : i->GetValues()) {
+                    if (!consumer(TStringBuf(v.data(), v.size()))) {
+                        break;
+                    }
+                }
+            };
+            IChunkedArray::EType accessorType = IChunkedArray::EType::Array;
+            if (settings.IsSparsed(presentCount, recordsCount)) {
+                accessorType = IChunkedArray::EType::SparsedArray;
+            } else if (allowDictionary && settings.IsDictionary(presentCount, enumerateValues)) {
+                accessorType = IChunkedArray::EType::Dictionary;
+            }
+            builder.Add(i->GetKeyName(), presentCount, i->GetDataSize(), accessorType);
         }
         return builder.Finish();
     }

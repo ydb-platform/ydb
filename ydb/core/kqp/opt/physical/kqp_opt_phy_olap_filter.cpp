@@ -1,5 +1,4 @@
 #include "kqp_opt_phy_rules.h"
-#include "kqp_olap_filter_inspection.h"
 #include "predicate_collector.h"
 #include "kqp_opt_phy_olap_filter.h"
 
@@ -20,6 +19,18 @@ using namespace NYql;
 using namespace NYql::NNodes;
 
 namespace {
+
+TString GetOlapColumnName(TStringBuf columnName, bool stripAliasPrefix) {
+    if (!stripAliasPrefix) {
+        return TString(columnName);
+    }
+
+    const auto it = columnName.find('.');
+    if (it == TStringBuf::npos) {
+        return TString(columnName);
+    }
+    return TString(columnName.substr(it + 1));
+}
 
 TMaybeNode<TExprBase> NullNode = TMaybeNode<TExprBase>();
 TFilterOpsLevels NullFilterOpsLevels = TFilterOpsLevels(NullNode, NullNode);

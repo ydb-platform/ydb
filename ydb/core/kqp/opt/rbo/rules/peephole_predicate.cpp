@@ -29,6 +29,10 @@ bool IsSuitableToApplyPeephole(const TIntrusivePtr<IOperator>& input) {
 namespace NKikimr {
 namespace NKqp {
 
+bool TPeepholePredicate::QuickMatch(const TIntrusivePtr<IOperator>& input) const {
+    return input->Kind == EOperator::Filter;
+}
+
 TIntrusivePtr<IOperator> TPeepholePredicate::SimpleMatchAndApply(const TIntrusivePtr<IOperator>& input, TRBOContext& ctx, TPlanProps& props) {
     Y_UNUSED(props);
     if (!IsSuitableToApplyPeephole(input)) {

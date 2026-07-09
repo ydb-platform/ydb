@@ -207,6 +207,11 @@ bool ResidualIsValid(
 
 } // anonymous namespace
 
+bool TPushMapElementsThroughUnionAllRule::QuickMatch(const TIntrusivePtr<IOperator>& input) const {
+    return input->Kind == EOperator::Map &&
+        input->Children.front()->Kind == EOperator::UnionAll;
+}
+
 TIntrusivePtr<IOperator>
 TPushMapElementsThroughUnionAllRule::SimpleMatchAndApply(const TIntrusivePtr<IOperator>& input, TRBOContext& ctx, TPlanProps& props) {
     if (input->Kind != EOperator::Map) {

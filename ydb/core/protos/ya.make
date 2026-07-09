@@ -194,7 +194,6 @@ PEERDIR(
     ydb/core/protos/schemeshard
     ydb/core/scheme/protos
     ydb/core/tx/columnshard/common/protos
-    ydb/core/tx/columnshard/engines/protos
     ydb/core/tx/columnshard/engines/scheme/defaults/protos
     ydb/library/actors/protos
     ydb/library/formats/arrow/protos

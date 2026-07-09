@@ -40,7 +40,10 @@ TVChunk::TVChunk(
     , BlockSize(DefaultBlockSize)
     , BlocksCount(vChunkSize / BlockSize)
     , SyncRequestsBatchSize(syncRequestsBatchSize)
-    , LogTitle{GetCycleCount(), TLogTitle::TVChunk{.VChunkIndex = vChunkConfig.GetVChunkIndex()}}
+    , LogTitle{GetCycleCount(), TLogTitle::TVChunk{
+        .DBGIndex = vChunkConfig.GetDBGIndex(),
+        .VChunkIndex = vChunkConfig.GetVChunkIndex()
+     }}
     , VChunkConfig(vChunkConfig)
     , BlocksDirtyMap(VChunkConfig, BlockSize, BlocksCount)
     , Counters(std::move(counters))
@@ -208,6 +211,33 @@ void TVChunk::SetHostState(THostIndex hostIndex, EHostState state)
     {
         if (auto self = weakSelf.lock()) {
             return self->PrepareNewConfig(hostIndex, state);
+        }
+        return TVChunkConfig{};
+    };
+    auto apply = [weakSelf = weak_from_this()]()
+    {
+        if (auto self = weakSelf.lock()) {
+            self->ApplyConfig();
+        }
+    };
+
+    UpdateConfig(std::move(prepare), std::move(apply));
+}
+
+void TVChunk::OnHostAppended(size_t newHostCount)
+{
+    Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
+
+    // Resize synchronously - the config apply below is async, but the new host
+    // is connected and used before it runs.
+    BlocksDirtyMap.ResizeHosts(newHostCount);
+
+    auto prepare = [weakSelf = weak_from_this()]() -> TVChunkConfig
+    {
+        if (auto self = weakSelf.lock()) {
+            TVChunkConfig cfg = self->VChunkConfig;
+            cfg.AppendHost();
+            return cfg;
         }
         return TVChunkConfig{};
     };

@@ -1025,7 +1025,7 @@ struct TSetColumnConstraintOperationInfo: public TIndexBuildInfo {
     bool IsCloseToCompletion() {
         return OperationState == EOperationState::Done
             || OperationState == EOperationState::Unlocking
-            || OperationState == EOperationState::Finishing && UnlockNullWritesTxStatus == NKikimrScheme::StatusSuccess;
+            || OperationState == EOperationState::Finishing;
     }
 
     bool IsSetColumnConstraint() const override {

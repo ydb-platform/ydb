@@ -208,6 +208,14 @@ void TPartition::ProcessHasDataRequests(const TActorContext& ctx) {
 }
 
 void TPartition::FailStaleSessionReadRequests(const TString& user, const TActorContext& ctx) {
+    const auto now = ctx.Now();
+
+    auto forgetSubscription = [&](const TString& clientId) {
+        if (InitDone && !clientId.empty()) {
+            UsersInfoStorage->GetOrCreate(clientId, ctx).ForgetSubscription(GetEndOffset(), now);
+        }
+    };
+
     for (auto it = HasDataRequests.begin(); it != HasDataRequests.end();) {
         if (it->ClientId != user) {
             ++it;
@@ -227,10 +235,7 @@ void TPartition::FailStaleSessionReadRequests(const TString& user, const TActorC
             }
         }
 
-        if (InitDone) {
-            auto& userInfo = UsersInfoStorage->GetOrCreate(user, ctx);
-            userInfo.ForgetSubscription(GetEndOffset(), ctx.Now());
-        }
+        forgetSubscription(it->ClientId);
         it = HasDataRequests.erase(it);
     }
 }

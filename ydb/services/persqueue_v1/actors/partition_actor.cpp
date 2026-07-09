@@ -954,7 +954,8 @@ void TPartitionActor::Handle(TEvPersQueue::TEvResponse::TPtr& ev, const TActorCo
                 {"reason", ev->Get()->Record.GetErrorReason()});
             WaitForData = false;
             WaitDataInfly.clear();
-            SendPartitionReady(ctx);
+            const ui64 offset = Min(ReadOffset, EndOffset);
+            ctx.Send(ParentId, new TEvPQProxy::TEvPartitionReady(Partition, WTime, SizeLag, offset, EndOffset));
             return;
         }
         if (errorCode == NPersQueue::NErrorCode::WRONG_COOKIE

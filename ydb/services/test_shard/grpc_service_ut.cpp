@@ -131,7 +131,7 @@ Y_UNIT_TEST_SUITE(TestShardSetGRPCService) {
         return listDirectoryResult;
     }
 
-    void CreateTestShard(auto &channel, const TString &path, ui16 port) {
+    void CreateTestShardSet(auto &channel, const TString &path, ui16 port) {
         std::unique_ptr<Ydb::TestShardSet::V1::TestShardSetService::Stub> stub;
         stub = Ydb::TestShardSet::V1::TestShardSetService::NewStub(channel);
 
@@ -190,7 +190,7 @@ validation:
         UNIT_ASSERT_VALUES_EQUAL(result.tablet_ids_size(), 1);
     }
 
-    void DeleteTestShard(auto &channel, const TString &path) {
+    void DeleteTestShardSet(auto &channel, const TString &path) {
         std::unique_ptr<Ydb::TestShardSet::V1::TestShardSetService::Stub> stub;
         stub = Ydb::TestShardSet::V1::TestShardSetService::NewStub(channel);
 
@@ -218,13 +218,13 @@ validation:
         TString path = "/Root/mydb/";
         TString testShardPath = "/Root/mydb/mytestshard";
         MakeDirectory(channel, path);
-        CreateTestShard(channel, testShardPath, grpc);
+        CreateTestShardSet(channel, testShardPath, grpc);
 
         Ydb::Scheme::ListDirectoryResult listDirectoryResult = ListDirectory(channel, path);
         UNIT_ASSERT_VALUES_EQUAL(listDirectoryResult.self().name(), "mydb");
         UNIT_ASSERT_VALUES_EQUAL(listDirectoryResult.children(0).name(), "mytestshard");
 
-        DeleteTestShard(channel, testShardPath);
+        DeleteTestShardSet(channel, testShardPath);
         listDirectoryResult = ListDirectory(channel, path);
         UNIT_ASSERT_VALUES_EQUAL(listDirectoryResult.self().name(), "mydb");
         UNIT_ASSERT_VALUES_EQUAL(listDirectoryResult.children_size(), 0);

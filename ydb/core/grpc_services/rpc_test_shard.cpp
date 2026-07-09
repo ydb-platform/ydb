@@ -17,7 +17,7 @@ using namespace NActors;
 
 class TYamlParser {
 public:
-    bool Parse(const TString& yaml, NKikimrClient::TTestShardControlRequest::TCmdInitialize& cmd, TString& errorMsg) {
+    static bool Parse(const TString& yaml, NKikimrClient::TTestShardControlRequest::TCmdInitialize& cmd, TString& errorMsg) {
         try {
             auto doc = NFyaml::TDocument::Parse(yaml);
             return ParseYamlConfig(doc.Root(), cmd, errorMsg);
@@ -28,7 +28,7 @@ public:
     }
 
 private:
-    bool ValidateYamlKeys(const auto& mapping, const TString& sectionName,
+    static bool ValidateYamlKeys(const auto& mapping, const TString& sectionName,
                          const THashSet<TString>& validKeys, TString& errorMsg) {
         for (const auto& pair : mapping) {
             TString keyStr{pair.Key().Scalar()};
@@ -46,7 +46,7 @@ private:
         return true;
     }
 
-    bool ParseWorkloadSection(const NFyaml::TNodeRef& workloadNode, NKikimrClient::TTestShardControlRequest::TCmdInitialize& cmd, TString& errorMsg) {
+    static bool ParseWorkloadSection(const NFyaml::TNodeRef& workloadNode, NKikimrClient::TTestShardControlRequest::TCmdInitialize& cmd, TString& errorMsg) {
         auto workload = workloadNode.Map();
         const THashSet<TString> validWorkloadKeys = {"sizes", "write", "restart", "patch_fraction_ppm"};
         if (!ValidateYamlKeys(workload, "workload", validWorkloadKeys, errorMsg)) {
@@ -106,7 +106,7 @@ private:
         return true;
     }
 
-    bool ParseLimitsSection(const NFyaml::TNodeRef& limitsNode, NKikimrClient::TTestShardControlRequest::TCmdInitialize& cmd, TString& errorMsg) {
+    static bool ParseLimitsSection(const NFyaml::TNodeRef& limitsNode, NKikimrClient::TTestShardControlRequest::TCmdInitialize& cmd, TString& errorMsg) {
         auto limits = limitsNode.Map();
         const THashSet<TString> validLimitsKeys = {"data", "concurrency"};
         if (!ValidateYamlKeys(limits, "limits", validLimitsKeys, errorMsg)) {
@@ -138,7 +138,7 @@ private:
         return true;
     }
 
-    bool ParseTimingSection(const NFyaml::TNodeRef& timingNode, NKikimrClient::TTestShardControlRequest::TCmdInitialize& cmd, TString& errorMsg) {
+    static bool ParseTimingSection(const NFyaml::TNodeRef& timingNode, NKikimrClient::TTestShardControlRequest::TCmdInitialize& cmd, TString& errorMsg) {
         auto timing = timingNode.Map();
         const THashSet<TString> validTimingKeys = {"delay_start", "reset_on_full", "stall_counter"};
         if (!ValidateYamlKeys(timing, "timing", validTimingKeys, errorMsg)) {
@@ -152,7 +152,7 @@ private:
         return true;
     }
 
-    bool ParseValidationSection(const NFyaml::TNodeRef& validationNode, NKikimrClient::TTestShardControlRequest::TCmdInitialize& cmd, TString& errorMsg) {
+    static bool ParseValidationSection(const NFyaml::TNodeRef& validationNode, NKikimrClient::TTestShardControlRequest::TCmdInitialize& cmd, TString& errorMsg) {
         auto validation = validationNode.Map();
         const THashSet<TString> validValidationKeys = {"server", "after_bytes"};
         if (!ValidateYamlKeys(validation, "validation", validValidationKeys, errorMsg)) {
@@ -179,7 +179,7 @@ private:
         return true;
     }
 
-    bool ParseTracingSection(const NFyaml::TNodeRef& tracingNode, NKikimrClient::TTestShardControlRequest::TCmdInitialize& cmd, TString& errorMsg) {
+    static bool ParseTracingSection(const NFyaml::TNodeRef& tracingNode, NKikimrClient::TTestShardControlRequest::TCmdInitialize& cmd, TString& errorMsg) {
         auto tracing = tracingNode.Map();
         const THashSet<TString> validTracingKeys = {"put_fraction_ppm", "verbosity"};
         if (!ValidateYamlKeys(tracing, "tracing", validTracingKeys, errorMsg)) {
@@ -196,7 +196,7 @@ private:
         return true;
     }
 
-    bool ParseYamlConfig(const NFyaml::TNodeRef& root, NKikimrClient::TTestShardControlRequest::TCmdInitialize& cmd, TString& errorMsg) {
+    static bool ParseYamlConfig(const NFyaml::TNodeRef& root, NKikimrClient::TTestShardControlRequest::TCmdInitialize& cmd, TString& errorMsg) {
         try {
             if (root.Type() != NFyaml::ENodeType::Mapping) {
                 errorMsg = "Config root must be a YAML map";
@@ -285,19 +285,20 @@ public:
         op->SetName(name);
         op->SetCount(req->count());
 
-        TYamlParser parser;
         NKikimrClient::TTestShardControlRequest::TCmdInitialize cmd;
         TString errorMsg;
-        if (!parser.Parse(req->config(), cmd, errorMsg)) {
+        if (!TYamlParser::Parse(req->config(), cmd, errorMsg)) {
             Request_->RaiseIssue(NYql::TIssue(errorMsg));
             return Reply(Ydb::StatusIds::BAD_REQUEST, ctx);
         }
         *op->MutableCmdInitialize() = cmd;
 
-        auto* storageConfig = op->MutableStorageConfig();
-        for (const auto& channel : req->channels()) {
-            auto* settings = storageConfig->AddChannel();
-            settings->SetPreferredPoolKind(channel);
+        if (req->channels_size() > 0) {
+            auto* storageConfig = op->MutableStorageConfig();
+            for (const auto& channel : req->channels()) {
+                auto* settings = storageConfig->AddChannel();
+                settings->SetPreferredPoolKind(channel);
+            }
         }
 
         ctx.Send(MakeTxProxyID(), proposeRequest.release());

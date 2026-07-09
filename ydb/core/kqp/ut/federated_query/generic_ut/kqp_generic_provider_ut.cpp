@@ -40,6 +40,7 @@ namespace NKikimr::NKqp {
         PostgreSQL,
         ClickHouse,
         Ydb,
+        Yt,
         IcebergHiveMetastoreBasic,
         IcebergHiveMetastoreSa,
         IcebergHiveMetastoreToken,
@@ -56,6 +57,8 @@ namespace NKikimr::NKqp {
                 return TConnectorClientMock::TClickHouseDataSourceInstanceBuilder<>().GetResult();
             case EProviderType::Ydb:
                 return TConnectorClientMock::TYdbDataSourceInstanceBuilder<>().GetResult();
+            case EProviderType::Yt:
+                return TConnectorClientMock::TYtDataSourceInstanceBuilder<>().GetResult();
             case EProviderType::IcebergHiveMetastoreBasic:
                 return NTestUtils::CreateIcebergBasic().CreateDataSourceForHiveMetastore();
             case EProviderType::IcebergHiveMetastoreSa:
@@ -79,6 +82,8 @@ namespace NKikimr::NKqp {
                 return CreateClickHouseExternalDataSource(kikimr);
             case EProviderType::Ydb:
                 return CreateYdbExternalDataSource(kikimr);
+            case EProviderType::Yt:
+                return CreateYtExternalDataSource(kikimr);
             case EProviderType::IcebergHiveMetastoreBasic:
                 return NTestUtils::CreateIcebergBasic()
                     .ExecuteCreateHiveMetastoreExternalDataSource(kikimr);
@@ -121,6 +126,7 @@ namespace NKikimr::NKqp {
         config.AddAvailableExternalDataSources("MySQL");
         config.AddAvailableExternalDataSources("Ydb");
         config.AddAvailableExternalDataSources("Iceberg");
+        config.AddAvailableExternalDataSources("YT");
         return appConfig;
     }
 
@@ -300,6 +306,10 @@ namespace NKikimr::NKqp {
 
         Y_UNIT_TEST(YdbManagedSelectAll) {
             TestSelectAllFields(EProviderType::Ydb);
+        }
+
+        Y_UNIT_TEST(YtSelectAll) {
+            TestSelectAllFields(EProviderType::Yt);
         }
 
         Y_UNIT_TEST(IcebergHiveBasicSelectAll) {
@@ -532,6 +542,10 @@ namespace NKikimr::NKqp {
             TestSelectCount(EProviderType::Ydb);
         }
 
+        Y_UNIT_TEST(YtSelectCount) {
+            TestSelectCount(EProviderType::Yt);
+        }
+
         Y_UNIT_TEST(IcebergHiveBasicSelectCount) {
             TestSelectCount(EProviderType::IcebergHiveMetastoreBasic);
         }
@@ -684,6 +698,274 @@ namespace NKikimr::NKqp {
 
         Y_UNIT_TEST(YdbFilterPushdown) {
             TestFilterPushdown(EProviderType::Ydb);
+        }
+
+        Y_UNIT_TEST(YtFilterPushdown) {
+            TestFilterPushdown(EProviderType::Yt);
+        }
+
+        ///
+        /// Test a read query against a YT external table returning several
+        /// columns with actual data. The external table is read in full
+        /// through the generic read path (DescribeTable + ListSplits +
+        /// ReadSplits) and the returned values are verified row by row.
+        ///
+        Y_UNIT_TEST(YtReadTable) {
+            // prepare mock
+            auto clientMock = std::make_shared<TConnectorClientMock>();
+
+            const NYql::TGenericDataSourceInstance dataSourceInstance = MakeDataSourceInstance(EProviderType::Yt);
+
+            // step 1: DescribeTable
+            // clang-format off
+            clientMock->ExpectDescribeTable()
+                .DataSourceInstance(dataSourceInstance)
+                .TypeMappingSettings(MakeTypeMappingSettings(NYql::NConnector::NApi::STRING_FORMAT))
+                .Response()
+                    .Column("col1", Ydb::Type::UINT16)
+                    .Column("col2", Ydb::Type::DOUBLE);
+
+            // step 2: ListSplits
+            clientMock->ExpectListSplits()
+                .Select()
+                    .DataSourceInstance(dataSourceInstance)
+                    .What()
+                        .Column("col1", Ydb::Type::UINT16)
+                        .Column("col2", Ydb::Type::DOUBLE)
+                        .Done()
+                    .Done()
+                .Result()
+                    .AddResponse(NewSuccess())
+                        .Description("some binary description")
+                        .Select()
+                            .DataSourceInstance(dataSourceInstance)
+                            .What()
+                                .Column("col1", Ydb::Type::UINT16)
+                                .Column("col2", Ydb::Type::DOUBLE);
+
+            // step 3: ReadSplits
+            std::vector<ui16> col1Data = {10, 20, 30};
+            std::vector<double> col2Data = {1.5, 2.5, 3.5};
+            clientMock->ExpectReadSplits()
+                .Filtering(NYql::NConnector::NApi::TReadSplitsRequest::FILTERING_OPTIONAL)
+                .Split()
+                    .Description("some binary description")
+                    .Select()
+                        .DataSourceInstance(dataSourceInstance)
+                        .What()
+                            .Column("col1", Ydb::Type::UINT16)
+                            .Column("col2", Ydb::Type::DOUBLE)
+                            .Done()
+                        .Done()
+                    .Done()
+                .Result()
+                    .AddResponse(MakeRecordBatch(
+                        MakeArray<arrow::UInt16Builder>("col1", col1Data, arrow::uint16()),
+                        MakeArray<arrow::DoubleBuilder>("col2", col2Data, arrow::float64())),
+                        NewSuccess());
+            // clang-format on
+
+            // prepare database resolver mock
+            auto databaseAsyncResolverMock = MakeDatabaseAsyncResolver(EProviderType::Yt);
+
+            // run test
+            auto appConfig = CreateDefaultAppConfig();
+            auto s3ActorsFactory = NYql::NDq::CreateS3ActorsFactory();
+            auto kikimr = MakeKikimrRunner(false, clientMock, databaseAsyncResolverMock, appConfig, s3ActorsFactory,
+                {.CredentialsFactory = CreateCredentialsFactory()});
+
+            CreateExternalDataSource(EProviderType::Yt, kikimr);
+
+            const TString query = fmt::format(
+                R"(
+                SELECT col1, col2 FROM {data_source_name}.{table_name};
+            )",
+                "data_source_name"_a = DEFAULT_DATA_SOURCE_NAME,
+                "table_name"_a = DEFAULT_TABLE);
+
+            auto db = kikimr->GetQueryClient();
+            auto scriptExecutionOperation = db.ExecuteScript(query).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(scriptExecutionOperation.Status().GetStatus(), EStatus::SUCCESS, scriptExecutionOperation.Status().GetIssues().ToString());
+            UNIT_ASSERT(!scriptExecutionOperation.Metadata().ExecutionId.empty());
+
+            NYdb::NQuery::TScriptExecutionOperation readyOp = WaitScriptExecutionOperation(scriptExecutionOperation.Id(), kikimr->GetDriver());
+            UNIT_ASSERT_C(readyOp.Metadata().ExecStatus == EExecStatus::Completed, readyOp.Status().GetIssues().ToString());
+            TFetchScriptResultsResult results = db.FetchScriptResults(scriptExecutionOperation.Id(), 0).ExtractValueSync();
+            UNIT_ASSERT_C(results.IsSuccess(), results.GetIssues().ToString());
+
+            TResultSetParser resultSet(results.ExtractResultSet());
+            UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnsCount(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(resultSet.RowsCount(), col1Data.size());
+
+            // check every row
+            for (size_t i = 0; i < col1Data.size(); ++i) {
+                resultSet.TryNextRow();
+                UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnParser(0).GetUint16(), col1Data[i]);
+                UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnParser(1).GetDouble(), col2Data[i]);
+            }
+        }
+
+        ///
+        /// Test a map join of a local table against a YT external table.
+        /// The external table is read in full through the generic read path
+        /// (DescribeTable + ListSplits + ReadSplits) and the join is performed
+        /// against a local in-memory table.
+        ///
+        Y_UNIT_TEST(YtJoin) {
+            const EProviderType providerType = EProviderType::Yt;
+
+            // prepare mock
+            auto clientMock = std::make_shared<TConnectorClientMock>();
+
+            const NYql::TGenericDataSourceInstance dataSourceInstance = MakeDataSourceInstance(providerType);
+
+            // clang-format off
+            // step 1: DescribeTable
+            clientMock->ExpectDescribeTable()
+                .DataSourceInstance(dataSourceInstance)
+                .TypeMappingSettings(MakeTypeMappingSettings(NYql::NConnector::NApi::STRING_FORMAT))
+                .Response()
+                    .Column("col1", Ydb::Type::UINT16);
+
+            // step 2: ListSplits
+            clientMock->ExpectListSplits()
+                .Select()
+                    .DataSourceInstance(dataSourceInstance)
+                    .What()
+                        .Column("col1", Ydb::Type::UINT16)
+                        .Done()
+                    .Done()
+                .Result()
+                    .AddResponse(NewSuccess())
+                        .Description("some binary description")
+                        .Select()
+                            .DataSourceInstance(dataSourceInstance)
+                            .What()
+                                .Column("col1", Ydb::Type::UINT16);
+
+            // step 3: ReadSplits
+            std::vector<ui16> colData = {10, 20, 30, 40, 50};
+            clientMock->ExpectReadSplits()
+                .Filtering(NYql::NConnector::NApi::TReadSplitsRequest::FILTERING_OPTIONAL)
+                .Split()
+                    .Description("some binary description")
+                    .Select()
+                        .DataSourceInstance(dataSourceInstance)
+                        .What()
+                            .Column("col1", Ydb::Type::UINT16)
+                            .Done()
+                        .Done()
+                    .Done()
+                .Result()
+                    .AddResponse(
+                        MakeRecordBatch<arrow::UInt16Builder>("col1", colData, arrow::uint16()),
+                        NewSuccess());
+            // clang-format on
+
+            // prepare database resolver mock
+            auto databaseAsyncResolverMock = MakeDatabaseAsyncResolver(providerType);
+
+            // run test
+            auto appConfig = CreateDefaultAppConfig();
+            auto s3ActorsFactory = NYql::NDq::CreateS3ActorsFactory();
+            auto kikimr = MakeKikimrRunner(false, clientMock, databaseAsyncResolverMock, appConfig, s3ActorsFactory,
+                {.CredentialsFactory = CreateCredentialsFactory()});
+
+            CreateExternalDataSource(providerType, kikimr);
+
+            // Join a local (in-memory) table against the external YT table.
+            // Local keys {10, 30} match two of the external rows.
+            const TString query = fmt::format(
+                R"(
+                $local = SELECT * FROM AS_TABLE([
+                    <|k: CAST(10 AS Uint16)|>,
+                    <|k: CAST(30 AS Uint16)|>
+                ]);
+                SELECT l.k AS k
+                FROM $local AS l
+                INNER JOIN {data_source_name}.{table_name} AS r
+                ON l.k = r.col1
+                ORDER BY k;
+            )",
+                "data_source_name"_a = DEFAULT_DATA_SOURCE_NAME,
+                "table_name"_a = DEFAULT_TABLE);
+
+            auto db = kikimr->GetQueryClient();
+            auto queryResult = db.ExecuteQuery(query, TTxControl::BeginTx().CommitTx(), TExecuteQuerySettings()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(queryResult.GetStatus(), EStatus::SUCCESS, queryResult.GetIssues().ToString());
+
+            TResultSetParser resultSet(queryResult.GetResultSetParser(0));
+            UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnsCount(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(resultSet.RowsCount(), 2);
+
+            std::vector<ui16> expected = {10, 30};
+            MATCH_RESULT_WITH_INPUT(expected, resultSet, GetUint16);
+        }
+
+        ///
+        /// Test an INSERT INTO a YT external table.
+        /// The write is routed through the generic sink down to the mock's
+        /// WriteRows override; the test asserts on the written table name,
+        /// cluster and row contents.
+        ///
+        Y_UNIT_TEST(YtInsert) {
+            const EProviderType providerType = EProviderType::Yt;
+
+            // prepare mock
+            auto clientMock = std::make_shared<TConnectorClientMock>();
+
+            const NYql::TGenericDataSourceInstance dataSourceInstance = MakeDataSourceInstance(providerType);
+
+            // The write path fetches table metadata (via DescribeTable) to build
+            // the sink settings that carry the data source instance.
+            // clang-format off
+            clientMock->ExpectDescribeTable()
+                .DataSourceInstance(dataSourceInstance)
+                .TypeMappingSettings(MakeTypeMappingSettings(NYql::NConnector::NApi::STRING_FORMAT))
+                .Response()
+                    .Column("col1", Ydb::Type::UINT16);
+            // clang-format on
+
+            // prepare database resolver mock
+            auto databaseAsyncResolverMock = MakeDatabaseAsyncResolver(providerType);
+
+            // run test
+            auto appConfig = CreateDefaultAppConfig();
+            auto s3ActorsFactory = NYql::NDq::CreateS3ActorsFactory();
+            auto kikimr = MakeKikimrRunner(false, clientMock, databaseAsyncResolverMock, appConfig, s3ActorsFactory,
+                {.CredentialsFactory = CreateCredentialsFactory()});
+
+            CreateExternalDataSource(providerType, kikimr);
+
+            const TString query = fmt::format(
+                R"(
+                INSERT INTO {data_source_name}.{table_name}
+                SELECT * FROM AS_TABLE([
+                    <|col1: CAST(10 AS Uint16)|>,
+                    <|col1: CAST(20 AS Uint16)|>,
+                    <|col1: CAST(30 AS Uint16)|>
+                ]);
+            )",
+                "data_source_name"_a = DEFAULT_DATA_SOURCE_NAME,
+                "table_name"_a = DEFAULT_TABLE);
+
+            auto db = kikimr->GetQueryClient();
+            auto queryResult = db.ExecuteQuery(query, TTxControl::BeginTx().CommitTx(), TExecuteQuerySettings()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(queryResult.GetStatus(), EStatus::SUCCESS, queryResult.GetIssues().ToString());
+
+            // Assert the write reached the mock with the expected target.
+            {
+                TGuard<TMutex> guard(clientMock->WrittenMutex_);
+                UNIT_ASSERT_VALUES_EQUAL(clientMock->Written.Table, DEFAULT_TABLE);
+                UNIT_ASSERT_VALUES_EQUAL(clientMock->Written.Cluster, DEFAULT_YT_CLUSTER);
+
+                size_t totalRows = 0;
+                for (const auto& batch : clientMock->Written.Batches) {
+                    UNIT_ASSERT(batch);
+                    totalRows += batch->num_rows();
+                }
+                UNIT_ASSERT_VALUES_EQUAL(totalRows, 3);
+            }
         }
 
         Y_UNIT_TEST(IcebergHiveBasicFilterPushdown) {

@@ -18,6 +18,7 @@
 #include <ydb/library/yql/providers/common/pushdown/physical_opt.h>
 #include <ydb/library/yql/providers/common/pushdown/collection.h>
 #include <ydb/library/yql/dq/expr_nodes/dq_expr_nodes.h>
+#include <ydb/library/yql/dq/opt/dq_opt.h>
 
 namespace NYql {
 
@@ -60,6 +61,7 @@ namespace NYql {
                 AddHandler(0, &TCoNarrowMap::Match, HNDL(ReadZeroColumns));
                 AddHandler(0, &TCoFlatMap::Match, HNDL(PushFilterToReadTable));
                 AddHandler(0, &TCoFlatMap::Match, HNDL(PushFilterToDqSourceWrap));
+                AddHandler(0, &TGenInsert::Match, HNDL(GenInsert));
 #undef HNDL
             }
 
@@ -207,6 +209,102 @@ namespace NYql {
                         .Build()
                     .Done();
                 // clang-format on
+            }
+
+            TMaybeNode<TExprBase> GenInsert(TExprBase node, TExprContext& ctx, IOptimizationContext&, const TGetParents& getParents) const {
+                const auto insert = node.Cast<TGenInsert>();
+                const auto input = insert.Input();
+
+                const auto maybeUnionAll = input.Maybe<TDqCnUnionAll>();
+                const bool pureDqExpr = NDq::IsDqPureExpr(input);
+                if (!pureDqExpr && !maybeUnionAll) {
+                    // Wait until the input becomes a DQ connection or a pure expression.
+                    return node;
+                }
+
+                if (maybeUnionAll) {
+                    const auto& parents = *getParents();
+                    if (!NDq::IsSingleConsumerConnection(maybeUnionAll.Cast(), parents)) {
+                        // Wait until the union is split with DqReplicate.
+                        return node;
+                    }
+                }
+
+                const auto tokenName = TString("cluster:default_") += insert.DataSink().Cluster().StringValue();
+                const auto* rowType = input.Ref().GetTypeAnn()->Cast<TListExprType>()->GetItemType();
+
+                // clang-format off
+                auto sink = Build<TDqSink>(ctx, node.Pos())
+                    .DataSink(insert.DataSink())
+                    .Index().Value("0").Build()
+                    .Settings<TGenSinkSettings>()
+                        .World(insert.World())
+                        .Cluster(insert.DataSink().Cluster())
+                        .Table(insert.Table().Name())
+                        .Token<TCoSecureParam>()
+                            .Name().Build(tokenName)
+                            .Build()
+                        .RowType(ExpandType(node.Pos(), *rowType, ctx))
+                        .Build()
+                    .Done();
+                // clang-format on
+
+                if (pureDqExpr) {
+                    // clang-format off
+                    auto stage = Build<TDqStage>(ctx, node.Pos())
+                        .Inputs().Build()
+                        .Program()
+                            .Args({})
+                            .Body<TCoToFlow>()
+                                .Input(input)
+                                .Build()
+                            .Build()
+                        .Outputs<TDqStageOutputsList>()
+                            .Add(sink)
+                            .Build()
+                        .Settings().Build()
+                        .Done();
+                    // clang-format on
+
+                    auto dqResult = Build<TCoNth>(ctx, node.Pos())
+                        .Tuple(stage)
+                        .Index().Build("0")
+                        .Done();
+
+                    return TExprBase(ctx.NewList(node.Pos(), {dqResult.Ptr()}));
+                }
+
+                // Input is a DqCnUnionAll: build a passthrough stage consuming it and carrying the sink.
+                const auto rowArgument = Build<TCoArgument>(ctx, node.Pos())
+                    .Name("row")
+                    .Done();
+
+                // clang-format off
+                auto stage = Build<TDqStage>(ctx, node.Pos())
+                    .Inputs()
+                        .Add<TDqCnMap>()
+                            .Output(maybeUnionAll.Cast().Output())
+                            .Build()
+                        .Build()
+                    .Program()
+                        .Args({rowArgument})
+                        .Body<TCoToFlow>()
+                            .Input(rowArgument)
+                            .Build()
+                        .Build()
+                    .Outputs<TDqStageOutputsList>()
+                        .Add(sink)
+                        .Build()
+                    .Settings().Build()
+                    .Done();
+                // clang-format on
+
+                auto dqResult = Build<TCoNth>(ctx, node.Pos())
+                    .Tuple(stage)
+                    .Index().Build("0")
+                    .Done();
+
+                return TExprBase(ctx.NewList(node.Pos(), {dqResult.Ptr()}));
             }
 
         private:

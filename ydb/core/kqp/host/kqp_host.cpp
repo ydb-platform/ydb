@@ -20,6 +20,7 @@
 #include <ydb/library/yql/providers/generic/expr_nodes/yql_generic_expr_nodes.h>
 #include <ydb/library/yql/providers/generic/provider/yql_generic_provider.h>
 #include <ydb/library/yql/providers/generic/provider/yql_generic_state.h>
+#include <ydb/library/yql/providers/generic/connector/libcpp/yt_client.h>
 
 #include <yql/essentials/core/yql_opt_proposed_by_data.h>
 #include <yql/essentials/core/services/yql_plan.h>
@@ -1952,7 +1953,19 @@ private:
             return;
         }
 
-        if (!FederatedQuerySetup->ConnectorClient) {
+        // The generic provider can be served either by the gRPC connector client
+        // (fq-connector-go) or by the YT-native client. Build a YT-native client when the
+        // generic gateway config declares at least one YT cluster.
+        NYql::NConnector::IClient::TPtr ytClient = NYql::NConnector::MakeYtClient(FederatedQuerySetup->GenericGatewayConfig);
+        // for (const auto& cluster : FederatedQuerySetup->GenericGatewayConfig.GetClusterMapping()) {
+        //     if (cluster.GetKind() == NYql::EGenericDataSourceKind::YT) {
+        //         ytClient = NYql::NConnector::MakeYtClient(FederatedQuerySetup->GenericGatewayConfig);
+        //         break;
+        //     }
+        // }
+
+        // Initialize the provider when either transport is available.
+        if (!FederatedQuerySetup->ConnectorClient && !ytClient) {
             return;
         }
 
@@ -1962,7 +1975,8 @@ private:
             FederatedQuerySetup->DatabaseAsyncResolver,
             FederatedQuerySetup->CredentialsFactory,
             FederatedQuerySetup->ConnectorClient,
-            FederatedQuerySetup->GenericGatewayConfig
+            FederatedQuerySetup->GenericGatewayConfig,
+            ytClient
         );
 
         TypesCtx->AddDataSource(NYql::GenericProviderName, NYql::CreateGenericDataSource(state));

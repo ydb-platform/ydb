@@ -279,7 +279,11 @@ TIssues FillDataSourceOptions(NConnector::NApi::TDescribeTableRequest& request,
             return SetMongoDBOptions(*options, clusterConfig);
         } break;
         case NYql::EGenericDataSourceKind::OPENSEARCH:
-            break; 
+            break;
+        case NYql::EGenericDataSourceKind::YT: {
+            auto* options = request.mutable_data_source_instance()->mutable_yt_options();
+            options->set_cluster(clusterConfig.GetName());
+        } break;
         default:
             throw yexception() << "Unexpected data source kind: '"
                                << NYql::EGenericDataSourceKind_Name(dataSourceKind) << "'";
@@ -323,7 +327,16 @@ IGraphTransformer::TStatus TGenericDescribeTableTransformer::DoTransform(TExprNo
         return false;
     });
 
-    if (reads.empty()) {
+    // Write-target tables (still in `Write!` form at this step) must be described too,
+    // so that their schema / data source instance is available to the write path.
+    const auto& writes = FindNodes(input, [&](const TExprNode::TPtr& node) {
+        if (const auto maybeWrite = TMaybeNode<TGenWrite>(node)) {
+            return maybeWrite.Cast().DataSink().Category().Value() == GenericProviderName;
+        }
+        return false;
+    });
+
+    if (reads.empty() && writes.empty()) {
         return TStatus::Ok;
     }
 
@@ -365,6 +378,36 @@ IGraphTransformer::TStatus TGenericDescribeTableTransformer::DoTransform(TExprNo
 
         if (pendingRequests.insert(tableAddress).second) {
             YQL_CLOG(INFO, ProviderGeneric) << "Describe table for: `" << tableAddress.ToString() << "`";
+        }
+    }
+
+    // Iterate over write targets, create Describe requests for unique tables
+    for (const auto& w : writes) {
+        const TGenWrite write(w);
+
+        const auto& keyNode = *write.Ref().Child(2);
+        if (!keyNode.IsCallable("Key") || keyNode.ChildrenSize() < 1) {
+            ctx.AddError(TIssue(ctx.GetPosition(keyNode.Pos()), "Expected key"));
+            return TStatus::Error;
+        }
+
+        const auto* tagNode = keyNode.Child(0);
+        if (tagNode->ChildrenSize() != 2U || !tagNode->Child(0)->IsAtom("table") ||
+            !tagNode->Child(1)->IsCallable(TCoString::CallableName())) {
+            ctx.AddError(TIssue(ctx.GetPosition(keyNode.Pos()), "Expected single table name"));
+            return TStatus::Error;
+        }
+
+        const auto clusterName = write.DataSink().Cluster().StringValue();
+        const auto tableName = TString(tagNode->Child(1)->Head().Content());
+        auto tableAddress = TGenericState::TTableAddress(clusterName, tableName);
+
+        if (State_->HasTable(tableAddress)) {
+            continue;
+        }
+
+        if (pendingRequests.insert(tableAddress).second) {
+            YQL_CLOG(INFO, ProviderGeneric) << "Describe table for write: `" << tableAddress.ToString() << "`";
         }
     }
 
@@ -416,10 +459,11 @@ TIssues TGenericDescribeTableTransformer::DescribeTableFromConnector(const TGene
     handles.emplace_back(promise.GetFuture());
     desc->DataSourceInstance = request.data_source_instance();
 
-    Y_ENSURE(State_->GenericClient);
+    const auto& client = State_->GetClientForKind(request.data_source_instance().kind());
+    Y_ENSURE(client);
 
-    State_->GenericClient->DescribeTable(request, State_->Configuration->DescribeTableTimeout).Subscribe(
-    [desc, tableAddress, promise, client = State_->GenericClient](const NConnector::TDescribeTableAsyncResult& f1) mutable {
+    client->DescribeTable(request, State_->Configuration->DescribeTableTimeout).Subscribe(
+    [desc, tableAddress, promise, client](const NConnector::TDescribeTableAsyncResult& f1) mutable {
         NConnector::TDescribeTableAsyncResult f2(f1);
         auto result = f2.ExtractValueSync();
 
@@ -549,6 +593,54 @@ IGraphTransformer::TStatus TGenericDescribeTableTransformer::DoApplyAsyncChanges
         }
         return false;
     });
+
+    const auto& writes = FindNodes(input, [&](const TExprNode::TPtr& node) {
+        if (const auto maybeWrite = TMaybeNode<TGenWrite>(node)) {
+            return maybeWrite.Cast().DataSink().Category().Value() == GenericProviderName;
+        }
+        return false;
+    });
+
+    if (!reads.size() && !writes.size()) {
+        return TStatus::Ok;
+    }
+
+    // Register write-target table metadata into the provider state. Write nodes
+    // are not remapped here (they are rewritten later by the datasink RewriteIO).
+    for (const auto& w : writes) {
+        const TGenWrite write(w);
+        const auto clusterName = write.DataSink().Cluster().StringValue();
+        const auto& keyNode = *write.Ref().Child(2);
+        const auto tableName = TString(keyNode.Child(0)->Child(1)->Head().Content());
+        const TGenericState::TTableAddress tableAddress{clusterName, tableName};
+
+        if (State_->HasTable(tableAddress)) {
+            continue;
+        }
+
+        auto iter = TableDescriptions_.find(tableAddress);
+        if (iter == TableDescriptions_.end()) {
+            ctx.AddError(TIssue(ctx.GetPosition(write.Pos()), TStringBuilder()
+                << "Connector response not found for table " << tableAddress.ToString()));
+            return TStatus::Error;
+        }
+
+        auto& result = iter->second;
+        if (result->Issues) {
+            for (const auto& issue : result->Issues) {
+                ctx.AddError(issue);
+            }
+            return TStatus::Error;
+        }
+
+        Y_ENSURE(result->Schema);
+
+        TGenericState::TTableMeta tableMeta;
+        tableMeta.Schema = *result->Schema;
+        tableMeta.DataSourceInstance = result->DataSourceInstance;
+        ParseTableMeta(ctx, ctx.GetPosition(write.Pos()), tableAddress, tableMeta);
+        State_->AddTable(tableAddress, std::move(tableMeta));
+    }
 
     if (!reads.size()) {
         return TStatus::Ok;

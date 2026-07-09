@@ -19,4 +19,9 @@ namespace NYql::NConnector::NTest {
 
     extern const TString DEFAULT_YDB_HOST = "localhost";
     extern const TString DEFAULT_YDB_ENDPOINT = TStringBuilder() << DEFAULT_YDB_HOST << ':' << DEFAULT_YDB_PORT;
+
+    extern const TString DEFAULT_YT_TOKEN = "yt_token_value";
+    // The metadata loader sets yt_options.cluster to the fully-qualified
+    // cluster config name, which for an external data source is "/Root/<name>".
+    extern const TString DEFAULT_YT_CLUSTER = TStringBuilder() << "/Root/" << DEFAULT_DATA_SOURCE_NAME;
 } // namespace NYql::NConnector::NTest

@@ -161,6 +161,33 @@ namespace NYql::NConnector::NTest {
         UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
     }
 
+    void CreateYtExternalDataSource(
+        const std::shared_ptr<NKikimr::NKqp::TKikimrRunner>& kikimr,
+        const TString& dataSourceName,
+        const TString& token,
+        const TString& cluster)
+    {
+        auto tc = kikimr->GetTableClient();
+        auto session = tc.CreateSession().GetValueSync().GetSession();
+        const TString query = fmt::format(
+            R"(
+            CREATE SECRET {data_source_name}_token WITH (value="{token}");
+
+            CREATE EXTERNAL DATA SOURCE {data_source_name} WITH (
+                SOURCE_TYPE="{source_type}",
+                AUTH_METHOD="TOKEN",
+                TOKEN_SECRET_PATH="{data_source_name}_token",
+                CLUSTER="{cluster}"
+            );
+        )",
+            "data_source_name"_a = dataSourceName,
+            "token"_a = token,
+            "source_type"_a = ToString(NYql::EDatabaseType::YT),
+            "cluster"_a = cluster);
+        auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+        UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+    }
+
     std::shared_ptr<arrow::RecordBatch> MakeEmptyRecordBatch(size_t rowsCount) {
         return arrow::RecordBatch::Make(
             std::make_shared<arrow::Schema>(arrow::FieldVector()),

@@ -187,10 +187,11 @@ struct TFakeGenericClient: public NConnector::IClient {
 
 class TBuildDqSourceSettingsTransformer: public TOptimizeTransformerBase {
 public:
-    explicit TBuildDqSourceSettingsTransformer(TTypeAnnotationContext* types, Generic::TSource* dqSourceSettings, bool* dqSourceSettingsWereBuilt)
+    explicit TBuildDqSourceSettingsTransformer(TTypeAnnotationContext* types, Generic::TSource* dqSourceSettings, bool* dqSourceSettingsWereBuilt, const TString& expectedSourceType = "PostgreSqlGeneric")
         : TOptimizeTransformerBase(types, NLog::EComponent::ProviderGeneric, {})
         , DqSourceSettings_(dqSourceSettings)
         , DqSourceSettingsWereBuilt_(dqSourceSettingsWereBuilt)
+        , ExpectedSourceType_(expectedSourceType)
     {
         AddHandler(0, TCoRight::Match, "BuildGenericDqSourceSettings", Hndl(&TBuildDqSourceSettingsTransformer::BuildDqSource));
     }
@@ -224,7 +225,7 @@ public:
         ::google::protobuf::Any settings;
         TString sourceType;
         dqIntegration->FillSourceSettings(*dqSourceNode, settings, sourceType, 1, ctx);
-        UNIT_ASSERT_STRINGS_EQUAL(sourceType, "PostgreSqlGeneric");
+        UNIT_ASSERT_STRINGS_EQUAL(sourceType, ExpectedSourceType_);
         UNIT_ASSERT(settings.Is<Generic::TSource>());
         settings.UnpackTo(DqSourceSettings_);
         *DqSourceSettingsWereBuilt_ = true;
@@ -233,6 +234,7 @@ public:
 private:
     Generic::TSource* DqSourceSettings_;
     bool* DqSourceSettingsWereBuilt_;
+    TString ExpectedSourceType_;
 };
 
 struct TPushdownFixture: public NUnitTest::TBaseFixture {
@@ -256,11 +258,13 @@ struct TPushdownFixture: public NUnitTest::TBaseFixture {
     TExprNode::TPtr InitialExprRoot;
     TExprNode::TPtr ExprRoot;
 
-    TPushdownFixture() {
-        Init();
+    TPushdownFixture(NYql::EGenericDataSourceKind kind = NYql::EGenericDataSourceKind::POSTGRESQL,
+                     const TString& expectedSourceType = "PostgreSqlGeneric") {
+        Init(kind, expectedSourceType);
     }
 
-    void Init() {
+    void Init(NYql::EGenericDataSourceKind kind = NYql::EGenericDataSourceKind::POSTGRESQL,
+              const TString& expectedSourceType = "PostgreSqlGeneric") {
         TypesCtx = MakeIntrusive<TTypeAnnotationContext>();
         TypesCtx->RandomProvider = CreateDeterministicRandomProvider(1);
 
@@ -278,7 +282,7 @@ struct TPushdownFixture: public NUnitTest::TBaseFixture {
 
             auto* cluster = GatewaysCfg.MutableGeneric()->AddClusterMapping();
             cluster->SetName("test_cluster");
-            cluster->SetKind(NYql::EGenericDataSourceKind::POSTGRESQL);
+            cluster->SetKind(kind);
             cluster->MutableEndpoint()->set_host("host");
             cluster->MutableEndpoint()->set_port(42);
             cluster->MutableCredentials()->mutable_basic()->set_username("user");
@@ -322,7 +326,7 @@ struct TPushdownFixture: public NUnitTest::TBaseFixture {
                           .Add(TExprLogTransformer::Sync("Optimized expr", NLog::EComponent::Core, NLog::ELevel::DEBUG), "LogExpr")
                           .Build();
 
-        TAutoPtr<IGraphTransformer> buildTransformer = new TBuildDqSourceSettingsTransformer(TypesCtx.Get(), &DqSourceSettings, &DqSourceSettingsWereBuilt);
+        TAutoPtr<IGraphTransformer> buildTransformer = new TBuildDqSourceSettingsTransformer(TypesCtx.Get(), &DqSourceSettings, &DqSourceSettingsWereBuilt, expectedSourceType);
         BuildDqSourceSettingsTransformer = TTransformationPipeline(TypesCtx)
                                                .AddServiceTransformers()
                                                .Add(buildTransformer, "BuildDqSourceSettings")
@@ -847,5 +851,133 @@ Y_UNIT_TEST_SUITE_F(PushdownTest, TPushdownFixture) {
                 }
             )proto"
         );
+    }
+}
+
+// YT kind reuses the same generic pushdown machinery; only the cluster kind
+// and expected source type differ.
+struct TYtPushdownFixture: public TPushdownFixture {
+    TYtPushdownFixture()
+        : TPushdownFixture(NYql::EGenericDataSourceKind::YT, "YtGeneric")
+    {
+    }
+};
+
+Y_UNIT_TEST_SUITE_F(YtPushdownTest, TYtPushdownFixture) {
+    Y_UNIT_TEST(SourceTypeIsYtGeneric) {
+        // BuildDqSourceSettings() asserts the source type equals "YtGeneric".
+        AssertNoPush(R"ast((Bool '"true"))ast"); // Note that R"ast()ast" is empty string!
+    }
+
+    Y_UNIT_TEST(Equal) {
+        AssertFilter(
+            R"ast((== (Member $row '"col_int16") (Int16 '42)))ast",
+            R"proto(
+                comparison {
+                    operation: EQ
+                    left_value {
+                        column: "col_int16"
+                    }
+                    right_value {
+                        typed_value {
+                            type {
+                                type_id: INT16
+                            }
+                            value {
+                                int32_value: 42
+                            }
+                        }
+                    }
+                }
+            )proto");
+    }
+
+    // Exercises the write path of the generic DqIntegration for the YT kind:
+    // CanWrite must recognize GenWriteTable!, WrapWrite must rewrite it into a
+    // DqSink carrying GenSinkSettings, and FillSinkSettings must pack a
+    // Generic::TSink whose sink type resolves to "YtGeneric".
+    Y_UNIT_TEST(WriteRewriteToYtGenericSink) {
+        const auto pos = Ctx.AppendPosition(TPosition());
+
+        // Row type of the data being written: struct { id: Uint64, payload: Optional<String> }.
+        const auto* uint64Type = Ctx.MakeType<TDataExprType>(EDataSlot::Uint64);
+        const auto* stringType = Ctx.MakeType<TDataExprType>(EDataSlot::String);
+        const auto* optStringType = Ctx.MakeType<TOptionalExprType>(stringType);
+        TVector<const TItemExprType*> items = {
+            Ctx.MakeType<TItemExprType>("id", uint64Type),
+            Ctx.MakeType<TItemExprType>("payload", optStringType),
+        };
+        const auto* structType = Ctx.MakeType<TStructExprType>(items);
+        const auto* listType = Ctx.MakeType<TListExprType>(structType);
+
+        // Register table metadata for the write target so FillSinkSettings can
+        // resolve the data source instance / sink type (kind = YT).
+        {
+            TGenericState::TTableMeta meta;
+            meta.DataSourceInstance.set_kind(NYql::EGenericDataSourceKind::YT);
+            GenericState->AddTable({"test_cluster", "//tmp/write_test"}, std::move(meta));
+        }
+
+        // Typed input list node (stands in for the data being written).
+        auto inputArg = Ctx.NewArgument(pos, "writeInput");
+        inputArg->SetTypeAnn(listType);
+
+        auto dataSink = Ctx.Builder(pos)
+                            .Callable("DataSink")
+                                .Atom(0, "generic")
+                                .Atom(1, "test_cluster")
+                            .Seal()
+                            .Build();
+
+        auto writeNode = Ctx.Builder(pos)
+                             .Callable("GenWriteTable!")
+                                 .Add(0, Ctx.NewWorld(pos))
+                                 .Add(1, dataSink)
+                                 .Callable(2, "GenTable")
+                                     .Atom(0, "//tmp/write_test")
+                                 .Seal()
+                                 .Add(3, inputArg)
+                                 .Atom(4, "append")
+                             .Seal()
+                             .Build();
+        writeNode->SetTypeAnn(Ctx.MakeType<TWorldExprType>());
+
+        auto* dqIntegration = GenericDataSink->GetDqIntegration();
+        UNIT_ASSERT(dqIntegration);
+
+        // CanWrite recognizes the GenWriteTable! callable.
+        const auto canWrite = dqIntegration->CanWrite(*writeNode, Ctx);
+        UNIT_ASSERT(canWrite.Defined());
+        UNIT_ASSERT(*canWrite);
+
+        // WrapWrite rewrites into a DqSink carrying GenSinkSettings.
+        const auto dqSinkNode = dqIntegration->WrapWrite(writeNode, Ctx);
+        UNIT_ASSERT(dqSinkNode);
+        TExprBase dqSinkExpr(dqSinkNode);
+        auto maybeSink = dqSinkExpr.Maybe<TDqSink>();
+        UNIT_ASSERT(maybeSink);
+        const auto sink = maybeSink.Cast();
+        auto maybeSettings = sink.Settings().Maybe<TGenSinkSettings>();
+        UNIT_ASSERT(maybeSettings);
+        const auto sinkSettings = maybeSettings.Cast();
+        UNIT_ASSERT_STRINGS_EQUAL(sinkSettings.Table().StringValue(), "//tmp/write_test");
+        UNIT_ASSERT_STRINGS_EQUAL(sinkSettings.Cluster().StringValue(), "test_cluster");
+
+        // The RowType node is produced by ExpandType and is not yet type-annotated
+        // in this isolated test; annotate it the way the type-annotation pass would.
+        sinkSettings.RowType().Ptr()->SetTypeAnn(Ctx.MakeType<TTypeExprType>(structType));
+
+        // FillSinkSettings packs a Generic::TSink resolving to the YT sink type.
+        ::google::protobuf::Any settings;
+        TString sinkType;
+        dqIntegration->FillSinkSettings(sink.Ref(), settings, sinkType);
+        UNIT_ASSERT_STRINGS_EQUAL(sinkType, "YtGeneric");
+        UNIT_ASSERT(settings.Is<Generic::TSink>());
+        Generic::TSink sinkDesc;
+        settings.UnpackTo(&sinkDesc);
+        UNIT_ASSERT_STRINGS_EQUAL(sinkDesc.table(), "//tmp/write_test");
+        UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(sinkDesc.data_source_instance().kind()),
+                                 static_cast<int>(NYql::EGenericDataSourceKind::YT));
+        UNIT_ASSERT(!sinkDesc.GetRowType().empty());
     }
 }

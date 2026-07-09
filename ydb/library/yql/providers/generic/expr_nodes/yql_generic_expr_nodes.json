@@ -56,6 +56,60 @@
                 {"Index": 4, "Name": "Columns", "Type": "TCoAtomList"},
                 {"Index": 5, "Name": "FilterPredicate", "Type": "TCoLambda"}
             ]
+        },
+        {
+            "Name": "TGenDataSink",
+            "Base": "TCallable",
+            "Definition": "Custom",
+            "Match": {"Type": "Callable", "Name": "DataSink"},
+            "Children": [
+                {"Index": 0, "Name": "Category", "Type": "TCoAtom"},
+                {"Index": 1, "Name": "Cluster", "Type": "TCoAtom"}
+            ]
+        },
+        {
+            "Name": "TGenWrite",
+            "Base": "TFreeArgCallable",
+            "Match": {"Type": "Callable", "Name": "Write!"},
+            "Children": [
+                {"Index": 0, "Name": "World", "Type": "TExprBase"},
+                {"Index": 1, "Name": "DataSink", "Type": "TGenDataSink"}
+            ]
+        },
+        {
+            "Name": "TGenWriteTable",
+            "Base": "TCallable",
+            "Match": {"Type": "Callable", "Name": "GenWriteTable!"},
+            "Children": [
+                {"Index": 0, "Name": "World", "Type": "TExprBase"},
+                {"Index": 1, "Name": "DataSink", "Type": "TGenDataSink"},
+                {"Index": 2, "Name": "Table", "Type": "TGenTable"},
+                {"Index": 3, "Name": "Input", "Type": "TExprBase"},
+                {"Index": 4, "Name": "Mode", "Type": "TCoAtom"}
+            ]
+        },
+        {
+            "Name": "TGenInsert",
+            "Base": "TCallable",
+            "Match": {"Type": "Callable", "Name": "GenInsert"},
+            "Children": [
+                {"Index": 0, "Name": "World", "Type": "TExprBase"},
+                {"Index": 1, "Name": "DataSink", "Type": "TGenDataSink"},
+                {"Index": 2, "Name": "Table", "Type": "TGenTable"},
+                {"Index": 3, "Name": "Input", "Type": "TExprBase"}
+            ]
+        },
+        {
+            "Name": "TGenSinkSettings",
+            "Base": "TCallable",
+            "Match": {"Type": "Callable", "Name": "GenSinkSettings"},
+            "Children": [
+                {"Index": 0, "Name": "World", "Type": "TExprBase"},
+                {"Index": 1, "Name": "Cluster", "Type": "TCoAtom"},
+                {"Index": 2, "Name": "Table", "Type": "TCoAtom"},
+                {"Index": 3, "Name": "Token", "Type": "TCoSecureParam"},
+                {"Index": 4, "Name": "RowType", "Type": "TExprBase"}
+            ]
         }
     ]
 }

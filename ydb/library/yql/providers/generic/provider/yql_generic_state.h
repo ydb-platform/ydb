@@ -100,13 +100,15 @@ namespace NYql {
             const std::shared_ptr<IDatabaseAsyncResolver>& databaseResolver,
             const ISecuredServiceAccountCredentialsFactory::TPtr& credentialsFactory,
             const NConnector::IClient::TPtr& genericClient,
-            const TGenericGatewayConfig& gatewayConfig)
+            const TGenericGatewayConfig& gatewayConfig,
+            const NConnector::IClient::TPtr& ytClient = nullptr)
             : Types(types)
             , Configuration(MakeIntrusive<TGenericConfiguration>())
             , FunctionRegistry(functionRegistry)
             , DatabaseResolver(databaseResolver)
             , CredentialsFactory(credentialsFactory)
             , GenericClient(genericClient)
+            , YtClient(ytClient)
         {
             Configuration->Init(gatewayConfig, databaseResolver, DatabaseAuth, types->Credentials);
         }
@@ -117,6 +119,11 @@ namespace NYql {
                                                   const TSelectKey& key,
                                                   std::vector<NYql::NConnector::NApi::TSplit>&& splits);
         TGetTableResult GetTable(const TTableAddress& tableAddress) const;
+
+        // Returns the IClient responsible for the given data source kind. YT clusters are
+        // served by the YT-native client (if provided); all other kinds go through the
+        // default (gRPC / fq-connector-go) client.
+        const NConnector::IClient::TPtr& GetClientForKind(NYql::EGenericDataSourceKind kind) const;
 
         TTypeAnnotationContext* Types;
         TGenericConfiguration::TPtr Configuration = MakeIntrusive<TGenericConfiguration>();
@@ -133,6 +140,8 @@ namespace NYql {
         ISecuredServiceAccountCredentialsFactory::TPtr CredentialsFactory;
 
         NConnector::IClient::TPtr GenericClient;
+        // YT-native client used for EGenericDataSourceKind::YT clusters (may be null).
+        NConnector::IClient::TPtr YtClient;
 
     private:
         THashMap<TTableAddress, TTableMeta> Tables_;

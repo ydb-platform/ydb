@@ -26,6 +26,7 @@ PEERDIR(
     ydb/library/yql/providers/common/http_gateway
     ydb/library/yql/providers/dq/helper
     ydb/library/yql/providers/generic/provider
+    ydb/library/yql/providers/generic/connector/libcpp
     ydb/library/yql/providers/pq/provider
     ydb/library/yql/providers/s3/expr_nodes
     yql/essentials/core

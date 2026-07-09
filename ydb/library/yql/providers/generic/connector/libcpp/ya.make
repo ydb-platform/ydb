@@ -4,6 +4,7 @@ SRCS(
     client.cpp
     error.cpp
     utils.cpp
+    yt_client.cpp
 )
 
 PEERDIR(
@@ -19,10 +20,14 @@ PEERDIR(
     yql/essentials/public/issue
     yql/essentials/utils
     yql/essentials/utils/log
+    yt/cpp/mapreduce/interface
+    yt/cpp/mapreduce/client
+    library/cpp/yson/node
 )
 
 END()
 
 RECURSE(
+    ut
     ut_helpers
 )

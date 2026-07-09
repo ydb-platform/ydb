@@ -44,6 +44,8 @@
 #include <ydb/library/yql/providers/solomon/actors/dq_solomon_write_actor.h>
 #include <ydb/library/yql/utils/actor_log/log.h>
 
+#include <ydb/library/yql/providers/generic/connector/libcpp/yt_client.h>
+
 #include <yql/essentials/minikql/comp_nodes/mkql_factories.h>
 #include <yql/essentials/providers/common/comp_nodes/yql_factory.h>
 #include <yql/essentials/providers/common/metrics/service_counters.h>
@@ -243,6 +245,10 @@ void Init(
 
     auto s3ActorsFactory = NYql::NDq::CreateS3ActorsFactory();
 
+    //RegisterGenericProviderFactories(*asyncIoFactory, credentialsFactory, connectorClient);
+    ::NYql::TGenericGatewayConfig cfg;
+    RegisterGenericProviderFactories(*asyncIoFactory, credentialsFactory, NYql::NConnector::MakeYtClient(cfg));
+
     if (protoConfig.GetPrivateApi().GetEnabled()) {
         auto s3HttpRetryPolicy = NYql::GetFqHTTPRetryPolicy();
         NYql::NDq::TS3ReadActorFactoryConfig readActorFactoryCfg = NYql::NDq::CreateReadActorFactoryConfig(protoConfig.GetGateways().GetS3());
@@ -267,7 +273,10 @@ void Init(
         s3ActorsFactory->RegisterS3WriteActorFactory(*asyncIoFactory, credentialsFactory,
             httpGateway, s3HttpRetryPolicy);
 
-        RegisterGenericProviderFactories(*asyncIoFactory, credentialsFactory, connectorClient);
+        //RegisterGenericProviderFactories(*asyncIoFactory, credentialsFactory, connectorClient);
+        // ::NYql::TGenericGatewayConfig cfg;
+        // RegisterGenericProviderFactories(*asyncIoFactory, credentialsFactory, NYql::NConnector::MakeYtClient(cfg));
+
         RegisterDqPqWriteActorFactory(*asyncIoFactory, yqSharedResources->UserSpaceYdbDriver, credentialsFactory, pqGateway, yqCounters->GetSubgroup("subsystem", "DqSinkTracker"), true);
         RegisterDQSolomonWriteActorFactory(*asyncIoFactory, credentialsFactory);
         RegisterDQSolomonReadActorFactory(*asyncIoFactory, credentialsFactory);

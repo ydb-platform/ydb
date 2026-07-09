@@ -13,6 +13,7 @@
 #include <ydb/library/yql/utils/plan/plan_utils.h>
 #include <yql/essentials/ast/yql_expr.h>
 #include <yql/essentials/providers/common/dq/yql_dq_integration_impl.h>
+#include <yql/essentials/providers/common/schema/expr/yql_expr_schema.h>
 #include <yql/essentials/utils/log/log.h>
 
 namespace NYql {
@@ -49,8 +50,19 @@ namespace NYql {
                     return "MongoDBGeneric";
                 case NYql::EGenericDataSourceKind::OPENSEARCH:
                     return "OpenSearchGeneric";
+                case NYql::EGenericDataSourceKind::YT:
+                    return "YtGeneric";
                 default:
                     throw yexception() << "Data source kind is unknown or not specified";
+            }
+        }
+
+        TString GetSinkType(NYql::EGenericDataSourceKind kind) {
+            switch (kind) {
+                case NYql::EGenericDataSourceKind::YT:
+                    return "YtGeneric";
+                default:
+                    throw yexception() << "Data sink kind is unknown or not specified";
             }
         }
 
@@ -116,6 +128,28 @@ namespace NYql {
                     // clang-format on
                 }
                 return read;
+            }
+
+            TMaybe<bool> CanWrite(const TExprNode& write, TExprContext&) override {
+                return TGenWriteTable::Match(&write);
+            }
+
+            TExprNode::TPtr WrapWrite(const TExprNode::TPtr& writeNode, TExprContext& ctx) override {
+                TExprBase writeExpr(writeNode);
+                const auto write = writeExpr.Cast<TGenWriteTable>();
+                YQL_ENSURE(write.Ref().GetTypeAnn(), "No type annotation for node " << write.Ref().Content());
+
+                // Emit an intermediate GenInsert node. The physical optimizer will later wrap
+                // the (by then materialized) DQ input into a stage that carries the GenSink as
+                // an output, which is what KQP's effect builder expects.
+                // clang-format off
+                return Build<TGenInsert>(ctx, writeNode->Pos())
+                    .World(write.World())
+                    .DataSink(write.DataSink())
+                    .Table(write.Table())
+                    .Input(write.Input())
+                    .Done().Ptr();
+                // clang-format on
             }
 
             ///
@@ -253,6 +287,48 @@ namespace NYql {
                 sourceType = GetSourceType(select->data_source_instance());
             }
 
+            void FillSinkSettings(const TExprNode& node, ::google::protobuf::Any& protoSettings, TString& sinkType) override {
+                const TDqSink sink(&node);
+                const auto maybeSettings = sink.Settings().Maybe<TGenSinkSettings>();
+                if (!maybeSettings) {
+                    return;
+                }
+
+                const auto settings = maybeSettings.Cast();
+                const auto& clusterName = sink.DataSink().Cast<TGenDataSink>().Cluster().StringValue();
+                const auto& tableName = settings.Table().StringValue();
+
+                Generic::TSink sinkDesc;
+
+                YQL_CLOG(INFO, ProviderGeneric)
+                    << "Filling sink settings"
+                    << ": cluster: " << clusterName
+                    << ", table: " << tableName;
+
+                // Fetch table metadata to obtain the data source instance describing the target.
+                auto [tableMeta, issues] = State_->GetTable({clusterName, tableName});
+                if (issues) {
+                    throw yexception() << "Get table metadata: " << issues.ToOneLineString();
+                }
+
+                *sinkDesc.mutable_data_source_instance() = tableMeta->DataSourceInstance;
+                sinkDesc.Settable(tableName);
+
+                // Carry the compile-time-resolved connector schema so the write
+                // actor does not need to re-describe the table at runtime.
+                *sinkDesc.mutable_schema() = tableMeta->Schema;
+
+                // Serialize the row type being written for the write actor.
+                const auto* rowType = settings.RowType().Ref().GetTypeAnn()->Cast<TTypeExprType>()->GetType();
+                sinkDesc.SetRowType(NCommon::WriteTypeToYson(rowType, NYT::NYson::EYsonFormat::Text));
+
+                const TString tokenName(settings.Token().Maybe<TCoSecureParam>().Name().Cast());
+                sinkDesc.SetTokenName(tokenName);
+
+                protoSettings.PackFrom(sinkDesc);
+                sinkType = GetSinkType(tableMeta->DataSourceInstance.kind());
+            }
+
             bool FillSourcePlanProperties(const NNodes::TExprBase& node, TMap<TString, NJson::TJsonValue>& properties) override {
                 if (!node.Maybe<TDqSource>()) {
                     return false;
@@ -309,6 +385,9 @@ namespace NYql {
                             break;
                         case NYql::EGenericDataSourceKind::OPENSEARCH:
                             properties["SourceType"] = "OpenSearch";
+                            break;
+                        case NYql::EGenericDataSourceKind::YT:
+                            properties["SourceType"] = "Yt";
                             break;
                         case NYql::EGenericDataSourceKind::DATA_SOURCE_KIND_UNSPECIFIED:
                             break;

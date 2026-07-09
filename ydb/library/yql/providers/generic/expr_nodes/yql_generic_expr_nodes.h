@@ -34,6 +34,31 @@ namespace NYql {
             }
         };
 
+        class TGenDataSink: public NGenerated::TGenDataSinkStub<TExprBase, TCallable, TCoAtom> {
+        public:
+            explicit TGenDataSink(const TExprNode* node)
+                : TGenDataSinkStub(node)
+            {
+            }
+
+            explicit TGenDataSink(const TExprNode::TPtr& node)
+                : TGenDataSinkStub(node)
+            {
+            }
+
+            static bool Match(const TExprNode* node) {
+                if (!TGenDataSinkStub::Match(node)) {
+                    return false;
+                }
+
+                if (node->Child(0)->Content() != GenericProviderName) {
+                    return false;
+                }
+
+                return true;
+            }
+        };
+
 #include <ydb/library/yql/providers/generic/expr_nodes/yql_generic_expr_nodes.defs.inl.h>
 
     } // namespace NNodes

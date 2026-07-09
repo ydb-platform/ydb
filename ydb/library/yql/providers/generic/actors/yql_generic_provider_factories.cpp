@@ -2,6 +2,7 @@
 
 #include "yql_generic_read_actor.h"
 #include "yql_generic_lookup_actor.h"
+#include "yql_generic_write_actor.h"
 
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor_async_io.h>
 
@@ -47,6 +48,22 @@ namespace NYql::NDq {
             );
         };
 
+        auto sinkActorFactory = [securedServiceAccountCredentialsFactory, genericClient](
+                                    Generic::TSink&& settings,
+                                    IDqAsyncIoFactory::TSinkArguments&& args) {
+            return CreateGenericWriteActor(
+                args.TypeEnv,
+                *args.HolderFactory.GetFunctionRegistry(),
+                genericClient,
+                std::move(settings),
+                args.OutputIndex,
+                args.StatsLevel,
+                args.TxId,
+                args.SecureParams,
+                args.Callback,
+                securedServiceAccountCredentialsFactory);
+        };
+
         for (auto& name : {
                  "ClickHouseGeneric",
                  "PostgreSqlGeneric",
@@ -60,9 +77,11 @@ namespace NYql::NDq {
                  "RedisGeneric",
                  "PrometheusGeneric",
                  "MongoDBGeneric",
-                 "OpenSearchGeneric"}) {
+                 "OpenSearchGeneric",
+                 "YtGeneric"}) {
             factory.RegisterSource<Generic::TSource>(name, readActorFactory);
             factory.RegisterLookupSource<Generic::TLookupSource>(name, lookupActorFactory);
+            factory.RegisterSink<Generic::TSink>(name, sinkActorFactory);
         }
     }
 

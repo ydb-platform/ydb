@@ -61,6 +61,11 @@ namespace NYql::NConnector::NTest {
         return TYdbDataSourceInstanceBuilder<TBuilder>(                             \
             this->Result_->mutable_data_source_instance(),                          \
             static_cast<TBuilder*>(this));                                          \
+    }                                                                               \
+    TYtDataSourceInstanceBuilder<TBuilder> YtDataSourceInstance() {                 \
+        return TYtDataSourceInstanceBuilder<TBuilder>(                              \
+            this->Result_->mutable_data_source_instance(),                          \
+            static_cast<TBuilder*>(this));                                          \
     }
 
     template <typename TProto>
@@ -254,11 +259,42 @@ namespace NYql::NConnector::NTest {
         bool useTls = DEFAULT_USE_TLS,
         const TString& databaseName = DEFAULT_DATABASE);
 
+    void CreateYtExternalDataSource(
+        const std::shared_ptr<NKikimr::NKqp::TKikimrRunner>& kikimr,
+        const TString& dataSourceName = DEFAULT_DATA_SOURCE_NAME,
+        const TString& token = DEFAULT_YT_TOKEN,
+        const TString& cluster = DEFAULT_YT_CLUSTER);
+
     class TConnectorClientMock: public NYql::NConnector::IClient {
     public:
         MOCK_METHOD(TResult<NApi::TDescribeTableResponse>, DescribeTableImpl, (const NApi::TDescribeTableRequest& request));
         MOCK_METHOD(TIteratorResult<IListSplitsStreamIterator>, ListSplitsImpl, (const NApi::TListSplitsRequest& request));
         MOCK_METHOD(TIteratorResult<IReadSplitsStreamIterator>, ReadSplitsImpl, (const NApi::TReadSplitsRequest& request));
+
+        // Records rows written via the generic sink so that e2e write tests can
+        // assert on the written table/cluster/contents.
+        struct TWrittenRows {
+            TString Table;
+            TString Cluster;
+            TVector<std::shared_ptr<arrow::RecordBatch>> Batches;
+        };
+
+        void WriteRows(const NApi::TSchema& /*schema*/,
+                       const TString& table,
+                       const TString& arrowIpcStreaming,
+                       const NYql::TGenericDataSourceInstance& dataSourceInstance) override {
+            TGuard<TMutex> guard(WrittenMutex_);
+            Written.Table = table;
+            Written.Cluster = dataSourceInstance.yt_options().cluster();
+
+            auto serializer = NKikimr::NArrow::NSerialization::TSerializerContainer::GetDefaultSerializer();
+            auto deserialized = serializer->Deserialize(arrowIpcStreaming);
+            Y_ENSURE(deserialized.ok(), deserialized.status().ToString());
+            Written.Batches.push_back(deserialized.ValueOrDie());
+        }
+
+        TWrittenRows Written;
+        TMutex WrittenMutex_;
 
         //
         // Expectation helpers
@@ -353,6 +389,42 @@ namespace NYql::NConnector::NTest {
                 this->Port(DEFAULT_YDB_PORT);
                 this->Kind(NYql::EGenericDataSourceKind::YDB);
                 this->Protocol(DEFAULT_YDB_PROTOCOL);
+            }
+        };
+
+        template <class TParent = void /* no parent by default */>
+        struct TYtDataSourceInstanceBuilder: public TBaseDataSourceInstanceBuilder<TYtDataSourceInstanceBuilder<TParent>, TParent> {
+            using TBase = TBaseDataSourceInstanceBuilder<TYtDataSourceInstanceBuilder<TParent>, TParent>;
+
+            explicit TYtDataSourceInstanceBuilder(NYql::TGenericDataSourceInstance* result = nullptr, TParent* parent = nullptr)
+                : TBase(result, parent)
+            {
+                FillWithDefaults();
+            }
+
+            TYtDataSourceInstanceBuilder& Cluster(const TString& cluster) {
+                this->Result_->mutable_yt_options()->set_cluster(cluster);
+                return *this;
+            }
+
+            TYtDataSourceInstanceBuilder& Token(const TString& token) {
+                this->Result_->mutable_credentials()->mutable_token()->set_type("IAM");
+                this->Result_->mutable_credentials()->mutable_token()->set_value(token);
+                return *this;
+            }
+
+            void FillWithDefaults() {
+                // YT is accessed with a token, not Basic Auth, so do not call
+                // TBase::FillWithDefaults() which fills login/password.
+                this->Result_->mutable_endpoint();
+                // The metadata loader always sets database (to an empty string for
+                // YT); set it here so the expected request matches the actual one.
+                this->Database("");
+                this->Kind(NYql::EGenericDataSourceKind::YT);
+                this->Protocol(DEFAULT_YT_PROTOCOL);
+                this->UseTls(false);
+                Token(DEFAULT_YT_TOKEN);
+                Cluster(DEFAULT_YT_CLUSTER);
             }
         };
 

@@ -140,11 +140,12 @@ namespace NYql {
 
             desc->DataSourceInstance = request.data_source_instance();
 
-            Y_ENSURE(State_->GenericClient);
+            const auto& client = State_->GetClientForKind(request.data_source_instance().kind());
+            Y_ENSURE(client);
 
-            State_->GenericClient->DescribeTable(request, State_->Configuration->DescribeTableTimeout).Subscribe(
+            client->DescribeTable(request, State_->Configuration->DescribeTableTimeout).Subscribe(
                 [desc, tableAddress, promise,
-                 client = State_->GenericClient](const NConnector::TDescribeTableAsyncResult& f1) mutable {
+                 client](const NConnector::TDescribeTableAsyncResult& f1) mutable {
                     NConnector::TDescribeTableAsyncResult f2(f1);
                     auto result = f2.ExtractValueSync();
 
@@ -601,7 +602,11 @@ namespace NYql {
                     return SetMongoDBOptions(*options, clusterConfig);
                 } break;
                 case NYql::EGenericDataSourceKind::OPENSEARCH:
-                    break; 
+                    break;
+                case NYql::EGenericDataSourceKind::YT: {
+                    auto* options = request.mutable_data_source_instance()->mutable_yt_options();
+                    options->set_cluster(clusterConfig.GetName());
+                } break;
                 default:
                     throw yexception() << "Unexpected data source kind: '"
                                        << NYql::EGenericDataSourceKind_Name(dataSourceKind) << "'";

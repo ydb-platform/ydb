@@ -30,3 +30,27 @@ message TLookupSource {
 
     reserved 4, 5, 6;
 }
+
+// TSink describes a write (INSERT) target for the generic provider.
+// It is used during query execution phase by the generic write (sink) actor.
+message TSink {
+    // Data source instance to write to.
+    NYql.TGenericDataSourceInstance data_source_instance = 1;
+
+    // Destination table name.
+    string table = 2;
+
+    // Serialized row type (YSON) of the data being written.
+    string RowType = 3;
+
+    // Connector schema of the target table, resolved at compile time
+    // (via DescribeTable). Carried here so the write actor does not need to
+    // re-describe the table at runtime.
+    NYql.NConnector.NApi.TSchema schema = 4;
+
+    // TokenName is used during query execution phase.
+    // It's used to obtain appropriate structured token from `secureParams` map.
+    string TokenName = 7;
+
+    reserved 5, 6;
+}

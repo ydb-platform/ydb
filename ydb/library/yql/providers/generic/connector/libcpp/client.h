@@ -15,6 +15,7 @@ namespace NYql::NConnector::NApi {
     class TListSplitsResponse;
     class TReadSplitsRequest;
     class TReadSplitsResponse;
+    class TSchema;
 } // namespace NYql::NConnector::NApi
 
 namespace NYql::NConnector {
@@ -178,6 +179,22 @@ namespace NYql::NConnector {
                                                                 TDuration timeout = {}) = 0;
         virtual TReadSplitsStreamIteratorAsyncResult ReadSplits(const NApi::TReadSplitsRequest& request,
                                                                 TDuration timeout = {}) = 0;
+
+        // Write entrypoint used by the generic sink actor. Appends the rows contained in
+        // the serialized Arrow IPC block to the given table according to the supplied row
+        // schema. The default implementation throws: only clients that support writing
+        // (currently the YT-native client) override it.
+        virtual void WriteRows(const NApi::TSchema& schema,
+                               const TString& table,
+                               const TString& arrowIpcStreaming,
+                               const NYql::TGenericDataSourceInstance& dataSourceInstance) {
+            Y_UNUSED(schema);
+            Y_UNUSED(table);
+            Y_UNUSED(arrowIpcStreaming);
+            Y_UNUSED(dataSourceInstance);
+            ythrow yexception() << "Generic connector client does not support writing";
+        }
+
         virtual ~IClient() = default;
     };
 

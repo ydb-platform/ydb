@@ -161,7 +161,7 @@ IExternalSourceFactory::TPtr CreateExternalSourceFactory(const std::vector<TStri
         },
         {
             ToString(NYql::EDatabaseType::YT),
-            CreateExternalDataSource(TString{NYql::YtProviderName}, {"NONE", "TOKEN"}, {}, hostnamePatternsRegEx)
+            CreateExternalDataSource(TString{NYql::GenericProviderName}, {"NONE", "TOKEN"}, {"cluster"}, hostnamePatternsRegEx)
         },
         {
             ToString(NYql::EDatabaseType::Greenplum),

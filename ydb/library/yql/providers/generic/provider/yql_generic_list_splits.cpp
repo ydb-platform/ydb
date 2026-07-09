@@ -188,9 +188,10 @@ TIssues TGenericListSplitTransformer::ListSplitsFromConnector(const TListSplitRe
     auto promise = NThreading::NewPromise();
     handles.emplace_back(promise.GetFuture());
 
-    Y_ENSURE(State_->GenericClient);
+    const auto& client = State_->GetClientForKind(data.Select.data_source_instance().kind());
+    Y_ENSURE(client);
 
-    State_->GenericClient->ListSplits(request).Subscribe([desc, promise, data]
+    client->ListSplits(request).Subscribe([desc, promise, data]
         (const NConnector::TListSplitsStreamIteratorAsyncResult f3) mutable {
         NConnector::TListSplitsStreamIteratorAsyncResult f4(f3);
         auto streamIterResult = f4.ExtractValueSync();

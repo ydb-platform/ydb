@@ -5,11 +5,15 @@ SRCS(
     yql_generic_lookup_actor.cpp
     yql_generic_provider_factories.cpp
     yql_generic_read_actor.cpp
+    yql_generic_write_actor.cpp
 )
 
 PEERDIR(
+    ydb/core/formats/arrow/serializer
     ydb/library/yql/dq/actors/compute
+    yql/essentials/minikql
     yql/essentials/minikql/computation
+    yql/essentials/providers/common/schema/mkql
     yql/essentials/providers/common/structured_token
     ydb/library/yql/providers/common/token_accessor/client
     ydb/library/yql/providers/generic/proto

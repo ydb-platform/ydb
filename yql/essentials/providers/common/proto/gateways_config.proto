@@ -604,6 +604,7 @@ enum EGenericDataSourceKind {
     PROMETHEUS = 12;
     ICEBERG = 13;
     OPENSEARCH = 14;
+    YT = 15;
 }
 
 // EGenericProtocol generalizes various kinds of network protocols supported by different databases.
@@ -734,6 +735,12 @@ message TIcebergDataSourceOptions {
     optional TIcebergWarehouse warehouse = 2;
 }
 
+// TYtDataSourceOptions represents settings specific to YTsaurus (YT) data source
+message TYtDataSourceOptions {
+    // YT cluster (proxy) name, e.g. "hahn", "arnold" or an explicit proxy address
+    optional string cluster = 1;
+}
+
 // TYdbDataSourceOptions represents settings specific for YDB data source
 message TYdbDataSourceOptions {
     // EQueryDataFormat determines the format of the data returned by the YDB server
@@ -772,6 +779,7 @@ message TGenericDataSourceInstance {
         TMongoDbDataSourceOptions mongodb_options = 13;
         TIcebergDataSourceOptions iceberg_options = 14;
         TYdbDataSourceOptions ydb_options = 15;
+        TYtDataSourceOptions yt_options = 16;
     }
 }
 

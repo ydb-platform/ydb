@@ -192,8 +192,9 @@ namespace NYql {
                 EGenericDataSourceKind::ORACLE,
                 EGenericDataSourceKind::ICEBERG,
                 EGenericDataSourceKind::REDIS,
-                EGenericDataSourceKind::MONGO_DB
-                }, 
+                EGenericDataSourceKind::MONGO_DB,
+                EGenericDataSourceKind::YT
+                },
                clusterConfig.GetKind()
             )) {
             clusterConfig.SetProtocol(EGenericProtocol::NATIVE);

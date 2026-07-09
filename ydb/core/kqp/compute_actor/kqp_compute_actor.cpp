@@ -188,9 +188,24 @@ NYql::NDq::IDqAsyncIoFactory::TPtr CreateKqpAsyncIoFactory(
         s3ActorsFactory->RegisterS3ReadActorFactory(*factory, federatedQuerySetup->CredentialsFactory, federatedQuerySetup->HttpGateway, s3HttpRetryPolicy, federatedQuerySetup->S3ReadActorFactoryConfig, nullptr, federatedQuerySetup->S3GatewayConfig.GetAllowLocalFiles());
         s3ActorsFactory->RegisterS3WriteActorFactory(*factory,  federatedQuerySetup->CredentialsFactory, federatedQuerySetup->HttpGateway, s3HttpRetryPolicy);
 
-        if (federatedQuerySetup->ConnectorClient) {
-            RegisterGenericProviderFactories(*factory, federatedQuerySetup->CredentialsFactory, federatedQuerySetup->ConnectorClient);
-        }
+        // if (federatedQuerySetup->ConnectorClient) {
+        //     RegisterGenericProviderFactories(*factory, federatedQuerySetup->CredentialsFactory, federatedQuerySetup->ConnectorClient);
+        // } else {
+        //     // Even without a gRPC connector client, YT clusters can be served by the
+        //     // YT-native generic client. Register the generic factories when the generic
+        //     // gateway config declares at least one YT cluster.
+        //     const auto& genericConfig = federatedQuerySetup->GenericGatewayConfig;
+        //     bool hasYtCluster = false;
+        //     for (const auto& cluster : genericConfig.GetClusterMapping()) {
+        //         if (cluster.GetKind() == NYql::EGenericDataSourceKind::YT) {
+        //             hasYtCluster = true;
+        //             break;
+        //         }
+        //     }
+        //     if (hasYtCluster) {
+        //         RegisterGenericProviderFactories(*factory, federatedQuerySetup->CredentialsFactory, NYql::NConnector::MakeYtClient(genericConfig));
+        //     }
+        // }
 
         static_assert(
             static_cast<ui32>(NYql::NDq::EEventSpaceSolomonProvider::ES_SOLOMON_PROVIDER) == static_cast<ui32>(NKikimr::TKikimrEvents::ES_SOLOMON_PROVIDER),

@@ -558,6 +558,8 @@ TString TKqpPlanner::ExecuteDataComputeTask(ui64 taskId, ui32 computeTasksSize) 
         .Query = Query,
     });
 
+    Cerr << "YTDBG ExecuteDataComputeTask created CA taskId=" << taskId
+         << " actorId=" << actorId << " computeTasksSize=" << computeTasksSize << Endl;
     Y_ABORT_UNLESS(AcknowledgeCA(taskId, actorId, nullptr));
 
     for (auto& output : task.Outputs) {
@@ -587,6 +589,22 @@ std::unique_ptr<IEventHandle> TKqpPlanner::PlanExecution() {
     nScanTasks = 0;
 
     for (auto& task : TasksGraph.GetTasks()) {
+        {
+            const auto& stageInfo = TasksGraph.GetStageInfo(task.StageId);
+            const auto& stage = stageInfo.Meta.GetStage(stageInfo.Id);
+            Cerr << "YTDBG PlanExecution task.Id=" << task.Id
+                 << " Meta.Type=" << (ui32)task.Meta.Type
+                 << " ShardId=" << task.Meta.ShardId
+                 << " NodeId=" << task.Meta.NodeId
+                 << " stageId=" << stageInfo.Id.StageId
+                 << " TasksType=" << (ui32)stageInfo.Meta.TasksType
+                 << " Sinks=" << stage.SinksSize()
+                 << " Sources=" << stage.SourcesSize()
+                 << " Inputs=" << stage.InputsSize()
+                 << " OutTransforms=" << stage.OutputTransformsSize()
+                 << " ShardOps=" << stageInfo.Meta.ShardOperations.size()
+                 << Endl;
+        }
         switch (task.Meta.Type) {
             case TTaskMeta::ETaskType::Compute:
                 ComputeTasks.emplace_back(task.Id);
@@ -600,6 +618,14 @@ std::unique_ptr<IEventHandle> TKqpPlanner::PlanExecution() {
         }
     }
     nComputeTasks = ComputeTasks.size();
+    Cerr << "YTDBG PlanExecution nComputeTasks=" << nComputeTasks
+         << " nScanTasks=" << nScanTasks
+         << " TasksPerNode.size=" << TasksPerNode.size()
+         << " AsyncIoFactory=" << (AsyncIoFactory != nullptr)
+         << " SinglePartitionOptAllowed=" << TasksGraph.GetMeta().SinglePartitionOptAllowed
+         << " MayRunTasksLocally=" << TasksGraph.GetMeta().MayRunTasksLocally
+         << " ExecuterNodeId=" << ExecuterId.NodeId()
+         << Endl;
 
     LOG_D("Total tasks: " << nScanTasks + nComputeTasks << ", readonly: true"  // TODO ???
         << ", " << nScanTasks << " scan tasks on " << TasksPerNode.size() << " nodes"

@@ -30,4 +30,8 @@ namespace NYql::NConnector::NTest {
     constexpr int DEFAULT_YDB_PORT = 2136;
     extern const TString DEFAULT_YDB_ENDPOINT;
     constexpr NYql::EGenericProtocol DEFAULT_YDB_PROTOCOL = NYql::EGenericProtocol::NATIVE;
+
+    extern const TString DEFAULT_YT_TOKEN;
+    extern const TString DEFAULT_YT_CLUSTER;
+    constexpr NYql::EGenericProtocol DEFAULT_YT_PROTOCOL = NYql::EGenericProtocol::NATIVE;
 } // namespace NYql::NConnector::NTest

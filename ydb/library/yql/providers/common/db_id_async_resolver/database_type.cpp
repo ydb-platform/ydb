@@ -56,7 +56,9 @@ EDatabaseType DatabaseTypeFromDataSourceKind(NYql::EGenericDataSourceKind dataSo
         case NYql::EGenericDataSourceKind::MONGO_DB:
             return EDatabaseType::MongoDB;
         case NYql::EGenericDataSourceKind::OPENSEARCH:
-            return EDatabaseType::OpenSearch; 
+            return EDatabaseType::OpenSearch;
+        case NYql::EGenericDataSourceKind::YT:
+            return EDatabaseType::YT;
         default:
             ythrow yexception() << "Unknown data source kind: " << NYql::EGenericDataSourceKind_Name(dataSourceKind);
     }
@@ -89,7 +91,9 @@ NYql::EGenericDataSourceKind DatabaseTypeToDataSourceKind(EDatabaseType database
         case EDatabaseType::MongoDB:
             return NYql::EGenericDataSourceKind::MONGO_DB;
         case EDatabaseType::OpenSearch:
-            return NYql::EGenericDataSourceKind::OPENSEARCH;    
+            return NYql::EGenericDataSourceKind::OPENSEARCH;
+        case EDatabaseType::YT:
+            return NYql::EGenericDataSourceKind::YT;
         default:
             ythrow yexception() << "Unknown database type: " << ToString(databaseType);
     }

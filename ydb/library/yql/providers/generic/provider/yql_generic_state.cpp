@@ -93,6 +93,13 @@ namespace NYql {
         return std::make_pair<TTableMeta*, TIssues>(nullptr, std::move(issues));
     }
 
+    const NConnector::IClient::TPtr& TGenericState::GetClientForKind(NYql::EGenericDataSourceKind kind) const {
+        if (kind == NYql::EGenericDataSourceKind::YT && YtClient) {
+            return YtClient;
+        }
+        return GenericClient;
+    }
+
     std::optional<TIssue> TGenericState::AttachSplitsToTable(const TTableAddress& tableAddress,
                                                              const TSelectKey& key,
                                                              std::vector<NYql::NConnector::NApi::TSplit>&& splits) {

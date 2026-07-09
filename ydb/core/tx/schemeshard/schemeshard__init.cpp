@@ -4190,6 +4190,12 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 NKikimrSchemeOp::TColumnTableDescription description;
                 Y_ABORT_UNLESS(description.ParseFromString(rowset.GetValue<Schema::ColumnTables::Description>()));
                 Y_ABORT_UNLESS(description.MutableSharding()->ParseFromString(rowset.GetValue<Schema::ColumnTables::Sharding>()));
+                if (rowset.HaveValue<Schema::ColumnTables::MultiColumnStatistics>()) {
+                    NKikimrSchemeOp::TColumnTableDescription statisticsHolder;
+                    Y_ABORT_UNLESS(ParseFromStringNoSizeLimit(statisticsHolder,
+                        rowset.GetValue<Schema::ColumnTables::MultiColumnStatistics>()));
+                    description.MutableMultiColumnStatistics()->Swap(statisticsHolder.MutableMultiColumnStatistics());
+                }
                 TMaybe<NKikimrSchemeOp::TColumnStoreSharding> storeSharding;
                 if (rowset.HaveValue<Schema::ColumnTables::StandaloneSharding>()) {
                     Y_ABORT_UNLESS(storeSharding.ConstructInPlace().ParseFromString(
@@ -4237,6 +4243,12 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 NKikimrSchemeOp::TColumnTableDescription description;
                 Y_ABORT_UNLESS(description.ParseFromString(rowset.GetValue<Schema::ColumnTablesAlters::Description>()));
                 Y_ABORT_UNLESS(description.MutableSharding()->ParseFromString(rowset.GetValue<Schema::ColumnTablesAlters::Sharding>()));
+                if (rowset.HaveValue<Schema::ColumnTablesAlters::MultiColumnStatistics>()) {
+                    NKikimrSchemeOp::TColumnTableDescription statisticsHolder;
+                    Y_ABORT_UNLESS(ParseFromStringNoSizeLimit(statisticsHolder,
+                        rowset.GetValue<Schema::ColumnTablesAlters::MultiColumnStatistics>()));
+                    description.MutableMultiColumnStatistics()->Swap(statisticsHolder.MutableMultiColumnStatistics());
+                }
                 TMaybe<NKikimrSchemeOp::TAlterColumnTable> alterBody;
                 if (rowset.HaveValue<Schema::ColumnTablesAlters::AlterBody>()) {
                     Y_ABORT_UNLESS(alterBody.ConstructInPlace().ParseFromString(rowset.GetValue<Schema::ColumnTablesAlters::AlterBody>()));

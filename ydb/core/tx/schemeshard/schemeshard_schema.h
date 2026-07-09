@@ -1817,9 +1817,10 @@ struct Schema : NIceDb::Schema {
         struct StandaloneSharding : Column<5, NScheme::NTypeIds::String> {}; // TColumnStoreSharding
         struct IsRestore : Column<6, NScheme::NTypeIds::Bool> {};
         struct IsReadOnly : Column<7, NScheme::NTypeIds::Bool> {};
+        struct MultiColumnStatistics : Column<8, NScheme::NTypeIds::String> {};
 
         using TKey = TableKey<PathId>;
-        using TColumns = TableColumns<PathId, AlterVersion, Description, Sharding, StandaloneSharding, IsRestore, IsReadOnly>;
+        using TColumns = TableColumns<PathId, AlterVersion, Description, Sharding, StandaloneSharding, IsRestore, IsReadOnly, MultiColumnStatistics>;
     };
 
     struct ColumnTablesAlters : Table<91> {
@@ -1829,9 +1830,10 @@ struct Schema : NIceDb::Schema {
         struct Sharding : Column<4, NScheme::NTypeIds::String> {}; // TColumnTableSharding
         struct AlterBody : Column<5, NScheme::NTypeIds::String> {}; // TAlterColumnTable
         struct StandaloneSharding : Column<6, NScheme::NTypeIds::String> {}; // TColumnStoreSharding
+        struct MultiColumnStatistics : Column<7, NScheme::NTypeIds::String> {};
 
         using TKey = TableKey<PathId>;
-        using TColumns = TableColumns<PathId, AlterVersion, Description, Sharding, AlterBody, StandaloneSharding>;
+        using TColumns = TableColumns<PathId, AlterVersion, Description, Sharding, AlterBody, StandaloneSharding, MultiColumnStatistics>;
     };
 
     struct LoginKeys : Table<92> {

@@ -4596,6 +4596,16 @@ void TSchemeShard::PersistColumnTable(NIceDb::TNiceDb& db, TPathId pathId, const
     if (tableInfo.IsStandalone()) {
         tableInfoCopy.Description.MutableSchema()->SetEngine(NKikimrSchemeOp::COLUMN_ENGINE_REPLACING_TIMESERIES);
     }
+
+    // Keep multi-column statistics out of the Description blob
+    TString serializedStatistics;
+    {
+        NKikimrSchemeOp::TColumnTableDescription statisticsHolder;
+        statisticsHolder.MutableMultiColumnStatistics()->CopyFrom(tableInfoCopy.Description.GetMultiColumnStatistics());
+        Y_ABORT_UNLESS(statisticsHolder.SerializeToString(&serializedStatistics));
+        tableInfoCopy.Description.ClearMultiColumnStatistics();
+    }
+
     Y_ABORT_UNLESS(tableInfoCopy.Description.SerializeToString(&serialized));
     Y_ABORT_UNLESS(tableInfoCopy.Description.GetSharding().SerializeToString(&serializedSharding));
 
@@ -4603,7 +4613,8 @@ void TSchemeShard::PersistColumnTable(NIceDb::TNiceDb& db, TPathId pathId, const
         db.Table<Schema::ColumnTablesAlters>().Key(pathId.LocalPathId).Update(
             NIceDb::TUpdate<Schema::ColumnTablesAlters::AlterVersion>(tableInfo.AlterVersion),
             NIceDb::TUpdate<Schema::ColumnTablesAlters::Description>(serialized),
-            NIceDb::TUpdate<Schema::ColumnTablesAlters::Sharding>(serializedSharding));
+            NIceDb::TUpdate<Schema::ColumnTablesAlters::Sharding>(serializedSharding),
+            NIceDb::TUpdate<Schema::ColumnTablesAlters::MultiColumnStatistics>(serializedStatistics));
         if (tableInfo.AlterBody) {
             TString serializedAlterBody;
             Y_ABORT_UNLESS(tableInfo.AlterBody->SerializeToString(&serializedAlterBody));
@@ -4621,7 +4632,8 @@ void TSchemeShard::PersistColumnTable(NIceDb::TNiceDb& db, TPathId pathId, const
             NIceDb::TUpdate<Schema::ColumnTables::AlterVersion>(tableInfo.AlterVersion),
             NIceDb::TUpdate<Schema::ColumnTables::Description>(serialized),
             NIceDb::TUpdate<Schema::ColumnTables::Sharding>(serializedSharding),
-            NIceDb::TUpdate<Schema::ColumnTables::IsReadOnly>(tableInfo.IsReadOnly));
+            NIceDb::TUpdate<Schema::ColumnTables::IsReadOnly>(tableInfo.IsReadOnly),
+            NIceDb::TUpdate<Schema::ColumnTables::MultiColumnStatistics>(serializedStatistics));
         if (tableInfo.StandaloneSharding) {
             TString serializedOwnedShards;
             Y_ABORT_UNLESS(tableInfo.StandaloneSharding->SerializeToString(&serializedOwnedShards));

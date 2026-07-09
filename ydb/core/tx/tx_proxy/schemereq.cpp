@@ -1740,7 +1740,7 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
             {"txId", TxId},
             {"shardToRequest", SchemeshardIdToRequest},
             {"domainKey", navigate->ResultSet.begin()->DomainInfo->DomainKey},
-            {"domainInfoParams", navigate->ResultSet.begin()->DomainInfo->Params},
+            {"domainInfoParams", navigate->ResultSet.begin()->DomainInfo->Params.ShortDebugString()},
             {"redirectRequired", (navigate->ResultSet.begin()->RedirectRequired ? "true" : "false")});
 
         // TSchemeTransactionalReq can't contain AlterLogin operations since it's used only for RenameTables requests

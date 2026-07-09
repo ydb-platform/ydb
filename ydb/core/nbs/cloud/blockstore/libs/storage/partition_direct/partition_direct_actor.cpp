@@ -641,12 +641,12 @@ void TPartitionActor::HandleUpdateVChunkConfig(
 {
     auto& cfg = ev->Get()->VChunkConfig;
 
-    LOG_DEBUG_S(
+    LOG_INFO(
         ctx,
         NKikimrServices::NBS_PARTITION,
-        LogTitle.GetWithTime().c_str()
-            << " Handle UpdateVChunkConfig, vChunkIndex: "
-            << cfg.GetVChunkIndex());
+        "%s Handle UpdateVChunkConfig %s",
+        LogTitle.GetWithTime().c_str(),
+        cfg.DebugPrint().c_str());
 
     ExecuteTx(ctx, CreateTx<TUpdateVChunkConfig>(std::move(cfg)));
 }

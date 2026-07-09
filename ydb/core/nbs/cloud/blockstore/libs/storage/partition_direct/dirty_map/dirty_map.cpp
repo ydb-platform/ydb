@@ -585,12 +585,17 @@ void TBlocksDirtyMap::FlushFinished(
     const TVector<ui64>& flushFailed)
 {
     if (DisabledHosts.Get(route.DestinationHostIndex)) {
+        // No processing is required, all inflight operations have been updated
+        // when transition to disabled state occurs.
         return;
     }
 
     for (ui64 lsn: flushOk) {
         auto item = Inflight.GetValue(lsn);
-        Y_ABORT_UNLESS(item);
+        if (!item) {
+            // The item was deleted when the host was disabled.
+            continue;
+        }
         auto& inflight = item->Value;
 
         inflight.ConfirmFlush(route.DestinationHostIndex);
@@ -598,7 +603,10 @@ void TBlocksDirtyMap::FlushFinished(
 
     for (ui64 lsn: flushFailed) {
         auto item = Inflight.GetValue(lsn);
-        Y_ABORT_UNLESS(item);
+        if (!item) {
+            // The item was deleted when the host was disabled.
+            continue;
+        }
         auto& inflight = item->Value;
 
         inflight.FlushFailed(route.DestinationHostIndex);

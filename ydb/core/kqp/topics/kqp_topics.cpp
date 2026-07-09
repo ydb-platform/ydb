@@ -901,7 +901,9 @@ bool TTopicOperations::ShouldOmitPeerTopicTabletsForPredicateExchange() const
 void ValidateDeferredPublicationRequest(const NKikimrKqp::TTopicDeferredPublicationRequest& request)
 {
     Y_ENSURE(request.HasOp(), "DeferredPublication request must have Op");
-    Y_ENSURE(request.GetOp() != NKikimrKqp::TTopicDeferredPublicationRequest::Unspecified,
+    const auto op = request.GetOp();
+    Y_ENSURE(op == NKikimrKqp::TTopicDeferredPublicationRequest::Publish
+            || op == NKikimrKqp::TTopicDeferredPublicationRequest::Cancel,
         "DeferredPublication request must specify Publish or Cancel");
     Y_ENSURE(request.HasIntPublicationId(), "DeferredPublication request must have IntPublicationId");
     Y_ENSURE(!request.GetDestinations().empty(), "DeferredPublication request must have at least one destination");

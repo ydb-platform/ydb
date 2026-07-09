@@ -105,6 +105,10 @@ public:
         return ChunkTracker.GetNumActiveSlots();
     }
 
+    i64 GetUserChunkPoolSize() const {
+      return ChunkTracker.GetTotalHardLimit();
+    }
+
     TChunkIdx PopOwnerFreeChunk(TOwner owner, TString &outErrorReason) {
         if (ChunkTracker.TryAllocate(owner, 1, outErrorReason)) {
             TChunkIdx idx = PopFree(outErrorReason);

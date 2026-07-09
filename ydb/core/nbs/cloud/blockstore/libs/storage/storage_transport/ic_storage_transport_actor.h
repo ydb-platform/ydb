@@ -110,7 +110,6 @@ private:
     void HandleBatchErasePersistentBuffer(
         const TEvTransportPrivate::TEvBatchEraseFromPBuffer::TPtr& ev,
         const NActors::TActorContext& ctx);
-
     void HandleBarrierErasePersistentBuffer(
         const TEvTransportPrivate::TEvBarrierEraseFromPBuffer::TPtr& ev,
         const NActors::TActorContext& ctx);

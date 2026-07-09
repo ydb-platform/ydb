@@ -745,7 +745,11 @@ public:
                             .World(materializeWorld)
                             .DataSink(maybeWrite.Cast().DataSink())
                             .Input(content)
-                            .Settings().Build()
+                            .Settings()
+                                .Add()
+                                    .Name().Value(ToString(EYtSettingType::Transparent), TNodeFlags::Default).Build()
+                                .Build()
+                            .Build()
                         .Build()
                         .Done().Ptr();
                 } else if (content.Raw()->IsCallable({TCoSort::CallableName(), TCoTopSort::CallableName()}) && !content.Raw()->GetConstraint<TSortedConstraintNode>()) {
@@ -757,7 +761,11 @@ public:
                             .World(materializeWorld)
                             .DataSink(maybeWrite.Cast().DataSink())
                             .Input(content.Cast<TCoInputBase>().Input())
-                            .Settings().Build()
+                            .Settings()
+                                .Add()
+                                    .Name().Value(ToString(EYtSettingType::Transparent), TNodeFlags::Default).Build()
+                                .Build()
+                            .Build()
                         .Build()
                         .Done().Ptr();
                     newContent = ctx.ChangeChild(content.Ref(), TCoInputBase::idx_Input, std::move(materialize));
@@ -770,7 +778,11 @@ public:
                             .World(materializeWorld)
                             .DataSink(maybeWrite.Cast().DataSink())
                             .Input(content)
-                            .Settings().Build()
+                            .Settings()
+                                .Add()
+                                    .Name().Value(ToString(EYtSettingType::Transparent), TNodeFlags::Default).Build()
+                                .Build()
+                            .Build()
                         .Build()
                         .Done().Ptr();
                 }

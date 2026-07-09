@@ -14,15 +14,20 @@ public:
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
         LOG_S_DEBUG("TTxTxAbort.Execute at tablet " << Self->TabletID());
 
-        auto txOperator = Self->ProgressTxController->GetTxOperatorOptional(TxId);
+        auto txOperator = Self->ProgressTxController->GetTxOperator(TxId, ETxOperatorStatus::InProgress, /*optional*/ true);
         if (txOperator) {
+            DoComplete = true;
             return txOperator->ExecuteOnAbort(*Self, txc);
         }
         return true;
     }
 
     void Complete(const TActorContext& ctx) override {
-        auto txOperator = Self->ProgressTxController->GetTxOperatorOptional(TxId);
+        if (!DoComplete) {
+            return;
+        }
+
+        auto txOperator = Self->ProgressTxController->GetTxOperator(TxId, ETxOperatorStatus::Any, /*optional*/ true);
         if (txOperator) {
             txOperator->CompleteOnAbort(*Self, ctx);
         }
@@ -47,6 +52,7 @@ public:
 
 private:
     ui64 TxId = 0;
+    bool DoComplete = false;
     TActorId Subscriber;
 };
 

@@ -2232,7 +2232,8 @@ private:
     {
         std::vector<TOperationTableRef> operationInputTables;
         std::unordered_map<TFmrTableId, TClusterConnection> clusterConnections;
-        for (auto& ytTable: inputTables) {
+        for (ui32 tableIndex = 0; tableIndex < inputTables.size(); ++tableIndex) {
+            auto& ytTable = inputTables[tableIndex];
             TString inputCluster = ytTable.Cluster;
             auto richPath = GetFilledRichPathFromInputTable(ytTable);
             TFmrTableId fmrTableId = GetAliasOrFmrId(TFmrTableId(richPath), sessionId);
@@ -2245,6 +2246,7 @@ private:
                 // table is in fmr, do not download
                 TFmrTableRef fmrTableRef = GetFmrTableRef(fmrTableId, sessionId);
                 fmrTableRef.SerializedColumnGroups = GetColumnGroupSpec(fmrTableRef.FmrTableId, sessionId);
+                fmrTableRef.TableIndex = tableIndex;
                 YQL_CLOG(INFO, FastMapReduce) << "GetInputTables: table=" << fmrTableRef.FmrTableId
                     << " columnGroups=" << (fmrTableRef.SerializedColumnGroups.empty() ? "(empty)" : fmrTableRef.SerializedColumnGroups.substr(0, 200));
                 if (!richPath.Columns_.Empty()) {
@@ -2255,6 +2257,7 @@ private:
             } else {
                 TYtTableRef ytTableRef(richPath);
                 ytTableRef.FilePath = GetTableFilePath(TGetTableFilePathOptions(sessionId).Cluster(inputCluster).Path(ytTable.Name).IsTemp(ytTable.Temp));
+                ytTableRef.TableIndex = tableIndex;
                 operationInputTables.emplace_back(ytTableRef);
                 auto connection = GetTableClusterConnection(ytTable.Cluster, sessionId, config);
                 clusterConnections.emplace(fmrTableId, connection);

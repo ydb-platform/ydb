@@ -78,6 +78,11 @@ size_t THostStat::GetConsecutiveSuccessCount() const
     return ConsecutiveSuccessCount;
 }
 
+size_t THostStat::GetConsecutiveErrorCount() const
+{
+    return ConsecutiveErrorCount;
+}
+
 size_t THostStat::InflightCount(EOperation operation) const
 {
     return InflightByOperation[static_cast<size_t>(operation)];

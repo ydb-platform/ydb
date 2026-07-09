@@ -37,40 +37,59 @@ static void UpdateKafkaProducerInstanceId(TMaybe<NKafka::TProducerInstanceId>& l
     }
 }
 
-template <class T>
-static void UpdateMatchingMaybe(TMaybe<T>& lhs, const TMaybe<T>& rhs)
+static void UpdateDeferredPublicationOp(
+    TMaybe<NKikimrKqp::TTopicDeferredPublicationRequest::EOp>& lhs,
+    NKikimrKqp::TTopicDeferredPublicationRequest::EOp rhs)
 {
-    if (rhs.Empty()) {
-        return;
-    }
     if (lhs.Empty()) {
         lhs = rhs;
         return;
     }
-    Y_ENSURE(*lhs == *rhs);
-}
-
-template <class T>
-static void UpdateMatchingMaybe(TMaybe<T>& lhs, const T& rhs)
-{
-    UpdateMatchingMaybe(lhs, TMaybe<T>{rhs});
+    Y_ENSURE(*lhs == rhs, "DeferredPublication merge requires matching Op");
 }
 
 static void UpdateDeferredPublicationOp(
     TMaybe<NKikimrKqp::TTopicDeferredPublicationRequest::EOp>& lhs,
     const TMaybe<NKikimrKqp::TTopicDeferredPublicationRequest::EOp>& rhs)
 {
-    UpdateMatchingMaybe(lhs, rhs);
+    if (rhs.Empty()) {
+        return;
+    }
+    UpdateDeferredPublicationOp(lhs, *rhs);
+}
+
+static void UpdateDeferredPublicationIntId(TMaybe<ui64>& lhs, ui64 rhs)
+{
+    if (lhs.Empty()) {
+        lhs = rhs;
+        return;
+    }
+    Y_ENSURE(*lhs == rhs, "DeferredPublication merge requires matching IntPublicationId");
 }
 
 static void UpdateDeferredPublicationIntId(TMaybe<ui64>& lhs, const TMaybe<ui64>& rhs)
 {
-    UpdateMatchingMaybe(lhs, rhs);
+    if (rhs.Empty()) {
+        return;
+    }
+    UpdateDeferredPublicationIntId(lhs, *rhs);
+}
+
+static void UpdateDeferredPublicationExtId(TMaybe<TString>& lhs, const TString& rhs)
+{
+    if (lhs.Empty()) {
+        lhs = rhs;
+        return;
+    }
+    Y_ENSURE(*lhs == rhs, "DeferredPublication merge requires matching ExtPublicationId");
 }
 
 static void UpdateDeferredPublicationExtId(TMaybe<TString>& lhs, const TMaybe<TString>& rhs)
 {
-    UpdateMatchingMaybe(lhs, rhs);
+    if (rhs.Empty()) {
+        return;
+    }
+    UpdateDeferredPublicationExtId(lhs, *rhs);
 }
 
 static NKikimrPQ::TPartitionOperation::TWriteOp::TDeferredPublicationApi::EOp MapDeferredPublicationOp(

@@ -1,7 +1,7 @@
 YQL_UDF_CONTRIB(datetime2_udf)
     YQL_ABI_VERSION(
         2
-        46
+        47
         0
     )
 

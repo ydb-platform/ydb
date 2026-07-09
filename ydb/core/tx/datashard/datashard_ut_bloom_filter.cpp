@@ -16,6 +16,7 @@ Y_UNIT_TEST_SUITE(DataShardBloomFilter) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root").SetUseRealThreads(false);
+        serverSettings.AppConfig->MutableFeatureFlags()->SetEnableLocalIndexAsSchemeObject(true);
 
         Tests::TServer::TPtr server = new TServer(serverSettings);
         auto& runtime = *server->GetRuntime();

@@ -27,7 +27,7 @@ std::unique_ptr<NKikimr::TEvColumnShard::TEvProposeTransactionResult> IProposeTx
             evResult->Record.MutableDomainCoordinators()->CopyFrom(owner.ProcessingParams->GetCoordinators());
         }
         owner.Counters.GetTabletCounters()->IncCounter(COUNTER_PREPARE_SUCCESS);
-        YDB_LOG_DEBUG("",
+        YDB_LOG_DEBUG("Dump message, tabletId, txId",
             {"message", GetProposeStartInfoVerified().GetStatusMessage()},
             {"tabletId", owner.TabletID()},
             {"txId", txInfo.TxId});

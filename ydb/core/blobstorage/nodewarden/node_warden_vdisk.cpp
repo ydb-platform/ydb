@@ -259,6 +259,16 @@ namespace NKikimr::NStorage {
                 if (Cfg->PBufferConfig->HasMinFreeSectorsReserve()) {
                     pbufferFormat.MinFreeSectorsReserve = Cfg->PBufferConfig->GetMinFreeSectorsReserve();
                 }
+                if (Cfg->PBufferConfig->HasPreallocateFreeSpaceThresholdPercent()) {
+                    auto newValue = Cfg->PBufferConfig->GetPreallocateFreeSpaceThresholdPercent();
+                    if (newValue >= 100) {
+                        YDB_LOG_ERROR("PreallocateFreeSpaceThresholdPercent value should be less than 100",
+                            {"marker", "NW36"},
+                            {"PreallocateFreeSpaceThresholdPercent", newValue});
+                    } else {
+                        pbufferFormat.PreallocateFreeSpaceThresholdPercent = newValue;
+                    }
+                }
             }
             actor.reset(NDDisk::CreateDDiskActor(std::move(baseInfo), groupInfo, std::move(pbufferFormat),
                 std::move(ddiskConfig), AppData()->Counters));

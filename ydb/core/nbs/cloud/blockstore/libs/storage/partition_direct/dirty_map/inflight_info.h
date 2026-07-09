@@ -148,23 +148,25 @@ public:
     [[nodiscard]] THostIndex RequestFlush(
         THostIndex destination,
         THostMask disabledHosts);
-    void ConfirmFlush(THostRoute route);
-    void FlushFailed(THostRoute route);
+    void ConfirmFlush(THostIndex host);
+    void FlushFailed(THostIndex host);
     [[nodiscard]] THostMask GetRequestedFlushes() const;
 
     void RequestErase(THostIndex host);
     // Returns true when all erases confirmed.
     [[nodiscard]] bool ConfirmErase(THostIndex host);
     void EraseFailed(THostIndex host);
+    // Hosts where a write was requested but erase is not yet
+    // requested/confirmed.
+    [[nodiscard]] THostMask GetEraseNeeded() const;
+
+    // Skip removed hosts flushing and erase. Update state.
+    void RemoveHosts(THostMask removed);
 
     // Sets a lock that prohibits erasing the PBuffer.
     void LockPBuffer();
     // Removes the lock that prohibits erasing the PBuffer.
     void UnlockPBuffer();
-
-    // Hosts where a write was requested but erase is not yet
-    // requested/confirmed.
-    [[nodiscard]] THostMask GetEraseNeeded() const;
 
     TString DebugPrint(TInstant now) const;
 

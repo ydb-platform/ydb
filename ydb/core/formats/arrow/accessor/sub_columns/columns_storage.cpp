@@ -64,7 +64,10 @@ void TColumnsData::TIterator::InitArrays() {
         ChunkAddress = FullArrayAddress->GetArray()->GetChunk(ChunkAddress, localIndex);
         AFL_VERIFY(ChunkAddress->GetArray()->type()->id() == arrow::binary()->id());
         CurrentArrayData = static_cast<const arrow::BinaryArray*>(ChunkAddress->GetArray().get());
-        if (FullArrayAddress->GetArray()->GetType() == IChunkedArray::EType::Array) {
+        // Dictionary columns materialize (decode) to a dense binary array, so they are
+        // read exactly like a plain Array here.
+        if (FullArrayAddress->GetArray()->GetType() == IChunkedArray::EType::Array ||
+            FullArrayAddress->GetArray()->GetType() == IChunkedArray::EType::Dictionary) {
             if (CurrentArrayData->IsNull(localIndex)) {
                 Next();
             }

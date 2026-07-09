@@ -374,7 +374,7 @@ public:
         AFL_VERIFY(writtenPrimaryKeys);
         auto it = IntervalsInfo.begin();
         THashSet<ui64> affectedTxIds;
-        YDB_LOG_DEBUG_COMP(NKikimrServices::TX_COLUMNSHARD, "",
+        YDB_LOG_DEBUG_COMP(NKikimrServices::TX_COLUMNSHARD, "Dump batch, info",
             {"batch", writtenPrimaryKeys->ToString()},
             {"info", DebugJson().GetStringRobust()});
         for (ui32 i = 0; i < writtenPrimaryKeys->num_rows();) {
@@ -455,7 +455,7 @@ public:
             it->second.AddIntervalTx(lockId);
         }
         itTo->second.AddFinish(lockId, to.IsIncluded());
-        YDB_LOG_DEBUG_COMP(NKikimrServices::TX_COLUMNSHARD, "",
+        YDB_LOG_DEBUG_COMP(NKikimrServices::TX_COLUMNSHARD, "Dump event, interactionsInfo",
             {"event", "add_interval"},
             {"interactionsInfo", DebugJson().GetStringRobust()});
     }
@@ -484,7 +484,7 @@ public:
         if (intervals.IsEmpty()) {
             ReadIntervalsByPathId.erase(itIntervals);
         }
-        YDB_LOG_DEBUG_COMP(NKikimrServices::TX_COLUMNSHARD, "",
+        YDB_LOG_DEBUG_COMP(NKikimrServices::TX_COLUMNSHARD, "Dump event, interactionsInfo",
             {"event", "remove_interval"},
             {"interactionsInfo", DebugJson().GetStringRobust()});
     }

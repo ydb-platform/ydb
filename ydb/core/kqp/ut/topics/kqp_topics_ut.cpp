@@ -1,5 +1,9 @@
 #include <ydb/core/kqp/topics/kqp_topics.h>
+#include <ydb/core/kafka_proxy/kafka_producer_instance_id.h>
+#include <ydb/core/protos/kqp.pb.h>
 #include <library/cpp/testing/unittest/registar.h>
+
+#include <util/generic/yexception.h>
 
 namespace NKikimr::NKqp {
 
@@ -42,7 +46,14 @@ static
 void AssertReadOperation(const NTopic::TTopicOperationTransactions& txs,
                          const ui64 tabletId,
                          const size_t opsCount,
-                         const size_t opIndex)
+                         const size_t opIndex,
+                         const TString& consumer,
+                         ui64 begin,
+                         ui64 end,
+                         bool forceCommit,
+                         bool killReadSession,
+                         bool onlyCheckCommitedToFinish,
+                         const TString& readSessionId)
 {
     UNIT_ASSERT(txs.contains(tabletId));
     const auto& t = txs.at(tabletId);
@@ -50,6 +61,50 @@ void AssertReadOperation(const NTopic::TTopicOperationTransactions& txs,
     UNIT_ASSERT_LT(opIndex, opsCount);
     const auto& readOp = t.tx.GetOperations(opIndex);
     UNIT_ASSERT(not readOp.HasSkipConflictCheck());
+
+    UNIT_ASSERT(readOp.HasRead());
+    UNIT_ASSERT(readOp.GetRead().HasTopic());
+    const auto& topicRead = readOp.GetRead().GetTopic();
+    UNIT_ASSERT_EQUAL(topicRead.GetConsumer(), consumer);
+    UNIT_ASSERT_EQUAL(topicRead.GetCommitOffsetsBegin(), begin);
+    UNIT_ASSERT_EQUAL(topicRead.GetCommitOffsetsEnd(), end);
+    UNIT_ASSERT_EQUAL(topicRead.GetForceCommit(), forceCommit);
+    UNIT_ASSERT_EQUAL(topicRead.GetKillReadSession(), killReadSession);
+    UNIT_ASSERT_EQUAL(topicRead.GetOnlyCheckCommitedToFinish(), onlyCheckCommitedToFinish);
+    UNIT_ASSERT_EQUAL(topicRead.GetReadSessionId(), readSessionId);
+
+    UNIT_ASSERT_EQUAL(readOp.GetConsumer(), consumer);
+    UNIT_ASSERT_EQUAL(readOp.GetCommitOffsetsBegin(), begin);
+    UNIT_ASSERT_EQUAL(readOp.GetCommitOffsetsEnd(), end);
+    UNIT_ASSERT_EQUAL(readOp.GetForceCommit(), forceCommit);
+    UNIT_ASSERT_EQUAL(readOp.GetKillReadSession(), killReadSession);
+    UNIT_ASSERT_EQUAL(readOp.GetOnlyCheckCommitedToFinish(), onlyCheckCommitedToFinish);
+    UNIT_ASSERT_EQUAL(readOp.GetReadSessionId(), readSessionId);
+}
+
+static
+void AssertKafkaReadOperation(const NTopic::TTopicOperationTransactions& txs,
+                                const ui64 tabletId,
+                                const size_t opsCount,
+                                const size_t opIndex,
+                                const TString& consumer,
+                                ui64 commitOffsetEnd)
+{
+    UNIT_ASSERT(txs.contains(tabletId));
+    const auto& t = txs.at(tabletId);
+    UNIT_ASSERT_EQUAL(t.tx.OperationsSize(), opsCount);
+    UNIT_ASSERT_LT(opIndex, opsCount);
+    const auto& readOp = t.tx.GetOperations(opIndex);
+
+    UNIT_ASSERT(readOp.HasRead());
+    UNIT_ASSERT(readOp.GetRead().HasKafka());
+    const auto& kafkaRead = readOp.GetRead().GetKafka();
+    UNIT_ASSERT_EQUAL(kafkaRead.GetConsumer(), consumer);
+    UNIT_ASSERT_EQUAL(kafkaRead.GetCommitOffsetsEnd(), commitOffsetEnd);
+
+    UNIT_ASSERT(readOp.GetKafkaTransaction());
+    UNIT_ASSERT_EQUAL(readOp.GetConsumer(), consumer);
+    UNIT_ASSERT_EQUAL(readOp.GetCommitOffsetsEnd(), commitOffsetEnd);
 }
 
 static
@@ -57,7 +112,8 @@ void AssertWriteOperation(const NTopic::TTopicOperationTransactions& txs,
                           const ui64 tabletId,
                           const size_t opsCount,
                           const size_t opIndex,
-                          const bool skipConflictCheck)
+                          const bool skipConflictCheck,
+                          TMaybe<ui32> supportivePartition = Nothing())
 {
     UNIT_ASSERT(txs.contains(tabletId));
     const auto& t = txs.at(tabletId);
@@ -67,6 +123,46 @@ void AssertWriteOperation(const NTopic::TTopicOperationTransactions& txs,
     const auto& writeOp = t.tx.GetOperations(opIndex);
     UNIT_ASSERT(writeOp.HasSkipConflictCheck());
     UNIT_ASSERT_EQUAL(writeOp.GetSkipConflictCheck(), skipConflictCheck);
+
+    UNIT_ASSERT(writeOp.HasWrite());
+    UNIT_ASSERT_EQUAL(writeOp.GetWrite().GetSkipConflictCheck(), skipConflictCheck);
+
+    if (supportivePartition.Defined()) {
+        UNIT_ASSERT_EQUAL(writeOp.GetSupportivePartition(), *supportivePartition);
+        UNIT_ASSERT(writeOp.GetWrite().HasTopic());
+        UNIT_ASSERT_EQUAL(writeOp.GetWrite().GetTopic().GetSupportivePartition(), *supportivePartition);
+    }
+}
+
+static
+void AssertKafkaWriteOperation(const NTopic::TTopicOperationTransactions& txs,
+                                 const ui64 tabletId,
+                                 const size_t opsCount,
+                                 const size_t opIndex,
+                                 const bool skipConflictCheck,
+                                 const NKafka::TProducerInstanceId& producerInstanceId)
+{
+    UNIT_ASSERT(txs.contains(tabletId));
+    const auto& t = txs.at(tabletId);
+    UNIT_ASSERT(t.hasWrite);
+    UNIT_ASSERT_EQUAL(t.tx.OperationsSize(), opsCount);
+    UNIT_ASSERT_LT(opIndex, opsCount);
+    const auto& writeOp = t.tx.GetOperations(opIndex);
+    UNIT_ASSERT(writeOp.HasSkipConflictCheck());
+    UNIT_ASSERT_EQUAL(writeOp.GetSkipConflictCheck(), skipConflictCheck);
+
+    UNIT_ASSERT(writeOp.HasWrite());
+    UNIT_ASSERT_EQUAL(writeOp.GetWrite().GetSkipConflictCheck(), skipConflictCheck);
+    UNIT_ASSERT(writeOp.GetWrite().HasKafka());
+
+    UNIT_ASSERT(writeOp.GetKafkaTransaction());
+    const auto& legacyProducerId = writeOp.GetKafkaProducerInstanceId();
+    UNIT_ASSERT_EQUAL(legacyProducerId.GetId(), producerInstanceId.Id);
+    UNIT_ASSERT_EQUAL(legacyProducerId.GetEpoch(), producerInstanceId.Epoch);
+
+    const auto& canonicalProducerId = writeOp.GetWrite().GetKafka().GetKafkaProducerInstanceId();
+    UNIT_ASSERT_EQUAL(canonicalProducerId.GetId(), producerInstanceId.Id);
+    UNIT_ASSERT_EQUAL(canonicalProducerId.GetEpoch(), producerInstanceId.Epoch);
 }
 
 Y_UNIT_TEST(OnlyReadOperations) {
@@ -93,7 +189,7 @@ Y_UNIT_TEST(OnlyReadOperations) {
     topicOps.BuildTopicTxs(txs);
     UNIT_ASSERT_EQUAL(txs.size(), 1);
 
-    AssertReadOperation(txs, TABLETID, 1, 0);
+    AssertReadOperation(txs, TABLETID, 1, 0, "consumer", 100, 105, false, false, false, "read-session");
 }
 
 static
@@ -134,8 +230,8 @@ void TestReadWriteOperations(bool skipConflictCheck, bool trackProducerId) {
     topicOps.BuildTopicTxs(txs);
     UNIT_ASSERT_EQUAL(txs.size(), 2);
 
-    AssertReadOperation(txs, TABLETID_A, 1, 0);
-    AssertWriteOperation(txs, TABLETID_B, 1, 0, shouldSkip);
+    AssertReadOperation(txs, TABLETID_A, 1, 0, "consumer", 100, 105, false, false, false, "read-session");
+    AssertWriteOperation(txs, TABLETID_B, 1, 0, shouldSkip, 100'001u);
 }
 
 Y_UNIT_TEST(ReadWriteOperations_NoSkipConflictCheck_NoTrackProducerId) {
@@ -186,7 +282,7 @@ void TestOnlyWriteOperations(bool skipConflictCheck, bool trackProducerId) {
     topicOps.BuildTopicTxs(txs);
     UNIT_ASSERT_EQUAL(txs.size(), 1);
 
-    AssertWriteOperation(txs, TABLETID, 1, 0, shouldSkip);
+    AssertWriteOperation(txs, TABLETID, 1, 0, shouldSkip, 100'001u);
 }
 
 Y_UNIT_TEST(OnlyWriteOperations_NoSkipConflictCheck_NoTrackProducerId) {
@@ -235,8 +331,8 @@ void TestReadWriteOperationsOnePartition(bool skipConflictCheck, bool trackProdu
     topicOps.BuildTopicTxs(txs);
     UNIT_ASSERT_EQUAL(txs.size(), 1);
 
-    AssertReadOperation(txs, TABLETID, 2, 0);
-    AssertWriteOperation(txs, TABLETID, 2, 1, shouldSkip);
+    AssertReadOperation(txs, TABLETID, 2, 0, "consumer", 100, 105, false, false, false, "read-session");
+    AssertWriteOperation(txs, TABLETID, 2, 1, shouldSkip, 100'001u);
 }
 
 Y_UNIT_TEST(ReadWriteOperations_OnePartition_NoSkipConflictCheck_NoTrackProducerId) {
@@ -316,6 +412,41 @@ Y_UNIT_TEST(ShouldOmitPeerTopicPredicateExchange_FalseWhenTrackProducerId) {
     topicOps.SetTabletId(TOPIC, 1, 200);
 
     UNIT_ASSERT(!topicOps.ShouldOmitPeerTopicTabletsForPredicateExchange());
+}
+
+Y_UNIT_TEST(KafkaReadOperation_DualWrite) {
+    const TString TOPIC = "topic";
+    const ui32 PARTITION = 0;
+    const ui64 TABLETID = 1'000'000;
+    const TString CONSUMER = "kafka-consumer";
+    const ui64 OFFSET = 42;
+
+    NTopic::TTopicOperations topicOps;
+    topicOps.AddKafkaApiReadOperation(TOPIC, PARTITION, CONSUMER, OFFSET);
+    topicOps.SetTabletId(TOPIC, PARTITION, TABLETID);
+
+    NTopic::TTopicOperationTransactions txs;
+    topicOps.BuildTopicTxs(txs);
+    UNIT_ASSERT_EQUAL(txs.size(), 1);
+    AssertKafkaReadOperation(txs, TABLETID, 1, 0, CONSUMER, OFFSET);
+}
+
+Y_UNIT_TEST(KafkaWriteOperation_DualWrite) {
+    const TString TOPIC = "topic";
+    const ui32 PARTITION = 0;
+    const ui64 TABLETID = 1'000'000;
+    const NKafka::TProducerInstanceId PRODUCER_ID{7, 3};
+
+    NTopic::TTopicOperations topicOps;
+    topicOps.SetSkipConflictCheck(false);
+    topicOps.SetTrackProducerId(false);
+    topicOps.AddKafkaApiWriteOperation(TOPIC, PARTITION, PRODUCER_ID);
+    topicOps.SetTabletId(TOPIC, PARTITION, TABLETID);
+
+    NTopic::TTopicOperationTransactions txs;
+    topicOps.BuildTopicTxs(txs);
+    UNIT_ASSERT_EQUAL(txs.size(), 1);
+    AssertKafkaWriteOperation(txs, TABLETID, 1, 0, false, PRODUCER_ID);
 }
 
 }

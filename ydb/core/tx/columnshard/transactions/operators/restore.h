@@ -13,6 +13,7 @@ private:
 
     std::shared_ptr<NOlap::NImport::TImportTask> ImportTask;
     bool TaskExists = false;
+    bool AlreadyCompleted = false;
     std::unique_ptr<NTabletFlatExecutor::ITransaction> TxAddTask;
     std::unique_ptr<NTabletFlatExecutor::ITransaction> TxRemove;
     std::unique_ptr<NTabletFlatExecutor::ITransaction> TxAbort;
@@ -26,6 +27,7 @@ private:
     virtual void DoFinishProposeOnComplete(TColumnShard& /*owner*/, const TActorContext& /*ctx*/) override;
     virtual TString DoGetOpType() const override;
     virtual bool DoIsAsync() const override;
+    virtual bool DoIsProposeReplyReady(TColumnShard& owner) const override;
     virtual bool DoParse(TColumnShard& owner, const TString& data) override;
     virtual TString DoDebugString() const override;
 

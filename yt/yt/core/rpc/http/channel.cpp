@@ -12,6 +12,8 @@
 #include <yt/yt/core/https/config.h>
 #include <yt/yt/core/https/client.h>
 
+#include <yt/yt/core/concurrency/thread_pool_poller.h>
+
 #include <yt/yt/core/rpc/grpc/helpers.h>
 
 namespace NYT::NRpc::NHttp {
@@ -388,10 +390,43 @@ DEFINE_REFCOUNTED_TYPE(THttpChannel)
 IChannelPtr CreateHttpChannel(
     const std::string& address,
     const NConcurrency::IPollerPtr& poller,
-    bool isHttps,
+    bool secure,
     NHttps::TClientCredentialsConfigPtr credentials)
 {
-    return New<THttpChannel>(address, poller, isHttps, credentials);
+    return New<THttpChannel>(address, poller, secure, credentials);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+namespace {
+
+class THttpChannelFactory
+    : public IChannelFactory
+{
+public:
+    THttpChannelFactory(
+        TClientConfigPtr config,
+        NConcurrency::IPollerPtr poller)
+        : Config_(std::move(config))
+        , Poller_(std::move(poller))
+    { }
+
+    IChannelPtr CreateChannel(const std::string& address) override
+    {
+        return CreateHttpChannel(address, Poller_, Config_->Secure, Config_->Credentials);
+    }
+
+private:
+    const TClientConfigPtr Config_;
+    const NConcurrency::IPollerPtr Poller_;
+};
+
+} // namespace
+
+IChannelFactoryPtr CreateHttpChannelFactory(TClientConfigPtr config)
+{
+    auto poller = NConcurrency::CreateThreadPoolPoller(config->PollerThreadCount, "HttpChannel");
+    return New<THttpChannelFactory>(config, std::move(poller));
 }
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -79,6 +79,22 @@ Y_UNIT_TEST_SUITE(TVChunkConfigTest)
         UNIT_ASSERT_VALUES_EQUAL("[H3,H4]", cfg.GetSecondaryPBuffers().Print());
         UNIT_ASSERT_VALUES_EQUAL("[H0,H1,H2]", cfg.GetHealthyDDisks().Print());
     }
+
+    Y_UNIT_TEST(ShouldAppendDisabledHost)
+    {
+        auto cfg = TVChunkConfig::MakeDefault(0, 3, 2);
+        const size_t before = cfg.GetHostCount();
+
+        cfg.AppendHost();
+
+        const auto newIdx = static_cast<THostIndex>(before);
+        UNIT_ASSERT_VALUES_EQUAL(before + 1, cfg.GetHostCount());
+        UNIT_ASSERT(cfg.GetPBufferRole(newIdx) == EHostRole::None);
+        UNIT_ASSERT(cfg.GetDDiskRole(newIdx) == EHostRole::None);
+        UNIT_ASSERT(cfg.GetDisabledHosts().Get(newIdx));
+        UNIT_ASSERT(!cfg.GetWatermark(newIdx).has_value());
+        UNIT_ASSERT(!cfg.GetDDisks().Get(newIdx));
+    }
 }
 
 }   // namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect

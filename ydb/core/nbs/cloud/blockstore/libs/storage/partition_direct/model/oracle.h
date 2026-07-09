@@ -6,9 +6,12 @@
 #include "host_mask.h"
 #include "host_stat.h"
 #include "host_state.h"
+#include "time_predictor.h"
 
 #include <ydb/core/nbs/cloud/blockstore/config/config.h>
 #include <ydb/core/nbs/cloud/blockstore/config/public.h>
+
+#include <ydb/core/nbs/cloud/storage/core/libs/common/backoff_delay_provider.h>
 
 #include <util/generic/vector.h>
 
@@ -23,6 +26,8 @@ enum class EHostHealth
     TemporaryOffline,
     Offline,
 };
+
+////////////////////////////////////////////////////////////////////////////////
 
 class IOracle
 {
@@ -47,25 +52,40 @@ public:
         EOperation operation,
         TInstant now) = 0;
 
+    virtual void OnDDiskDisconnected(THostIndex hostIndex, TInstant now) = 0;
+    virtual void OnDDiskConnected(THostIndex hostIndex, TInstant now) = 0;
+    virtual TDuration GetDDiskReconnectDelay(THostIndex hostIndex) = 0;
+
     // Picks the best host (by lowest inflight count) out of the provided set
     // of hosts. Ties are broken uniformly at random.
     [[nodiscard]] virtual THostIndex SelectBestPBufferHost(
         THostMask hosts,
         EOperation operation) const = 0;
 
-    [[nodiscard]] virtual TDuration GetReadHedgingDelay() const = 0;
+    [[nodiscard]] virtual TDuration GetReadHedgingDelay(
+        THostIndex host,
+        EDataLocation dataLocation) const = 0;
     [[nodiscard]] virtual TDuration GetReadRequestTimeout() const = 0;
-    [[nodiscard]] virtual TDuration GetWriteHedgingDelay() const = 0;
+
+    [[nodiscard]] virtual EWriteMode GetWriteMode() const = 0;
+    [[nodiscard]] virtual TDuration GetWriteHedgingDelay(
+        THostMask hosts,
+        bool indirect) const = 0;
     [[nodiscard]] virtual TDuration GetWriteRequestTimeout() const = 0;
     [[nodiscard]] virtual TDuration GetIndirectWriteReplyTimeout() const = 0;
+
+    [[nodiscard]] virtual TDuration GetFlushRequestCooldown(
+        THostMask hosts) const = 0;
     [[nodiscard]] virtual TDuration GetFlushRequestTimeout() const = 0;
+
     [[nodiscard]] virtual TDuration GetEraseRequestTimeout() const = 0;
-    [[nodiscard]] virtual EWriteMode GetWriteMode() const = 0;
 
     [[nodiscard]] virtual const THostStat& GetHostStatistics(
         THostIndex hostIndex) const = 0;
     [[nodiscard]] virtual TString Dump() const = 0;
 };
+
+////////////////////////////////////////////////////////////////////////////////
 
 class TOracle: public IOracle
 {
@@ -73,9 +93,11 @@ public:
     TOracle(
         TStorageConfigPtr storageConfig,
         IHostStateController* hostStateController);
+    ~TOracle() override;
 
     void Think(TInstant now);
 
+    // IOracle implementation
     void OnRequestStarted(
         THostIndex hostIndex,
         EOperation operation,
@@ -94,25 +116,48 @@ public:
         EOperation operation,
         TInstant now) override;
 
+    void OnDDiskDisconnected(THostIndex hostIndex, TInstant now) override;
+    void OnDDiskConnected(THostIndex hostIndex, TInstant now) override;
+    [[nodiscard]] TDuration GetDDiskReconnectDelay(
+        THostIndex hostIndex) override;
+
+    void OnHostAdded();
+
+    [[nodiscard]] size_t GetHostCount() const;
+
     [[nodiscard]] THostIndex SelectBestPBufferHost(
         THostMask hosts,
         EOperation operation) const override;
 
-    [[nodiscard]] TDuration GetReadHedgingDelay() const override;
+    [[nodiscard]] TDuration GetReadHedgingDelay(
+        THostIndex host,
+        EDataLocation dataLocation) const override;
     [[nodiscard]] TDuration GetReadRequestTimeout() const override;
-    [[nodiscard]] TDuration GetWriteHedgingDelay() const override;
+
+    [[nodiscard]] EWriteMode GetWriteMode() const override;
+    [[nodiscard]] TDuration GetWriteHedgingDelay(
+        THostMask hosts,
+        bool indirect) const override;
     [[nodiscard]] TDuration GetWriteRequestTimeout() const override;
     [[nodiscard]] TDuration GetIndirectWriteReplyTimeout() const override;
+
+    [[nodiscard]] TDuration GetFlushRequestCooldown(
+        THostMask hosts) const override;
     [[nodiscard]] TDuration GetFlushRequestTimeout() const override;
+
     [[nodiscard]] TDuration GetEraseRequestTimeout() const override;
-    [[nodiscard]] EWriteMode GetWriteMode() const override;
 
     [[nodiscard]] const THostStat& GetHostStatistics(
         THostIndex hostIndex) const override;
     [[nodiscard]] TString Dump() const override;
 
 private:
+    [[nodiscard]] TTimePredictor& AccessTimePredictor(EOperation operation);
+    [[nodiscard]] const TTimePredictor& GetTimePredictor(
+        EOperation operation) const;
+
     const TStorageConfigPtr StorageConfig;
+    const TOracleConfigPtr OracleConfig;
 
     IHostStateController* const HostStateController;
     const TDuration DefaultReadHedgingDelay;
@@ -127,6 +172,8 @@ private:
     TVector<THostStat> HostStatistics;
     TVector<THostState> HostStates;
     TVector<EHostHealth> HostsHealths;
+    TVector<TBackoffDelayProvider> HostsReconnectDelays;
+    TVector<TTimePredictor> TimePredictors;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

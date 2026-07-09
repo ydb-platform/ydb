@@ -1024,7 +1024,9 @@ public:
             case NKqpProto::TKqpSchemeOperation::kSetColumnConstraint: {
                 const auto& constraintSettings = schemeOp.GetSetColumnConstraint();
                 auto req = std::make_unique<NSchemeShard::TEvSetColumnConstraint::TEvCreateRequest>(TxId, Database, constraintSettings);
-                // TODO(flown4qqqq): add user sid
+                if (UserToken) {
+                    req->Record.SetUserSID(UserToken->GetUserSID());
+                }
                 ForwardToSchemeShard(std::move(req));
                 break;
             }
@@ -1227,11 +1229,11 @@ public:
         }
 
         auto& constraintResult = *record.MutableSetColumnConstraint();
-        const Ydb::Table::SetColumnConstraintState::State state = constraintResult.GetState();
+        const Ydb::Table::SetNotNullState::State state = constraintResult.GetState();
 
-        if (state == Ydb::Table::SetColumnConstraintState::STATE_DONE) {
+        if (state == Ydb::Table::SetNotNullState::STATE_DONE) {
             return ReplyErrorAndDie(Ydb::StatusIds::SUCCESS, record.MutableIssues());
-        } else if (state == Ydb::Table::SetColumnConstraintState::STATE_CANCELLED) {
+        } else if (state == Ydb::Table::SetNotNullState::STATE_CANCELLED) {
             return ReplyErrorAndDie(Ydb::StatusIds::PRECONDITION_FAILED, record.MutableIssues());
         } else {
             return ReplyErrorAndDie(Ydb::StatusIds::INTERNAL_ERROR, record.MutableIssues());

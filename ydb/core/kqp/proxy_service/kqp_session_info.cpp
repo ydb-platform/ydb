@@ -84,7 +84,7 @@ void TKqpSessionInfo::SerializeTo(::NKikimrKqp::TSessionInfo* proto, const TFiel
 
     if (fieldsMap.NeedField(VSessions::WmState::ColumnId)) { // 18
         if (WmState) {
-            using EWmState = IWmSessionUpdater::EWmState;
+            using EWmState = NWorkload::ISessionUpdater::EState;
             switch(WmState->GetState()) {
                 case EWmState::NONE: {
                     proto->SetWmState("NONE");

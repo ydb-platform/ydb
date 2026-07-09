@@ -251,6 +251,7 @@ DEFINE_ENUM(ESecondaryIndexKind,
     ((Unique)                   (2))
 );
 
+struct TUnfoldedColumns;
 struct TIndexInfo;
 
 DEFINE_ENUM(ETableToIndexCorrespondence,

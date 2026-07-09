@@ -200,7 +200,7 @@ private:
 
             switch (start->GetState()) {
             case TExprNode::EState::Initial:
-                return TStatus(TStatus::Repeat, true);
+                return TStatus(TStatus::Repeat, /*hasRestart=*/true);
             case TExprNode::EState::TypeInProgress:
                 return IGraphTransformer::TStatus::Async;
             case TExprNode::EState::TypePending:
@@ -216,7 +216,7 @@ private:
                     break;
                 }
 
-                return TStatus(TStatus::Repeat, true);
+                return TStatus(TStatus::Repeat, /*hasRestart=*/true);
             case TExprNode::EState::TypeComplete:
             case TExprNode::EState::ConstrInProgress:
             case TExprNode::EState::ConstrPending:
@@ -838,7 +838,7 @@ TAutoPtr<IGraphTransformer> CreateFullTypeAnnotationTransformer(
             issueCode));
     }
 
-    return CreateCompositeGraphTransformer(transformers, true);
+    return CreateCompositeGraphTransformer(transformers, /*useIssueScopes=*/true);
 }
 
 bool SyncAnnotateTypes(
@@ -869,7 +869,7 @@ TExprNode::TPtr ParseAndAnnotate(
     }
 
     TExprNode::TPtr exprRoot;
-    if (!CompileExpr(*astRes.Root, exprRoot, exprCtx, nullptr, nullptr)) {
+    if (!CompileExpr(*astRes.Root, exprRoot, exprCtx, /*resolver=*/nullptr, /*urlListerManager=*/nullptr)) {
         return nullptr;
     }
 
@@ -915,6 +915,17 @@ public:
             "MrTableEach", "MrTableEachStrict", "MrPartitions", "MrPartitionsStrict",
             "MrPartitionList", "MrPartitionListStrict", "MrWalkFolders"})) {
             input->SetTypeAnn(ctx.MakeType<TUnitExprType>());
+            return IGraphTransformer::TStatus::Ok;
+        }
+
+        if (input->IsCallable("Materialize!")) {
+            if (!EnsureMinArgsCount(*input, 3, ctx)) {
+                return IGraphTransformer::TStatus::Error;
+            }
+            TTypeAnnotationNode::TListType children;
+            children.push_back(ctx.MakeType<TWorldExprType>());
+            children.push_back(input->Child(2)->GetTypeAnn());
+            input->SetTypeAnn(ctx.MakeType<TTupleExprType>(children));
             return IGraphTransformer::TStatus::Ok;
         }
 
@@ -1222,8 +1233,25 @@ bool PartialAnnonateTypes(TAstNode* astRoot, bool isLibrary, TLangVersion langve
     typeCtx.AddDataSource(ConfigProviderName, configProvder);
     auto callableTypeAnnTransformer = CreateExtCallableTypeAnnotationTransformer(typeCtx);
     TVector<TTransformStage> transformers;
+
     transformers.push_back(TTransformStage(CreateFunctorTransformer(&ExpandApply),
-                                            "ExpandApply", TIssuesIds::CORE_PRE_TYPE_ANN));
+        "ExpandApply", TIssuesIds::CORE_PRE_TYPE_ANN));
+
+    transformers.push_back(TTransformStage(
+        CreateFunctorTransformer(
+            [&typeCtx](TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) {
+                TOptimizeExprSettings settings(&typeCtx);
+                return OptimizeExpr(input, output, [](const TExprNode::TPtr& node, TExprContext& ctx) {
+                    Y_UNUSED(ctx);
+
+                    if (node->IsCallable("Apply") && node->ChildrenSize() > 0 && IsUniversalLiteral(node->HeadPtr())) {
+                        return node->HeadPtr();
+                    }
+
+                    return node;
+                }, ctx, settings);
+            }), "ExpandApplyUniversal", TIssuesIds::CORE_PRE_TYPE_ANN));
+
     transformers.push_back(TTransformStage(CreateFunctorTransformer([&typeCtx](TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx){
         TOptimizeExprSettings settings(&typeCtx);
         return OptimizeExpr(input, output, [](const TExprNode::TPtr& node, TExprContext& ctx){
@@ -1237,11 +1265,12 @@ bool PartialAnnonateTypes(TAstNode* astRoot, bool isLibrary, TLangVersion langve
 
             return node;
         }, ctx, settings);
-    }),
-                                            "RewriteEvaluation", TIssuesIds::CORE_PRE_TYPE_ANN));
+    }), "RewriteEvaluation", TIssuesIds::CORE_PRE_TYPE_ANN));
+
     transformers.push_back(TTransformStage(
         CreatePartialTypeAnnotationTransformer(callableTypeAnnTransformer, typeCtx),
         "PartialTypeAnn", TIssuesIds::CORE_PARTIAL_TYPE_ANN));
+
     auto transformer = CreateCompositeGraphTransformer(transformers, /* useIssueScopes= */ true);
     auto status = InstantTransform(*transformer, exprRoot, ctx);
     issues.AddIssues(ctx.IssueManager.GetCompletedIssues());

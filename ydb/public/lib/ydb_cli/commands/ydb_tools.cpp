@@ -116,7 +116,8 @@ int TCommandDump::Run(TConfig& config) {
     auto log = std::make_shared<TLog>(CreateLogBackend("cerr", VerbosityLevelToELogPriority(config.VerbosityLevel)));
     log->SetFormatter(GetPrefixLogFormatter(""));
 
-    NDump::TClient client(CreateDriver(config), std::move(log));
+    auto driver = CreateDriver(config);
+    NDump::TClient client(driver, std::move(log));
     NStatusHelpers::ThrowOnErrorOrPrintIssues(client.Dump(Path, FilePath, settings));
 
     return EXIT_SUCCESS;
@@ -300,7 +301,8 @@ int TCommandRestore::Run(TConfig& config) {
     auto log = std::make_shared<TLog>(CreateLogBackend("cerr", VerbosityLevelToELogPriority(config.VerbosityLevel)));
     log->SetFormatter(GetPrefixLogFormatter(""));
 
-    NDump::TClient client(CreateDriver(config), std::move(log));
+    auto driver = CreateDriver(config);
+    NDump::TClient client(driver, std::move(log));
     NStatusHelpers::ThrowOnErrorOrPrintIssues(client.Restore(FilePath, Path, settings));
 
     return EXIT_SUCCESS;
@@ -368,7 +370,7 @@ int TCommandCopy::Run(TConfig& config) {
         }
     }
     NStatusHelpers::ThrowOnErrorOrPrintIssues(
-        GetSession(config).CopyTables(
+        GetSession(driver).CopyTables(
             copyItems,
             FillSettings(NTable::TCopyTablesSettings())
         ).GetValueSync()
@@ -452,6 +454,7 @@ void TCommandRename::ExtractParams(TConfig& config) {
 }
 
 int TCommandRename::Run(TConfig& config) {
+    auto driver = CreateDriver(config);
     TVector<NYdb::NTable::TRenameItem> renameItems;
     renameItems.reserve(Items.size());
     for (auto& item : Items) {
@@ -461,7 +464,7 @@ int TCommandRename::Run(TConfig& config) {
         }
     }
     NStatusHelpers::ThrowOnErrorOrPrintIssues(
-        GetSession(config).RenameTables(
+        GetSession(driver).RenameTables(
             renameItems,
             FillSettings(NTable::TRenameTablesSettings())
         ).GetValueSync()

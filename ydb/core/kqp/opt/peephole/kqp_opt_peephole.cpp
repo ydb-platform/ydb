@@ -523,11 +523,10 @@ TMaybeNode<TKqpPhysicalTx> PeepholeOptimize(const TKqpPhysicalTx& tx, TExprConte
 
                         // Run the peephole optimization on new program again to update type annotations.
                         // TODO(ilezhankin): refactor to run only the update of type annotations - not the whole optimization.
-                        bool allowNonDeterministicFunctions = !newInputProgram.Lambda().Body().Maybe<TKqpEffects>();
                         TExprNode::TPtr newInputProgramNode;
 
                         auto status = PeepHoleOptimize(newInputProgram, newInputProgramNode, ctx, typesCtx, config,
-                            allowNonDeterministicFunctions, withFinalStageRules, disabledOpts);
+                            true, withFinalStageRules, disabledOpts);
                         if (status != TStatus::Ok) {
                             ctx.AddError(TIssue(ctx.GetPosition(stage.Pos()), "Peephole optimization failed for KQP transaction"));
                             return {};
@@ -570,17 +569,15 @@ TMaybeNode<TKqpPhysicalTx> PeepholeOptimize(const TKqpPhysicalTx& tx, TExprConte
             .ArgsType(ExpandType(stage.Pos(), *ctx.MakeType<TTupleExprType>(argTypes), ctx))
             .Done();
 
-        const bool allowNonDeterministicFunctions = !program.Lambda().Body().Maybe<TKqpEffects>();
-
         TExprNode::TPtr newProgram;
         auto status = PeepHoleOptimize(program, newProgram, ctx, typesCtx, config,
-            allowNonDeterministicFunctions, withFinalStageRules, disabledOpts);
+            true, withFinalStageRules, disabledOpts);
         if (status != TStatus::Ok) {
             ctx.AddError(TIssue(ctx.GetPosition(stage.Pos()), "Peephole optimization failed for KQP transaction"));
             return {};
         }
 
-        if (allowNonDeterministicFunctions) {
+        {
             status = ReplaceNonDetFunctionsWithParams(newProgram, ctx, &nonDetParamBindings);
 
             if (status != TStatus::Ok) {

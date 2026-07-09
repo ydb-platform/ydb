@@ -1,8 +1,15 @@
+#include <ydb/core/testlib/actors/test_runtime.h>
+#include <ydb/core/testlib/basics/appdata.h>
+#include <ydb/core/tx/columnshard/common/path_id.h>
 #include <ydb/core/tx/columnshard/common/portion.h>
 #include <ydb/core/tx/columnshard/engines/portions/portion_info.h>
 #include <ydb/core/tx/columnshard/engines/storage/optimizer/abstract/optimizer.h>
 #include <ydb/core/tx/columnshard/engines/storage/optimizer/tiling/counters.h>
 #include <ydb/core/tx/columnshard/engines/storage/optimizer/tiling/tiling_pp/tiling.h>
+#include <ydb/core/tx/columnshard/test_helper/helper.h>
+
+#include <ydb/library/actors/core/actor.h>
+#include <ydb/library/actors/core/hfunc.h>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/type.h>
 #include <library/cpp/json/json_reader.h>
@@ -95,6 +102,82 @@ std::shared_ptr<IOptimizerPlannerConstructor> MakeTilingPlusPlusConstructor() {
     auto ctor = IOptimizerPlannerConstructor::BuildDefault("tiling++");
     UNIT_ASSERT(ctor);
     return ctor;
+}
+
+// Building a planner touches AppDataVerified() (via the base ctor's GetBadPortionsLimit()), so it must
+// run inside an initialized actor context. Mirrors ut_lcbuckets_skip_level.cpp.
+enum EEvTilingTest {
+    EvExecuteTilingTest = 1,
+    EvTilingTestExecuted,
+};
+
+struct TEvExecuteTilingTest: NActors::TEventLocal<TEvExecuteTilingTest, EvExecuteTilingTest> {
+    std::function<void()> Action;
+};
+
+struct TEvTilingTestExecuted: NActors::TEventLocal<TEvTilingTestExecuted, EvTilingTestExecuted> {};
+
+class TTilingTestExecutor: public NActors::TActor<TTilingTestExecutor> {
+private:
+    const NActors::TActorId ReplyTo;
+
+    void Handle(TEvExecuteTilingTest::TPtr ev) {
+        ev->Get()->Action();
+        Send(ReplyTo, new TEvTilingTestExecuted());
+        PassAway();
+    }
+
+public:
+    explicit TTilingTestExecutor(const NActors::TActorId replyTo)
+        : TActor(&TThis::StateWork)
+        , ReplyTo(replyTo)
+    {
+    }
+
+    STATEFN(StateWork) {
+        switch (ev->GetTypeRewrite()) {
+            hFunc(TEvExecuteTilingTest, Handle);
+            cFunc(NActors::TEvents::TSystem::Poison, PassAway);
+        }
+    }
+};
+
+void RunInActorContext(const std::function<void()>& action) {
+    NActors::TTestActorRuntime runtime;
+    runtime.Initialize(TAppPrepare().Unwrap());
+
+    const NActors::TActorId edge = runtime.AllocateEdgeActor();
+    const NActors::TActorId executor = runtime.Register(new TTilingTestExecutor(edge));
+
+    auto* request = new TEvExecuteTilingTest();
+    request->Action = action;
+    runtime.Send(new IEventHandle(executor, edge, request));
+
+    TAutoPtr<IEventHandle> handle;
+    runtime.GrabEdgeEventRethrow<TEvTilingTestExecuted>(handle);
+}
+
+std::shared_ptr<IOptimizerPlanner> BuildPlannerFromJson(const TString& className, const NJson::TJsonValue& json) {
+    auto ctor = IOptimizerPlannerConstructor::BuildDefault(className);
+    UNIT_ASSERT(ctor);
+    const auto deserialize = ctor->DeserializeFromJson(json);
+    UNIT_ASSERT_C(deserialize.IsSuccess(), deserialize.GetErrorMessage());
+
+    const TInternalPathId pathId = TInternalPathId::FromRawValue(1);
+    const auto pkSchema = arrow::schema({ arrow::field("pk", arrow::uint64()) });
+    IOptimizerPlannerConstructor::TBuildContext ctx(pathId, TTestStoragesManager::GetInstance(), pkSchema);
+
+    const auto plannerConclusion = ctor->BuildPlanner(ctx);
+    UNIT_ASSERT_C(plannerConclusion.IsSuccess(), plannerConclusion.GetErrorMessage());
+    return plannerConclusion.GetResult();
+}
+
+ui64 BuildPlannerAndGetNodePortionsCountLimit(const TString& className, const NJson::TJsonValue& json) {
+    ui64 limit = 0;
+    RunInActorContext([&] {
+        limit = BuildPlannerFromJson(className, json)->GetNodePortionsCountLimit();
+    });
+    return limit;
 }
 
 }   // namespace
@@ -457,6 +540,47 @@ Y_UNIT_TEST_SUITE(TilingCoreUnits) {
         UNIT_ASSERT_VALUES_EQUAL(tiling.LastLevel.Candidates.size(), 0);
     }
 
+    // HasNoIntersections() drives forced (ALTER TABLE ... COMPACT) completion: it is true only when
+    // every portion has settled into the regular last level (no accumulator, no candidates, no middle).
+    Y_UNIT_TEST(TilingHasNoIntersections) {
+        TTestTiling::TilingSettings settings;
+        settings.AccumulatorPortionSizeLimit = 100;   // portions with >=100 bytes bypass the accumulator
+        settings.K = 2;
+        settings.MiddleLevelCount = 5;
+
+        TCounters counters;
+        TTestTiling tiling(settings, counters);
+
+        // Empty optimizer: nothing intersects.
+        UNIT_ASSERT(tiling.HasNoIntersections());
+
+        // Non-overlapping wide portions settle into LastLevel.Portions → still no intersections.
+        tiling.AddPortion(MakePortion(1, 0, 9, 1000));
+        tiling.AddPortion(MakePortion(2, 100, 109, 1000));
+        UNIT_ASSERT_VALUES_EQUAL(tiling.LastLevel.Portions.size(), 2);
+        UNIT_ASSERT(tiling.HasNoIntersections());
+
+        // An overlapping wide portion becomes a last-level candidate → intersections present.
+        tiling.AddPortion(MakePortion(3, 0, 9, 1000));
+        UNIT_ASSERT(tiling.LastLevel.CandidateIds.contains(3));
+        UNIT_ASSERT(!tiling.HasNoIntersections());
+        tiling.RemovePortion(MakePortion(3, 0, 9, 1000));
+        UNIT_ASSERT(tiling.HasNoIntersections());
+
+        // A small portion parked in the accumulator also counts as an intersection until compacted out.
+        tiling.AddPortion(MakePortion(4, 500, 509, 10));
+        UNIT_ASSERT_VALUES_EQUAL(tiling.Accumulator.Portions.size(), 1);
+        UNIT_ASSERT(!tiling.HasNoIntersections());
+        tiling.RemovePortion(MakePortion(4, 500, 509, 10));
+        UNIT_ASSERT(tiling.HasNoIntersections());
+
+        // A portion placed on a middle level (overlaps both baselines) is an intersection too.
+        tiling.AddPortion(MakePortion(5, 0, 109, 1000));
+        UNIT_ASSERT(!tiling.HasNoIntersections());
+        tiling.RemovePortion(MakePortion(5, 0, 109, 1000));
+        UNIT_ASSERT(tiling.HasNoIntersections());
+    }
+
     Y_UNIT_TEST(TilingAccumulatorTaskTargetsLevelZero) {
         TTestTiling::TilingSettings settings;
         settings.AccumulatorPortionSizeLimit = 100;
@@ -747,6 +871,49 @@ Y_UNIT_TEST_SUITE(TilingPlusPlusParallelCompaction) {
         UNIT_ASSERT(NJson::ReadJsonFastTree(proto.GetTiling().GetJson(), &restoredJson));
         UNIT_ASSERT(restoredJson.Has("compaction_threads"));
         UNIT_ASSERT_VALUES_EQUAL(restoredJson["compaction_threads"].GetUInteger(), 2);
+    }
+}
+
+Y_UNIT_TEST_SUITE(TilingNodePortionsCountLimit) {
+    // node_portions_count_limit is consumed by the base IOptimizerPlannerConstructor and must reach the
+    // built planner's node-portions overload guard. Regression for both tiling optimizers:
+    //  - "tiling++" used to hardcode std::nullopt when constructing its planner, silently dropping it.
+    //  - "tiling" used to reject the base-owned key as an "unknown tiling compaction setting".
+    constexpr ui64 ConfiguredLimit = 777;
+
+    Y_UNIT_TEST(TilingPlusPlusForwardsLimitToPlanner) {
+        NJson::TJsonValue json(NJson::JSON_MAP);
+        json["node_portions_count_limit"] = ConfiguredLimit;
+        UNIT_ASSERT_VALUES_EQUAL(BuildPlannerAndGetNodePortionsCountLimit("tiling++", json), ConfiguredLimit);
+    }
+
+    Y_UNIT_TEST(TilingForwardsLimitToPlanner) {
+        NJson::TJsonValue json(NJson::JSON_MAP);
+        json["node_portions_count_limit"] = ConfiguredLimit;
+        UNIT_ASSERT_VALUES_EQUAL(BuildPlannerAndGetNodePortionsCountLimit("tiling", json), ConfiguredLimit);
+    }
+
+    // The base-owned keys must not trip "tiling"'s strict unknown-setting check when mixed with real settings.
+    Y_UNIT_TEST(TilingAcceptsBaseOwnedKeysAlongsideSettings) {
+        auto ctor = IOptimizerPlannerConstructor::BuildDefault("tiling");
+        UNIT_ASSERT(ctor);
+        NJson::TJsonValue json(NJson::JSON_MAP);
+        json["node_portions_count_limit"] = ConfiguredLimit;
+        json["weight_kff"] = 2.0;
+        json["max_levels"] = 5;
+        const auto status = ctor->DeserializeFromJson(json);
+        UNIT_ASSERT_C(status.IsSuccess(), status.GetErrorMessage());
+        UNIT_ASSERT(ctor->GetNodePortionsCountLimit().has_value());
+        UNIT_ASSERT_VALUES_EQUAL(*ctor->GetNodePortionsCountLimit(), ConfiguredLimit);
+    }
+
+    // Loosening the parser for base-owned keys must not let genuinely unknown settings through.
+    Y_UNIT_TEST(TilingStillRejectsUnknownSetting) {
+        auto ctor = IOptimizerPlannerConstructor::BuildDefault("tiling");
+        UNIT_ASSERT(ctor);
+        NJson::TJsonValue json(NJson::JSON_MAP);
+        json["definitely_not_a_setting"] = 1;
+        UNIT_ASSERT(ctor->DeserializeFromJson(json).IsFail());
     }
 }
 

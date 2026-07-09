@@ -59,6 +59,7 @@ struct TLogicalCpuInfo {
 struct TCpuTopology {
     // Source CPU information
     TVector<TLogicalCpuInfo> Cpus;
+    TCpuMask AllCpus;
 
     // Derived groupings
     TVector<TCpuTopologyGroup> Clusters;
@@ -67,11 +68,13 @@ struct TCpuTopology {
     TVector<TCpuTopologyGroup> Packages;
     TVector<TCpuTopologyGroup> NumaNodes;
 
-    // PlacementGroups are shared L3 cache boundaries.
+    // PlacementGroups use shared L3 cache boundaries when available.
+    // CPUs without L3 cache data are collected into one extra group.
     // Id is assigned by the parser after sorting (matches index)
     TVector<TCpuTopologyGroup> PlacementGroups;
 
     const TLogicalCpuInfo* FindCpu(TCpuId cpuId) const;
 };
 
-std::expected<TCpuTopology, TString> ParseSysfsCpuTopology(const TFsPath& root = TFsPath("/sys/devices/system"));
+std::expected<TCpuTopology, TString> ParseSysfsCpuTopology(const TFsPath& root);
+std::expected<TCpuTopology, TString> ParseCpuTopology();

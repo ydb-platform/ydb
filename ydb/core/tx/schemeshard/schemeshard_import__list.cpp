@@ -22,7 +22,7 @@ struct TSchemeShard::TImport::TTxList: public TSchemeShard::TXxport::TTxList<
         if (str == "import/s3") {
             parsed = TImportInfo::EKind::S3;
             return true;
-        } else if (str == "import/fs") {
+        } else if (str == "import/fs" || str == "import/nfs") {
             parsed = TImportInfo::EKind::FS;
             return true;
         }

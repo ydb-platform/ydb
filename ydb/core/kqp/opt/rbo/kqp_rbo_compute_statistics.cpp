@@ -1,5 +1,6 @@
 #include "kqp_operator.h"
 
+#include <ydb/core/kqp/opt/cbo/cbo_optimizer_hints.h>
 #include <ydb/core/kqp/opt/cbo/cbo_optimizer_new.h>
 #include <ydb/core/kqp/opt/cbo/solver/kqp_opt_predicate_selectivity.h>
 #include <ydb/core/kqp/opt/cbo/solver/kqp_opt_stat_kqp.h>
@@ -235,6 +236,15 @@ void TOpRead::ComputeStatistics(TRBOContext& ctx, TPlanProps& planProps) {
                 Props.Statistics->EBytes = byteSize->second.GetDoubleSafe();
             }
         }
+    }
+
+    auto hints = ctx.KqpCtx.GetOptimizerHints();
+    auto hintCandidates = BuildTableHintCandidates(Alias, path.StringValue());
+    if (hints.CardinalityHints) {
+        ApplySingleLabelHint(*hints.CardinalityHints, hintCandidates, Props.Statistics->ERows);
+    }
+    if (hints.BytesHints) {
+        ApplySingleLabelHint(*hints.BytesHints, hintCandidates, Props.Statistics->EBytes);
     }
 
     const auto totalColumns = tableData.Metadata->Columns.size();

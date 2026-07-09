@@ -26,7 +26,7 @@ Y_UNIT_TEST_SUITE(FmrRawTableQueueTests) {
             // each thread writes repeatsNum copies of TableContent to queue
             threadPool->SafeAddFunc([queue, repeatsNum, i, rowEnd] {
                 TFmrRawTableQueueWriterSettings writerSettings{.ChunkSize = 100};
-                TFmrRawTableQueueWriter queueWriter(queue, writerSettings);
+                TFmrRawTableQueueWriter queueWriter(queue, /* tableIndex */ 0, /* enableTableIndexMarking */ false, writerSettings);
                 for (ui64 j = 0; j < repeatsNum; ++j) {
                     for (auto& row: TableContentRows) {
                         queueWriter.Write(row + rowEnd);

@@ -206,7 +206,8 @@ public:
             Become(&TKqpDataExecuter::FinalizeState);
             MakeResponseAndPassAway();
             return;
-        }  else if (Request.LocksOp == ELocksOp::Commit && !ReadOnlyTx) {
+        }  else if (Request.LocksOp == ELocksOp::Commit) {
+            AFL_ENSURE(!ReadOnlyTx);
             Become(&TKqpDataExecuter::FinalizeState);
             KQP_STLOG_D(KQPDATA, "Send Commit to BufferActor",
                 (buffer_actor_id, BufferActorId),
@@ -237,7 +238,7 @@ public:
                 0,
                 ExecuterSpan.GetTraceId());
             return;
-        } else if (Request.UseImmediateEffects) {
+        } else if (Request.FlushEffects) {
             Become(&TKqpDataExecuter::FinalizeState);
             KQP_STLOG_D(KQPDATA, "Send Flush to BufferActor",
                 (buffer_actor_id, BufferActorId),
@@ -452,13 +453,8 @@ private:
 
 private:
     bool IsReadOnlyTx() const {
-        if (TxManager->GetTopicOperations().HasOperations()) {
-            YQL_ENSURE(!Request.UseImmediateEffects);
-            return false;
-        }
-
-        if (Request.LocksOp == ELocksOp::Commit) {
-            YQL_ENSURE(!Request.UseImmediateEffects);
+        if (Request.LocksOp == ELocksOp::Commit || TxManager->GetTopicOperations().HasOperations()) {
+            YQL_ENSURE(!Request.FlushEffects);
             return false;
         }
 
@@ -468,6 +464,10 @@ private:
                     return false;
                 }
             }
+        }
+
+        if (Request.FlushEffects) {
+            return false;
         }
 
         return true;
@@ -697,7 +697,7 @@ private:
                 break;
         }
 
-        if ((ReadOnlyTx || Request.UseImmediateEffects) && GetSnapshot().IsValid()) {
+        if ((ReadOnlyTx || Request.FlushEffects) && GetSnapshot().IsValid()) {
             // Snapshot reads are always immediate
             // Uncommitted writes are executed without coordinators, so they can be immediate
             ImmediateTx = true;

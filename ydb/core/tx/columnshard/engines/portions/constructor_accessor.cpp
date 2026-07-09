@@ -1,6 +1,7 @@
 #include "constructor_accessor.h"
 
 #include <ydb/core/tx/columnshard/columnshard_schema.h>
+
 #include <ydb/library/actors/struct_log/log_stack.h>
 
 namespace NKikimr::NOlap {

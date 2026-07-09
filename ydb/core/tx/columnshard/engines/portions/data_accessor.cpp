@@ -14,8 +14,8 @@
 #include <ydb/core/tx/columnshard/engines/storage/chunks/column.h>
 #include <ydb/core/tx/columnshard/engines/storage/chunks/data.h>
 
-#include <ydb/library/formats/arrow/simple_arrays_cache.h>
 #include <ydb/library/actors/struct_log/log_stack.h>
+#include <ydb/library/formats/arrow/simple_arrays_cache.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD
 

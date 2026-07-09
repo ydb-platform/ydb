@@ -2779,7 +2779,7 @@ void TPersQueue::HandleEventForSupportivePartition(const ui64 responseCookie,
         // after PQ has deleted supportive partition and before it has deleted writeId from TxWrites (tx has not transaitioned to DELETED state)
         YDB_LOG_DEBUG_COMP(NKikimrServices::PERSQUEUE, "GetOwnership request for the next Kafka transaction while previous is being deleted. Saving it till the complete delete of the previous tx.%01",
             {"logPrefix", LogPrefix()});
-        KafkaNextTransactionRequests[writeId.KafkaProducerInstanceId].push_back(event);
+        KafkaNextTransactionRequests[writeId.GetKafkaProducerInstanceId()].push_back(event);
         return;
     } else if (TxWrites.contains(writeId) && TxWrites.at(writeId).Partitions.contains(originalPartitionId)) {
         //
@@ -2801,7 +2801,7 @@ void TPersQueue::HandleEventForSupportivePartition(const ui64 responseCookie,
             // before PQ has deleted supportive partition for previous transaction
             YDB_LOG_DEBUG_COMP(NKikimrServices::PERSQUEUE, "GetOwnership request for the next Kafka transaction while previous is being deleted. Saving it till the complete delete of the previous tx.%02",
                 {"logPrefix", LogPrefix()});
-            KafkaNextTransactionRequests[writeId.KafkaProducerInstanceId].push_back(event);
+            KafkaNextTransactionRequests[writeId.GetKafkaProducerInstanceId()].push_back(event);
             return;
         }
 
@@ -2819,10 +2819,10 @@ void TPersQueue::HandleEventForSupportivePartition(const ui64 responseCookie,
     } else {
         if (!req.GetNeedSupportivePartition()) {
             // missing supportivce partition in kafka transaction means that we already committed and deleted transaction for current producerId + producerEpoch
-            NPersQueue::NErrorCode::EErrorCode errorCode = writeId.KafkaApiTransaction ?
+            NPersQueue::NErrorCode::EErrorCode errorCode = writeId.IsKafkaApiTransaction() ?
                 NPersQueue::NErrorCode::KAFKA_TRANSACTION_MISSING_SUPPORTIVE_PARTITION :
                 NPersQueue::NErrorCode::PRECONDITION_FAILED;
-            TString error = writeId.KafkaApiTransaction ?
+            TString error = writeId.IsKafkaApiTransaction() ?
                 "Kafka transaction and there is no supportive partition for current producerId and producerEpoch. It means GetOwnership request was not called from TPartitionWriter" :
                 "lost messages";
 
@@ -2868,7 +2868,7 @@ void TPersQueue::HandleEventForSupportivePartition(const ui64 responseCookie,
             SubscribeWriteId(writeId, ctx);
         }
 
-        if (writeId.KafkaApiTransaction) {
+        if (writeId.IsKafkaApiTransaction()) {
             writeInfo.KafkaTransaction = true;
             writeInfo.CreatedAt = TAppData::TimeProvider->Now();
         }
@@ -3364,7 +3364,7 @@ void TPersQueue::ScheduleDeleteExpiredKafkaTransactions() {
         if (txnExpired(pair.second)) {
             YDB_LOG_DEBUG_COMP(NKikimrServices::PERSQUEUE, "Transaction for Kafka producer is expired",
                 {"logPrefix", LogPrefix()},
-                {"kafkaProducerInstanceId", pair.first.KafkaProducerInstanceId});
+                {"kafkaProducerInstanceId", pair.first.GetKafkaProducerInstanceId()});
             BeginDeletePartitions(pair.first, pair.second);
         }
     }
@@ -3372,7 +3372,7 @@ void TPersQueue::ScheduleDeleteExpiredKafkaTransactions() {
 
 void TPersQueue::TryContinueKafkaWrites(const TMaybe<TWriteId> writeId, const TActorContext& ctx) {
     if (writeId.Defined() && writeId->IsKafkaApiTransaction()) {
-        auto it = KafkaNextTransactionRequests.find(writeId->KafkaProducerInstanceId);
+        auto it = KafkaNextTransactionRequests.find(writeId->GetKafkaProducerInstanceId());
         if (it != KafkaNextTransactionRequests.end()) {
             for (auto& request : it->second) {
                 Handle(request, ctx);
@@ -3900,21 +3900,23 @@ bool TPersQueue::CanProcessTxWrites() const
 void TPersQueue::SubscribeWriteId(const TWriteId& writeId,
                                   const TActorContext& ctx)
 {
+    PQ_ENSURE(writeId.IsTopicApiTransaction());
     YDB_LOG_DEBUG_COMP(NKikimrServices::PQ_TX, "Send TEvSubscribeLock for WriteId",
         {"logPrefix", LogPrefix()},
         {"writeId", writeId});
-    ctx.Send(NLongTxService::MakeLongTxServiceID(writeId.NodeId),
-             new NLongTxService::TEvLongTxService::TEvSubscribeLock(writeId.KeyId, writeId.NodeId));
+    ctx.Send(NLongTxService::MakeLongTxServiceID(writeId.GetNodeId()),
+             new NLongTxService::TEvLongTxService::TEvSubscribeLock(writeId.GetKeyId(), writeId.GetNodeId()));
 }
 
 void TPersQueue::UnsubscribeWriteId(const TWriteId& writeId,
                                     const TActorContext& ctx)
 {
+    PQ_ENSURE(writeId.IsTopicApiTransaction());
     YDB_LOG_DEBUG_COMP(NKikimrServices::PQ_TX, "Send TEvUnsubscribeLock for WriteId",
         {"logPrefix", LogPrefix()},
         {"writeId", writeId});
-    ctx.Send(NLongTxService::MakeLongTxServiceID(writeId.NodeId),
-             new NLongTxService::TEvLongTxService::TEvUnsubscribeLock(writeId.KeyId, writeId.NodeId));
+    ctx.Send(NLongTxService::MakeLongTxServiceID(writeId.GetNodeId()),
+             new NLongTxService::TEvLongTxService::TEvUnsubscribeLock(writeId.GetKeyId(), writeId.GetNodeId()));
 }
 
 void TPersQueue::CreateSupportivePartitionActors(const TActorContext& ctx)

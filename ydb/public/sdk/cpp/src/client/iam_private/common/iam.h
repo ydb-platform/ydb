@@ -106,6 +106,21 @@ public:
         return std::make_shared<TCredentialsProvider>(Params_, std::move(facility));
     }
 
+    NThreading::TFuture<TCredentialsProviderPtr> CreateProviderAsync(std::weak_ptr<ICoreFacility> facility) const override {
+        return Params_.SystemServiceAccountCredentials->CreateProviderAsync(facility).Apply(
+            [params = Params_, facility = std::move(facility)](const NThreading::TFuture<TCredentialsProviderPtr>& authProviderFuture) mutable {
+                auto serviceProvider = std::make_shared<TCredentialsProvider>(
+                    params, std::move(facility), authProviderFuture.GetValue(), false);
+                auto ready = serviceProvider->GetReadyFuture();
+                TCredentialsProviderPtr provider = std::move(serviceProvider);
+
+                return ready.Apply([provider = std::move(provider)](const NThreading::TFuture<void>& readyFuture) mutable {
+                    readyFuture.GetValue();
+                    return provider;
+                });
+            });
+    }
+
     std::string GetClientIdentity() const override final {
         return TStringBuilder()
                 << "TIamServiceCredentialsProviderFactory"

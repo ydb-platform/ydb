@@ -29,7 +29,6 @@ TWriteSessionImpl::TWriteSessionImpl(
     , Client(std::move(client))
     , Connections(std::move(connections))
     , DbDriverState(std::move(dbDriverState))
-    , PrevToken(DbDriverState->CredentialsProvider ? DbDriverState->CredentialsProvider->GetAuthInfo() : "")
     , InitSeqNoPromise(NThreading::NewPromise<ui64>())
     , WakeupInterval(
             Settings.BatchFlushInterval_ != TDuration::Zero() ?
@@ -38,6 +37,9 @@ TWriteSessionImpl::TWriteSessionImpl(
                 TDuration::MilliSeconds(100)
     )
 {
+    if (auto credentialsProvider = DbDriverState->GetCredentialsProvider()) {
+        PrevToken = credentialsProvider->GetAuthInfo();
+    }
     if (!Settings.RetryPolicy_) {
         Settings.RetryPolicy_ = IRetryPolicy::GetDefaultPolicy();
     }
@@ -1183,11 +1185,12 @@ void TWriteSessionImpl::UpdateTokenIfNeededImpl() {
 
     LOG_LAZY(DbDriverState->Log, TLOG_DEBUG, LogPrefix() << "Write session: try to update token");
 
-    if (!DbDriverState->CredentialsProvider || UpdateTokenInProgress || !SessionEstablished)
+    auto credentialsProvider = DbDriverState->GetCredentialsProvider();
+    if (!credentialsProvider || UpdateTokenInProgress || !SessionEstablished)
         return;
     TClientMessage clientMessage;
     auto* updateRequest = clientMessage.mutable_update_token_request();
-    auto token = DbDriverState->CredentialsProvider->GetAuthInfo();
+    auto token = credentialsProvider->GetAuthInfo();
     if (token == PrevToken)
         return;
     UpdateTokenInProgress = true;

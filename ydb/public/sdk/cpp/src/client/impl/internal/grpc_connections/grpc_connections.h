@@ -17,6 +17,7 @@
 
 #include <atomic>
 #include <condition_variable>
+#include <exception>
 #include <mutex>
 #include <optional>
 
@@ -41,6 +42,57 @@ using NYdbGrpc::IQueueClientCallbackGuard;
 using NYdbGrpc::TQueueClientCallbackGuardFactory;
 
 class ICredentialsProvider;
+
+inline TPlainStatus CredentialsInitFailedStatus(const std::exception& e) {
+    return TPlainStatus(EStatus::CLIENT_UNAUTHENTICATED,
+        TStringBuilder() << "Credentials provider initialization failed. " << e.what());
+}
+
+inline TPlainStatus CredentialsInitFailedStatus() {
+    return TPlainStatus(EStatus::CLIENT_UNAUTHENTICATED,
+        "Credentials provider initialization failed");
+}
+
+template <typename TCallbackFactory>
+bool DeferUntilCredentialsReady(const TDbDriverStatePtr& dbState, bool useAuth, TCallbackFactory&& callbackFactory) {
+    if (!useAuth) {
+        return false;
+    }
+
+    auto credentialsReady = dbState->GetCredentialsReady();
+    if (!credentialsReady.Initialized()) {
+        return false;
+    }
+
+    if (!credentialsReady.IsReady()) {
+        auto callback = callbackFactory();
+        credentialsReady.Subscribe([callback = std::move(callback)](const NThreading::TFuture<void>& future) mutable {
+            try {
+                future.GetValue();
+            } catch (const std::exception& e) {
+                callback(CredentialsInitFailedStatus(e));
+                return;
+            } catch (...) {
+                callback(CredentialsInitFailedStatus());
+                return;
+            }
+            callback(std::nullopt);
+        });
+        return true;
+    }
+
+    try {
+        credentialsReady.GetValue();
+    } catch (const std::exception& e) {
+        callbackFactory()(CredentialsInitFailedStatus(e));
+        return true;
+    } catch (...) {
+        callbackFactory()(CredentialsInitFailedStatus());
+        return true;
+    }
+
+    return false;
+}
 
 // Deferred callbacks
 using TDeferredResultCb = std::function<void(google::protobuf::Any*, TPlainStatus status)>;
@@ -310,6 +362,26 @@ public:
         using TConnection = std::unique_ptr<TServiceConnection<TService>>;
         Y_ABORT_UNLESS(dbState);
 
+        if (DeferUntilCredentialsReady(dbState, requestSettings.UseAuth, [&]() mutable {
+            return [this, requestWrapper = std::move(requestWrapper), userResponseCb = std::move(userResponseCb),
+                    rpc, dbState, requestSettings, context = std::move(context)]
+                (std::optional<TPlainStatus> status) mutable {
+                    if (status) {
+                        userResponseCb(nullptr, std::move(*status));
+                        return;
+                    }
+                    Run<TService, TRequest, TResponse>(
+                        std::move(requestWrapper),
+                        std::move(userResponseCb),
+                        rpc,
+                        std::move(dbState),
+                        requestSettings,
+                        std::move(context));
+                };
+        })) {
+            return;
+        }
+
         if (auto tlsValidationStatus = ValidateClientTlsCredentials(dbState)) {
             RunResponseCallback<TResponse>(userResponseCb, nullptr, std::move(*tlsValidationStatus), StopState_);
             return;
@@ -547,6 +619,25 @@ public:
         using TConnection = std::unique_ptr<TServiceConnection<TService>>;
         using TProcessor = typename NYdbGrpc::IStreamRequestReadProcessor<TResponse>::TPtr;
 
+        if (DeferUntilCredentialsReady(dbState, requestSettings.UseAuth, [&]() mutable {
+            return [this, request, responseCb = std::move(responseCb), rpc, dbState, requestSettings, context = std::move(context)]
+                (std::optional<TPlainStatus> status) mutable {
+                    if (status) {
+                        responseCb(std::move(*status), nullptr);
+                        return;
+                    }
+                    StartReadStream<TService, TRequest, TResponse>(
+                        request,
+                        std::move(responseCb),
+                        rpc,
+                        std::move(dbState),
+                        requestSettings,
+                        std::move(context));
+                };
+        })) {
+            return;
+        }
+
         if (auto tlsValidationStatus = ValidateClientTlsCredentials(dbState)) {
             RunStreamCallback(responseCb, std::move(*tlsValidationStatus), nullptr, StopState_);
             return;
@@ -633,6 +724,24 @@ public:
         using NYdbGrpc::TGrpcStatus;
         using TConnection = std::unique_ptr<TServiceConnection<TService>>;
         using TProcessor = typename NYdbGrpc::IStreamRequestReadWriteProcessor<TRequest, TResponse>::TPtr;
+
+        if (DeferUntilCredentialsReady(dbState, requestSettings.UseAuth, [&]() mutable {
+            return [this, connectedCallback = std::move(connectedCallback), rpc, dbState, requestSettings, context = std::move(context)]
+                (std::optional<TPlainStatus> status) mutable {
+                    if (status) {
+                        connectedCallback(std::move(*status), nullptr);
+                        return;
+                    }
+                    StartBidirectionalStream<TService, TRequest, TResponse>(
+                        std::move(connectedCallback),
+                        rpc,
+                        std::move(dbState),
+                        requestSettings,
+                        std::move(context));
+                };
+        })) {
+            return;
+        }
 
         if (auto tlsValidationStatus = ValidateClientTlsCredentials(dbState)) {
             RunStreamCallback(connectedCallback, std::move(*tlsValidationStatus), nullptr, StopState_);

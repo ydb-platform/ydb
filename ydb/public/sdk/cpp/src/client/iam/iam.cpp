@@ -8,7 +8,9 @@
 #include <library/cpp/json/json_reader.h>
 #include <library/cpp/http/simple/http_client.h>
 
+#include <exception>
 #include <mutex>
+#include <thread>
 
 using namespace yandex::cloud::iam::v1;
 
@@ -139,6 +141,14 @@ public:
         return std::make_shared<TIAMCredentialsProvider>(Params_);
     }
 
+    NThreading::TFuture<TCredentialsProviderPtr> CreateProviderAsync() const final {
+        return CreateProviderInBackground(Params_);
+    }
+
+    NThreading::TFuture<TCredentialsProviderPtr> CreateProviderAsync(std::weak_ptr<ICoreFacility>) const final {
+        return CreateProviderAsync();
+    }
+
     std::string GetClientIdentity() const final {
         return TStringBuilder() <<
                 "TIamCredentialsProviderFactory" << '\t' <<
@@ -146,6 +156,18 @@ public:
     }
 
 private:
+    static NThreading::TFuture<TCredentialsProviderPtr> CreateProviderInBackground(TIamHost params) {
+        auto promise = NThreading::NewPromise<TCredentialsProviderPtr>();
+        std::thread([params = std::move(params), promise]() mutable {
+            try {
+                promise.SetValue(std::make_shared<TIAMCredentialsProvider>(params));
+            } catch (...) {
+                promise.SetException(std::current_exception());
+            }
+        }).detach();
+        return promise.GetFuture();
+    }
+
     TIamHost Params_;
 };
 

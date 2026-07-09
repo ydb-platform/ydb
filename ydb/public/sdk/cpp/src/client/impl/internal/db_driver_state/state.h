@@ -40,6 +40,9 @@ public:
     NThreading::TFuture<void> DiscoveryCompleted() const;
 
     void SignalDiscoveryCompleted();
+    NThreading::TFuture<void> InitCredentials(std::shared_ptr<ICredentialsProviderFactory> credentialsProviderFactory);
+    NThreading::TFuture<void> GetCredentialsReady() const;
+    std::shared_ptr<ICredentialsProvider> GetCredentialsProvider() const;
 
     void AddPeriodicTask(TPeriodicCb&& cb, TDeadline::Duration period) override;
     void PostToResponseQueue(TPostTaskCb&& f) override;
@@ -73,6 +76,7 @@ public:
     NSdkStats::TStatCollector StatCollector;
     TLog Log;
     NThreading::TPromise<void> DiscoveryCompletedPromise;
+    NThreading::TFuture<void> CredentialsReady;
 
 private:
     mutable std::once_flag ClientTlsValidationOnceFlag_;

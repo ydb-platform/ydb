@@ -9,6 +9,8 @@
 
 #include <jwt-cpp/jwt.h>
 
+#include <exception>
+
 using namespace std::chrono_literals;
 
 namespace NYdb::inline Dev {
@@ -42,6 +44,7 @@ public:
     TLoginCredentialsProvider(std::weak_ptr<ICoreFacility> facility, TLoginCredentialsParams params);
     virtual std::string GetAuthInfo() const override;
     virtual bool IsValid() const override;
+    NThreading::TFuture<void> PrepareTokenAsync();
 
 private:
     void PrepareToken();
@@ -71,11 +74,14 @@ private:
     TInstant TokenRequestAt_;
     TPlainStatus Status_;
     Ydb::Auth::LoginResponse Response_;
+    NThreading::TPromise<void> TokenReadyPromise_;
+    bool TokenReadySet_ = false;
 };
 
 TLoginCredentialsProvider::TLoginCredentialsProvider(std::weak_ptr<ICoreFacility> facility, TLoginCredentialsParams params)
     : Facility_(facility)
     , Params_(std::move(params))
+    , TokenReadyPromise_(NThreading::NewPromise<void>())
 {
     auto strongFacility = facility.lock();
     if (strongFacility) {
@@ -122,6 +128,8 @@ void TLoginCredentialsProvider::RequestToken() {
         TokenRequestAt_ = {};
 
         auto responseCb = [facility = Facility_, this](Ydb::Auth::LoginResponse* resp, TPlainStatus status) {
+            std::optional<std::string> error;
+            bool setTokenReady = false;
             auto strongFacility = facility.lock();
             if (strongFacility) {
                 std::lock_guard<std::mutex> lock(Mutex_);
@@ -131,8 +139,21 @@ void TLoginCredentialsProvider::RequestToken() {
                 }
                 State_ = EState::Done;
                 TokenReceived_++;
+                ParseToken();
+                if (!TokenReadySet_) {
+                    TokenReadySet_ = true;
+                    setTokenReady = true;
+                    error = Error_;
+                }
             }
             Notify_.notify_all();
+            if (setTokenReady) {
+                if (error) {
+                    TokenReadyPromise_.SetException(std::make_exception_ptr(yexception() << *error));
+                } else {
+                    TokenReadyPromise_.SetValue();
+                }
+            }
         };
 
         Ydb::Auth::LoginRequest request;
@@ -163,6 +184,22 @@ void TLoginCredentialsProvider::PrepareToken() {
             ParseToken();
             break;
     }
+}
+
+NThreading::TFuture<void> TLoginCredentialsProvider::PrepareTokenAsync() {
+    bool requestToken = false;
+    auto future = TokenReadyPromise_.GetFuture();
+    {
+        std::unique_lock<std::mutex> lock(Mutex_);
+        if (!TokenReadySet_ && State_ == EState::Empty) {
+            State_ = EState::Requesting;
+            requestToken = true;
+        }
+    }
+    if (requestToken) {
+        RequestToken();
+    }
+    return future;
 }
 
 bool TLoginCredentialsProvider::IsOk() const {
@@ -226,6 +263,7 @@ public:
     TLoginCredentialsProviderFactory(TLoginCredentialsParams params);
     virtual std::shared_ptr<ICredentialsProvider> CreateProvider() const override;
     virtual std::shared_ptr<ICredentialsProvider> CreateProvider(std::weak_ptr<ICoreFacility> facility) const override;
+    virtual NThreading::TFuture<TCredentialsProviderPtr> CreateProviderAsync(std::weak_ptr<ICoreFacility> facility) const override;
 
 private:
     TLoginCredentialsParams Params_;
@@ -242,6 +280,16 @@ std::shared_ptr<ICredentialsProvider> TLoginCredentialsProviderFactory::CreatePr
 
 std::shared_ptr<ICredentialsProvider> TLoginCredentialsProviderFactory::CreateProvider(std::weak_ptr<ICoreFacility> facility) const {
     return std::make_shared<TLoginCredentialsProvider>(std::move(facility), Params_);
+}
+
+NThreading::TFuture<TCredentialsProviderPtr> TLoginCredentialsProviderFactory::CreateProviderAsync(std::weak_ptr<ICoreFacility> facility) const {
+    auto provider = std::make_shared<TLoginCredentialsProvider>(std::move(facility), Params_);
+    auto ready = provider->PrepareTokenAsync();
+    TCredentialsProviderPtr result = std::move(provider);
+    return ready.Apply([result = std::move(result)](const NThreading::TFuture<void>& future) mutable {
+        future.GetValue();
+        return result;
+    });
 }
 
 std::shared_ptr<ICredentialsProviderFactory> CreateLoginCredentialsProviderFactory(TLoginCredentialsParams params) {

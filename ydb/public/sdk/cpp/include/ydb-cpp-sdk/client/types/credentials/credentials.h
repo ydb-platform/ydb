@@ -6,6 +6,7 @@
 
 #include <memory>
 #include <string>
+#include <utility>
 
 namespace NYdb::inline Dev {
 
@@ -28,6 +29,9 @@ public:
     }
     virtual TCredentialsProviderPtr CreateProvider([[maybe_unused]] std::weak_ptr<ICoreFacility> facility) const {
         return CreateProvider();
+    }
+    virtual NThreading::TFuture<TCredentialsProviderPtr> CreateProviderAsync(std::weak_ptr<ICoreFacility> facility) const {
+        return NThreading::MakeFuture(CreateProvider(std::move(facility)));
     }
     virtual std::string GetClientIdentity() const;
 };

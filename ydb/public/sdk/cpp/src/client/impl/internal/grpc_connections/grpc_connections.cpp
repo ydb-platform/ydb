@@ -152,7 +152,9 @@ bool IsTokenCorrect(const std::string& in) {
 
 std::string GetAuthInfo(TDbDriverStatePtr p) {
     try {
-        auto token = p->CredentialsProvider->GetAuthInfo();
+        auto credentialsProvider = p->GetCredentialsProvider();
+        Y_ABORT_UNLESS(credentialsProvider);
+        auto token = credentialsProvider->GetAuthInfo();
         if (!IsTokenCorrect(token)) {
             throw TAuthenticationError("token is incorrect, illegal characters found");
         }
@@ -720,7 +722,8 @@ TCallMeta TGRpcConnectionsImpl::MakeCallMeta(const TRpcRequestSettings& requestS
 #ifndef YDB_GRPC_UNSECURE_AUTH
     meta.CallCredentials = dbState->CallCredentials;
 #else
-    if (requestSettings.UseAuth && dbState->CredentialsProvider && dbState->CredentialsProvider->IsValid()) {
+    auto credentialsProvider = dbState->GetCredentialsProvider();
+    if (requestSettings.UseAuth && credentialsProvider && credentialsProvider->IsValid()) {
         meta.Aux.push_back({YDB_AUTH_TICKET_HEADER, GetAuthInfo(dbState)});
     }
 #endif

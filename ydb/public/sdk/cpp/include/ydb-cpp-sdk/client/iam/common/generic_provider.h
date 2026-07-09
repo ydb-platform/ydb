@@ -482,6 +482,18 @@ public:
         return std::make_shared<TIamJwtCredentialsProvider<TRequest, TResponse, TService>>(Params_, std::move(facility));
     }
 
+    NThreading::TFuture<TCredentialsProviderPtr> CreateProviderAsync(std::weak_ptr<ICoreFacility> facility) const override {
+        auto inner = std::make_shared<TIamJwtCredentialsProvider<TRequest, TResponse, TService>>(
+            Params_, std::move(facility), false);
+        auto ready = inner->GetReadyFuture();
+        TCredentialsProviderPtr provider = std::move(inner);
+
+        return ready.Apply([provider = std::move(provider)](const NThreading::TFuture<void>& future) mutable {
+            future.GetValue();
+            return provider;
+        });
+    }
+
 private:
     TIamJwtParams Params_;
 };
@@ -515,6 +527,18 @@ public:
 
     TCredentialsProviderPtr CreateProvider(std::weak_ptr<ICoreFacility> facility) const override {
         return std::make_shared<TIamOAuthCredentialsProvider<TRequest, TResponse, TService>>(Params_, std::move(facility));
+    }
+
+    NThreading::TFuture<TCredentialsProviderPtr> CreateProviderAsync(std::weak_ptr<ICoreFacility> facility) const override {
+        auto inner = std::make_shared<TIamOAuthCredentialsProvider<TRequest, TResponse, TService>>(
+            Params_, std::move(facility), false);
+        auto ready = inner->GetReadyFuture();
+        TCredentialsProviderPtr provider = std::move(inner);
+
+        return ready.Apply([provider = std::move(provider)](const NThreading::TFuture<void>& future) mutable {
+            future.GetValue();
+            return provider;
+        });
     }
 
 private:

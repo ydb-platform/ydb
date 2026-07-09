@@ -32,7 +32,7 @@ void TActor::ScheduleTimeoutCheck() {
 }
 
 void TActor::HandleWakeup() {
-    if (Stage == EStage::Finished) {
+    if (Stage == EStage::Finished || Stage == EStage::WaitSaveCursor) {
         return;
     }
     const auto elapsed = TInstant::Now() - StageStartTime;
@@ -56,11 +56,15 @@ void TActor::HandleWakeup() {
 }
 
 void TActor::AbortExport(const TString& errorMessage) {
-    ErrorMessage = errorMessage;
-    if (ExportSession->GetCursor().IsFinished()) {
-        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "abort_after_cursor_finished")("message", errorMessage);
+    if (ExportSession->IsFinished() || ExportSession->IsReadyForRemoveOnFinished()) {
+        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "abort_after_export_finished")("message", errorMessage);
         return;
     }
+    if (Stage == EStage::WaitSaveCursor) {
+        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "abort_during_save_cursor")("message", errorMessage);
+        return;
+    }
+    ExportSession->Abort(errorMessage);
     ExportSession->MutableCursor().InitNext({}, true);
     if (Stage == EStage::WaitData) {
         Counters.OnAckResponse();
@@ -85,6 +89,7 @@ void TActor::KillExporter() {
 }
 
 void TActor::PassAway() {
+    AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("event", "export_actor_pass_away")("self_id", SelfId())("tablet_id", TabletId);
     KillExporter();
     Counters.OnActorDead();
     TBase::PassAway();
@@ -104,32 +109,37 @@ void TActor::HandleExecute(NKqp::TEvKqpCompute::TEvScanInitActor::TPtr& ev) {
 void TActor::HandleExecute(NKqp::TEvKqpCompute::TEvScanError::TPtr& ev) {
     AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "scan_error")("message", ev->Get()->Record.ShortDebugString());
     Counters.OnError();
-    if (ExportSession->GetCursor().IsFinished()) {
+    if (ExportSession->IsFinished() || ExportSession->IsReadyForRemoveOnFinished()) {
         if (Stage == EStage::WaitData) {
             Counters.OnAckResponse();
         }
         AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "scan_error_after_finish")(
-            "message", "ignoring scan error because cursor is already finished");
+            "message", "ignoring scan error because export is already finished");
         return;
     }
     AbortExport("Scan error: " + ev->Get()->Record.ShortDebugString());
 }
 
 void TActor::OnTxCompleted(const ui64 /*txId*/) {
+    AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("event", "export_actor_on_tx_completed")("self_id", SelfId())("tablet_id", TabletId);
     Session->FinishActor();
 }
 
 void TActor::OnSessionProgressSaved() {
     Counters.OnSaveCursorFinished(TInstant::Now() - SaveCursorStartTime);
-    if (ExportSession->GetCursor().IsFinished()) {
-        if (ErrorMessage) {
-            ExportSession->Abort(ErrorMessage);
-        } else {
+    if (ExportSession->IsFinished() || ExportSession->IsReadyForRemoveOnFinished()) {
+        AFL_VERIFY(Stage == EStage::WaitData || Stage == EStage::WaitSaveCursor)("real", (ui32)Stage);
+        Stage = EStage::Finished;
+        StageStartTime = TInstant::Now();
+        SaveSessionState();
+    } else if (ExportSession->GetCursor().IsFinished()) {
+        if (ExportSession->IsStarted()) {
             ExportSession->Finish();
         }
         SaveSessionState();
         SwitchStage(EStage::WaitSaveCursor, EStage::Finished);
     } else {
+        AFL_VERIFY(Stage == EStage::WaitSaveCursor)("real", (ui32)Stage);
         SwitchStage(EStage::WaitSaveCursor, EStage::WaitData);
         AFL_VERIFY(ScanActorId);
         Counters.OnReadStarted();
@@ -150,15 +160,16 @@ void TActor::HandleExecute(NColumnShard::TEvPrivate::TEvBackupExportRecordBatchR
 
 void TActor::HandleExecute(NColumnShard::TEvPrivate::TEvBackupExportError::TPtr& ev) {
     Counters.OnError();
-    if (ExportSession->GetCursor().IsFinished()) {
+    if (ExportSession->IsFinished() || ExportSession->IsReadyForRemoveOnFinished()) {
         AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "export_error_after_finish")(
-            "message", "ignoring export error because cursor is already finished");
+            "message", "ignoring export error because export is already finished");
         return;
     }
     AbortExport(ev->Get()->ErrorMessage);
 }
 
 void TActor::OnBootstrap(const TActorContext& /*ctx*/) {
+    AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("event", "export_actor_bootstrap")("self_id", SelfId())("tablet_id", TabletId);
     Counters.OnActorAlive();
     StageStartTime = TInstant::Now();
     ScheduleTimeoutCheck();
@@ -167,7 +178,9 @@ void TActor::OnBootstrap(const TActorContext& /*ctx*/) {
     if (ExportSession->GetCursor().IsFinished()) {
         AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("event", "export_actor_bootstrap_cursor_finished")("tablet_id", TabletId)(
             "session_id", ExportSession->GetIdentifier().ToString());
-        ExportSession->Finish();
+        if (ExportSession->IsStarted()) {
+            ExportSession->Finish();
+        }
         SaveSessionState();
         SwitchStage(EStage::Initialization, EStage::Finished);
         Become(&TActor::StateFunc);
@@ -184,7 +197,7 @@ void TActor::OnBootstrap(const TActorContext& /*ctx*/) {
     Exporter = Register(actor.release());
     auto evStart = BuildRequestInitiator(ExportSession->GetCursor());
     evStart->Record.SetGeneration((ui64)TabletId);
-    evStart->Record.SetCSScanPolicy("PLAIN");
+    evStart->Record.SetCSScanPolicy("EXPORT");
     Send(TabletActorId, evStart.release());
     Become(&TActor::StateFunc);
 }
@@ -269,12 +282,15 @@ public:
 };
 
 void TActor::OnSessionStateSaved() {
-    AFL_VERIFY(ExportSession->IsFinished() || ExportSession->IsAborted());
+    AFL_VERIFY(ExportSession->IsFinished() || ExportSession->IsReadyForRemoveOnFinished());
     NYDBTest::TControllers::GetColumnShardController()->OnExportFinished();
     if (ExportSession->GetTxId()) {
+        AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("event", "export_actor_session_state_saved_with_tx")("self_id", SelfId())(
+            "tablet_id", TabletId)("tx_id", *ExportSession->GetTxId());
         ExecuteTransaction(std::make_unique<TTxProposeFinish>(
             GetShardVerified<NColumnShard::TColumnShard>(), *ExportSession->GetTxId(), SelfId(), GetNextTxId()));
     } else {
+        AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("event", "export_actor_session_state_saved_no_tx")("self_id", SelfId())("tablet_id", TabletId);
         Session->FinishActor();
     }
 }

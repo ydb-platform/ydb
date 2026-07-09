@@ -91,7 +91,7 @@ namespace NActors {
             TEventHolder& event = pool.Allocate(Queue);
             const ui32 bytes = event.Fill(ev, now) + sizeof(TEventDescr2);
             OutputQueueSize += bytes;
-            event.Span = NWilson::TSpan(15 /*max verbosity*/, NWilson::TTraceId(ev.TraceId), "Interconnect.Queue");
+            event.Span = NActors::TPacketSpan::TUniversal(15 /*max verbosity*/, NWilson::TTraceId(ev.TraceId), "Interconnect.Queue");
             if (NWilson::TSpan* wilsonSpan = event.Span.GetWilsonSpanPtr()) {
                 wilsonSpan->Attribute("OutputQueueItems", static_cast<i64>(Queue.size()));
                 wilsonSpan->Attribute("OutputQueueSize", static_cast<i64>(OutputQueueSize));

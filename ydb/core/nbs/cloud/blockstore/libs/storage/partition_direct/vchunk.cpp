@@ -40,7 +40,10 @@ TVChunk::TVChunk(
     , BlockSize(DefaultBlockSize)
     , BlocksCount(vChunkSize / BlockSize)
     , SyncRequestsBatchSize(syncRequestsBatchSize)
-    , LogTitle{GetCycleCount(), TLogTitle::TVChunk{.VChunkIndex = vChunkConfig.GetVChunkIndex()}}
+    , LogTitle{GetCycleCount(), TLogTitle::TVChunk{
+        .DBGIndex = vChunkConfig.GetDBGIndex(),
+        .VChunkIndex = vChunkConfig.GetVChunkIndex()
+     }}
     , VChunkConfig(vChunkConfig)
     , BlocksDirtyMap(VChunkConfig, BlockSize, BlocksCount)
     , Counters(std::move(counters))
@@ -221,6 +224,33 @@ void TVChunk::SetHostState(THostIndex hostIndex, EHostState state)
     UpdateConfig(std::move(prepare), std::move(apply));
 }
 
+void TVChunk::OnHostAppended(size_t newHostCount)
+{
+    Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
+
+    // Resize synchronously - the config apply below is async, but the new host
+    // is connected and used before it runs.
+    BlocksDirtyMap.ResizeHosts(newHostCount);
+
+    auto prepare = [weakSelf = weak_from_this()]() -> TVChunkConfig
+    {
+        if (auto self = weakSelf.lock()) {
+            TVChunkConfig cfg = self->VChunkConfig;
+            cfg.AppendHost();
+            return cfg;
+        }
+        return TVChunkConfig{};
+    };
+    auto apply = [weakSelf = weak_from_this()]()
+    {
+        if (auto self = weakSelf.lock()) {
+            self->ApplyConfig();
+        }
+    };
+
+    UpdateConfig(std::move(prepare), std::move(apply));
+}
+
 const TVChunkConfig& TVChunk::GetConfig() const
 {
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
@@ -318,6 +348,7 @@ void TVChunk::OnBelatedWriteBlocksResponse(
         bundle->GetVChunkRange());
 
     DoErase(false, TBlocksDirtyMap::EEraseType::Belated);
+    ScheduleCleaningUp();
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -474,8 +505,7 @@ void TVChunk::DoReadBlocksLocal(
             auto value = UnsafeExtractValue(f);
 
             if (auto self = weakSelf.lock()) {
-                bool ok = !HasError(value.Error);
-                self->Counters.RequestFinished(EVChunkOperation::Read, ok);
+                self->OnReadBlocksResponse(value);
             }
 
             promise.SetValue(
@@ -484,6 +514,14 @@ void TVChunk::DoReadBlocksLocal(
 
     span->Event("Run ReadRequestExecutor");
     requestExecutor->Run();
+}
+
+void TVChunk::OnReadBlocksResponse(
+    const IReadRequestExecutor::TResponse& response)
+{
+    bool ok = !HasError(response.Error);
+    Counters.RequestFinished(EVChunkOperation::Read, ok);
+    ScheduleCleaningUp();
 }
 
 void TVChunk::DoWriteBlocksLocal(std::shared_ptr<TWriteRequestBundle> bundle)
@@ -682,6 +720,7 @@ void TVChunk::OnEraseResponse(const TEraseRequestExecutor::TResponse& response)
     }
 
     UpdatePendingCounters();
+    ScheduleCleaningUp();
 }
 
 void TVChunk::OnEraseBelatedResponse(
@@ -697,17 +736,14 @@ void TVChunk::OnEraseBelatedResponse(
     }
 
     UpdatePendingCounters();
+    ScheduleCleaningUp();
 }
 
 void TVChunk::ScheduleCleaningUp()
 {
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
 
-    if (CleaningUpScheduled || InflightFlushesCount || InflightWritesCount) {
-        return;
-    }
-
-    if (!BlocksDirtyMap.NeedFlush() && !BlocksDirtyMap.NeedErase()) {
+    if (CleaningUpScheduled) {
         return;
     }
 

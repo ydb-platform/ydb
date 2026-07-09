@@ -175,23 +175,23 @@ struct TEvKqp {
     };
 
     struct TEvCancelScriptExecutionResponse : public TEventPB<TEvCancelScriptExecutionResponse, NKikimrKqp::TEvCancelScriptExecutionResponse, TKqpEvents::EvCancelScriptExecutionResponse> {
+        struct TInfo {
+            const bool ExecutionEntryExists = true;
+            const bool AlreadyStopped = false;
+        };
+
         TEvCancelScriptExecutionResponse() = default;
 
-        explicit TEvCancelScriptExecutionResponse(Ydb::StatusIds::StatusCode status, const NYql::TIssues& issues = {}) {
+        TEvCancelScriptExecutionResponse(Ydb::StatusIds::StatusCode status, TInfo&& info, const NYql::TIssues& issues = {}) {
             Record.SetStatus(status);
             NYql::IssuesToMessage(issues, Record.MutableIssues());
+            Record.SetAlreadyFinished(info.AlreadyStopped);
+            Record.SetExecutionEntryExists(info.ExecutionEntryExists);
         }
 
-        TEvCancelScriptExecutionResponse(Ydb::StatusIds::StatusCode status, const TString& message)
-            : TEvCancelScriptExecutionResponse(status, TextToIssues(message))
+        TEvCancelScriptExecutionResponse(Ydb::StatusIds::StatusCode status, TInfo&& info, const TString& message)
+            : TEvCancelScriptExecutionResponse(status, std::move(info), {NYql::TIssue(message)})
         {}
-
-    private:
-        static NYql::TIssues TextToIssues(const TString& message) {
-            NYql::TIssues issues;
-            issues.AddIssue(message);
-            return issues;
-        }
     };
 
     struct TEvUpdateDatabaseInfo : public TEventLocal<TEvUpdateDatabaseInfo, TKqpEvents::EvUpdateDatabaseInfo> {

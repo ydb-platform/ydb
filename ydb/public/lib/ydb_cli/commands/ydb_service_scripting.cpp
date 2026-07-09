@@ -93,7 +93,7 @@ void TCommandExecuteYqlScript::Parse(TConfig& config) {
 }
 
 int TCommandExecuteYqlScript::Run(TConfig& config) {
-    TDriver driver = CreateDriver(config);
+    auto driver = CreateDriver(config);
     NScripting::TScriptingClient client(driver);
 
     if (Explain) {

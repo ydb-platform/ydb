@@ -71,6 +71,18 @@ public:
         return std::make_shared<TCredentialsProvider>(Params_, std::move(facility));
     }
 
+    std::string GetClientIdentity() const override final {
+        return TStringBuilder()
+                << "TIamServiceCredentialsProviderFactory"
+                << '\t' << Params_.ServiceId
+                << '\t' << Params_.MicroserviceId
+                << '\t' << Params_.ResourceId
+                << '\t' << Params_.ResourceType
+                << '\t' << Params_.TargetServiceAccountId
+                << '\t' << Params_.SystemServiceAccountCredentials->GetClientIdentity()
+                ;
+    }
+
 private:
     TIamServiceParams Params_;
 };

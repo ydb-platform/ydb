@@ -342,4 +342,85 @@ Y_UNIT_TEST_SUITE(TAuthenticationWithSqlExecution) {
     }
 }
 
+Y_UNIT_TEST_SUITE(TModifyUser) {
+    Y_UNIT_TEST(ModifyUserPassword) {
+        TLoginClientConnection loginConnection;
+
+        loginConnection.CreateUser("user1", "pass1");
+        loginConnection.CreateUser("user2", "pass2");
+        loginConnection.ModifyACL(true, "user1", NACLib::EAccessRights::ConnectDatabase);
+        loginConnection.ModifyACL(true, "user2", NACLib::EAccessRights::ConnectDatabase);
+
+        auto user1Token = loginConnection.GetToken("user1", "pass1");
+        auto user2Token = loginConnection.GetToken("user2", "pass2");
+
+        // user2 cannot change password for user1: user2 has no ydb.granular.alter_schema permission
+        {
+            auto result = loginConnection.ExecuteSql(user2Token, "ALTER USER user1 PASSWORD 'password1'");
+            UNIT_ASSERT_C(result.GetStatus() != EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        // user2 can change password for self
+        {
+            auto result = loginConnection.ExecuteSql(user2Token, "ALTER USER user2 PASSWORD 'password2'");
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        // user2 cannot login with the old password
+        {
+            auto factory = CreateLoginCredentialsProviderFactory({.User = "user2", .Password = "pass2"});
+            auto loginProvider = factory->CreateProvider(loginConnection.GetCoreFacility());
+            UNIT_ASSERT_EXCEPTION_CONTAINS(loginProvider->GetAuthInfo(), yexception, "Invalid password");
+        }
+
+        // user2 can login with the new password
+        loginConnection.GetToken("user2", "password2");
+
+        // grant ydb.granular.alter_schema to user1
+        loginConnection.ModifyACL(true, "user1", NACLib::EAccessRights::AlterSchema);
+
+        // user1 can change password for user2 now: user1 has ydb.granular.alter_schema permission
+        {
+            auto result = loginConnection.ExecuteSql(user1Token, "ALTER USER user2 PASSWORD 'pas2user'");
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        // user2 can login with the password set by user1
+        loginConnection.GetToken("user2", "pas2user");
+
+        loginConnection.Stop();
+    }
+
+    Y_UNIT_TEST(ModifyUserIsEnabled) {
+        TLoginClientConnection loginConnection;
+
+        loginConnection.CreateUser("user1", "pass1");
+        loginConnection.CreateUser("user2", "pass2");
+        loginConnection.ModifyACL(true, "user1", NACLib::EAccessRights::ConnectDatabase);
+        loginConnection.ModifyACL(true, "user2", NACLib::EAccessRights::ConnectDatabase);
+
+        auto user2Token = loginConnection.GetToken("user2", "pass2");
+
+        // user2 cannot change isEnabled for user1: user2 has no ydb.granular.alter_schema permission
+        {
+            auto result = loginConnection.ExecuteSql(user2Token, "ALTER USER user1 NOLOGIN");
+            UNIT_ASSERT_C(result.GetStatus() != EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        // user2 cannot change isEnabled for self
+        {
+            auto result = loginConnection.ExecuteSql(user2Token, "ALTER USER user2 NOLOGIN");
+            UNIT_ASSERT_C(result.GetStatus() != EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        // user2 cannot change isEnabled for self even together with a password change
+        {
+            auto result = loginConnection.ExecuteSql(user2Token, "ALTER USER user2 PASSWORD 'password' NOLOGIN");
+            UNIT_ASSERT_C(result.GetStatus() != EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        loginConnection.Stop();
+    }
+}
+
 } //namespace NKikimr

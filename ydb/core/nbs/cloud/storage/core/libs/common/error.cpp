@@ -182,6 +182,11 @@ EDiagnosticsErrorKind GetDiagnosticsErrorKind(const NProto::TError& e)
     return EDiagnosticsErrorKind::ErrorFatal;
 }
 
+bool IsCancelledError(const NProto::TError& e)
+{
+    return e.GetCode() == E_CANCELLED;
+}
+
 bool IsConnectionError(const NProto::TError& e)
 {
     return e.GetCode() == E_GRPC_UNAVAILABLE;

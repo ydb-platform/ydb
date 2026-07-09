@@ -150,4 +150,30 @@ Below are examples of setting the session pool limit in different {{ ydb-short-n
 
   {% include [work-in-progress](../../_includes/work-in-progress.md) %}
 
+- Rust
+
+  For `QueryClient`, set the session pool size via [`QuerySessionPoolSettings::with_limit`](https://docs.rs/ydb/latest/ydb/struct.QuerySessionPoolSettings.html#method.with_limit) and [`with_implicit_session_pool`](https://docs.rs/ydb/latest/ydb/struct.QueryClient.html#method.with_implicit_session_pool) (or [`with_session_pool`](https://docs.rs/ydb/latest/ydb/struct.QueryClient.html#method.with_session_pool) for explicit sessions):
+
+  ```rust
+  use ydb::{ClientBuilder, QuerySessionPoolSettings, YdbResult};
+
+  #[tokio::main]
+  async fn main() -> YdbResult<()> {
+      let client = ClientBuilder::new_from_connection_string(
+          std::env::var("YDB_CONNECTION_STRING")?,
+      )?
+      .client()?;
+      client.wait().await?;
+
+      let mut qc = client
+          .query_client()
+          .with_implicit_session_pool(
+              QuerySessionPoolSettings::new().with_limit(500),
+          );
+
+      let mut row = qc.query_row("SELECT 1 AS one").await?;
+      Ok(())
+  }
+  ```
+
 {% endlist %}

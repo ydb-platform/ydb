@@ -23,6 +23,7 @@ from stringprep import (
 
 from asn1crypto.x509 import Certificate
 
+from scramp.exceptions import ScramException
 from scramp.utils import b64dec, b64enc, h, hmac, uenc, xor
 
 # https://tools.ietf.org/html/rfc5802
@@ -56,16 +57,6 @@ def _check_stage(Stages, current_stage, next_stage):
             f"The next method to be called is "
             f"{Stages(current_stage + 1).name}, not this method."
         )
-
-
-class ScramException(Exception):
-    def __init__(self, message, server_error=None):
-        super().__init__(message)
-        self.server_error = server_error
-
-    def __str__(self):
-        s_str = "" if self.server_error is None else f": {self.server_error}"
-        return super().__str__() + s_str
 
 
 MECHANISMS = (
@@ -405,7 +396,11 @@ def _make_cbind_input(channel_binding, use_binding):
         raise ScramException(f"The gs2_cbind_flag '{gs2_cbind_flag}' is not recognized")
 
 
-def _parse_message(msg, desc, *validations):
+def _print_set(s):
+    return "{" + ", ".join(sorted(set(s))) + "}"
+
+
+def _parse_message(msg, desc, *expected_attr_sets):
     m = {}
     for p in msg.split(","):
         if len(p) < 2 or p[1] != "=":
@@ -414,32 +409,34 @@ def _parse_message(msg, desc, *validations):
                 f"each attribute must start with a letter followed by a '='",
                 SERVER_ERROR_OTHER_ERROR,
             )
-        m[p[0]] = p[2:]
+        k = p[0]
+        if k in m:
+            raise ScramException(
+                f"Duplicate attributes not allowed in message. The duplicated "
+                f"attribute is {k}. ",
+                SERVER_ERROR_OTHER_ERROR,
+            )
+        m[k] = p[2:]
 
-    m = {e[0]: e[2:] for e in msg.split(",")}
-
-    keystr = "".join(m.keys())
-    for validation in validations:
-        if keystr == validation:
-            return m
-
-    if len(validations) == 1:
-        val_str = f"'{validations[0]}'"
-    else:
-        val_str = f"one of {validations}"
+    attr_set = m.keys()
+    if attr_set in expected_attr_sets:
+        return m
 
     raise ScramException(
-        f"Malformed {desc} message. Expected the attribute list to be {val_str} but "
-        f"found '{keystr}'",
+        f"Malformed {desc} message. Expected the attribute set to be one of "
+        f"[{', '.join([_print_set(s) for s in expected_attr_sets])}] but found "
+        f"{_print_set(attr_set)}",
         SERVER_ERROR_OTHER_ERROR,
     )
 
 
 def _get_client_first(username, c_nonce, channel_binding, use_binding):
     try:
-        u = saslprep(username)
+        prepped_u = saslprep(username)
     except ScramException as e:
         raise ScramException(e.args[0], SERVER_ERROR_INVALID_USERNAME_ENCODING)
+
+    u = prepped_u.replace("=", "=3D").replace(",", "=2C")
 
     bare = ",".join((f"n={u}", f"r={c_nonce}"))
     _, gs2_header = _make_gs2_header(channel_binding, use_binding)
@@ -469,7 +466,7 @@ def _set_client_first(client_first, s_nonce, channel_binding, use_binding):
     if gs2_char == "y":
         if channel_binding is not None:
             raise ScramException(
-                "Recieved GS2 flag 'y' which indicates that the client doesn't think "
+                "Received GS2 flag 'y' which indicates that the client doesn't think "
                 "the server supports channel binding, but in fact it does",
                 SERVER_ERROR_SERVER_DOES_SUPPORT_CHANNEL_BINDING,
             )
@@ -508,11 +505,11 @@ def _set_client_first(client_first, s_nonce, channel_binding, use_binding):
         )
 
     client_first_bare = client_first[second_comma + 1 :]
-    msg = _parse_message(client_first_bare, "client first bare", "nr")
+    msg = _parse_message(client_first_bare, "client first bare", {"n", "r"})
 
     c_nonce = msg["r"]
     nonce = c_nonce + s_nonce
-    user = msg["n"]
+    user = msg["n"].replace("=2C", ",").replace("=3D", "=")
 
     return nonce, user, client_first_bare, upgrade_mechanism
 
@@ -522,7 +519,7 @@ def _get_server_first(nonce, salt, iterations):
 
 
 def _set_server_first(server_first, c_nonce):
-    msg = _parse_message(server_first, "server first", "rsi")
+    msg = _parse_message(server_first, "server first", {"r", "s", "i"})
     if "e" in msg:
         raise ScramException(f"The server returned the error: {msg['e']}")
 
@@ -567,7 +564,6 @@ def _get_client_final(
 SERVER_ERROR_INVALID_ENCODING = "invalid-encoding"
 SERVER_ERROR_EXTENSIONS_NOT_SUPPORTED = "extensions-not-supported"
 SERVER_ERROR_INVALID_PROOF = "invalid-proof"
-SERVER_ERROR_INVALID_ENCODING = "invalid-encoding"
 SERVER_ERROR_CHANNEL_BINDINGS_DONT_MATCH = "channel-bindings-dont-match"
 SERVER_ERROR_SERVER_DOES_SUPPORT_CHANNEL_BINDING = "server-does-support-channel-binding"
 SERVER_ERROR_SERVER_DOES_NOT_SUPPORT_CHANNEL_BINDING = (
@@ -592,7 +588,7 @@ def _set_client_final(
     channel_binding,
     use_binding,
 ):
-    msg = _parse_message(client_final, "client final", "crp")
+    msg = _parse_message(client_final, "client final", {"c", "r", "p"})
     chan_binding = msg["c"]
 
     nonce = msg["r"]
@@ -623,7 +619,7 @@ def _get_server_final(server_signature, error):
 
 
 def _set_server_final(message, server_signature):
-    msg = _parse_message(message, "server final", "v", "e")
+    msg = _parse_message(message, "server final", {"v"}, {"e"})
     if "e" in msg:
         raise ScramException(f"The server returned the error: {msg['e']}")
 
@@ -668,12 +664,11 @@ def saslprep(source):
     # check for prohibited output
     # stringprep tables A.1, B.1, C.1.2, C.2 - C.9
     for c in data:
-        # check for chars mapping stage should have removed
-        assert not in_table_b1(c), "failed to strip B.1 in mapping stage"
-        assert not in_table_c12(c), "failed to replace C.1.2 in mapping stage"
-
-        # check for forbidden chars
         for f, msg in (
+            # check for chars mapping stage should have removed
+            (in_table_b1, "failed to strip B.1 in mapping stage"),
+            (in_table_c12, "failed to replace C.1.2 in mapping stage"),
+            # check for forbidden chars
             (in_table_a1, "unassigned code points forbidden"),
             (in_table_c21_c22, "control characters forbidden"),
             (in_table_c3, "private use characters forbidden"),

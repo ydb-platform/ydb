@@ -1,4 +1,3 @@
-/* syntax version 1 */
 declare $x1 as int;
 declare $x2 as Double;
 declare $x3 as Bool;

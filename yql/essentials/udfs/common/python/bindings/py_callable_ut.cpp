@@ -77,7 +77,7 @@ Y_UNIT_TEST(ToPythonAndBack) {
             UNIT_ASSERT(value);
             UNIT_ASSERT(value.IsBoxed());
             NUdf::TUnboxedValue arg = NUdf::TUnboxedValuePod((ui32)5);
-            const auto result = value.Run(nullptr, &arg);
+            const auto result = value.Run(/*valueBuilder=*/nullptr, &arg);
 
             UNIT_ASSERT(result);
             UNIT_ASSERT_VALUES_EQUAL(47, result.Get<ui32>());

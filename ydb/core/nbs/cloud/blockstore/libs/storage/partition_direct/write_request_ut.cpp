@@ -523,7 +523,6 @@ Y_UNIT_TEST_SUITE(TWriteRequestWithPBufferReplicationTest)
 
         {
             TDBGWriteBlocksToManyPBuffersResponse partResponse;
-            partResponse.OverallError = MakeError(S_OK);
             partResponse.Responses.push_back(
                 {.HostIndex = THostIndex{1}, .Error = MakeError(S_OK)});
             partResponse.Responses.push_back(
@@ -566,7 +565,6 @@ Y_UNIT_TEST_SUITE(TWriteRequestWithPBufferReplicationTest)
 
         {
             TDBGWriteBlocksToManyPBuffersResponse partResponse;
-            partResponse.OverallError = MakeError(S_OK);
             partResponse.Responses.push_back(
                 {.HostIndex = THostIndex{0}, .Error = MakeError(S_OK)});
             partResponse.Responses.push_back(

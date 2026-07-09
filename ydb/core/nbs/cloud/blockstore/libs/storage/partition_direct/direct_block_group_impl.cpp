@@ -1309,8 +1309,7 @@ void TDirectBlockGroup::OnConnectionEstablished(
     } else {
         if (IsBlockedStatus(result)) {
             // Terminal: our tablet generation is stale. Suicide, no reconnect.
-            // TODO rename context
-            HandleBlockedGeneration(index, "Connect/LOCK", result.GetStatus());
+            HandleBlockedGeneration(index, "Connect", result.GetStatus());
             // Unblock waiters on ConnectFuture with the error.
             connection.ConnectPromise.SetValue(error);
             return;

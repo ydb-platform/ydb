@@ -712,7 +712,7 @@ Y_UNIT_TEST_SUITE(TDirectBlockGroupTest)
         }
     }
 
-    // BLOCKED at Connect/LOCK: the stale tablet must suicide, mark the
+    // BLOCKED at Connect: the stale tablet must suicide, mark the
     // session terminally broken, reject the pending read, and never reconnect.
     Y_UNIT_TEST_F(ShouldSuicideOnBlockedConnect, TDBGFixture)
     {
@@ -772,7 +772,7 @@ Y_UNIT_TEST_SUITE(TDirectBlockGroupTest)
 
         UNIT_ASSERT_VALUES_EQUAL(1, service.BlockedGenerationCount);
         UNIT_ASSERT_VALUES_EQUAL(0, service.LastBlockedHostIndex);
-        UNIT_ASSERT(service.LastBlockedReason.Contains("Connect/LOCK"));
+        UNIT_ASSERT(service.LastBlockedReason.Contains("Connect"));
         UNIT_ASSERT(service.LastBlockedReason.Contains("BLOCKED"));
 
         // No reconnect was issued for host[0].

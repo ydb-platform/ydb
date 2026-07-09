@@ -53,9 +53,7 @@ struct TPartitionDirectServiceMock: public IPartitionDirectService
         return ++LsnGenerator;
     }
 
-    // TODO check if we really need this stuff
     size_t BlockedGenerationCount = 0;
-    size_t LastBlockedDirectBlockGroupIndex = 0;
     size_t LastBlockedHostIndex = 0;
     TString LastBlockedReason;
 
@@ -64,8 +62,8 @@ struct TPartitionDirectServiceMock: public IPartitionDirectService
         size_t hostIndex,
         const TString& reason) override
     {
+        Y_UNUSED(directBlockGroupIndex);
         ++BlockedGenerationCount;
-        LastBlockedDirectBlockGroupIndex = directBlockGroupIndex;
         LastBlockedHostIndex = hostIndex;
         LastBlockedReason = reason;
     }

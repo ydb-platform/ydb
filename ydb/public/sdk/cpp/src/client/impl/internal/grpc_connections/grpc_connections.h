@@ -53,8 +53,19 @@ inline TPlainStatus CredentialsInitFailedStatus() {
         "Credentials provider initialization failed");
 }
 
-template <typename TCallbackFactory>
-bool DeferUntilCredentialsReady(const TDbDriverStatePtr& dbState, bool useAuth, TCallbackFactory&& callbackFactory) {
+inline TPlainStatus CredentialsInitDeadlineExceededStatus() {
+    return TPlainStatus(EStatus::CLIENT_DEADLINE_EXCEEDED,
+        "Request deadline exceeded while waiting for credentials");
+}
+
+template <typename TCallbackFactory, typename TScheduleDelayedTask>
+bool DeferUntilCredentialsReady(
+    const TDbDriverStatePtr& dbState,
+    bool useAuth,
+    TDeadline deadline,
+    TCallbackFactory&& callbackFactory,
+    TScheduleDelayedTask&& scheduleDelayedTask)
+{
     if (!useAuth) {
         return false;
     }
@@ -65,19 +76,35 @@ bool DeferUntilCredentialsReady(const TDbDriverStatePtr& dbState, bool useAuth, 
     }
 
     if (!credentialsReady.IsReady()) {
-        auto callback = callbackFactory();
-        credentialsReady.Subscribe([callback = std::move(callback)](const NThreading::TFuture<void>& future) mutable {
+        auto callbackValue = callbackFactory();
+        auto callback = std::make_shared<decltype(callbackValue)>(std::move(callbackValue));
+        auto done = std::make_shared<std::atomic_bool>(false);
+
+        credentialsReady.Subscribe([callback, done](const NThreading::TFuture<void>& future) mutable {
+            if (done->exchange(true)) {
+                return;
+            }
             try {
                 future.GetValue();
             } catch (const std::exception& e) {
-                callback(CredentialsInitFailedStatus(e));
+                (*callback)(CredentialsInitFailedStatus(e));
                 return;
             } catch (...) {
-                callback(CredentialsInitFailedStatus());
+                (*callback)(CredentialsInitFailedStatus());
                 return;
             }
-            callback(std::nullopt);
+            (*callback)(std::nullopt);
         });
+
+        if (!(deadline == TDeadline::Max())) {
+            scheduleDelayedTask([callback, done]() mutable {
+                if (done->exchange(true)) {
+                    return;
+                }
+                (*callback)(CredentialsInitDeadlineExceededStatus());
+            }, deadline);
+        }
+
         return true;
     }
 
@@ -362,7 +389,7 @@ public:
         using TConnection = std::unique_ptr<TServiceConnection<TService>>;
         Y_ABORT_UNLESS(dbState);
 
-        if (DeferUntilCredentialsReady(dbState, requestSettings.UseAuth, [&]() mutable {
+        if (DeferUntilCredentialsReady(dbState, requestSettings.UseAuth, requestSettings.Deadline, [&]() mutable {
             return [this, requestWrapper = std::move(requestWrapper), userResponseCb = std::move(userResponseCb),
                     rpc, dbState, requestSettings, context = std::move(context)]
                 (std::optional<TPlainStatus> status) mutable {
@@ -378,6 +405,8 @@ public:
                         requestSettings,
                         std::move(context));
                 };
+        }, [this](TSimpleCb&& cb, TDeadline deadline) {
+            ScheduleDelayedTask(std::move(cb), deadline);
         })) {
             return;
         }
@@ -619,7 +648,7 @@ public:
         using TConnection = std::unique_ptr<TServiceConnection<TService>>;
         using TProcessor = typename NYdbGrpc::IStreamRequestReadProcessor<TResponse>::TPtr;
 
-        if (DeferUntilCredentialsReady(dbState, requestSettings.UseAuth, [&]() mutable {
+        if (DeferUntilCredentialsReady(dbState, requestSettings.UseAuth, requestSettings.Deadline, [&]() mutable {
             return [this, request, responseCb = std::move(responseCb), rpc, dbState, requestSettings, context = std::move(context)]
                 (std::optional<TPlainStatus> status) mutable {
                     if (status) {
@@ -634,6 +663,8 @@ public:
                         requestSettings,
                         std::move(context));
                 };
+        }, [this](TSimpleCb&& cb, TDeadline deadline) {
+            ScheduleDelayedTask(std::move(cb), deadline);
         })) {
             return;
         }
@@ -725,7 +756,7 @@ public:
         using TConnection = std::unique_ptr<TServiceConnection<TService>>;
         using TProcessor = typename NYdbGrpc::IStreamRequestReadWriteProcessor<TRequest, TResponse>::TPtr;
 
-        if (DeferUntilCredentialsReady(dbState, requestSettings.UseAuth, [&]() mutable {
+        if (DeferUntilCredentialsReady(dbState, requestSettings.UseAuth, requestSettings.Deadline, [&]() mutable {
             return [this, connectedCallback = std::move(connectedCallback), rpc, dbState, requestSettings, context = std::move(context)]
                 (std::optional<TPlainStatus> status) mutable {
                     if (status) {
@@ -739,6 +770,8 @@ public:
                         requestSettings,
                         std::move(context));
                 };
+        }, [this](TSimpleCb&& cb, TDeadline deadline) {
+            ScheduleDelayedTask(std::move(cb), deadline);
         })) {
             return;
         }

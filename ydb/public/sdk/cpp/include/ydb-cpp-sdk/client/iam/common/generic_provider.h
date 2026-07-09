@@ -288,6 +288,7 @@ private:
 
         void ProcessIamResponse(grpc::Status&& status, TResponse&& result) {
             bool setFirstTokenReady = false;
+            std::string firstTokenReadyError;
 
             {
                 std::lock_guard guard(Lock_);
@@ -298,6 +299,11 @@ private:
                         << ". GrpcStatusCode: " << static_cast<int>(status.error_code())
                         << " Message: \"" << status.error_message()
                         << "\" iam-endpoint: \"" << IamEndpoint_.Endpoint << "\"";
+
+                    if (!FirstTokenReadySet_) {
+                        FirstTokenReadySet_ = true;
+                        firstTokenReadyError = LastRequestError_;
+                    }
 
                     RescheduleOnFailure();
                 } else {
@@ -319,6 +325,8 @@ private:
 
             if (setFirstTokenReady) {
                 FirstTokenReady_.SetValue();
+            } else if (!firstTokenReadyError.empty()) {
+                FirstTokenReady_.SetException(firstTokenReadyError.c_str());
             }
         }
 

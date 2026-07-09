@@ -227,6 +227,8 @@ struct TTupleLayout {
     // Pretty prints a single packed tuple for debugging purposes.
     // Fixed-size fields are printed as integers, variable-length fields as strings.
     std::string Stringify(TSingleTuple tuple) const;
+
+    virtual TStringBuf GetSimdVariant() const { return TStringBuf("Fallback"); }
 };
 
 struct TTupleLayoutFallback : public TTupleLayout {
@@ -258,6 +260,12 @@ struct TTupleLayoutFallback : public TTupleLayout {
 template <typename TTraits> struct TTupleLayoutSIMD : public TTupleLayoutFallback {
 
     explicit TTupleLayoutSIMD(const std::vector<TColumnDesc> &columns);
+
+    TStringBuf GetSimdVariant() const override {
+        if constexpr (TTraits::Size == 32) return TStringBuf("AVX2");
+        else if constexpr (TTraits::Size == 16) return TStringBuf("SSE4.2");
+        else return TStringBuf("SIMD-Unknown");
+    }
 
     void Pack(const ui8 **columns, const ui8 **isValidBitmask, ui8 *res,
         std::vector<ui8, TMKQLAllocator<ui8>> &overflow, ui32 start,

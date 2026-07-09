@@ -1,16 +1,28 @@
 #include "dq_scalar_hash_join.h"
 
 #include <yql/essentials/minikql/comp_nodes/mkql_blocks.h>
+#include <yql/essentials/minikql/comp_nodes/mkql_counters.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders_codegen.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node_impl.h>
 #include <yql/essentials/minikql/invoke_builtins/mkql_builtins.h>
 #include <yql/essentials/minikql/mkql_node_cast.h>
 #include <yql/essentials/minikql/mkql_program_builder.h>
+#include <yql/essentials/minikql/mkql_stats_registry.h>
 
 #include <ydb/library/yql/dq/comp_nodes/dq_join_common.h>
 #include <ydb/library/yql/dq/comp_nodes/hash_join_utils/scalar_layout_converter.h>
 
 namespace NKikimr::NMiniKQL {
+
+static const TStatKey ScalarHashJoin_SimdVariant("ScalarHashJoin_SimdVariant", false);
+static const TStatKey ScalarHashJoin_TupleSize("ScalarHashJoin_TupleSize", false);
+static const TStatKey ScalarHashJoin_BuildRows("ScalarHashJoin_BuildRows", false);
+static const TStatKey ScalarHashJoin_ProbeRows("ScalarHashJoin_ProbeRows", true);
+static const TStatKey ScalarHashJoin_OutputRows("ScalarHashJoin_OutputRows", true);
+static const TStatKey ScalarHashJoin_PackTimeUs("ScalarHashJoin_PackTimeUs", true);
+static const TStatKey ScalarHashJoin_UnpackTimeUs("ScalarHashJoin_UnpackTimeUs", true);
+static const TStatKey ScalarHashJoin_HashTableProbes("ScalarHashJoin_HashTableProbes", true);
+static const TStatKey ScalarHashJoin_HashTableCollisions("ScalarHashJoin_HashTableCollisions", true);
 
 namespace {
 
@@ -33,6 +45,7 @@ public:
         , Pointers_(columns)
         , Converter_(converter)
         , Columns_(columns)
+        , Stats_(ctx.Stats)
     {
         for (int index = 0; index < columns; ++index) {
             Pointers_[index] = &Buff_[index];
@@ -82,7 +95,10 @@ private:
     FetchResult<TPackResult> FlushBatch() {
         MKQL_ENSURE(BatchCount_ > 0, "INTERNAL LOGIC ERROR");
         TPackResult packed;
+        auto packStart = GetCycleCount();
         Converter_->PackBatch(BatchValues_.data(), BatchCount_, packed);
+        auto packUs = static_cast<i64>(1e6 * (GetCycleCount() - packStart) / NHPTimer::GetClockRate());
+        MKQL_ADD_STAT(Stats_, ScalarHashJoin_PackTimeUs, packUs);
         BatchValues_.clear();
         BatchCount_ = 0;
         return One<TPackResult>{std::move(packed)};
@@ -95,6 +111,7 @@ private:
     TMKQLVector<NYql::NUdf::TUnboxedValue*> Pointers_;
     IScalarLayoutConverter* Converter_;
     int Columns_;
+    IStatsRegistry* Stats_;
     static constexpr int BatchSize_ = 1024;
     TMKQLVector<NYql::NUdf::TUnboxedValue> BatchValues_;
     int BatchCount_ = 0;
@@ -217,7 +234,17 @@ private:
                     TSides<const NPackedTuple::TTupleLayout*>{.Build = Converters_.Build->GetTupleLayout(),
                                                               .Probe = Converters_.Probe->GetTupleLayout()})
             , Output_(meta, {.Build = Converters_.Build.get(), .Probe = Converters_.Probe.get()})
-        {}
+        {
+            auto simdVariant = Converters_.Build->GetTupleLayout()->GetSimdVariant();
+            i64 simdId = (simdVariant == "AVX2") ? 2 : (simdVariant == "SSE4.2") ? 1 : 0;
+            MKQL_SET_STAT(ctx.Stats, ScalarHashJoin_SimdVariant, simdId);
+            MKQL_SET_STAT(ctx.Stats, ScalarHashJoin_TupleSize, Converters_.Build->GetTupleLayout()->TotalRowSize);
+
+            if (ctx.CountersProvider) {
+                TString id = TString(Operator_Join) + "0";
+                CounterOutputRows_ = ctx.CountersProvider->GetCounter(id, Counter_OutputRows, false);
+            }
+        }
 
         EFetchResult FetchValues(NUdf::TUnboxedValue* const* output) {
             const int expectedWidth = Output_.Columns();
@@ -241,12 +268,34 @@ private:
                 Buffer_.reset();
                 BufferPos_ = 0;
             }
+
+            MKQL_INC_STAT(JoinCtx_->Stats, ScalarHashJoin_OutputRows);
+            CounterOutputRows_.Inc();
+
             return EFetchResult::One;
         }
 
     private:
         bool HasRow() const {
             return Buffer_.has_value() && BufferPos_ + Output_.Columns() <= Buffer_->Buffer.size();
+        }
+
+        void FlushWithStats() {
+            auto unpackStart = GetCycleCount();
+            Buffer_ = Output_.Flush();
+            auto unpackUs = static_cast<i64>(1e6 * (GetCycleCount() - unpackStart) / NHPTimer::GetClockRate());
+            MKQL_ADD_STAT(JoinCtx_->Stats, ScalarHashJoin_UnpackTimeUs, unpackUs);
+            ReportJoinStats();
+        }
+
+        void ReportJoinStats() {
+            MKQL_SET_STAT(JoinCtx_->Stats, ScalarHashJoin_BuildRows, Join_.GetBuildRows());
+            MKQL_ADD_STAT(JoinCtx_->Stats, ScalarHashJoin_ProbeRows, Join_.GetProbeRows() - LastReportedProbeRows_);
+            LastReportedProbeRows_ = Join_.GetProbeRows();
+            MKQL_ADD_STAT(JoinCtx_->Stats, ScalarHashJoin_HashTableProbes, Join_.GetHashTableProbes() - LastReportedProbes_);
+            LastReportedProbes_ = Join_.GetHashTableProbes();
+            MKQL_ADD_STAT(JoinCtx_->Stats, ScalarHashJoin_HashTableCollisions, Join_.GetHashTableMisses() - LastReportedMisses_);
+            LastReportedMisses_ = Join_.GetHashTableMisses();
         }
 
         EFetchResult FillBuffer() {
@@ -260,14 +309,14 @@ private:
                     if (Output_.SizeTuples() == 0) {
                         return EFetchResult::Finish;
                     }
-                    Buffer_ = Output_.Flush();
+                    FlushWithStats();
                     return EFetchResult::One;
                 }
                 case EFetchResult::Yield: {
                     if (Output_.SizeTuples() == 0) {
                         return EFetchResult::Yield;
                     }
-                    Buffer_ = Output_.Flush();
+                    FlushWithStats();
                     return EFetchResult::One;
                 }
                 case EFetchResult::One: {
@@ -277,7 +326,7 @@ private:
                     MKQL_ENSURE(false, "unexpected fetch result");
                 }
             }
-            Buffer_ = Output_.Flush();
+            FlushWithStats();
             return EFetchResult::One;
         }
 
@@ -287,6 +336,10 @@ private:
         TComputationContext* JoinCtx_;
         JoinType Join_;
         TRenamesScalarOutput Output_;
+        NYql::NUdf::TCounter CounterOutputRows_;
+        ui64 LastReportedProbeRows_ = 0;
+        ui64 LastReportedProbes_ = 0;
+        ui64 LastReportedMisses_ = 0;
         std::optional<TRenamesScalarOutput::TFlushResult> Buffer_;
         size_t BufferPos_ = 0;
         const int Threshold_ = 10000;

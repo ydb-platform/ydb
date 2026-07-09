@@ -28,6 +28,7 @@ ydb/core/viewer/tests test.py.TestViewer.test_viewer_tenantinfo
 ydb/core/viewer/tests test.py.TestViewer.test_viewer_tenantinfo_db
 ydb/library/actors/interconnect/rdma/ut TRdmaLow/TCqMode.ReadInOneProcessWithQpInterruption/EVENT
 ydb/library/actors/interconnect/ut_fat InterconnectUnstableConnection.InterconnectTestWithProxyTlsReestablishWithXdc
+ydb/library/actors/interconnect/ut_rdma XdcRdmaTest.RestoreRdmaSession
 ydb/library/actors/interconnect/ut_rdma XdcRdmaTest/XdcRdmaTestCqMode.SendMixBig/POLLING
 ydb/public/sdk/cpp/src/client/topic/ut/with_direct_read_ut BasicUsage.KeyedWriteSession_CloseTimeout
 ydb/public/sdk/cpp/src/client/topic/ut/with_direct_read_ut unittest.[*/*] chunk
@@ -54,4 +55,5 @@ ydb/tests/stress/testshard_workload/tests test_workload.py.TestYdbTestShardWorkl
 ydb/tools/stress_tool/ut TDeviceTestTool.AioTestRead
 ydb/tools/stress_tool/ut TDeviceTestTool.AioTestReadWrite
 ydb/tools/stress_tool/ut TDeviceTestTool.AioTestWrite
+ydb/tools/stress_tool/ut TDeviceTestTool.PDiskTestLogWrite
 ydb/tools/stress_tool/ut TDeviceTestTool.PersistentBufferTestWrite

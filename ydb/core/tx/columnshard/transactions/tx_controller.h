@@ -217,7 +217,6 @@ public:
 
     private:
         mutable TAtomicCounter PreparationsStarted = 0;
-        bool NeedResendReplyFlag = false;
         std::optional<bool> StartedAsync;
 
         friend class TTxController;
@@ -257,20 +256,6 @@ public:
         }
 
         void ResetStatusOnUpdate() {
-            if (Status) {
-                switch (*Status) {
-                    case EStatus::Failed:
-                    case EStatus::ReplySent:
-                        NeedResendReplyFlag = true;
-                        return;
-                    case EStatus::ProposeFinishedOnExecute:
-                    case EStatus::ProposeFinishedOnComplete:
-                        NeedResendReplyFlag = true;
-                        break;
-                    default:
-                        break;
-                }
-            }
             Status = {};
         }
 
@@ -357,7 +342,7 @@ public:
         }
 
         bool IsAsync() const {
-            return DoIsAsync() && Status != EStatus::Failed && Status != EStatus::ReplySent && !NeedResendReplyFlag;
+            return DoIsAsync() && Status != EStatus::Failed && Status != EStatus::ReplySent;
         }
 
         virtual ~ITransactionOperator() {

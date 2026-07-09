@@ -134,7 +134,7 @@ TString ITask::DebugString() const {
 }
 
 void ITask::OnDataReady() {
-    YDB_LOG_DEBUG_COMP(NActors::NStructuredLog::TLogStack::GetComponent(), "Dump event, task, externalTaskId",
+    YDB_LOG_DEBUG_COMP(NActors::NStructuredLog::TLogStack::GetComponent(), "",
         {"event", "OnDataReady"},
         {"task", DebugString()},
         {"externalTaskId", ExternalTaskId});
@@ -144,7 +144,7 @@ void ITask::OnDataReady() {
 }
 
 bool ITask::OnError(const TString& storageId, const TBlobRange& range, const IBlobsReadingAction::TErrorStatus& status) {
-    YDB_LOG_DEBUG_COMP(NActors::NStructuredLog::TLogStack::GetComponent(), "Dump event, status, task",
+    YDB_LOG_DEBUG_COMP(NActors::NStructuredLog::TLogStack::GetComponent(), "",
         {"event", "OnError"},
         {"status", status.GetStatus()},
         {"task", DebugString()});

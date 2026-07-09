@@ -53,7 +53,7 @@ void TActor::Handle(NBlobCache::TEvBlobCache::TEvReadBlobRangeResult::TPtr& ev) 
     if (!Task) {
         return;
     }
-    YDB_LOG_TRACE_COMP(NActors::NStructuredLog::TLogStack::GetComponent(), "Dump event, blobId",
+    YDB_LOG_TRACE_COMP(NActors::NStructuredLog::TLogStack::GetComponent(), "",
         {"event", "TEvReadBlobRangeResult"},
         {"blobId", ev->Get()->BlobRange});
 
@@ -125,7 +125,7 @@ void TActor::Bootstrap() {
     YDB_LOG_CREATE_CONTEXT_COMP(NKikimrServices::TX_COLUMNSHARD,
         {"externalTaskId", externalTaskId});
     Task->StartBlobsFetching({});
-    YDB_LOG_DEBUG_COMP(NActors::NStructuredLog::TLogStack::GetComponent(), "Dump task",
+    YDB_LOG_DEBUG_COMP(NActors::NStructuredLog::TLogStack::GetComponent(), "",
         {"task", Task->DebugString()});
     WaitingBlobsCount.Add(Task->GetWaitingRangesCount());
     Become(&TThis::StateWait);

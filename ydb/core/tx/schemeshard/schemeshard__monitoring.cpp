@@ -516,10 +516,13 @@ class TMonitoringMoveShardToStoragePool : public TActorBootstrapped<TMonitoringM
 private:
     NMon::TEvRemoteHttpInfo::TPtr Ev;
     TActorId SchemeShard;
-    TTabletId Hive;
+    TTabletId Hive;  // the Hive the request is currently addressed to; updated on a redirect
     TShardIdx ShardIdx;
     TChannelsBindings NewBindings;
-    THolder<TEvHive::TEvCreateTablet> CreateEv;
+    // Keep the request record so it can be re-sent to another Hive on INVALID_OWNER. The
+    // TEvCreateTablet event itself is consumed by each send, so it is rebuilt from this record.
+    NKikimrHive::TEvCreateTablet CreateRecord;
+    bool Redirected = false;
 
     TActorId PipeCache;
 
@@ -531,12 +534,18 @@ public:
         , Hive(hive)
         , ShardIdx(shardIdx)
         , NewBindings(std::move(newBindings))
-        , CreateEv(std::move(createEv))
+        , CreateRecord(createEv->Record)
     {}
+
+    void SendCreateTablet() {
+        auto ev = MakeHolder<TEvHive::TEvCreateTablet>();
+        ev->Record = CreateRecord;
+        Send(PipeCache, new TEvPipeCache::TEvForward(ev.Release(), ui64(Hive), /* subscribe */ true));
+    }
 
     void Bootstrap() {
         PipeCache = MakePipePerNodeCacheID(EPipePerNodeCache::Leader);
-        Send(PipeCache, new TEvPipeCache::TEvForward(CreateEv.Release(), ui64(Hive), /* subscribe */ true));
+        SendCreateTablet();
         Become(&TThis::StateWait);
     }
 
@@ -547,10 +556,52 @@ public:
         }
     }
 
+    void SendError(ui32 httpCode, const TString& reason, const TString& details) {
+        // Nothing has been persisted, so the action stays retryable.
+        Send(Ev->Sender, new NMon::TEvRemoteBinaryInfoRes(TStringBuilder()
+            << "HTTP/1.1 " << httpCode << " " << reason << "\r\nConnection: Close\r\n\r\n"
+            << details << "\r\n"));
+    }
+
     void Handle(TEvHive::TEvCreateTabletReply::TPtr& ev) {
+        const auto& record = ev->Get()->Record;
+        const NKikimrProto::EReplyStatus status = record.GetStatus();
+
+        // The tablet lives on a different Hive: re-send the request there. Bindings are persisted
+        // only after the owning Hive acks with OK/ALREADY, so a redirect must not persist anything.
+        // A tablet is owned by exactly one Hive (the root Hive or a tenant Hive), so a correct Hive
+        // redirects at most once; a second INVALID_OWNER means something is wrong, so bail out.
+        if (status == NKikimrProto::INVALID_OWNER) {
+            const TTabletId redirectTo = TTabletId(record.GetForwardRequest().GetHiveTabletId());
+            if (!redirectTo || Redirected) {
+                SendError(502, "Bad Gateway", TStringBuilder()
+                    << "Hive redirected the request (INVALID_OWNER) but no valid target Hive was"
+                       " provided or it redirected more than once; nothing was changed");
+                PassAway();
+                return;
+            }
+            Redirected = true;
+            // Stop subscribing to the old Hive before addressing the new one.
+            Send(PipeCache, new TEvPipeCache::TEvUnlink(ui64(Hive)));
+            Hive = redirectTo;
+            SendCreateTablet();
+            return;  // keep waiting for the reply from the new Hive
+        }
+
+        // Any status other than OK/ALREADY means Hive did not apply the move (e.g. BLOCKED or
+        // ERROR). Report it and persist nothing, so the recorded bindings still name the old pool.
+        if (status != NKikimrProto::OK && status != NKikimrProto::ALREADY) {
+            SendError(409, "Conflict", TStringBuilder()
+                << "Hive rejected the move: status " << NKikimrProto::EReplyStatus_Name(status)
+                << ", error reason " << NKikimrHive::EErrorReason_Name(record.GetErrorReason())
+                << "; nothing was changed");
+            PassAway();
+            return;
+        }
+
         TString text;
         try {
-            NProtobufJson::Proto2Json(ev->Get()->Record, text, {
+            NProtobufJson::Proto2Json(record, text, {
                 .EnumMode = NProtobufJson::TProto2JsonConfig::EnumName,
                 .FieldNameMode = NProtobufJson::TProto2JsonConfig::FieldNameSnakeCaseDense,
                 .MapAsObject = true,
@@ -567,7 +618,11 @@ public:
         PassAway();
     }
 
-    void Handle(TEvPipeCache::TEvDeliveryProblem::TPtr&) {
+    void Handle(TEvPipeCache::TEvDeliveryProblem::TPtr& ev) {
+        if (ev->Get()->TabletId != ui64(Hive)) {
+            // Stale problem from a Hive we already redirected away from; ignore.
+            return;
+        }
         // Hive not reached: nothing persisted, so the action is retryable.
         Send(Ev->Sender, new NMon::TEvRemoteBinaryInfoRes(TStringBuilder() << "HTTP/1.1 502 Bad Gateway\r\nConnection: Close\r\n\r\nHive tablet disconnected\r\n"));
         PassAway();
@@ -1641,7 +1696,11 @@ private:
 
         TStringBuilder options;
         for (const auto& pool : pools) {
-            options << std::format("<option value='{0}'>{0} ({1})</option>", pool.GetName(), pool.GetKind());
+            // Pool name/kind are not user-controlled, but escape them anyway as basic HTML hygiene
+            // so values with special characters render literally.
+            const TString name = EncodeHtmlPcdata(pool.GetName());
+            const TString kind = EncodeHtmlPcdata(pool.GetKind());
+            options << std::format("<option value='{0}'>{0} ({1})</option>", name, kind);
         }
 
         // Duplicate params in query string in addition to form-urlencoded body

@@ -18,9 +18,6 @@ public:
         Column  /* "column" */,
         ExternalS3      /* "external-s3" */
     };
-    enum class EQuerySyntax {
-        YQL /* "yql" */,
-    };
     enum class EDatetimeTypes {
         DateTime32 /* "dt32" */,
         DateTime64 /* "dt64" */

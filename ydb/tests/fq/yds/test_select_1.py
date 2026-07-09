@@ -8,6 +8,7 @@ from ydb.tests.tools.fq_runner.kikimr_utils import yq_v1, yq_all
 import ydb.public.api.protos.draft.fq_pb2 as fq
 import ydb.public.api.protos.ydb_value_pb2 as ydb
 
+
 class TestSelect1(object):
     @yq_all
     def test_select_1(self, kikimr, client):

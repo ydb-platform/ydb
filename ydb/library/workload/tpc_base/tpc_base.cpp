@@ -88,7 +88,7 @@ TQueryInfoList TTpcBaseWorkloadGenerator::GetWorkload(int type) {
     resourcePrefix.to_lower();
     TVector<TString> queries;
     NResource::TResources qresources;
-    const auto prefix = resourcePrefix + "queries/" + ToString(Params.GetSyntax()) + "/q";
+    const auto prefix = resourcePrefix + "queries/yql/q";
     NResource::FindMatch(prefix, &qresources);
     for (const auto& r: qresources) {
         ui32 num;

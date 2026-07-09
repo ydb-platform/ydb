@@ -334,10 +334,8 @@ NYql::TAstParseResult ParseQuery(const TString& queryText, bool isSql, TMaybe<ui
 namespace {
 
 NYql::TAstParseResult MakeRejectedSyntaxResult(const TString& message) {
-    NYql::TExprContext ctx;
-    ctx.IssueManager.RaiseIssue(NYql::YqlIssue(NYql::TPosition(0, 0), NYql::TIssuesIds::DEFAULT_ERROR, message));
     NYql::TAstParseResult result;
-    result.Issues = ctx.IssueManager.GetIssues();
+    result.Issues.AddIssue(NYql::YqlIssue(NYql::TPosition(0, 0), NYql::TIssuesIds::DEFAULT_ERROR, message));
     return result;
 }
 
@@ -400,7 +398,7 @@ TVector<TQueryAst> ParseStatements(const TString& queryText, const TMaybe<Ydb::Q
         return {ParseQuery(queryText, syntax, isSql, settingsBuilder)};
     }
     if (syntax && *syntax == Ydb::Query::Syntax::SYNTAX_PG) {
-        return {{std::make_shared<NYql::TAstParseResult>(MakeRejectedSyntaxResult("PostgreSQL syntax is not supported")), {}, true, false, {}}};
+        return {{std::make_shared<NYql::TAstParseResult>(MakeRejectedSyntaxResult("PostgreSQL syntax is not supported")), {}, {}, false, {}}};
     }
     bool deprecatedSQL;
     TMaybe<ui16> sqlVersion;

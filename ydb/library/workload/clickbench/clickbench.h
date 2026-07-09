@@ -13,7 +13,6 @@ public:
     TWorkloadDataInitializer::TList CreateDataInitializers() const override;
     TString GetWorkloadName() const override;
     YDB_READONLY_DEF(TFsPath, DataFiles);
-    YDB_READONLY(EQuerySyntax, Syntax, EQuerySyntax::YQL);
 };
 
 class TClickbenchWorkloadGenerator final: public TWorkloadGeneratorBase {

@@ -105,7 +105,7 @@ The `dropTable` changeset - delete a table. For example: `<dropTable tableName="
 - xml
 
   ```xml
-  <createIndex tableName="episodes" indexName="episodes_index" unique="false">
+  <createIndex tableName="episodes" indexName="episodes_index">
       <column name="title"/>
   </createIndex>
   ```
@@ -118,7 +118,6 @@ The `dropTable` changeset - delete a table. For example: `<dropTable tableName="
         "createIndex": {
           "tableName": "episodes",
           "indexName": "episodes_index",
-          "unique": "false",
           "columns": {
             "column": {
               "name": "title"
@@ -135,7 +134,6 @@ The `dropTable` changeset - delete a table. For example: `<dropTable tableName="
   - createIndex:
       tableName: episodes
       indexName: episodes_index
-      unique: false
       columns:
       - column:
           name: title
@@ -401,7 +399,7 @@ Let's apply this changeset to an empty database:
         </rollback>
     </changeSet>
     <changeSet id="index_episodes_title" author="kurdyukov-kir">
-        <createIndex tableName="episodes" indexName="index_episodes_title" unique="false">
+        <createIndex tableName="episodes" indexName="index_episodes_title">
             <column name="title"/>
         </createIndex>
     </changeSet>

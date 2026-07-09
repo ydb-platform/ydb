@@ -46,7 +46,7 @@ bool TOperationsManager::Load(NTabletFlatExecutor::TTransactionContext& txc) {
             auto operation = std::make_shared<TWriteOperation>(TUnifiedPathId{}, writeId, lockId, cookie, status,
                 TInstant::Seconds(createdAtSec), granuleShardingVersionId, NEvWrite::EModificationType::Upsert, metaProto.GetIsBulk());
             operation->FromProto(metaProto);
-            YDB_LOG_DEBUG_COMP(NKikimrServices::TX_COLUMNSHARD_TX, "Dump event, operationId",
+            YDB_LOG_DEBUG_COMP(NKikimrServices::TX_COLUMNSHARD_TX, "",
                 {"event", "register_operation_on_load"},
                 {"operationId", operation->GetWriteId()});
             AFL_VERIFY(operation->GetStatus() != EOperationStatus::Draft);
@@ -211,13 +211,13 @@ void TOperationsManager::RemoveOperationOnExecute(const TWriteOperation::TPtr& o
 
 void TOperationsManager::RemoveOperationOnComplete(const TWriteOperation::TPtr& op) {
     for (auto&& i : op->GetInsertWriteIds()) {
-        YDB_LOG_DEBUG_COMP(NKikimrServices::TX_COLUMNSHARD_WRITE, "Dump event, writeId, operationId",
+        YDB_LOG_DEBUG_COMP(NKikimrServices::TX_COLUMNSHARD_WRITE, "",
             {"event", "remove_write_id_to_operation_id"},
             {"writeId", i},
             {"operationId", op->GetWriteId()});
         AFL_VERIFY(InsertWriteIdToOpWriteId.erase(i));
     }
-    YDB_LOG_DEBUG_COMP(NKikimrServices::TX_COLUMNSHARD_WRITE, "Dump event, operationId",
+    YDB_LOG_DEBUG_COMP(NKikimrServices::TX_COLUMNSHARD_WRITE, "",
         {"event", "remove_operation"},
         {"operationId", op->GetWriteId()});
     Operations.erase(op->GetWriteId());
@@ -249,7 +249,7 @@ TWriteOperation::TPtr TOperationsManager::CreateWriteOperation(const TUnifiedPat
     auto writeId = BuildNextOperationWriteId();
     auto operation = std::make_shared<TWriteOperation>(
         pathId, writeId, lockId, cookie, EOperationStatus::Draft, AppData()->TimeProvider->Now(), granuleShardingVersionId, mType, isBulk);
-    YDB_LOG_DEBUG_COMP(NKikimrServices::TX_COLUMNSHARD_WRITE, "Dump event, operationId, last",
+    YDB_LOG_DEBUG_COMP(NKikimrServices::TX_COLUMNSHARD_WRITE, "",
         {"event", "register_operation"},
         {"operationId", operation->GetWriteId()},
         {"last", LastWriteId});

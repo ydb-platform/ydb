@@ -7,6 +7,7 @@
 #include <ydb/core/tx/columnshard/engines/portions/constructor_portion.h>
 #include <ydb/core/tx/columnshard/tracing/probes.h>
 #include <ydb/core/tx/columnshard/transactions/locks/write.h>
+
 #include <ydb/library/actors/struct_log/log_stack.h>
 
 namespace NKikimr::NColumnShard {

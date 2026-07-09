@@ -4,6 +4,7 @@
 #include <ydb/core/tx/columnshard/engines/changes/abstract/abstract.h>
 #include <ydb/core/tx/columnshard/engines/column_engine_logs.h>
 #include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
+
 #include <ydb/library/actors/struct_log/log_stack.h>
 
 namespace NKikimr::NColumnShard {

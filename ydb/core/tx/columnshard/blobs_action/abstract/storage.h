@@ -12,9 +12,9 @@
 #include <ydb/core/tx/tiering/abstract/manager.h>
 
 #include <ydb/library/accessor/accessor.h>
+#include <ydb/library/actors/struct_log/log_stack.h>
 
 #include <optional>
-#include <ydb/library/actors/struct_log/log_stack.h>
 
 namespace NKikimr::NOlap {
 

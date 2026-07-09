@@ -1,6 +1,7 @@
 #include "tx_remove_blobs.h"
 
 #include <ydb/core/tx/columnshard/blobs_action/events/delete_blobs.h>
+
 #include <ydb/library/actors/struct_log/log_stack.h>
 
 namespace NKikimr::NColumnShard {

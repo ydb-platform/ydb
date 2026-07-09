@@ -1104,6 +1104,79 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         UNIT_ASSERT_C(joinFilter.Contains("t1.b < t2.c"), joinFilter);
     }
 
+    Y_UNIT_TEST(OperatorIteratorMovePreservesDeepTraversal) {
+        const auto pos = NYql::TPositionHandle();
+        TIntrusivePtr<IOperator> op = MakeIntrusive<TOpEmptySource>(pos);
+        for (size_t i = 0; i < 30; ++i) {
+            op = MakeIntrusive<TOpJoin>(
+                op,
+                MakeIntrusive<TOpEmptySource>(pos),
+                pos,
+                "Cross",
+                TVector<std::pair<TInfoUnit, TInfoUnit>>{});
+        }
+        TOpRoot root(op, pos, TVector<TString>{});
+
+        auto source = root.begin();
+        TOpIterator moved(std::move(source));
+        UNIT_ASSERT(source == TOpEnd{});
+        ++source;
+        UNIT_ASSERT(source == TOpEnd{});
+
+        auto assigned = root.begin();
+        assigned = std::move(moved);
+        UNIT_ASSERT(moved == TOpEnd{});
+        ++moved;
+        UNIT_ASSERT(moved == TOpEnd{});
+
+        size_t count = 0;
+        IOperator* last = nullptr;
+        for (; assigned != TOpEnd{}; ++assigned) {
+            last = assigned->Current.Get();
+            ++count;
+        }
+
+        UNIT_ASSERT_VALUES_EQUAL(count, 61);
+        UNIT_ASSERT_VALUES_EQUAL(last, op.Get());
+    }
+
+    Y_UNIT_TEST(ComputeParentsHandlesSharedDagAndIgnoresInactiveSubplans) {
+        const auto pos = NYql::TPositionHandle();
+        auto shared = MakeIntrusive<TOpEmptySource>(pos);
+        auto join = MakeIntrusive<TOpJoin>(
+            shared,
+            shared,
+            pos,
+            "Cross",
+            TVector<std::pair<TInfoUnit, TInfoUnit>>{});
+        TOpRoot root(join, pos, TVector<TString>{});
+
+        auto inactiveChild = MakeIntrusive<TOpEmptySource>(pos);
+        auto inactiveSubplan = MakeIntrusive<TOpJoin>(
+            inactiveChild,
+            MakeIntrusive<TOpEmptySource>(pos),
+            pos,
+            "Cross",
+            TVector<std::pair<TInfoUnit, TInfoUnit>>{});
+        const TInfoUnit inactiveIU("inactive_subplan", true);
+        root.PlanProps.Subplans.Add(inactiveIU, TSubplanEntry{inactiveSubplan, {}, ESubplanType::EXPR, inactiveIU, {}});
+
+        root.ComputeParents();
+
+        UNIT_ASSERT(join->Parents.empty());
+        UNIT_ASSERT_VALUES_EQUAL(shared->Parents.size(), 2);
+        bool hasLeftEdge = false;
+        bool hasRightEdge = false;
+        for (const auto& [parent, childIndex] : shared->Parents) {
+            UNIT_ASSERT_VALUES_EQUAL(parent, join.Get());
+            hasLeftEdge |= childIndex == 0;
+            hasRightEdge |= childIndex == 1;
+        }
+        UNIT_ASSERT(hasLeftEdge);
+        UNIT_ASSERT(hasRightEdge);
+        UNIT_ASSERT(inactiveChild->Parents.empty());
+    }
+
     Y_UNIT_TEST(NameConstraintsPropagateThroughUnary) {
         NYql::TExprContext exprCtx;
         TPlanProps planProps;

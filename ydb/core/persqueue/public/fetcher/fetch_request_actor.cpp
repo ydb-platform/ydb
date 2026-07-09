@@ -338,6 +338,12 @@ public:
             return;
         }
 
+        if (record.GetSessionInvalidated()) {
+            AddResult(partitionIndex, EPartitionStatus::DataReceived, NPersQueue::NErrorCode::READ_ERROR_NO_SESSION);
+            ProceedFetchRequest(ctx);
+            return;
+        }
+
         status = EPartitionStatus::HasDataReceived;
 
         auto& partition = Settings.Partitions[partitionIndex];
@@ -355,18 +361,6 @@ public:
     void Handle(TEvPersQueue::TEvResponse::TPtr& ev, const TActorContext& ctx) {
         auto& record = ev->Get()->Record;
         LOG_D("Handle TEvPersQueue::TEvResponse " << record.ShortDebugString());
-
-        if (record.HasErrorCode() && record.GetErrorCode() == NPersQueue::NErrorCode::READ_ERROR_NO_SESSION
-            && record.HasPartitionResponse() && record.GetPartitionResponse().HasCookie()) {
-            const auto partitionIndex = record.GetPartitionResponse().GetCookie();
-            if (partitionIndex < PartitionStatus.size()
-                && PartitionStatus[partitionIndex] == EPartitionStatus::HasDataRequested) {
-                AddResult(partitionIndex, EPartitionStatus::DataReceived, NPersQueue::NErrorCode::READ_ERROR_NO_SESSION);
-                ProceedFetchRequest(ctx);
-            }
-            return;
-        }
-
         AFL_ENSURE(record.HasPartitionResponse());
 
         if (record.GetPartitionResponse().GetCookie() != FetchRequestCurrentPartitionIndex || FetchRequestCurrentReadTablet == 0) {

@@ -128,7 +128,7 @@ void TPartition::FillReadFromTimestamps(const TActorContext& ctx) {
     }
 }
 
-TAutoPtr<TEvPersQueue::TEvHasDataInfoResponse> TPartition::MakeHasDataInfoResponse(ui64 lagSize, const TMaybe<ui64>& cookie, bool readingFinished) {
+TAutoPtr<TEvPersQueue::TEvHasDataInfoResponse> TPartition::MakeHasDataInfoResponse(ui64 lagSize, const TMaybe<ui64>& cookie, bool readingFinished, bool sessionInvalidated) {
     TAutoPtr<TEvPersQueue::TEvHasDataInfoResponse> res(new TEvPersQueue::TEvHasDataInfoResponse());
 
     res->Record.SetEndOffset(GetEndOffset());
@@ -136,6 +136,9 @@ TAutoPtr<TEvPersQueue::TEvHasDataInfoResponse> TPartition::MakeHasDataInfoRespon
     res->Record.SetWriteTimestampEstimateMS(WriteTimestampEstimate.MilliSeconds());
     if (cookie) {
         res->Record.SetCookie(*cookie);
+    }
+    if (sessionInvalidated) {
+        res->Record.SetSessionInvalidated(true);
     }
     GetResultPostProcessor<NKikimrPQ::THasDataInfoResponse>()(readingFinished, res->Record);
 
@@ -221,13 +224,7 @@ void TPartition::FailStaleSessionReadRequests(const TString& user, const TActorC
             ++it;
             continue;
         }
-        auto response = MakeHolder<TEvPersQueue::TEvResponse>();
-        response->Record.SetStatus(NMsgBusProxy::MSTATUS_ERROR);
-        response->Record.SetErrorCode(NPersQueue::NErrorCode::READ_ERROR_NO_SESSION);
-        response->Record.SetErrorReason(TStringBuilder() << "no such session for consumer '" << it->ClientId << "'");
-        if (it->Cookie) {
-            response->Record.MutablePartitionResponse()->SetCookie(*it->Cookie);
-        }
+        auto response = MakeHasDataInfoResponse(0, it->Cookie, false, true);
         ctx.Send(it->Sender, response.Release());
 
         for (auto dlIt = HasDataDeadlines.begin(); dlIt != HasDataDeadlines.end(); ++dlIt) {

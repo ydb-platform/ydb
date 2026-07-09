@@ -5,8 +5,6 @@
 #include <ydb/services/metadata/abstract/decoder.h>
 #include <ydb/services/metadata/manager/object.h>
 
-#include <memory>
-
 
 namespace NKikimr::NKqp {
 
@@ -18,7 +16,7 @@ class TResourcePoolClassifierConfig : public NMetadata::NModifications::TObject<
     YDB_ACCESSOR_DEF(i64, Rank);
     YDB_ACCESSOR_DEF(NJson::TJsonValue, ConfigJson);
 
-    mutable std::optional<NResourcePool::TClassifierSettings> CachedSettings;
+    std::optional<NResourcePool::TClassifierSettings> Settings;
 
 public:
     class TDecoder : public NMetadata::NInternal::TDecoderBase {
@@ -41,7 +39,12 @@ public:
     NMetadata::NInternal::TTableRecord SerializeToRecord() const;
     bool DeserializeFromRecord(const TDecoder& decoder, const Ydb::Value& rawData);
 
-    const NResourcePool::TClassifierSettings& GetClassifierSettings() const;
+    void EnsureSettings();
+
+    const NResourcePool::TClassifierSettings& GetClassifierSettings() const {
+        Y_ABORT_UNLESS(Settings, "Settings not populated; caller must call EnsureSettings() first");
+        return *Settings;
+    }
     NJson::TJsonValue GetDebugJson() const;
 
     bool operator==(const TResourcePoolClassifierConfig& other) const;

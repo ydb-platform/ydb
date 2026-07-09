@@ -14,7 +14,7 @@ void CheckDecision(std::function<void(NResourcePool::TPoolSettings&)> setup, EEx
     NResourcePool::TPoolSettings config;
     setup(config);
 
-    auto classifierSnap = MakeClassifierSnapshot(TEST_DB, {
+    auto classifierSnap = MakeClassifierSnapshot({
         MakeClassifierConfig(TEST_DB, "c1", 100, "test_pool"),
     });
     auto poolSnap = MakeResourcePoolMap({

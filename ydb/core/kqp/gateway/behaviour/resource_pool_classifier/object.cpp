@@ -92,11 +92,7 @@ NMetadata::NInternal::TTableRecord TResourcePoolClassifierConfig::SerializeToRec
     return result;
 }
 
-const TClassifierSettings& TResourcePoolClassifierConfig::GetClassifierSettings() const {
-    if (CachedSettings) {
-        return *CachedSettings;
-    }
-
+void TResourcePoolClassifierConfig::EnsureSettings() {
     TClassifierSettings settings;
     settings.Rank = Rank;
 
@@ -113,8 +109,7 @@ const TClassifierSettings& TResourcePoolClassifierConfig::GetClassifierSettings(
         }
     }
 
-    CachedSettings = std::move(settings);
-    return *CachedSettings;
+    Settings = std::move(settings);
 }
 
 NJson::TJsonValue TResourcePoolClassifierConfig::GetDebugJson() const {

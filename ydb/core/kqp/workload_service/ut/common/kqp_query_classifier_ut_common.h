@@ -41,14 +41,11 @@ inline TResourcePoolClassifierConfig MakeClassifierConfig(
 }
 
 inline std::shared_ptr<TResourcePoolClassifierSnapshot> MakeClassifierSnapshot(
-    const TString& db,
     std::vector<TResourcePoolClassifierConfig> configs)
 {
     auto snapshot = std::make_shared<TResourcePoolClassifierSnapshot>(TInstant::Now());
-    for (const auto& cfg : configs) {
-        auto& info = snapshot->MutableResourcePoolClassifierConfigs()[db];
-        info.ByName.emplace(cfg.GetName(), cfg);
-        info.ByRank.emplace(cfg.GetRank(), cfg);
+    for (auto& cfg : configs) {
+        snapshot->AddConfig(std::move(cfg));
     }
     return snapshot;
 }
@@ -110,7 +107,7 @@ struct TClassifyTestCase {
                 extra.MemberName, extra.HasAppName));
         }
 
-        auto classifierSnap = MakeClassifierSnapshot(TEST_DB, std::move(configs));
+        auto classifierSnap = MakeClassifierSnapshot(std::move(configs));
 
         std::vector<std::pair<TString, TResourcePoolEntry>> poolEntries = {
             {_JoinPath(TEST_DB, ResourcePool), MakePoolEntry(10)},

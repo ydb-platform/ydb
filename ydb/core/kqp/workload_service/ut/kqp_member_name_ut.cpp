@@ -12,7 +12,7 @@ Y_UNIT_TEST_SUITE(TQueryClassifierMemberName) {
     }
 
     Y_UNIT_TEST(ShouldMatchGroupSID) {
-        auto classifierSnap = MakeClassifierSnapshot(TEST_DB, {
+        auto classifierSnap = MakeClassifierSnapshot({
             MakeClassifierConfig(TEST_DB, "c1", 100, "pool_target", "admins"),
         });
 
@@ -43,7 +43,7 @@ Y_UNIT_TEST_SUITE(TQueryClassifierMemberName) {
     }
 
     Y_UNIT_TEST(ShouldMatchAnonymousUserWithEmptySID) {
-        auto classifierSnap = MakeClassifierSnapshot(TEST_DB, {
+        auto classifierSnap = MakeClassifierSnapshot({
             MakeClassifierConfig(TEST_DB, "c1", 100, "pool_target",
                 TString(NACLib::TSID())),
         });

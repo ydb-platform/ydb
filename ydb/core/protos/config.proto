@@ -554,6 +554,7 @@ message TInterconnectConfig {
     optional bool EnableSQPOLLv2 = 66 [default = true];
     optional bool EnablePreserializeInV2 = 67 [default = false];
     optional uint32 UringEngineThreadsV2 = 68 [default = 4];
+    optional bool EnableRdmaSendReceive = 69 [default = false];
 
     // ballast is added to IC handshake frames to ensure correctness of jumbo frames transmission over network
     optional uint32 HandshakeBallastSize = 14;

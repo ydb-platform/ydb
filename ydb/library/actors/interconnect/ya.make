@@ -55,6 +55,7 @@ SRCS(
     packet.cpp
     packet.h
     profiler.h
+    rdma_sync_actor.cpp
     slowpoke_actor.h
     subscription_manager.cpp
     subscription_manager.h

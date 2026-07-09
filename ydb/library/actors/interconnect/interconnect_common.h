@@ -79,6 +79,7 @@ namespace NActors {
         TDuration EventDelay = TDuration::Zero();
         ESocketSendOptimization SocketSendOptimization = ESocketSendOptimization::DISABLED;
         bool RdmaChecksum = true;
+        bool EnableRdmaSendReceive = false;
         ui32 RdmaPayloadCopySizeThreshold = 64 << 10;
         // 5s * 2^8 = 1280s, about 21 minutes with the current RDMA retry base delay.
         ui32 MaxRdmaRetryBackoffLevel = 8;

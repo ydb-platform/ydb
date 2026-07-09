@@ -171,7 +171,7 @@ bool TBlobManager::LoadState(IBlobManagerDb& db, const TTabletId selfTabletId) {
     // Build the list of steps that cannot be garbage collected before Keep flag is set on the blobs
     TBlobsByGenStep blobsToKeepLocal;
     for (const auto& unifiedBlobId : blobsToKeep) {
-        YDB_LOG_DEBUG("Dump addBlobToKeep",
+        YDB_LOG_DEBUG("",
             {"addBlobToKeep", unifiedBlobId.ToStringNew()});
         TLogoBlobID blobId = unifiedBlobId.GetLogoBlobId();
         Y_ABORT_UNLESS(LastCollectedGenStep < TGenStep(blobId));
@@ -330,7 +330,7 @@ std::shared_ptr<NBlobOperations::NBlobStorage::TGCTask> TBlobManager::BuildGCTas
     AFL_VERIFY(!CollectGenStepInFlight);
     if (BlobsToKeep.IsEmpty() && BlobsToDelete.IsEmpty() && LastCollectedGenStep == TGenStep{ CurrentGen, CurrentStep }) {
         BlobsManagerCounters.GCCounters.SkipCollectionEmpty->Add(1);
-        YDB_LOG_DEBUG_COMP(NActors::NStructuredLog::TLogStack::GetComponent(), "Dump event, currentGen, currentStep, reason",
+        YDB_LOG_DEBUG_COMP(NActors::NStructuredLog::TLogStack::GetComponent(), "",
             {"event", "TBlobManager::BuildGCTask skip"},
             {"currentGen", CurrentGen},
             {"currentStep", CurrentStep},
@@ -339,7 +339,7 @@ std::shared_ptr<NBlobOperations::NBlobStorage::TGCTask> TBlobManager::BuildGCTas
     }
 
     if (AppData()->TimeProvider->Now() - PreviousGCTime < NYDBTest::TControllers::GetColumnShardController()->GetOverridenGCPeriod()) {
-        YDB_LOG_DEBUG_COMP(NActors::NStructuredLog::TLogStack::GetComponent(), "Dump event, currentGen, currentStep, reason",
+        YDB_LOG_DEBUG_COMP(NActors::NStructuredLog::TLogStack::GetComponent(), "",
             {"event", "TBlobManager::BuildGCTask skip"},
             {"currentGen", CurrentGen},
             {"currentStep", CurrentStep},

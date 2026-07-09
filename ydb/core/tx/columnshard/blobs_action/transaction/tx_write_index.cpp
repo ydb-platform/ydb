@@ -17,7 +17,7 @@ bool TTxWriteIndex::Execute(TTransactionContext& txc, const TActorContext& ctx) 
     Y_ABORT_UNLESS(Self->TablesManager.HasPrimaryIndex());
     txc.DB.NoMoreReadsForTx();
 
-    YDB_LOG_DEBUG_COMP(NActors::NStructuredLog::TLogStack::GetComponent(), "Dump event, changeType, details",
+    YDB_LOG_DEBUG_COMP(NActors::NStructuredLog::TLogStack::GetComponent(), "",
         {"event", "TTxWriteIndex::Execute"},
         {"changeType", changes->TypeString()},
         {"details", changes->DebugString()});
@@ -59,7 +59,7 @@ void TTxWriteIndex::Complete(const TActorContext& ctx) {
         {"tabletId", Self->TabletID()},
         {"taskId", changes->GetTaskIdentifier()});
     TMemoryProfileGuard mpg("TTxWriteIndex::Complete::" + changes->TypeString());
-    YDB_LOG_DEBUG_COMP(NActors::NStructuredLog::TLogStack::GetComponent(), "Dump event, changeType, details",
+    YDB_LOG_DEBUG_COMP(NActors::NStructuredLog::TLogStack::GetComponent(), "",
         {"event", "TTxWriteIndex::Complete"},
         {"changeType", changes->TypeString()},
         {"details", changes->DebugString()});

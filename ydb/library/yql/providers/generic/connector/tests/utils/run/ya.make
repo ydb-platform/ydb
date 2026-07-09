@@ -7,7 +7,6 @@ ENDIF()
 
 
 PY_SRCS(
-    dqrun.py
     kqprun.py
     parent.py
     result.py

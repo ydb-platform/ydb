@@ -361,12 +361,11 @@ message TKqpPhyCnVectorSearch {
     bool IsDesc = 10;
     uint32 LevelTop = 11;              // KMeansTreeSearchTopSize
     uint32 OverlapClusters = 12;
-    double OverlapRatio = 13;
-    uint32 Levels = 14;                // Number of KMeans tree levels
-    uint32 VectorColumnIndex = 15;     // Index of the embedding column in Columns
+    uint32 Levels = 13;                // Number of KMeans tree levels
+    uint32 VectorColumnIndex = 14;     // Index of the embedding column in Columns
     // Prefixed index: the transform input carries, per prefix group, the root
     // __ydb_parent id alongside the target vector (see KqpBuildReadTableVectorIndexStage).
-    bool HasPrefix = 16;
+    bool HasPrefix = 15;
 }
 
 message TKqpPhyCnSequencer {

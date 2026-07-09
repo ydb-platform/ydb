@@ -1119,7 +1119,6 @@ void TKqpTasksGraph::BuildVectorSearchChannels(const TStageInfo& stageInfo, ui32
 
     *settings->MutableIndexSettings() = vectorSearch.GetIndexSettings();
     settings->SetOverlapClusters(vectorSearch.GetOverlapClusters());
-    settings->SetOverlapRatio(vectorSearch.GetOverlapRatio());
     settings->SetIndexLevels(vectorSearch.GetLevels());
     {
         // TopK (LIMIT) may be a literal or a query parameter; resolve it to a value here.

@@ -397,42 +397,40 @@ message TKqpVectorSearchSettings {
     optional bool IsDesc = 14;
     optional uint32 LevelTop = 15;       // KMeansTreeSearchTopSize
     optional uint32 OverlapClusters = 16;
-    optional double OverlapRatio = 17;
 
-    // Prefixed index support (reserved): the prefix table is read in the plan; the actor
-    // receives the per-prefix-group root cluster id in the input row's __ydb_parent member.
-    optional TKqpTransaction.TTableMeta PrefixTable = 18;
-    repeated uint32 PrefixTableKeyColumnIds = 19;
+    // Prefixed index: the prefix table is read in the query plan (not by the actor);
+    // the actor receives the per-prefix-group root cluster id in the input row's
+    // __ydb_parent member (see HasPrefix and TKqpPhyCnVectorSearch).
 
     // Transaction context
-    optional NKikimrProto.TRowVersion Snapshot = 20;
-    optional uint64 LockTxId = 21;
-    optional uint32 LockNodeId = 22;
-    optional NKikimrDataEvents.ELockMode LockMode = 23;
-    optional string Database = 24;
-    optional string PoolId = 25;
-    optional uint64 QuerySpanId = 26;
+    optional NKikimrProto.TRowVersion Snapshot = 17;
+    optional uint64 LockTxId = 18;
+    optional uint32 LockNodeId = 19;
+    optional NKikimrDataEvents.ELockMode LockMode = 20;
+    optional string Database = 21;
+    optional string PoolId = 22;
+    optional uint64 QuerySpanId = 23;
 
     // Serialized MiniKQL types: InputType is the single target vector value item,
     // OutputType is the output row struct.
-    optional bytes InputType = 27;
-    optional bytes OutputType = 28;
+    optional bytes InputType = 24;
+    optional bytes OutputType = 25;
 
     // When set, the immutable index impl tables (level, posting) are read from
     // followers (stale-RO). The main table is always read from the leader.
-    optional bool UseFollowers = 29;
+    optional bool UseFollowers = 26;
 
     // Covered index: the posting table already holds every output column
     // (including the embedding used for ranking), so the main table read can be
     // skipped. PostingOutputColumnIds gives, for each OutputColumns entry (same
     // order), the column id of that column in the posting table.
-    optional bool PostingCovers = 30;
-    repeated uint32 PostingOutputColumnIds = 31;
+    optional bool PostingCovers = 37;
+    repeated uint32 PostingOutputColumnIds = 38;
 
     // Prefixed index: the transform input rows carry the root cluster id in the
     // __ydb_parent member (input struct element 1; the target vector is element 0).
     // The actor uses these as the level-traversal roots instead of cluster 0.
-    optional bool HasPrefix = 32;
+    optional bool HasPrefix = 39;
 }
 
 message TKqpTaskInfo {

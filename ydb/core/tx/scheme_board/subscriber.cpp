@@ -541,7 +541,7 @@ class TSubscriberProxy: public TMonitorableActor<TDerived> {
                 {"path", Path},
                 {"sender", ev->Sender},
                 {"clusterState", ClusterState},
-                {"state", record.GetClusterState()});
+                {"state", record.GetClusterState().ShortDebugString()});
             this->Send(ReplicaSubscriber, new TEvents::TEvPoisonPill());
             return Sleep();
         }
@@ -941,7 +941,7 @@ class TSubscriber: public TMonitorableActor<TDerived> {
                 {"selfId", this->SelfId()},
                 {"path", Path},
                 {"owner", Owner},
-                {"proto", proto});
+                {"proto", proto.ShortDebugString()});
             this->Send(Owner, BuildNotify<TSchemeBoardEvents::TEvNotifyUpdate>(record, std::move(proto)));
         } else {
             YDB_LOG_TRACE("Send deletion notification to the owner",
@@ -1048,7 +1048,7 @@ class TSubscriber: public TMonitorableActor<TDerived> {
                 {"sender", ev->Sender},
                 {"cookie", ev->Cookie},
                 {"clusterState", ClusterState},
-                {"state", record.GetClusterState()});
+                {"state", record.GetClusterState().ShortDebugString()});
         }
 
         PendingSync.erase(it);

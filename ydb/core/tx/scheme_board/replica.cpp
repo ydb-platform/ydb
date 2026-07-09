@@ -654,7 +654,7 @@ private:
             {"subscriber", subscriber},
             {"path", path},
             {"domainOwnerId", domainOwnerId},
-            {"capabilities", capabilities});
+            {"capabilities", capabilities.ShortDebugString()});
 
         desc->Subscribe(subscriber, path, domainOwnerId, capabilities);
 

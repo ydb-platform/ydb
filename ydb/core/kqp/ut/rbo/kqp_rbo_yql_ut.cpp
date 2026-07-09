@@ -712,6 +712,20 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         UNIT_ASSERT_VALUES_EQUAL_C(GetStringField(*readS, "E-Rows"), "3000000000", plan);
         UNIT_ASSERT_VALUES_EQUAL_C(GetStringField(*readT, "E-Rows"), "777", plan);
     }
+    
+    Y_UNIT_TEST(PushConstantConditionOnJoinKeyBothSides) {
+        TExplainPlanTestContext testContext;
+        auto& session = testContext.GetSession();
+        auto plan = ExecuteExplain(session, R"(
+            select t1.a, t1.b
+            from `/Root/t1` as t1
+             join `/Root/t2` as t2 on t1.a = t2.a
+             where t1.a == 1;
+        )");
+
+        const auto simplifiedPlan = GetSimplifiedPlan(plan);
+        UNIT_ASSERT_C(!FindOperatorByStringFieldContaining(simplifiedPlan, "Name", "TableFullScan"), plan);
+    }
 
     Y_UNIT_TEST(EliminateUnusedLeftJoin) {
         TExplainPlanTestContext testContext;

@@ -3597,8 +3597,8 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         CheckScriptExecutionsCount(1, 1);
         Sleep(TDuration::Seconds(1));
 
-        WriteTopicMessage(inputTopicName, "tes_message");
-        ReadTopicMessage(outputTopicName, "tes_message");
+        WriteTopicMessage(inputTopicName, "test_message");
+        ReadTopicMessage(outputTopicName, "test_message");
 
         constexpr ui64 changesCount = 10;
         for (ui64 i = 0; i < changesCount; ++i) {

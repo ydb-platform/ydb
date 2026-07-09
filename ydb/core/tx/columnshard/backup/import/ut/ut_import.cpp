@@ -10,11 +10,11 @@
 #include <ydb/core/tx/tx_processing.h>
 #include <ydb/core/wrappers/fake_storage.h>
 
+#include <ydb/library/actors/struct_log/log_stack.h>
 #include <ydb/library/testlib/s3_recipe_helper/s3_recipe_helper.h>
 
 #include <contrib/libs/aws-sdk-cpp/aws-cpp-sdk-core/include/aws/core/Aws.h>
 #include <library/cpp/testing/hook/hook.h>
-#include <ydb/library/actors/struct_log/log_stack.h>
 
 namespace NKikimr {
 

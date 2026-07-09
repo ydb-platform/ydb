@@ -9,9 +9,9 @@
 #include <ydb/core/tx/datashard/import_s3.h>
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/struct_log/log_stack.h>
 
 #include <contrib/libs/protobuf/src/google/protobuf/util/message_differencer.h>
-#include <ydb/library/actors/struct_log/log_stack.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD
 

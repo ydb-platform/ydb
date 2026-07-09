@@ -73,12 +73,6 @@ inline void RfcBytesToYdbInternal(const ui8* rfc, ui8* ydb) {
     std::memcpy(ydb, dw.data(), NKikimr::NUuid::UUID_LEN);
 }
 
-inline void TransformRfcLsbToYdb(ui8* bytes) {
-    for (ui32 i = 0; i < 4; ++i) {
-        std::swap(bytes[i * 2], bytes[i * 2 + 1]);
-    }
-}
-
 inline ui64 GetPrefixMask() {
     return V8PrefixMask;
 }
@@ -143,7 +137,6 @@ inline std::array<ui8, NKikimr::NUuid::UUID_LEN> MakeV8Bytes(ui64 prefix, ui64 e
     std::array<ui8, NKikimr::NUuid::UUID_LEN> ydb{};
     WriteBe64(msb, ydb.data());
     WriteBe64(lsb, ydb.data() + 8);
-    TransformRfcLsbToYdb(ydb.data() + 8);
     return ydb;
 }
 

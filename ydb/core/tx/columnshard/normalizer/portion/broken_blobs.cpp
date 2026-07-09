@@ -7,8 +7,9 @@
 #include <ydb/core/tx/columnshard/engines/scheme/filtered_scheme.h>
 #include <ydb/core/tx/columnshard/tables_manager.h>
 
-#include <util/string/vector.h>
 #include <ydb/library/actors/struct_log/log_stack.h>
+
+#include <util/string/vector.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD
 

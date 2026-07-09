@@ -65,7 +65,8 @@ protected:
         YDB_LOG_ERROR_CTX_COMP(ctx, NKikimrServices::MSGBUS_REQUEST, "TabletRequest",
             {"tabletId", TabletId},
             {"status", status},
-            {"text", text});
+            {"text", text},
+            {"endl", Endl});
         return new TBusResponseStatus(status, text);
     }
 

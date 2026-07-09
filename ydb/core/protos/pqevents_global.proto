@@ -173,6 +173,7 @@ message THasDataInfo {
 
     optional int32 MaxTimeLagMs = 7; // optional, default = infinity, why we use int instead of uint?
     optional uint64 ReadTimestampMs = 8; //optional, default = 0
+    optional string SessionId = 9;
 }
 
 message THasDataInfoResponse { //signal

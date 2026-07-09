@@ -1482,6 +1482,7 @@ void TPartitionActor::WaitDataInPartition(const TActorContext& ctx) {
     ui64 deadline = (ctx.Now() + WAIT_DATA - WAIT_DELTA).MilliSeconds();
     event->Record.SetDeadline(deadline);
     event->Record.SetClientId(ClientId);
+    event->Record.SetSessionId(Session);
     if (MaxTimeLagMs) {
         event->Record.SetMaxTimeLagMs(MaxTimeLagMs);
     }

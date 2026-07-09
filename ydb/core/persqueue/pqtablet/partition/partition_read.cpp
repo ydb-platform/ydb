@@ -247,6 +247,16 @@ void TPartition::Handle(TEvPersQueue::TEvHasDataInfo::TPtr& ev, const TActorCont
     auto readTimestamp = GetReadFrom(record.GetMaxTimeLagMs(), record.GetReadTimestampMs(), TInstant::Zero(), ctx);
     TActorId sender = ActorIdFromProto(record.GetSender());
 
+    if (InitDone && !record.GetSessionId().empty()) {
+        auto& userInfo = UsersInfoStorage->GetOrCreate(record.GetClientId(), ctx);
+        if (!userInfo.NoConsumer && userInfo.Session != record.GetSessionId()) {
+            auto response = MakeHasDataInfoResponse(0, cookie);
+            response->Record.SetSessionInvalidated(true);
+            ctx.Send(sender, response.Release());
+            return;
+        }
+    }
+
     THasDataReq req{++HasDataReqNum, (ui64)record.GetOffset(), sender, cookie,
         record.HasClientId() && InitDone ? record.GetClientId() : "", readTimestamp};
 

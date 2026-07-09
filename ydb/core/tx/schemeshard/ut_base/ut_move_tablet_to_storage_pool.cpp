@@ -270,7 +270,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveTabletToStoragePool) {
 
         // Root schemeshard shows pool-1 for all channels of the tenant schemeshard.
         {
-            const TString region = GetBindedChannelsRegion(GetShardInfoHtml(runtime, TTestTxConfig::SchemeShard, tenantSchemaShard));
+            const TString region = GetBindedChannelsRegion(GetShardInfoHtml(runtime, TTestTxConfig::SchemeShard, tenantSchemeShard));
             UNIT_ASSERT_C(region.Contains("pool-1"), region);
             UNIT_ASSERT_C(!region.Contains("pool-2"), region);
         }
@@ -278,14 +278,14 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveTabletToStoragePool) {
         // From root schemeshard: move the tenant schemeshard to pool-2.
         // Root has bindings for the tenant SS, so the move succeeds.
         {
-            auto r = PostMoveToStoragePoolAction(runtime, TTestTxConfig::SchemeShard, tenantSchemaShard, "pool-2");
+            auto r = PostMoveToStoragePoolAction(runtime, TTestTxConfig::SchemeShard, tenantSchemeShard, "pool-2");
             UNIT_ASSERT_C(r.IsJson(), "Expected JSON success reply, got: " << r.Body);
             UNIT_ASSERT_C(r.Body.Contains("OK"), "Expected Hive reply status OK, got: " << r.Body);
         }
 
         // Root schemeshard now shows pool-2 for all channels of the tenant schemeshard.
         {
-            const TString region = GetBindedChannelsRegion(GetShardInfoHtml(runtime, TTestTxConfig::SchemeShard, tenantSchemaShard));
+            const TString region = GetBindedChannelsRegion(GetShardInfoHtml(runtime, TTestTxConfig::SchemeShard, tenantSchemeShard));
             UNIT_ASSERT_C(!region.Contains("pool-1"), region);
             UNIT_ASSERT_C(region.Contains("pool-2"), region);
         }

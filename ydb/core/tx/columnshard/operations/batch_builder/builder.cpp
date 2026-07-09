@@ -9,6 +9,7 @@
 #include <ydb/core/tx/conveyor/usage/service.h>
 #include <ydb/core/tx/conveyor_composite/usage/service.h>
 #include <ydb/core/tx/data_events/common/modification_type.h>
+
 #include <ydb/library/actors/struct_log/log_stack.h>
 
 namespace NKikimr::NOlap {

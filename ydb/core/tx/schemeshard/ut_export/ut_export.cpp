@@ -5275,6 +5275,5 @@ CREATE EXTERNAL TABLE IF NOT EXISTS `ExternalTable` (
 
         TestDescribeResult(DescribePath(Runtime(), "/MyRoot/ColumnTable"), {NLs::PathExist});
         UNIT_ASSERT_VALUES_EQUAL(CountCompletedBackupsRows(), 0u);
->>>>>>> main
     }
 }

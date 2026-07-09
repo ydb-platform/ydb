@@ -271,31 +271,29 @@ TDirectBlockGroup::ReadBlocksFromDDisk(
                     Y_ABORT_UNLESS(threadChecker.Check());
 
                     if (auto self = weakSelf.lock()) {
+                        NProto::TError error = TranslateError(f.GetValue());
+
                         if (self->CheckBlockedAndMaybeSuicide(
                                 hostIndex,
                                 "ReadFromDDisk",
-                                f.GetValue()))
+                                f.GetValue().GetStatus()))
                         {
-                            promise.SetValue(TDBGReadBlocksResponse{
-                                .Error = MakeError(
-                                    E_REJECTED,
-                                    "tablet generation blocked")});
-                            return;
+                            error = MakeTabletGenerationBLockedError();
                         }
-                    }
 
-                    NProto::TError error = TranslateError(f.GetValue());
-                    if (auto self = weakSelf.lock()) {
                         self->OnResponse(
                             hostIndex,
                             TMonotonic::Now() - startAt,
                             EOperation::ReadFromDDisk,
                             true,
                             error);
-                    }
 
-                    promise.SetValue(
-                        TDBGReadBlocksResponse{.Error = std::move(error)});
+                        promise.SetValue(
+                            TDBGReadBlocksResponse{.Error = std::move(error)});
+                    } else {
+                        promise.SetValue(TDBGReadBlocksResponse{
+                            .Error = MakeError(E_CANCELLED)});
+                    }
                 });
         });
     return result;
@@ -437,32 +435,28 @@ TDirectBlockGroup::WriteBlocksToDDisk(
                     Y_ABORT_UNLESS(threadChecker.Check());
 
                     if (auto self = weakSelf.lock()) {
+                        NProto::TError error = TranslateError(f.GetValue());
+
                         if (self->CheckBlockedAndMaybeSuicide(
                                 hostIndex,
                                 "WriteToDDisk",
-                                f.GetValue()))
+                                f.GetValue().GetStatus()))
                         {
-                            promise.SetValue(TDBGWriteBlocksResponse{
-                                .Error = MakeError(
-                                    E_REJECTED,
-                                    "tablet generation blocked")});
-                            return;
+                            error = MakeTabletGenerationBLockedError();
                         }
-                    }
-
-                    NProto::TError error = TranslateError(f.GetValue());
-
-                    if (auto self = weakSelf.lock()) {
                         self->OnResponse(
                             hostIndex,
                             TMonotonic::Now() - startAt,
                             EOperation::WriteToDDisk,
                             true,
                             error);
-                    }
 
-                    promise.SetValue(
-                        TDBGWriteBlocksResponse{.Error = std::move(error)});
+                        promise.SetValue(
+                            TDBGWriteBlocksResponse{.Error = std::move(error)});
+                    } else {
+                        promise.SetValue(TDBGWriteBlocksResponse{
+                            .Error = MakeError(E_CANCELLED)});
+                    }
                 });
         });
     return result;
@@ -812,18 +806,6 @@ TDBGFlushResponse TDirectBlockGroup::HandleSyncWithPBufferResponse(
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
 
     TDBGFlushResponse result;
-    if (CheckBlockedAndMaybeSuicide(
-            ddiskHostIndex,
-            "SyncWithPBuffer",
-            response))
-    {
-        result.Errors.reserve(segmentCount);
-        for (size_t i = 0; i < segmentCount; ++i) {
-            result.Errors.push_back(
-                MakeError(E_REJECTED, "tablet generation blocked"));
-        }
-        return result;
-    }
 
     if (HasSuccess(response) &&
         response.GetSegmentResults().size() == static_cast<int>(segmentCount))
@@ -844,9 +826,17 @@ TDBGFlushResponse TDirectBlockGroup::HandleSyncWithPBufferResponse(
             response.ShortUtf8DebugString().c_str(),
             FormatError(TranslateError(response)).c_str());
 
+        auto error = MakeError(E_FAIL, response.GetErrorReason());
+        if (CheckBlockedAndMaybeSuicide(
+                ddiskHostIndex,
+                "SyncWithPBuffer",
+                response.GetStatus()))
+        {
+            error = MakeTabletGenerationBLockedError();
+        }
+
         for (size_t i = 0; i < segmentCount; ++i) {
-            result.Errors.push_back(
-                MakeError(E_FAIL, response.GetErrorReason()));
+            result.Errors.push_back(error);
         }
     }
 
@@ -1307,7 +1297,7 @@ void TDirectBlockGroup::OnConnectionEstablished(
         }
         // INVARIANT: PBuffer does NOT require a session/lock
     } else {
-        if (IsBlockedStatus(result)) {
+        if (IsBlockedStatus(result.GetStatus())) {
             // Terminal: our tablet generation is stale. Suicide, no reconnect.
             HandleBlockedGeneration(index, "Connect", result.GetStatus());
             // Unblock waiters on ConnectFuture with the error.
@@ -1645,6 +1635,19 @@ void TDirectBlockGroup::HandleBlockedGeneration(
 
     // No retry/reconnect: signal the actor to suicide.
     Service->OnBlockedGeneration(DirectBlockGroupIndex, hostIndex, reason);
+}
+
+bool TDirectBlockGroup::CheckBlockedAndMaybeSuicide(
+    THostIndex hostIndex,
+    TStringBuf context,
+    NKikimrBlobStorage::NDDisk::TReplyStatus_E status)
+{
+    Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
+    if (!IsBlockedStatus(status)) {
+        return false;
+    }
+    HandleBlockedGeneration(hostIndex, context, status);
+    return true;
 }
 
 TDBGDumpResponse TDirectBlockGroup::DoDebugPrintDirtyMap()

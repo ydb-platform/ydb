@@ -513,6 +513,8 @@ NProto::TError MakeTabletIsDeadError(
     ui32 code,
     const TSourceLocation& location);
 
+NProto::TError MakeTabletGenerationBLockedError();
+
 }   // namespace NYdb::NBS
 
 ////////////////////////////////////////////////////////////////////////////////

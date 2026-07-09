@@ -1,5 +1,7 @@
 #include "error.h"
 
+#include "error_utils.h"
+
 #include <ydb/core/nbs/cloud/storage/core/libs/common/helpers.h>
 
 #include <util/stream/format.h>
@@ -283,6 +285,11 @@ NProto::TError MakeTabletIsDeadError(ui32 code, const TSourceLocation& location)
     TStringStream out;
     out << "Tablet is dead: " << location.File << ":" << location.Line;
     return MakeError(code, out.Str());
+}
+
+NProto::TError MakeTabletGenerationBLockedError()
+{
+    return MakeError(E_REJECTED, TString(TabletGenerationBlockedErrorMessage));
 }
 
 }   // namespace NYdb::NBS

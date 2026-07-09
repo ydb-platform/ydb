@@ -234,19 +234,10 @@ private:
         TStringBuf context,
         NKikimrBlobStorage::NDDisk::TReplyStatus_E status);
 
-    template <typename TRecord>
     bool CheckBlockedAndMaybeSuicide(
         THostIndex hostIndex,
         TStringBuf context,
-        const TRecord& record)
-    {
-        Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
-        if (!IsBlockedStatus(record)) {
-            return false;
-        }
-        HandleBlockedGeneration(hostIndex, context, record.GetStatus());
-        return true;
-    }
+        NKikimrBlobStorage::NDDisk::TReplyStatus_E status);
 
     TDBGDumpResponse DoDebugPrintDirtyMap();
 

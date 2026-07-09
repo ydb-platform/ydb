@@ -13,6 +13,8 @@ constexpr TStringBuf DestroyErrorMessage =
 constexpr TStringBuf CantAcquireDataErrorMessage = "can't acquire data";
 constexpr TStringBuf UndeliveryErrorMessage = "Undelivered";
 constexpr TStringBuf SessionBrokenErrorMessage = "Session broken";
+constexpr TStringBuf TabletGenerationBlockedErrorMessage =
+    "tablet generation blocked";
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -59,15 +61,7 @@ bool HasSuccessOrOutdated(const T& response)
     return HasSuccessOrOutdated(response.GetStatus());
 }
 
-////////////////////////////////////////////////////////////////////////////////
-
 bool IsBlockedStatus(NKikimrBlobStorage::NDDisk::TReplyStatus_E status);
-
-template <typename T>
-bool IsBlockedStatus(const T& response)
-{
-    return IsBlockedStatus(response.GetStatus());
-}
 
 ////////////////////////////////////////////////////////////////////////////////
 

@@ -287,7 +287,7 @@ TDirectBlockGroup::ReadBlocksFromDDisk(
                                 "ReadFromDDisk",
                                 f.GetValue().GetStatus()))
                         {
-                            error = MakeTabletGenerationBLockedError();
+                            error = MakeTabletGenerationBlockedError();
                         }
 
                         self->OnResponse(
@@ -451,7 +451,7 @@ TDirectBlockGroup::WriteBlocksToDDisk(
                                 "WriteToDDisk",
                                 f.GetValue().GetStatus()))
                         {
-                            error = MakeTabletGenerationBLockedError();
+                            error = MakeTabletGenerationBlockedError();
                         }
                         self->OnResponse(
                             hostIndex,
@@ -841,7 +841,7 @@ TDBGFlushResponse TDirectBlockGroup::HandleSyncWithPBufferResponse(
                 "SyncWithPBuffer",
                 response.GetStatus()))
         {
-            error = MakeTabletGenerationBLockedError();
+            error = MakeTabletGenerationBlockedError();
         }
 
         for (size_t i = 0; i < segmentCount; ++i) {
@@ -1427,18 +1427,17 @@ void TDirectBlockGroup::OnConnectionEstablished(
         // Unblock waiters on ConnectFuture with the error.
         connection.ConnectPromise.SetValue(error);
         return;
-    } else {
-        if (IsInitialized()) {
-            LOG_ERROR(
-                *ActorSystem,
-                NKikimrServices::NBS_PARTITION,
-                "%s connection failed for host %s (post-init): %s",
-                LogTitle.GetWithTime().c_str(),
-                PrintHostIndex(static_cast<THostIndex>(index)).c_str(),
-                FormatError(error).c_str());
-        }
         // TODO (future phase): handle non-BLOCKED connect errors
         // (ERROR/unavailability) via reconnect.
+    } else if (IsInitialized()) {
+        LOG_ERROR(
+            *ActorSystem,
+            NKikimrServices::NBS_PARTITION,
+            "%s connection failed for host %s (post-init): %s",
+            LogTitle.GetWithTime().c_str(),
+            PrintHostIndex(static_cast<THostIndex>(index)).c_str(),
+            FormatError(error).c_str());
+    } else {
         Y_ABORT("Unhandled branch of connect error");
     }
 

@@ -287,7 +287,7 @@ NProto::TError MakeTabletIsDeadError(ui32 code, const TSourceLocation& location)
     return MakeError(code, out.Str());
 }
 
-NProto::TError MakeTabletGenerationBLockedError()
+NProto::TError MakeTabletGenerationBlockedError()
 {
     return MakeError(E_REJECTED, TString(TabletGenerationBlockedErrorMessage));
 }

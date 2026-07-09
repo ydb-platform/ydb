@@ -72,16 +72,10 @@ TStepAction::TStepAction(
     }
 }
 
-<<<<<<< HEAD
-void TProgramStep::ReportTracing(const std::shared_ptr<IDataSource>& source, const TDuration executionDurationMs, const TString& currentExecutionResult) const {
-    if (!source->GetExecutionContext().HasProgramIterator()) {
-=======
-NO_SANITIZE_THREAD
 void TProgramStep::ReportTracing(const std::shared_ptr<IDataSource>& source, const TDuration executionDurationMs,
     const TString& currentExecutionResult, const ui32 nodeId, const TString& currentCategoryName,
     const std::shared_ptr<NArrow::NSSA::IResourceProcessor>& processor) const {
     if (!processor) {
->>>>>>> 1dac750d81f (Fix encoding compatibility test (#45915))
         return;
     }
     const auto& scanOrbit = source->GetContext()->GetCommonContext()->GetScanOrbit();
@@ -110,16 +104,9 @@ void TProgramStep::ReportTracing(const std::shared_ptr<IDataSource>& source, con
     const TString details = processor->DebugJson().GetStringRobust();
     const auto& resources = source->GetExecutionContext().GetExecutionVisitorVerified()->MutableContext().GetResources();
     const ui32 filteredRows = resources.GetRecordsCountActualOptional().value_or(source->GetRecordsCount());
-<<<<<<< HEAD
-#define PROGRAM_PROBE_ARGS source->GetDataSourceOrbit(), source->GetRawPathId(), source->GetTabletId(), \
-                    source->GetTxId(), source->GetDeprecatedPortionId(), step.GetStepIndex(), \
-                    tracingName, iterator->GetCurrentNodeId(), finishDurationMs, \
-                    executionDurationMs, filteredRows
-=======
 #define PROGRAM_PROBE_ARGS                                                                                                            \
     source->GetDataSourceOrbit(), source->GetRawPathId(), source->GetTabletId(), source->GetTxId(), source->GetDeprecatedPortionId(), \
         step.GetStepIndex(), tracingName, nodeId, finishDurationMs, executionDurationMs, filteredRows
->>>>>>> 1dac750d81f (Fix encoding compatibility test (#45915))
 #define PROGRAM_PROBE_RESERVED source->GetReservedMemory()
 #define PROGRAM_PROBE_TAIL tracingExecutionResult, details
     switch (processorType) {

@@ -175,9 +175,10 @@ TVector<IDirectBlockGroupPtr> TPartitionActor::CreateDirectBlockGroups(
     auto executors =
         nbsService->ExecutorPool.GetExecutors(DirectBlockGroupsCount);
 
-    for (size_t i = 0; i < DirectBlockGroupsCount; i++) {
+    for (ui32 dbgIndex = 0; dbgIndex < DirectBlockGroupsCount; dbgIndex++) {
         const auto& conn =
-            directBlockGroupsConnections.GetDirectBlockGroupConnections(i);
+            directBlockGroupsConnections.GetDirectBlockGroupConnections(
+                dbgIndex);
         TVector<NBsController::TDDiskId> ddiskIds;
         for (const auto& connection: conn.GetConnections()) {
             ddiskIds.push_back(
@@ -192,16 +193,18 @@ TVector<IDirectBlockGroupPtr> TPartitionActor::CreateDirectBlockGroups(
         auto directBlockGroup = std::make_shared<TDirectBlockGroup>(
             TActivationContext::ActorSystem(),
             nbsService->StorageConfig,
-            executors[i],
+            executors[dbgIndex],
             VolumeConfig.GetDiskId(),
             TabletID(),
             Executor()->Generation(),   // generation
-            i,                          // direct block group index
+            dbgIndex,
             std::move(ddiskIds),
             std::move(persistentBufferDDiskIds),
             std::make_unique<NTransport::TICStorageTransport>(
                 TActivationContext::ActorSystem(),
-                NTransport::CreateTransportActor()));
+                NTransport::CreateTransportActor(
+                    VolumeConfig.GetDiskId(),
+                    dbgIndex)));
 
         directBlockGroups.emplace_back(std::move(directBlockGroup));
     }

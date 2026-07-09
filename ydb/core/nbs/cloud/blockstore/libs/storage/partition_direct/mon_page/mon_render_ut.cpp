@@ -58,6 +58,7 @@ Y_UNIT_TEST_SUITE(TMonRenderTest)
         UNIT_ASSERT_STRING_CONTAINS(html, "Overview");
         UNIT_ASSERT_STRING_CONTAINS(html, "page=overview");
         UNIT_ASSERT_STRING_CONTAINS(html, "page=dbg");
+        UNIT_ASSERT_STRING_CONTAINS(html, "page=localdb");
         UNIT_ASSERT_STRING_CONTAINS(html, "DirectBlockGroups");
         UNIT_ASSERT_STRING_CONTAINS(html, "VChunks (total)");
         UNIT_ASSERT_STRING_CONTAINS(html, "LSN counter");
@@ -128,6 +129,34 @@ Y_UNIT_TEST_SUITE(TMonRenderTest)
 
         const TString html = RenderMonPage(data);
         UNIT_ASSERT_STRING_CONTAINS(html, "not found");
+    }
+
+    Y_UNIT_TEST(LocalDbShowsPersistedState)
+    {
+        const TMonPageData data{
+            .Page = EMonPage::LocalDb,
+            .TabletInfo = {.TabletId = 42},
+            .LocalDb =
+                TLocalDbContents{
+                    .VolumeConfig = "DiskId: vol-1",
+                    .VChunkConfigs = {TVChunkConfig::MakeDefault(3, 5, 3)},
+                },
+        };
+
+        const TString html = RenderMonPage(data);
+        UNIT_ASSERT_STRING_CONTAINS(html, "Local DB");
+        // Long proto dumps are collapsed; the summary is styled to look
+        // clickable (fold triangle + pointer).
+        UNIT_ASSERT_STRING_CONTAINS(html, "<details");
+        UNIT_ASSERT_STRING_CONTAINS(
+            html,
+            "<summary style='display:list-item; cursor:pointer;");
+        UNIT_ASSERT_STRING_CONTAINS(html, "DiskId: vol-1");
+        // DirectBlockGroupsConnections / AddHostInProgress not persisted.
+        UNIT_ASSERT_STRING_CONTAINS(html, "(none)");
+        UNIT_ASSERT_STRING_CONTAINS(
+            html,
+            "VChunkConfigs (persisted overrides)");
     }
 }
 

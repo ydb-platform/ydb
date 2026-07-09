@@ -2,6 +2,7 @@
 #include "partition_direct_actor.h"
 
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/mon_page/mon_render.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/part_database.h>
 
 #include <ydb/library/actors/core/mon.h>
 
@@ -10,11 +11,14 @@
 #include <util/generic/algorithm.h>
 #include <util/string/cast.h>
 
+#include <numeric>
 #include <optional>
 
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 using namespace NActors;
+using namespace NKikimr;
+using namespace NKikimr::NTabletFlatExecutor;
 
 namespace {
 
@@ -22,8 +26,12 @@ namespace {
 
 EMonPage ParsePage(const TCgiParameters& cgi)
 {
-    if (cgi.Get("page") == "dbg") {
+    const TString& page = cgi.Get("page");
+    if (page == "dbg") {
         return EMonPage::Dbg;
+    }
+    if (page == "localdb") {
+        return EMonPage::LocalDb;
     }
     return EMonPage::Overview;
 }
@@ -35,6 +43,26 @@ std::optional<size_t> ParseSelectedDbg(const TCgiParameters& cgi)
         return dbgIndex;
     }
     return std::nullopt;
+}
+
+template <typename TProto>
+std::optional<TString> DumpProto(const TMaybe<TProto>& proto)
+{
+    if (!proto.Defined()) {
+        return std::nullopt;
+    }
+    return proto->DebugString();
+}
+
+TLocalDbContents MakeLocalDbContents(const TTxPartition::TMonitoring& args)
+{
+    return {
+        .VolumeConfig = DumpProto(args.VolumeConfig),
+        .DirectBlockGroupsConnections =
+            DumpProto(args.DirectBlockGroupsConnections),
+        .AddHostInProgress = DumpProto(args.AddHostInProgress),
+        .VChunkConfigs = args.VChunkConfigs,
+    };
 }
 
 }   // namespace
@@ -75,6 +103,13 @@ void TPartitionActor::HandleHttpInfo(
         return;
     }
 
+    // Local DB page: read the persisted state in a transaction;
+    // CompleteMonitoring renders and replies.
+    if (page == EMonPage::LocalDb) {
+        ExecuteTx(ctx, CreateTx<TMonitoring>(ev->Sender));
+        return;
+    }
+
     // DBG page: gather snapshots, then render + reply in the callback. Safe
     // off-thread - captures are taken here and RenderMonPage is pure.
     auto* actorSystem = TActivationContext::ActorSystem();
@@ -105,6 +140,55 @@ void TPartitionActor::HandleHttpInfo(
                     requester,
                     new NMon::TEvRemoteHttpInfoRes(RenderMonPage(data)));
             });
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+bool TPartitionActor::PrepareMonitoring(
+    const TActorContext& ctx,
+    TTransactionContext& tx,
+    TTxPartition::TMonitoring& args)
+{
+    Y_UNUSED(ctx);
+
+    TPartitionDatabase db(tx.DB);
+
+    std::initializer_list<bool> results = {
+        db.ReadVolumeConfig(args.VolumeConfig),
+        db.ReadDirectBlockGroupsConnections(args.DirectBlockGroupsConnections),
+        db.ReadAllVChunkConfigs(args.VChunkConfigs),
+        db.ReadAddHostInProgress(args.AddHostInProgress),
+    };
+
+    return std::accumulate(
+        results.begin(),
+        results.end(),
+        true,
+        std::logical_and<>());
+}
+
+void TPartitionActor::ExecuteMonitoring(
+    const TActorContext& ctx,
+    TTransactionContext& tx,
+    TTxPartition::TMonitoring& args)
+{
+    Y_UNUSED(ctx);
+    Y_UNUSED(tx);
+    Y_UNUSED(args);
+}
+
+void TPartitionActor::CompleteMonitoring(
+    const TActorContext& ctx,
+    TTxPartition::TMonitoring& args)
+{
+    TMonPageData data{
+        .Page = EMonPage::LocalDb,
+        .TabletInfo = MakeMonTabletInfo(),
+        .LocalDb = MakeLocalDbContents(args),
+    };
+    ctx.Send(
+        args.Requester,
+        new NMon::TEvRemoteHttpInfoRes(RenderMonPage(data)));
 }
 
 ////////////////////////////////////////////////////////////////////////////////

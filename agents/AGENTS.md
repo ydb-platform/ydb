@@ -72,7 +72,7 @@ and [Yatool documentation](https://ydb.tech/docs/en/development/build-ya).
 See [`TESTS.md`](TESTS.md) for C++ test framework conventions.
 
 - **C++ unit tests** live in `ut/` subdirectories next to the code they test.
-  `ya.make` uses `UNITTEST_FOR(...)` and lists sources in `TEST_SRCS()`.
+  `ya.make` uses `UNITTEST_FOR(...)` and lists sources in `SRCS()`.
 - **Python tests** use `unittest`; test files are listed in `TEST_SRCS()` in
   the module's `ya.make`.
 - **Functional tests** are under `ydb/tests/functional/`.

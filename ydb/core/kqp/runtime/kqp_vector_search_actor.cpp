@@ -78,8 +78,7 @@ public:
         : Settings(std::move(settings))
         , TopK(Settings.GetTopK())
         , LevelTop(std::max<ui32>(1, Settings.GetLevelTop()))
-        , OverlapClusters(Settings.GetOverlapClusters() > 0 ? Settings.GetOverlapClusters() : 1)
-        , OverlapRatio(Settings.GetOverlapRatio())
+        , OverlapClusters(Settings.GetOverlapClusters())
         , PostingCovers(Settings.GetPostingCovers())
         , HasPrefix(Settings.GetHasPrefix())
         , LogPrefix(TStringBuilder() << "VectorSearchActor, inputIndex: " << inputIndex << ", CA Id " << computeActorId)
@@ -718,10 +717,11 @@ private:
             return CompareTypedCellVectors(a.GetCells().data(), b.GetCells().data(), keyTypes, keyCount) < 0;
         });
 
-        // Point lookups by primary key.
+        // Point lookups by primary key. sortedKeys is discarded right after, so move
+        // each serialized buffer into the proto instead of copying it.
         auto* ranges = src->MutableRanges();
-        for (const auto& key : sortedKeys) {
-            ranges->AddKeyPoints(key.GetBuffer());
+        for (auto& key : sortedKeys) {
+            ranges->AddKeyPoints(key.ReleaseBuffer());
         }
 
         AddMainKeyColumnTypes(src);
@@ -915,20 +915,32 @@ private:
                 break;
             }
             case EReadKind::Posting: {
-                // Dedup rows that appear in overlapping clusters by their PK. In
-                // the covered path the PK columns sit at CoveredPkPositions and the
-                // output columns occupy the first positions (so AddCandidate reads
-                // them directly); otherwise the read row is just the PK columns.
-                TString serialized = SerializePostingPk(value);
-                if (!SeenKeys.insert(serialized).second) {
-                    break;
-                }
+                // Dedup rows by PK only when clusters overlap (OverlapClusters > 1),
+                // since then the same row can appear under multiple clusters; without
+                // overlap each PK occurs once and the dedup is skipped. In the covered
+                // path the PK columns sit at CoveredPkPositions and the output columns
+                // occupy the first positions (so AddCandidate reads them directly);
+                // otherwise the read row is just the PK columns.
                 if (PostingCovers) {
-                    AddCandidate(value);
+                    if (OverlapClusters > 1) {
+                        TString serialized = SerializePostingPk(value);
+                        if (SeenKeys.insert(serialized).second) {
+                            AddCandidate(value);
+                        }
+                    } else {
+                        AddCandidate(value);
+                    }
                 } else {
                     // Buffer the PK for a pipelined main read (dispatched as the
                     // posting scan streams rows in; see MaybeFlushPendingMainKeys).
-                    PendingMainKeys.push_back(std::move(serialized));
+                    TString serialized = SerializePostingPk(value);
+                    if (OverlapClusters > 1) {
+                        if (SeenKeys.insert(serialized).second) {
+                            PendingMainKeys.push_back(std::move(serialized));
+                        }
+                    } else {
+                        PendingMainKeys.push_back(std::move(serialized));
+                    }
                 }
                 break;
             }
@@ -939,7 +951,8 @@ private:
         }
     }
 
-    // Serialize the PK cell vec of a posting row for dedup. The PK columns are
+    // Serialize the PK cell vec of a posting row: used as the dedup key and, in
+    // the non-covered path, as the buffered main-read key. The PK columns are
     // read at CoveredPkPositions in the covered path, else at positions 0..N-1.
     TString SerializePostingPk(NUdf::TUnboxedValue& value) {
         const ui32 n = MainKeyTypeInfos.size();
@@ -1086,7 +1099,6 @@ private:
     const ui32 TopK;
     ui32 LevelTop;
     const ui32 OverlapClusters;
-    const double OverlapRatio;
     const bool PostingCovers;
     const bool HasPrefix;
     const TString LogPrefix;
@@ -1113,7 +1125,8 @@ private:
     TVector<NScheme::TTypeInfo> OutputColumnTypeInfos;
     std::unique_ptr<NKikimr::NKMeans::IClusters> RankClusters;
 
-    // Reusable scratch for serializing a posting row's PK during dedup.
+    // Reusable scratch for serializing a posting row's PK (dedup key, and the
+    // main-read key in the non-covered path).
     TVector<TCell> PkCellsScratch;
 
     // Covered-index posting read: the read row holds the output columns at

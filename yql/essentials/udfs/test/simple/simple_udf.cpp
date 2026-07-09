@@ -224,7 +224,7 @@ public:
                 auto argType = argsTypeInspector.GetElementType(i);
                 argBuilder->Add(argType);
                 TString name = TStringBuilder() << "arg_" << i;
-                structBuilder->AddField(name, argType, nullptr);
+                structBuilder->AddField(name, argType, /*index=*/nullptr);
             }
 
             argBuilder->Done().Returns(builder.Optional()->Item(structBuilder->Build()).Build());

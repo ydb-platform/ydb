@@ -5930,7 +5930,7 @@ namespace NTypeAnnImpl {
         }
 
         if (IsNull(input->Head())) {
-            output = MakeBool(input->Pos(), false, ctx.Expr);
+            output = MakeBool(input->Pos(), /*value=*/false, ctx.Expr);
             return IGraphTransformer::TStatus::Repeat;
         }
 
@@ -7092,7 +7092,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         }
 
         if (IsNull(input->Head())) {
-            output = ContainsOrLookup ? MakeBool(input->Pos(), false, ctx.Expr) : input->HeadPtr();
+            output = ContainsOrLookup ? MakeBool(input->Pos(), /*value=*/false, ctx.Expr) : input->HeadPtr();
             return IGraphTransformer::TStatus::Repeat;
         }
 
@@ -7114,7 +7114,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
 
         if constexpr (InList) {
             if (dictType->GetKind() == ETypeAnnotationKind::EmptyList) {
-                output = MakeBool(input->Pos(), false, ctx.Expr);
+                output = MakeBool(input->Pos(), /*value=*/false, ctx.Expr);
                 return IGraphTransformer::TStatus::Repeat;
             }
 
@@ -7124,7 +7124,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         } else {
             if (dictType->GetKind() == ETypeAnnotationKind::EmptyDict) {
                 if constexpr (ContainsOrLookup) {
-                    output = MakeBool(input->Pos(), false, ctx.Expr);
+                    output = MakeBool(input->Pos(), /*value=*/false, ctx.Expr);
                 } else {
                     output = MakeNull(input->Pos(), ctx.Expr);
                 }
@@ -16518,6 +16518,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["BlockXor"] = &BlockLogicalWrapper;
         Functions["BlockNot"] = &BlockLogicalWrapper;
         Functions["BlockGuess"] = &BlockGuessWrapper;
+        Functions["BlockWay"] = &BlockWayWrapper;
         Functions["BlockIf"] = &BlockIfWrapper;
         Functions["BlockJust"] = &BlockJustWrapper;
         Functions["BlockAsStruct"] = &BlockAsStructWrapper;

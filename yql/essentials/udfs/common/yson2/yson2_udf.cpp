@@ -1212,7 +1212,7 @@ TUnboxedValue TParse<TJson, false>::Run(const IValueBuilder* valueBuilder, const
 
 template <>
 TUnboxedValue TParse<TJson, true>::Run(const IValueBuilder* valueBuilder, const TUnboxedValuePod* args) const try {
-    return TryParseJsonDom(args[0].AsStringRef(), valueBuilder, true);
+    return TryParseJsonDom(args[0].AsStringRef(), valueBuilder, /*decodeUtf8=*/true);
 } catch (const std::exception& e) {
     if (StrictType_ || ParseOptions(args[1]).Strict) {
         UdfTerminate((::TStringBuilder() << valueBuilder->WithCalleePosition(Pos_) << " " << e.what()).c_str());
@@ -2134,13 +2134,13 @@ SIMPLE_UDF_OPTIONS(TMutUp, TMutNodeLinear(TMutNodeLinear), builder.SetMinLangVer
 
 SIMPLE_UDF_OPTIONS(TMutDownOrCreate, TMutNodeLinear(TMutNodeLinear, const char*), builder.SetMinLangVer(NYql::MakeLangVersion(2025, 5));) {
     Y_UNUSED(valueBuilder);
-    TMutNodeBuilder::From(args[0]).Down(args[1], true);
+    TMutNodeBuilder::From(args[0]).Down(args[1], /*createIfNotExists=*/true);
     return args[0];
 }
 
 SIMPLE_UDF_OPTIONS(TMutDown, TMutNodeLinear(TMutNodeLinear, const char*), builder.SetMinLangVer(NYql::MakeLangVersion(2025, 5));) {
     Y_UNUSED(valueBuilder);
-    auto err = TMutNodeBuilder::From(args[0]).Down(args[1], false);
+    auto err = TMutNodeBuilder::From(args[0]).Down(args[1], /*createIfNotExists=*/false);
     if (err) {
         throw yexception() << *err;
     }
@@ -2151,7 +2151,7 @@ SIMPLE_UDF_OPTIONS(TMutDown, TMutNodeLinear(TMutNodeLinear, const char*), builde
 using TMutTryDownReturn = TTuple<TMutNodeLinear, bool>;
 SIMPLE_UDF_OPTIONS(TMutTryDown, TMutTryDownReturn(TMutNodeLinear, const char*), builder.SetMinLangVer(NYql::MakeLangVersion(2025, 5));) {
     Y_UNUSED(valueBuilder);
-    auto err = TMutNodeBuilder::From(args[0]).Down(args[1], false);
+    auto err = TMutNodeBuilder::From(args[0]).Down(args[1], /*createIfNotExists=*/false);
     TUnboxedValue* items;
     auto ret = valueBuilder->NewArray(2, items);
     items[0] = args[0];

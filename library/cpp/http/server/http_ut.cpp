@@ -7,6 +7,7 @@
 #include <util/generic/cast.h>
 #include <util/stream/output.h>
 #include <util/stream/zlib.h>
+#include <util/stream/tee.h>
 #include <util/system/datetime.h>
 #include <util/system/mutex.h>
 #include <util/random/random.h>
@@ -1015,5 +1016,113 @@ Y_UNIT_TEST_SUITE(THttpServerTest) {
         t1->Join();
         t2->Join();
         UNIT_ASSERT_EQUAL_C(results, (THashSet<TString>({"Zoooo", "TTL Exceed"})), "Results is {" + ToString(results) + "}");
+    }
+
+    Y_UNIT_TEST(TestCustomSocketStreams) {
+        // Check that TClientRequest::CreateHttpConnection override works
+
+        class TCustomSocketStreamsServer: public THttpServer::ICallBack {
+        public:
+            TStringStream InputCopy;
+            TStringStream OutputCopy;
+        private:
+            class TTeeInput
+                : public IInputStream
+            {
+            public:
+                TTeeInput(IInputStream* s, IOutputStream* copy)
+                    : S_(s)
+                    , Copy_(copy)
+                {
+                }
+
+                size_t DoRead(void* buf, size_t len) override {
+                    void* begin = buf;
+                    size_t res = S_->Read(buf, len);
+                    Copy_->Write(begin, res);
+                    return res;
+                }
+
+            private:
+                IInputStream* const S_;
+                IOutputStream* const Copy_;
+            };
+
+            class TBlockingSocketStreams: public THttpServerConn::ISocketStreams {
+            public:
+                explicit TBlockingSocketStreams(const TSocket& s, TCustomSocketStreamsServer* server)
+                    : Socket_(s)
+                    , Input_(Socket_)
+                    , TI_(&Input_, &server->InputCopy)
+                    , Output_(Socket_)
+                    , TO_(&Output_, &server->OutputCopy)
+                {
+                }
+
+                IInputStream* Input() override {
+                    return &TI_;
+                }
+
+                IOutputStream* Output() override {
+                    return &TO_;
+                }
+
+                void Reset() override {}
+            private:
+                TSocket Socket_;
+                TSocketInput Input_;
+                TTeeInput TI_;
+                TSocketOutput Output_;
+                TTeeOutput TO_;
+            };
+
+            class TRequest: public TClientRequest {
+            public:
+                TRequest(TCustomSocketStreamsServer* server)
+                    : Server_(server)
+                {
+                }
+
+                bool Reply(void* /*tsr*/) override {
+                    Output() << "HTTP/1.1 200 Ok\r\n\r\n";
+                    Output().Finish();
+                    return true;
+                }
+
+                THolder<THttpServerConn> CreateHttpConnection(const TSocket& s, size_t outputBuffer) override {
+                    return MakeHolder<THttpServerConn>(MakeHolder<TBlockingSocketStreams>(s, Server_), outputBuffer);
+                }
+            private:
+                TCustomSocketStreamsServer* const Server_;
+            };
+
+        public:
+            TClientRequest* CreateClient() override {
+                return new TRequest(this);
+            }
+
+            void OnException() override {
+                ExceptionMessage = CurrentExceptionMessage();
+            }
+
+            TString ExceptionMessage;
+        };
+
+        TPortManager portManager;
+        const ui16 port = portManager.GetPort();
+        TCustomSocketStreamsServer server;
+        THttpServer::TOptions options(port);
+        options.nThreads = 1;
+        options.MaxConnections = 2;
+        THttpServer srv(&server, options);
+
+        UNIT_ASSERT(srv.Start());
+
+        TSocket socket(TNetworkAddress("localhost", port), TDuration::Seconds(10));
+
+        SendRequest(socket, port);
+
+        UNIT_ASSERT_STRINGS_EQUAL(server.InputCopy.Str(), TStringBuilder() << "GET / HTTP/1.1\r\nHost: localhost:" << port << "\r\nConnection: Keep-Alive\r\n\r\n");
+        UNIT_ASSERT_STRINGS_EQUAL(server.OutputCopy.Str(), TStringBuilder() << "HTTP/1.1 200 Ok\r\nConnection: Keep-Alive\r\nTransfer-Encoding: chunked\r\n\r\n0\r\n\r\n");
     }
 }

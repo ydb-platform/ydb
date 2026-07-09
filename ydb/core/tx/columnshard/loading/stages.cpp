@@ -126,6 +126,12 @@ bool TSpecialValuesInitializer::DoExecute(NTabletFlatExecutor::TTransactionConte
     }
     Self->SpaceWatcher->SubDomainOutOfSpace = outOfSpace;
 
+    ui64 smallBlobsQuotaExceeded = 0;
+    if (!Schema::GetSpecialValueOpt(db, Schema::EValueIds::SubDomainSmallBlobsQuotaExceeded, smallBlobsQuotaExceeded)) {
+        return false;
+    }
+    Self->SpaceWatcher->SubDomainSmallBlobsQuotaExceeded = smallBlobsQuotaExceeded;
+
     {
         ui64 lastCompletedStep = 0;
         ui64 lastCompletedTx = 0;

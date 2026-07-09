@@ -750,8 +750,6 @@ public:
         YQL_ENSURE(querySettings.Type);
         queryProto.SetType(GetPhyQueryType(*querySettings.Type));
 
-        AFL_ENSURE(Config->GetEnableOltpSink());
-        queryProto.SetEnableOltpSink(Config->GetEnableOltpSink());
         queryProto.SetEnableOlapSink(Config->GetEnableOlapSink());
         queryProto.SetEnableHtapTx(Config->GetEnableHtapTx());
         queryProto.SetLangVer(Config->GetDefaultLangVer());
@@ -967,8 +965,6 @@ private:
         THashMap<TStringBuf, THashSet<TStringBuf>>& tablesMap,
         THashMap<ui64, NKqpProto::TKqpPhyStage*>& physicalStageByID
     ) {
-        const bool hasEffects = NOpt::IsKqpEffectsStage(stage);
-
         TStagePredictor& stagePredictor = rPredictor.BuildForStage(stage, ctx);
         stagePredictor.Scan(stage.Program().Ptr());
 
@@ -1012,29 +1008,6 @@ private:
                 } else if (tableMeta->RecordsCount) {
                     tableOp.SetEstimatedRows(static_cast<double>(tableMeta->RecordsCount));
                 }
-            } else if (auto maybeUpsertRows = node.Maybe<TKqpUpsertRows>()) {
-                auto upsertRows = maybeUpsertRows.Cast();
-                auto tableMeta = TablesData->ExistingTable(Cluster, upsertRows.Table().Path()).Metadata;
-                YQL_ENSURE(tableMeta);
-                YQL_ENSURE(hasEffects);
-
-                auto settings = TKqpUpsertRowsSettings::Parse(upsertRows);
-
-                auto& tableOp = *stageProto.AddTableOps();
-                FillTablesMap(upsertRows.Table(), upsertRows.Columns(), tablesMap);
-                FillTableId(upsertRows.Table(), *tableOp.MutableTable());
-                FillColumns(upsertRows.Columns(), *tableMeta, tableOp, false);
-                FillEffectRows(upsertRows, *tableOp.MutableUpsertRows(), settings.Inplace);
-            } else if (auto maybeDeleteRows = node.Maybe<TKqpDeleteRows>()) {
-                auto deleteRows = maybeDeleteRows.Cast();
-                auto tableMeta = TablesData->ExistingTable(Cluster, deleteRows.Table().Path()).Metadata;
-                YQL_ENSURE(tableMeta);
-                YQL_ENSURE(hasEffects);
-
-                auto& tableOp = *stageProto.AddTableOps();
-                FillTablesMap(deleteRows.Table(), tablesMap);
-                FillTableId(deleteRows.Table(), *tableOp.MutableTable());
-                FillEffectRows(deleteRows, *tableOp.MutableDeleteRows(), false);
             } else if (auto maybeWideReadTableRanges = node.Maybe<TKqpWideReadTableRanges>()) {
                 auto readTableRanges = maybeWideReadTableRanges.Cast();
                 auto tableMeta = TablesData->ExistingTable(Cluster, readTableRanges.Table().Path()).Metadata;
@@ -1182,7 +1155,7 @@ private:
             }
         }
 
-        stageProto.SetIsEffectsStage(hasEffects || hasTxTableSink);
+        stageProto.SetIsEffectsStage(hasTxTableSink);
 
         auto paramsType = CollectParameters(stage, ctx);
         NDq::TSpillingSettings spillingSettings{Config->GetEnabledSpillingNodes()};
@@ -2083,6 +2056,12 @@ private:
                 for (const auto& col: indexDescription.KeyColumns) {
                     lookupColumnsSet.insert(col);
                 }
+                // In rowid mode the doc_id is the synthetic __ydb_row_id column, which for UPSERT/UPDATE
+                // must be read back from the existing row (it is not part of the user-supplied columns).
+                const auto* ftDesc = std::get_if<NKikimrSchemeOp::TFulltextIndexDescription>(&indexDescription.SpecializedIndexDescription);
+                if (ftDesc && ftDesc->GetUseRowIdAsDocId()) {
+                    lookupColumnsSet.insert(NKikimr::NTableIndex::NFulltext::RowIdColumn);
+                }
             }
         }
 
@@ -2220,6 +2199,12 @@ private:
 
         // FIXME: Do not pass index column descriptions at all, pass index settings + main column descriptions
         // main table key + index key
+        // In rowid mode the doc_id is the synthetic __ydb_row_id (Uint64) column, not the main-table PK,
+        // so a non-integer/composite PK is supported. Feed __ydb_row_id as the doc_id column (position 1
+        // in the projection input) instead of the PK columns below.
+        const auto* ftDesc = std::get_if<NKikimrSchemeOp::TFulltextIndexDescription>(&indexDescription.SpecializedIndexDescription);
+        const bool useRowId = ftDesc && ftDesc->GetUseRowIdAsDocId();
+
         THashSet<TStringBuf> indexColumnsSet;
         for (const auto& columnName : indexDescription.KeyColumns) {
             if (updateColumnSet.contains(columnName)) {
@@ -2231,7 +2216,10 @@ private:
             }
             indexColumnsSet.emplace(columnName);
         }
-        for (const auto& columnName : tableMeta->KeyColumnNames) {
+        const TVector<TStringBuf> docIdColumns = useRowId
+            ? TVector<TStringBuf>{NKikimr::NTableIndex::NFulltext::RowIdColumn}
+            : TVector<TStringBuf>(tableMeta->KeyColumnNames.begin(), tableMeta->KeyColumnNames.end());
+        for (const auto& columnName : docIdColumns) {
             YQL_ENSURE(!indexColumnsSet.contains(columnName));
             if (updateColumnSet.contains(columnName)) {
                 const auto columnMeta = tableMeta->Columns.FindPtr(columnName);

@@ -339,6 +339,45 @@ void TDataShard::Handle(TEvDataShard::TEvGetRSInfoRequest::TPtr& ev) {
     Send(ev->Sender, response);
 }
 
+static TString MakeReadSetData(bool commit) {
+    NKikimrTx::TReadSetData data;
+    data.SetDecision(commit ? NKikimrTx::TReadSetData::DECISION_COMMIT : NKikimrTx::TReadSetData::DECISION_ABORT);
+
+    TString encoded;
+    AFL_ENSURE(data.SerializeToString(&encoded));
+
+    return encoded;
+}
+
+void TDataShard::HandleMonSendReadSetToSelf(NMon::TEvRemoteHttpInfo::TPtr ev, const TActorContext &ctx) {
+    auto cgi = ev->Get()->Cgi();
+    ui64 step = 0, txId = 0, srcTabletId = 0, seqNo = 0;
+    bool commit = false;
+    if (!cgi.Has("step") || !TryFromString(cgi.Get("step"), step) ||
+        !cgi.Has("txId") || !TryFromString(cgi.Get("txId"), txId) ||
+        !cgi.Has("srcTabletId") || !TryFromString(cgi.Get("srcTabletId"), srcTabletId) ||
+        !cgi.Has("seqNo") || !TryFromString(cgi.Get("seqNo"), seqNo) ||
+        !cgi.Has("commit") || !TryFromString(cgi.Get("commit"), commit)) {
+        Send(ev->Sender, new NMon::TEvRemoteBinaryInfoRes("HTTP/1.1 400 Bad Request\r\nContent-Type: text-plain\r\nConnection: Close\r\n\r\nInvalid request parameters."));
+        return;
+    }
+    auto tx = GetVolatileTxManager().FindByCommitTxId(txId);
+    if (!tx) {
+        Send(ev->Sender, new NMon::TEvRemoteBinaryInfoRes("HTTP/1.1 400 Bad Request\r\nContent-Type: text-plain\r\nConnection: Close\r\n\r\nTransaction not found."));
+        return;
+    }
+    if (step != tx->Version.Step) {
+        Send(ev->Sender, new NMon::TEvRemoteBinaryInfoRes("HTTP/1.1 400 Bad Request\r\nContent-Type: text-plain\r\nConnection: Close\r\n\r\nMismatching transaction step."));
+        return;
+    }
+    auto event = std::make_unique<TEvTxProcessing::TEvReadSet>(
+        step, txId, srcTabletId, TabletID(), srcTabletId,
+        MakeReadSetData(commit), seqNo
+    );
+    ctx.Send(ctx.SelfID, std::move(event));
+    Send(ev->Sender, new NMon::TEvRemoteBinaryInfoRes("HTTP/1.1 200 OK\r\nContent-Type: text-plain\r\nConnection: Close\r\n\r\nRead Set is sent."));
+}
+
 void TDataShard::Handle(TEvDataShard::TEvGetSlowOpProfilesRequest::TPtr& ev) {
     auto* response = new TEvDataShard::TEvGetSlowOpProfilesResponse;
     response->Record.MutableStatus()->SetCode(Ydb::StatusIds::SUCCESS);

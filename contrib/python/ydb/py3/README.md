@@ -5,6 +5,7 @@ YDB Python SDK
 [![API Reference](https://img.shields.io/badge/API-Reference-lightgreen.svg)](https://ydb-platform.github.io/ydb-python-sdk)
 [![Functional tests](https://github.com/ydb-platform/ydb-python-sdk/actions/workflows/tests.yaml/badge.svg)](https://github.com/ydb-platform/ydb-python-sdk/actions/workflows/tests.yaml)
 [![Style checks](https://github.com/ydb-platform/ydb-python-sdk/actions/workflows/style.yaml/badge.svg)](https://github.com/ydb-platform/ydb-python-sdk/actions/workflows/style.yaml)
+[![codecov](https://codecov.io/gh/ydb-platform/ydb-python-sdk/graph/badge.svg)](https://codecov.io/gh/ydb-platform/ydb-python-sdk)
 
 Officially supported Python client for YDB.
 

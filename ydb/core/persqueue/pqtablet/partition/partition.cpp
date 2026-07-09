@@ -2166,6 +2166,13 @@ void TPartition::Handle(TEvPQ::TEvConsumerBatchProcessorMetrics::TPtr& ev, const
     userInfo->ConsumerBatchProcessorCPUUsage += event->CPUUsage;
 }
 
+void TPartition::Handle(NBatching::TEvProcessBatchKeysResult::TPtr& ev, const TActorContext& ctx) {
+    Y_UNUSED(ctx);
+    if (Compacter) {
+        Compacter->ProcessResponse(ev);
+    }
+}
+
 void TPartition::Handle(TEvPQ::TEvError::TPtr& ev, const TActorContext& ctx) {
     if (ev->Get()->IsInternal) {
         CompacterPartitionRequestInflight = false;
@@ -5054,6 +5061,9 @@ IActor* CreatePartitionActor(ui64 tabletId, const TPartitionId& partition, const
 }
 
 ::NMonitoring::TDynamicCounterPtr TPartition::GetPerPartitionCounterSubgroup() const {
+    if (IsSupportive()) {
+        return nullptr;
+    }
     auto counters = AppData(ActorContext())->Counters;
     if (!counters) {
         return nullptr;

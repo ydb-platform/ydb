@@ -27,6 +27,26 @@ bool ValidateView(TPosition pos, TContext& ctx, TStringBuf service, TViewDescrip
     return true;
 }
 
+namespace {
+
+bool ValidateColumnIsDefined(TContext& ctx, const TIdentifier& column, const THashSet<TString>& definedColumns, bool allowUndefinedColumns) {
+    if (!allowUndefinedColumns && !definedColumns.contains(column.Name)) {
+        ctx.Error(column.Pos) << "Undefined column: " << column.Name;
+        return false;
+    }
+    return true;
+}
+
+bool ValidateNameIsUnique(TContext& ctx, THashSet<TString>& seenNames, const TIdentifier& name, TStringBuf entityKind) {
+    if (!seenNames.insert(name.Name).second) {
+        ctx.Error(name.Pos) << entityKind << " " << name.Name << " must be defined once";
+        return false;
+    }
+    return true;
+}
+
+} // anonymous namespace
+
 class TUniqueTableKey: public ITableKeys {
 public:
     TUniqueTableKey(TPosition pos, TString service, TDeferredAtom cluster,
@@ -375,6 +395,23 @@ INode::TPtr CreateAlterIndex(const TIndexDescription& index, const INode& node) 
     }
 
     return alterIndexNode;
+}
+
+INode::TPtr CreateStatisticsDesc(const TStatisticsDescription& statistics, const INode& node) {
+    auto statisticsColumns = node.Y();
+    for (const auto& col : statistics.Columns) {
+        statisticsColumns = node.L(statisticsColumns, BuildQuotedAtom(col.Pos, col.Name));
+    }
+    auto statisticsTypes = node.Y();
+    for (const auto& type : statistics.Types) {
+        statisticsTypes = node.L(statisticsTypes, BuildQuotedAtom(type.Pos, type.Name));
+    }
+    const auto& statisticsName = node.Y(node.Q("statisticsName"), BuildQuotedAtom(statistics.Name.Pos, statistics.Name.Name));
+    auto statisticsNode = node.Y(
+        node.Q(statisticsName),
+        node.Q(node.Y(node.Q("statisticsColumns"), node.Q(statisticsColumns))),
+        node.Q(node.Y(node.Q("statisticsTypes"), node.Q(statisticsTypes))));
+    return statisticsNode;
 }
 
 INode::TPtr CreateChangefeedDesc(const TChangefeedDescription& desc, const INode& node) {
@@ -1165,7 +1202,7 @@ public:
             return false;
         }
 
-        if (!Params_.PkColumns.empty() || !Params_.PartitionByColumns.empty() || !Params_.OrderByColumns.empty() || !Params_.Indexes.empty() || !Params_.Changefeeds.empty())
+        if (!Params_.PkColumns.empty() || !Params_.PartitionByColumns.empty() || !Params_.OrderByColumns.empty() || !Params_.Indexes.empty() || !Params_.Statistics.empty() || !Params_.Changefeeds.empty())
         {
             THashSet<TString> columnsSet;
             for (auto& col : Params_.Columns) {
@@ -1176,8 +1213,7 @@ public:
 
             THashSet<TString> pkColumns;
             for (auto& keyColumn : Params_.PkColumns) {
-                if (!allowUndefinedColumns && !columnsSet.contains(keyColumn.Name)) {
-                    ctx.Error(keyColumn.Pos) << "Undefined column: " << keyColumn.Name;
+                if (!ValidateColumnIsDefined(ctx, keyColumn, columnsSet, allowUndefinedColumns)) {
                     return false;
                 }
                 if (!pkColumns.insert(keyColumn.Name).second) {
@@ -1186,35 +1222,30 @@ public:
                 }
             }
             for (auto& keyColumn : Params_.PartitionByColumns) {
-                if (!allowUndefinedColumns && !columnsSet.contains(keyColumn.Name)) {
-                    ctx.Error(keyColumn.Pos) << "Undefined column: " << keyColumn.Name;
+                if (!ValidateColumnIsDefined(ctx, keyColumn, columnsSet, allowUndefinedColumns)) {
                     return false;
                 }
             }
             for (auto& keyColumn : Params_.OrderByColumns) {
-                if (!allowUndefinedColumns && !columnsSet.contains(keyColumn.first.Name)) {
-                    ctx.Error(keyColumn.first.Pos) << "Undefined column: " << keyColumn.first.Name;
+                if (!ValidateColumnIsDefined(ctx, keyColumn.first, columnsSet, allowUndefinedColumns)) {
                     return false;
                 }
             }
 
             THashSet<TString> indexNames;
             for (const auto& index : Params_.Indexes) {
-                if (!indexNames.insert(index.Name.Name).second) {
-                    ctx.Error(index.Name.Pos) << "Index " << index.Name.Name << " must be defined once";
+                if (!ValidateNameIsUnique(ctx, indexNames, index.Name, "Index")) {
                     return false;
                 }
 
                 for (const auto& indexColumn : index.IndexColumns) {
-                    if (!allowUndefinedColumns && !columnsSet.contains(indexColumn.Name)) {
-                        ctx.Error(indexColumn.Pos) << "Undefined column: " << indexColumn.Name;
+                    if (!ValidateColumnIsDefined(ctx, indexColumn, columnsSet, allowUndefinedColumns)) {
                         return false;
                     }
                 }
 
                 for (const auto& dataColumn : index.DataColumns) {
-                    if (!allowUndefinedColumns && !columnsSet.contains(dataColumn.Name)) {
-                        ctx.Error(dataColumn.Pos) << "Undefined column: " << dataColumn.Name;
+                    if (!ValidateColumnIsDefined(ctx, dataColumn, columnsSet, allowUndefinedColumns)) {
                         return false;
                     }
                 }
@@ -1222,10 +1253,29 @@ public:
 
             THashSet<TString> cfNames;
             for (const auto& cf : Params_.Changefeeds) {
-                if (!cfNames.insert(cf.Name.Name).second) {
-                    ctx.Error(cf.Name.Pos) << "Changefeed " << cf.Name.Name << " must be defined once";
+                if (!ValidateNameIsUnique(ctx, cfNames, cf.Name, "Changefeed")) {
                     return false;
                 }
+            }
+
+            THashSet<TString> statisticsNames;
+            for (const auto& statistics : Params_.Statistics) {
+                if (!ValidateNameIsUnique(ctx, statisticsNames, statistics.Name, "Statistics")) {
+                    return false;
+                }
+
+                if (statistics.Columns.empty()) {
+                    ctx.Error(statistics.Name.Pos) << "Statistics " << statistics.Name.Name << " must have at least one column";
+                    return false;
+                }
+
+                for (const auto& statisticsColumn : statistics.Columns) {
+                    if (!ValidateColumnIsDefined(ctx, statisticsColumn, columnsSet, allowUndefinedColumns)) {
+                        return false;
+                    }
+                }
+
+                // statistics.Types may be empty: WITH is optional and its omission means "all supported statistic types"
             }
         }
 
@@ -1399,6 +1449,11 @@ public:
             opts = L(opts, Q(Y(Q("index"), Q(desc))));
         }
 
+        for (const auto& statistics : Params_.Statistics) {
+            const auto& desc = CreateStatisticsDesc(statistics, *this);
+            opts = L(opts, Q(Y(Q("statistics"), Q(desc))));
+        }
+
         for (const auto& cf : Params_.Changefeeds) {
             const auto& desc = CreateChangefeedDesc(cf, *this);
             opts = L(opts, Q(Y(Q("changefeed"), Q(desc))));
@@ -1426,7 +1481,7 @@ public:
 
         TNodePtr node = nullptr;
         if (Values_) {
-            if (!Values_->Init(ctx, nullptr)) {
+            if (!Values_->Init(ctx, /*src=*/nullptr)) {
                 return false;
             }
             TTableList tableList;
@@ -1437,7 +1492,7 @@ public:
                 return false;
             }
 
-            TNodePtr inputTables(BuildInputTables(Pos_, tableList, false, Scoped_));
+            TNodePtr inputTables(BuildInputTables(Pos_, tableList, /*inSubquery=*/false, Scoped_));
             if (!inputTables->Init(ctx, valuesSource)) {
                 return false;
             }
@@ -1856,6 +1911,30 @@ public:
             actions = L(actions, Q(Y(Q("dropIndex"), indexName)));
         }
 
+        {
+            THashSet<TString> statisticsNames;
+            for (const auto& statistics : Params_.AddStatistics) {
+                if (!ValidateNameIsUnique(ctx, statisticsNames, statistics.Name, "Statistics")) {
+                    return false;
+                }
+
+                if (statistics.Columns.empty()) {
+                    ctx.Error(statistics.Name.Pos) << "Statistics " << statistics.Name.Name << " must have at least one column";
+                    return false;
+                }
+
+                // statistics.Types may be empty: WITH is optional and its omission means "all supported statistic types"
+
+                const auto& desc = CreateStatisticsDesc(statistics, *this);
+                actions = L(actions, Q(Y(Q("addStatistics"), Q(desc))));
+            }
+        }
+
+        for (const auto& id : Params_.DropStatistics) {
+            auto statisticsName = BuildQuotedAtom(id.Pos, id.Name);
+            actions = L(actions, Q(Y(Q("dropStatistics"), statisticsName)));
+        }
+
         if (Params_.RenameIndexTo) {
             auto src = BuildQuotedAtom(Params_.RenameIndexTo->first.Pos, Params_.RenameIndexTo->first.Name);
             auto dst = BuildQuotedAtom(Params_.RenameIndexTo->second.Pos, Params_.RenameIndexTo->second.Name);
@@ -2041,6 +2120,8 @@ TNullable<TNodePtr> CreateConsumerDesc(TContext& ctx, const TTopicConsumerDescri
     settings = setValue(settings, desc.Settings.MaxProcessingAttempts, "max_processing_attempts");
     settings = setValue(settings, desc.Settings.DeadLetterPolicy, "dead_letter_policy");
     settings = setValue(settings, desc.Settings.DeadLetterQueue, "dead_letter_queue");
+    settings = setValue(settings, desc.Settings.ReceiveMessageWaitTime, "receive_message_wait_time");
+    settings = setValue(settings, desc.Settings.ReceiveMessageDelay, "receive_message_delay");
 
     return node.Y(
         node.Q(node.Y(node.Q("name"), BuildQuotedAtom(desc.Name.Pos, desc.Name.Name))),
@@ -2082,7 +2163,7 @@ public:
         opts = L(opts, Q(Y(Q("mode"), Q(mode))));
 
         for (const auto& consumer : Params_.Consumers) {
-            const auto desc = CreateConsumerDesc(ctx, consumer, *this, false);
+            const auto desc = CreateConsumerDesc(ctx, consumer, *this, /*alter=*/false);
             if (!desc) {
                 return false;
             }
@@ -2197,7 +2278,7 @@ public:
         opts = L(opts, Q(Y(Q("mode"), Q(mode))));
 
         for (const auto& consumer : Params_.AddConsumers) {
-            const auto desc = CreateConsumerDesc(ctx, consumer, *this, false);
+            const auto desc = CreateConsumerDesc(ctx, consumer, *this, /*alter=*/false);
             if (!desc) {
                 return false;
             }
@@ -2205,7 +2286,7 @@ public:
         }
 
         for (const auto& [_, consumer] : Params_.AlterConsumers) {
-            const auto desc = CreateConsumerDesc(ctx, consumer, *this, true);
+            const auto desc = CreateConsumerDesc(ctx, consumer, *this, /*alter=*/true);
             if (!desc) {
                 return false;
             }
@@ -3654,7 +3735,7 @@ public:
             if (block->SubqueryAlias()) {
                 continue;
             }
-            if (!block->Init(ctx, nullptr)) {
+            if (!block->Init(ctx, /*src=*/nullptr)) {
                 hasError = true;
                 continue;
             }
@@ -3664,7 +3745,7 @@ public:
             auto& data = Scoped_->Local.ExprClustersMap[x.Get()];
             auto& node = data.second;
 
-            if (!node->Init(ctx, nullptr)) {
+            if (!node->Init(ctx, /*src=*/nullptr)) {
                 hasError = true;
                 continue;
             }
@@ -4089,7 +4170,7 @@ public:
             settings = L(settings, Q(Y(Q("autoref"))));
         }
 
-        TNodePtr node(BuildInputTables(Pos_, {Table_}, false, Scoped_));
+        TNodePtr node(BuildInputTables(Pos_, {Table_}, /*inSubquery=*/false, Scoped_));
         if (!node->Init(ctx, src)) {
             return false;
         }

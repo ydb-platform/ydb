@@ -49,7 +49,7 @@ BELONGS ya.make
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        bin/jeprof [2354:2354]
+        bin/jeprof [2355:2355]
 
 KEEP     COPYRIGHT_SERVICE_LABEL 3fc0805e0d840e358c161050fcb8adac
 BELONGS ya.make
@@ -95,4 +95,4 @@ BELONGS ya.make
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        bin/jeprof [284:284]
+        bin/jeprof [285:285]

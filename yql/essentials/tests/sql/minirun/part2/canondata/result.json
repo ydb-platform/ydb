@@ -1080,9 +1080,9 @@
     ],
     "test.test[select-prune_keys_over_filtering_flatmap-default.txt-Debug]": [
         {
-            "checksum": "9f50f408d8494385cd2820a4d8625ddf",
+            "checksum": "720877fb33973ba7049726728b045dbd",
             "size": 1031,
-            "uri": "https://{canondata_backend}/1773845/5e187b5c8712eed0b26575ad1c84f3158af43d1d/resource.tar.gz#test.test_select-prune_keys_over_filtering_flatmap-default.txt-Debug_/opt.yql"
+            "uri": "https://{canondata_backend}/1600758/969150d6c9c076c24968dc20f14781b840615912/resource.tar.gz#test.test_select-prune_keys_over_filtering_flatmap-default.txt-Debug_/opt.yql"
         }
     ],
     "test.test[select-prune_keys_over_filtering_flatmap-default.txt-Results]": [

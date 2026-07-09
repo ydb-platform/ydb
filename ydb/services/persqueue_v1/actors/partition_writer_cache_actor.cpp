@@ -1,6 +1,8 @@
 #include "partition_writer_cache_actor.h"
 #include <ydb/core/persqueue/writer/writer.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::PQ_WRITE_PROXY
+
 namespace NKikimr::NGRpcProxy::V1 {
 
 TPartitionWriterCacheActor::TPartitionWriterCacheActor(const TActorId& owner,
@@ -23,9 +25,10 @@ void TPartitionWriterCacheActor::Bootstrap(const TActorContext& ctx)
 
 bool TPartitionWriterCacheActor::OnUnhandledException(const std::exception& exc) {
     auto ctx = *NActors::TlsActivationContext;
-    LOG_CRIT_S(ctx, NKikimrServices::PQ_WRITE_PROXY,
-        TStringBuilder() << " unhandled exception " << TypeName(exc) << ": " << exc.what() << Endl
-            << TBackTrace::FromCurrentException().PrintToString());
+    YDB_LOG_CRIT_CTX(ctx, "Unhandled exception",
+        {"typeName", TypeName(exc)},
+        {"exception", exc.what()},
+        {"backTrace", TBackTrace::FromCurrentException().PrintToString()});
 
     for (auto& [k, w] : Writers) {
         ReplyError(k.first, k.second, EErrorCode::InternalError, "Internal error", 0, ctx.AsActorContext());

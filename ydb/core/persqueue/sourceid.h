@@ -63,6 +63,12 @@ public:
 
     TInstant MinAvailableTimestamp(TInstant now) const;
 
+    TString DescribeHeartbeatState(size_t maxSourceIds = 128) const;
+    TString DescribeMinHeartbeatSourceIds(size_t maxSourceIds = 16) const;
+    static TString DescribeSourceIdInfo(const TString& sourceId, const TSourceIdInfo& sourceIdInfo);
+
+    const TSourceIdsByHeartbeat& GetSourceIdsByHeartbeat() const { return SourceIdsByHeartbeat; }
+
 private:
     void LoadRawSourceIdInfo(const TString& key, const TString& data, TInstant now);
     void LoadProtoSourceIdInfo(const TString& key, const TString& data);
@@ -96,6 +102,9 @@ public:
 
     void DeregisterSourceId(const TString& sourceId);
     void Clear();
+
+    bool HasHeartbeatWrites() const;
+    TString DescribeHeartbeatWrites(size_t maxSourceIds = 128) const;
 
     void FillRequest(TEvKeyValue::TEvRequest* request, const TPartitionId& partition);
     static void FillKeyAndData(ESourceIdFormat format, const TString& sourceId, const TSourceIdInfo& sourceIdInfo, TKeyPrefix& key, TBuffer& data);

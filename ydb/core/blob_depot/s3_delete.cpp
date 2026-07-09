@@ -124,10 +124,8 @@ namespace NKikimr::NBlobDepot {
                 if (httpCode > 0) {
                     httpErrorCounts[httpCode] = Locators.size();
                 }
-                YDB_LOG_WARN("Failed to delete object(s) from S3",
-                    {"marker", "BDTS12"},
-                    {"id", LogId},
-                    {"error", msg.GetError().GetMessage().c_str()});
+                STLOG(PRI_WARN, BLOB_DEPOT, BDTS12, "failed to delete object(s) from S3", (Id, LogId),
+                    (Error, msg.GetError().GetMessage().c_str()));
             }
 
             auto *remainingTarget = requestThrottled ? &locatorsThrottled : &locatorsError;

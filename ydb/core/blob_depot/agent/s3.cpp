@@ -263,15 +263,7 @@ namespace NKikimr::NBlobDepot {
                     const auto& QueryId = Query->QueryId;
                     if (!LifetimeToken.expired()) {
                         Agent.IncS3HttpErrorCounter("Puts", httpCode);
-
-                        YDB_LOG_TRACE_COMP(BLOB_DEPOT_EVENTS, "Written_to_S3",
-                            {"marker", "BDEV37"},
-                            {"VG", Agent.VirtualGroupId},
-                            {"BDT", Agent.TabletId},
-                            {"G", Agent.BlobDepotGeneration},
-                            {"Q", QueryId},
-                            {"blobId", Id},
-                            {"locator", Locator});
+                        BDEV_QUERY(BDEV37, "written_to_S3", (BlobId, Id), (Locator, Locator));
                         Query->OnPutS3ObjectResponse(std::move(error), slowDown);
                     }
                     Y_ABORT_UNLESS(Agent.S3PutsInFlight);

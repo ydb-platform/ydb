@@ -556,15 +556,17 @@ Y_UNIT_TEST(DeferredPublication_Cancel_MultipleDestinations) {
 Y_UNIT_TEST(DeferredPublication_GetSendingTabletIds_IncludesWriteOnlyTablet) {
     const TString TOPIC = "topic";
     const ui64 TABLETID = 1'000'000;
+    const bool skipConflictCheck = true;
+    const bool trackProducerId = false;
 
     NTopic::TTopicOperations topicOps;
-    topicOps.SetSkipConflictCheck(true);
-    topicOps.SetTrackProducerId(false);
+    topicOps.SetSkipConflictCheck(skipConflictCheck);
+    topicOps.SetTrackProducerId(trackProducerId);
 
     topicOps.AddDeferredPublicationOperation(TOPIC, 0, TABLETID,
         NKikimrKqp::TTopicDeferredPublicationRequest::Publish, 1, "ext");
 
-    UNIT_ASSERT(topicOps.CalcSkipConflictCheck());
+    UNIT_ASSERT(ShouldSkipConflictCheck(skipConflictCheck, trackProducerId));
 
     const auto sendTabletIds = topicOps.GetSendingTabletIds();
     UNIT_ASSERT_EQUAL(sendTabletIds.size(), 1);

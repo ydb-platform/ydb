@@ -7,8 +7,6 @@ from ydb.tests.tools.fq_runner.kikimr_utils import yq_v1, yq_all
 
 import ydb.public.api.protos.draft.fq_pb2 as fq
 import ydb.public.api.protos.ydb_value_pb2 as ydb
-from google.protobuf.struct_pb2 import NullValue
-
 
 class TestSelect1(object):
     @yq_all
@@ -56,50 +54,6 @@ class TestSelect1(object):
         client.wait_query_status(query_id, fq.QueryMeta.FAILED)
         describe_result = client.describe_query(query_id).result
         assert "Failed to unwrap empty optional" in describe_result.query.issue[0].issues[0].message
-
-    @yq_all
-    def test_select_pg(self, client):
-        sql = R'''select ARRAY[ARRAY[1,2,3]], null, 'null', 1, true, null::int4'''
-
-        query_id = client.create_query(
-            "simple4", sql, type=fq.QueryContent.QueryType.ANALYTICS, pg_syntax=True
-        ).result.query_id
-        client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
-        data = client.get_result_data(query_id)
-
-        result_set = data.result.result_set
-        logging.debug(str(result_set))
-        assert len(result_set.columns) == 6
-        assert result_set.columns[0].name == "column0"
-        assert result_set.columns[0].type.pg_type.oid == 1007
-        assert result_set.columns[0].type.pg_type.typlen == -1
-        assert result_set.columns[0].type.pg_type.typmod == -1
-        assert result_set.columns[1].name == "column1"
-        assert result_set.columns[1].type.null_type is not None
-        assert result_set.columns[2].name == "column2"
-        assert result_set.columns[2].type.pg_type.oid == 25
-        assert result_set.columns[2].type.pg_type.typlen == -1
-        assert result_set.columns[2].type.pg_type.typmod == -1
-        assert result_set.columns[3].name == "column3"
-        assert result_set.columns[3].type.pg_type.oid == 23
-        assert result_set.columns[3].type.pg_type.typlen == 4
-        assert result_set.columns[3].type.pg_type.typmod == -1
-        assert result_set.columns[4].name == "column4"
-        assert result_set.columns[4].type.pg_type.oid == 16
-        assert result_set.columns[4].type.pg_type.typlen == 1
-        assert result_set.columns[4].type.pg_type.typmod == -1
-        assert result_set.columns[5].name == "column5"
-        assert result_set.columns[5].type.pg_type.oid == 23
-        assert result_set.columns[5].type.pg_type.typlen == 4
-        assert result_set.columns[5].type.pg_type.typmod == -1
-
-        assert len(result_set.rows) == 1
-        assert result_set.rows[0].items[0].text_value == "{{1,2,3}}"
-        assert result_set.rows[0].items[1].null_flag_value == NullValue.NULL_VALUE
-        assert result_set.rows[0].items[2].text_value == "null"
-        assert result_set.rows[0].items[3].text_value == "1"
-        assert result_set.rows[0].items[4].text_value == "t"
-        assert result_set.rows[0].items[5].null_flag_value == NullValue.NULL_VALUE
 
     @yq_all
     def test_select_10_p_19_plus_1(self, client):

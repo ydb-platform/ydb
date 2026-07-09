@@ -437,12 +437,24 @@ def stop_agent_services(hosts, app_port: int = 31434):
     print(f"Waiting {extract_wait_seconds}s for extract processes to complete...")
     time.sleep(extract_wait_seconds)
 
+    errors: list[str] = []
     if agent_hosts:
-        futures = []
         with ThreadPoolExecutor(max_workers=max(len(agent_hosts), 1)) as executor:
-            for host in agent_hosts:
-                futures.append(executor.submit(stop_agent_service, host))
+            futures = {executor.submit(stop_agent_service, host): host for host in agent_hosts}
             for fut in as_completed(futures):
-                fut.result()
+                host = futures[fut]
+                try:
+                    fut.result()
+                except Exception as e:
+                    errors.append(f"{host}: {e}")
+                    print(f"WARNING: failed to stop agent on {host}: {e}", file=sys.stderr)
 
-    stop_agent_service(orchestrator_host)
+    # Stop the orchestrator last (always attempted even if agents failed).
+    try:
+        stop_agent_service(orchestrator_host)
+    except Exception as e:
+        errors.append(f"{orchestrator_host}: {e}")
+        print(f"WARNING: failed to stop orchestrator on {orchestrator_host}: {e}", file=sys.stderr)
+
+    if errors:
+        print(f"WARNING: {len(errors)} host(s) failed to stop: {errors}", file=sys.stderr)

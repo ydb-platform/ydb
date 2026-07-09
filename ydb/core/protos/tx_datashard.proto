@@ -416,8 +416,8 @@ message TKqpVectorSearchSettings {
     optional bytes InputType = 24;
     optional bytes OutputType = 25;
 
-    // When set, the immutable index impl tables (level, posting) are read from
-    // followers (stale-RO). The main table is always read from the leader.
+    // When set, the index impl tables (level, posting) are read from followers
+    // (stale-RO). The main table is always read from the leader.
     optional bool UseFollowers = 26;
 
     // Covered index: the posting table already holds every output column

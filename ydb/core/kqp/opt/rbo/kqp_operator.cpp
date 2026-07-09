@@ -416,22 +416,43 @@ TVector<std::reference_wrapper<TExpression>> TOpMap::GetExpressions() {
     return result;
 }
 
-TVector<TInfoUnit> TOpMap::GetSubplanIUs(TPlanProps& props) {
-    TVector<TInfoUnit> subplanIUs;
-    TVector<TInfoUnit> res;
-
-    for (const auto& mapElement : MapElements) {
-        auto expression = mapElement.GetExpression();
-        auto vars = TExpression(expression.Node, expression.Ctx, &props).GetInputIUs(true, false);
-        for (const auto& iu : vars) {
-            if (iu.IsSubplanContext()) {
-                subplanIUs.push_back(iu);
+const TVector<TInfoUnit>& TOpMap::GetSubplanIUs(TPlanProps& props) {
+    auto cacheValid = [&]() {
+        if (SubplanIUsCacheVersion != props.Subplans.MembershipVersion) {
+            return false;
+        }
+        if (SubplanIUsCacheKeys.size() != MapElements.size()) {
+            return false;
+        }
+        for (size_t i = 0; i < MapElements.size(); ++i) {
+            if (SubplanIUsCacheKeys[i] != MapElements[i].GetExpression().Node) {
+                return false;
             }
         }
+        return true;
+    };
+
+    if (!cacheValid()) {
+        TVector<TInfoUnit> subplanIUs;
+        SubplanIUsCacheKeys.clear();
+
+        for (const auto& mapElement : MapElements) {
+            const auto& expression = mapElement.GetExpression();
+            auto vars = TExpression(expression.Node, expression.Ctx, &props).GetInputIUs(true, false);
+            for (const auto& iu : vars) {
+                if (iu.IsSubplanContext()) {
+                    subplanIUs.push_back(iu);
+                }
+            }
+            SubplanIUsCacheKeys.push_back(expression.Node);
+        }
+
+        SubplanIUsCache.clear();
+        AddUnique<TInfoUnit>(SubplanIUsCache, subplanIUs);
+        SubplanIUsCacheVersion = props.Subplans.MembershipVersion;
     }
 
-    AddUnique<TInfoUnit>(res, subplanIUs);
-    return res;
+    return SubplanIUsCache;
 }
 
 // Returns explicit renames as pairs of <to, from>
@@ -627,14 +648,18 @@ TVector<TInfoUnit> TOpFilter::GetUsedIUs(TPlanProps& props) {
     return FilterExpr.GetInputIUs(false, true);
 }
 
-TVector<TInfoUnit> TOpFilter::GetSubplanIUs(TPlanProps& props) {
-    TVector<TInfoUnit> res;
-    for (const auto& iu : GetFilterIUs(props)) {
-        if (iu.IsSubplanContext()) {
-            res.push_back(iu);
+const TVector<TInfoUnit>& TOpFilter::GetSubplanIUs(TPlanProps& props) {
+    if (SubplanIUsCacheKey != FilterExpr.Node || SubplanIUsCacheVersion != props.Subplans.MembershipVersion) {
+        SubplanIUsCache.clear();
+        for (const auto& iu : GetFilterIUs(props)) {
+            if (iu.IsSubplanContext()) {
+                SubplanIUsCache.push_back(iu);
+            }
         }
+        SubplanIUsCacheKey = FilterExpr.Node;
+        SubplanIUsCacheVersion = props.Subplans.MembershipVersion;
     }
-    return res;
+    return SubplanIUsCache;
 }
 
 TString TOpFilter::ToString(TExprContext& ctx) {
@@ -1364,14 +1389,12 @@ void TOpIterator::Advance() {
             return;
         }
 
-        if (RecurseIntoSubplans && !frame.SubplansLoaded) {
-            Y_ENSURE(PlanProps);
-            frame.SubplanIUs = frame.Current->GetSubplanIUs(*PlanProps);
-            frame.SubplansLoaded = true;
+        if (RecurseIntoSubplans && !frame.SubplanIUs) {
+            frame.SubplanIUs = &frame.Current->GetSubplanIUs(*PlanProps);
         }
 
-        if (RecurseIntoSubplans && frame.NextSubplanIdx < frame.SubplanIUs.size()) {
-            const auto& iu = frame.SubplanIUs[frame.NextSubplanIdx++];
+        if (RecurseIntoSubplans && frame.NextSubplanIdx < frame.SubplanIUs->size()) {
+            const auto& iu = (*frame.SubplanIUs)[frame.NextSubplanIdx++];
             const auto& subplan = PlanProps->Subplans.PlanMap.at(iu);
             PushFrame(CastOperator<IOperator>(subplan.Plan), nullptr, size_t(0), std::make_shared<TInfoUnit>(iu));
             continue;

@@ -217,9 +217,18 @@ public:
         return {};
     }
 
-    virtual TVector<TInfoUnit> GetSubplanIUs(TPlanProps& props) {
+    /**
+     * Get subplan IUs referenced by this operator's expressions.
+     * Implementations cache the result under a two-part key: the expression
+     * node pointer (rewrites always produce new TExprNode instances) and
+     * TSubplans::MembershipVersion (subplan membership classifies members as
+     * subplan references, and inlining rules change it without touching the
+     * referencing expression).
+     */
+    virtual const TVector<TInfoUnit>& GetSubplanIUs(TPlanProps& props) {
         Y_UNUSED(props);
-        return {};
+        static const TVector<TInfoUnit> empty;
+        return empty;
     }
 
     const TTypeAnnotationNode* GetIUType(const TInfoUnit& iu);
@@ -450,7 +459,7 @@ public:
            bool ordered = false);
 
     virtual TVector<TInfoUnit> GetUsedIUs(TPlanProps& props) override;
-    virtual TVector<TInfoUnit> GetSubplanIUs(TPlanProps& props) override;
+    virtual const TVector<TInfoUnit>& GetSubplanIUs(TPlanProps& props) override;
     virtual TVector<std::reference_wrapper<TExpression>> GetExpressions() override;
     virtual void PropagateLiveness(ILivenessContext& ctx) override;
     virtual bool PropagateNameConstraints() override;
@@ -485,6 +494,13 @@ public:
 
 protected:
     void ComputeOutputIUs() override;
+
+private:
+    // GetSubplanIUs cache, valid while every map element keeps its expression
+    // node and subplan membership is unchanged
+    TVector<TExprNode::TPtr> SubplanIUsCacheKeys;
+    ui64 SubplanIUsCacheVersion = 0;
+    TVector<TInfoUnit> SubplanIUsCache;
 };
 
 /**
@@ -575,7 +591,7 @@ public:
     TOpFilter(TIntrusivePtr<IOperator> input, TPositionHandle pos, const TPhysicalOpProps& props, const TExpression& filterExpr);
 
     virtual TVector<TInfoUnit> GetUsedIUs(TPlanProps& props) override;
-    virtual TVector<TInfoUnit> GetSubplanIUs(TPlanProps& props) override;
+    virtual const TVector<TInfoUnit>& GetSubplanIUs(TPlanProps& props) override;
     virtual TString ToString(TExprContext& ctx) override;
     virtual NJson::TJsonValue ToJson(ui32 explainFlags) override;
     virtual TString GetExplainName() const override { return "Filter"; }
@@ -596,6 +612,13 @@ public:
 
 protected:
     void ComputeOutputIUs() override;
+
+private:
+    // GetSubplanIUs cache, valid while FilterExpr keeps its expression node
+    // and subplan membership is unchanged
+    TExprNode::TPtr SubplanIUsCacheKey;
+    ui64 SubplanIUsCacheVersion = 0;
+    TVector<TInfoUnit> SubplanIUsCache;
 };
 
 bool TestAndExtractEqualityPredicate(TExprNode::TPtr pred, TExprNode::TPtr& leftArg, TExprNode::TPtr& rightArg);
@@ -836,10 +859,11 @@ private:
         TIntrusivePtr<IOperator> Parent;
         size_t ChildIndex = 0;
         std::shared_ptr<TInfoUnit> SubplanIU;
-        TVector<TInfoUnit> SubplanIUs;
+        // Points into the operator's GetSubplanIUs cache; the operator is kept
+        // alive by Current and the cache is stable while the plan is not mutated
+        const TVector<TInfoUnit>* SubplanIUs = nullptr;
         size_t NextSubplanIdx = 0;
         size_t NextChildIdx = 0;
-        bool SubplansLoaded = false;
         // Pre-order only: the node was already emitted when its frame was entered
         bool Emitted = false;
     };

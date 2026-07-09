@@ -125,6 +125,9 @@ bool TSubplans::RenameReferences(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit:
 
     PlanMap = std::move(renamedPlanMap);
     OrderedList = std::move(renamedOrderedList);
+    if (changed) {
+        ++MembershipVersion;
+    }
     return changed;
 }
 

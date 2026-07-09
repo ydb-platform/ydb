@@ -34,6 +34,7 @@ struct TSubplans {
     void Add(const TInfoUnit& iu, const TSubplanEntry& entry) {
         OrderedList.push_back(iu);
         PlanMap.insert({iu, entry});
+        ++MembershipVersion;
     }
 
     void Replace(const TInfoUnit& iu, TIntrusivePtr<ISimpleOperator> op) {
@@ -54,12 +55,20 @@ struct TSubplans {
     void Remove(const TInfoUnit& iu) {
         std::erase(OrderedList, iu);
         PlanMap.erase(iu);
+        ++MembershipVersion;
     }
 
     bool RenameReferences(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction>& renameMap, TExprContext& ctx);
 
     THashMap<TInfoUnit, TSubplanEntry, TInfoUnit::THashFunction> PlanMap;
     TVector<TInfoUnit> OrderedList;
+
+    // Bumped when the set of registered subplan IUs changes. Subplan membership
+    // classifies expression members as subplan references (GetAllMembers), and
+    // it can change while the expression node stays the same: inlining rules
+    // satisfy a reference by inserting a rename below and removing the subplan.
+    // Caches of subplan classification must key on this version.
+    ui64 MembershipVersion = 0;
 };
 
 class TInfoUnitConstraintSet {

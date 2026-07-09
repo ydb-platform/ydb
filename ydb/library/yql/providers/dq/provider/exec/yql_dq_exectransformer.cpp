@@ -816,7 +816,7 @@ private:
                         *untrustedUdfFlag = *untrustedUdfFlag ||
                             callable.GetType()->GetName() == TStringBuf("ScriptUdf") ||
                             !State->FunctionRegistry->IsLoadedUdfModule(moduleName) ||
-                            moduleName == TStringBuf("Geo");
+                            moduleName == TStringBuf("Geo") || moduleName == TStringBuf("Streaming");
                     }
                 }
             }

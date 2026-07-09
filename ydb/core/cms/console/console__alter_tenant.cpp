@@ -44,7 +44,7 @@ public:
         auto &rec = Request->Get()->Record.GetRequest();
         auto &token = Request->Get()->Record.GetUserToken();
         YDB_LOG_DEBUG_CTX(ctx, "TTxAlterTenant execute",
-            {"ev", Request->Get()->Record});
+            {"ev", Request->Get()->Record.ShortDebugString()});
 
         Response = new TEvConsole::TEvAlterTenantResponse;
 

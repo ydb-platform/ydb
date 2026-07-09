@@ -20,7 +20,7 @@ public:
         auto &req = Request->Get()->Record;
 
         YDB_LOG_DEBUG_CTX(ctx, "TTxGetLogTail Execute",
-            {"ev", req});
+            {"ev", req.ShortDebugString()});
 
         TVector<NKikimrConsole::TLogRecord> records;
         if (!Self->Logger.DbLoadLogTail(req.GetLogFilter(), records, txc))

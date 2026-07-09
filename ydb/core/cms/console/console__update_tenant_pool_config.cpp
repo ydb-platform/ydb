@@ -36,7 +36,7 @@ public:
         auto &rec = Request->Get()->Record;
         auto &token = rec.GetUserToken();
         YDB_LOG_DEBUG_CTX(ctx, "Dump TTxUpdateTenantPoolConfig",
-            {"config", rec});
+            {"config", rec.ShortDebugString()});
 
         Response.Reset(new TEvConsole::TEvGetTenantStatusResponse);
         auto &operation = *Response->Record.MutableResponse()->mutable_operation();

@@ -28,12 +28,6 @@ protected:
 public:
     using TBase::TBase;
 
-    ///
-    /// Inserts a config into the snapshot. Populates the config's parsed settings via
-    /// `EnsureSettings()` before publication — this is the only supported write path,
-    /// guaranteeing that any config observable from a snapshot has its settings ready
-    /// and read-only for concurrent readers.
-    ///
     void AddConfig(TResourcePoolClassifierConfig config);
 
     std::optional<TResourcePoolClassifierConfig> GetClassifierConfig(const TString& database, const TString& name) const;

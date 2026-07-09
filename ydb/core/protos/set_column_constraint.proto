@@ -21,7 +21,7 @@ message TSetColumnConstraintSettings {
 
 message TSetColumnConstraint {
     optional uint64 Id = 1;
-    optional Ydb.Table.SetColumnConstraintState.State State = 2;
+    optional Ydb.Table.SetNotNullState.State State = 2;
     optional TSetColumnConstraintSettings Settings = 3;
     optional float Progress = 4 [default = 0];
     optional google.protobuf.Timestamp StartTime = 5;
@@ -56,4 +56,17 @@ message TEvCreateResponse {
     repeated Ydb.Issue.IssueMessage Issues = 3;
     optional TSetColumnConstraint SetColumnConstraint = 4;
     optional sint32 SchemeStatus = 5 [default = -1]; // flat_tx_scheme.proto - enum EStatus, -1 is inexistent enum value
+}
+
+message TEvListRequest {
+    optional string DatabaseName = 1;
+    optional uint64 PageSize = 2;
+    optional string PageToken = 3;
+}
+
+message TEvListResponse {
+    optional Ydb.StatusIds.StatusCode Status = 1;
+    repeated Ydb.Issue.IssueMessage Issues = 2;
+    repeated TSetColumnConstraint Entries = 3;
+    optional string NextPageToken = 4;
 }

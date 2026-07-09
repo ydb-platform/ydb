@@ -106,6 +106,8 @@ public:
             DataSize += stats.GetColumnSize(idx);
         }
 
+        // Decides only the Array-vs-Sparsed axis and never returns Dictionary,
+        // because dictionary decision is deferred until the values are materialized.
         IChunkedArray::EType GetAccessorType(const TSettings& settings, const ui32 recordsCount) const {
             return settings.IsSparsed(RecordsCount, recordsCount) ? IChunkedArray::EType::SparsedArray : IChunkedArray::EType::Array;
         }

@@ -7,6 +7,8 @@
 
 #include <ydb/public/lib/ydb_cli/dump/util/query_utils.h>
 
+#include <util/string/subst.h>
+
 namespace NKikimr {
 namespace NSysView {
 
@@ -43,6 +45,10 @@ public:
 
     std::string ShowCreateTable(NQuery::TSession& session, const std::string& tableName) {
         return ShowCreate(session, "TABLE", tableName);
+    }
+
+    std::string ShowCreateExternalDataSource(NQuery::TSession& session, const std::string& dataSourceName) {
+        return ShowCreate(session, "EXTERNAL DATA SOURCE", dataSourceName);
     }
 
     void CheckShowCreateTable(const std::string& query, const std::string& tableName, TString formatQuery = "", bool temporary = false, bool initialScan = false) {
@@ -191,8 +197,12 @@ private:
             if (column.Name == "Path") {
                 UNIT_ASSERT_VALUES_EQUAL(value, path);
             } else if (column.Name == "PathType") {
-                auto actualType = to_upper(TString(value));
-                UNIT_ASSERT_VALUES_EQUAL(actualType, type);
+                TString actualType = to_upper(TString(value));
+                TString expectedType = TString(type);
+                // The "EXTERNAL DATA SOURCE" SQL keyword maps to a single
+                // CamelCase enum name "ExternalDataSource" in the column.
+                SubstGlobal(expectedType, " ", "");
+                UNIT_ASSERT_VALUES_EQUAL(actualType, expectedType);
             } else if (column.Name == "CreateQuery") {
                 createQuery = value;
             } else {
@@ -1976,7 +1986,7 @@ Y_UNIT_TEST(TableColumnAlterColumn) {
             )
             PARTITION BY HASH(Col1)
             WITH (STORE = COLUMN, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 2);
-            ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=Col2, `FORCE_SIMD_PARSING`=`true`, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`SUB_COLUMNS`, `OTHERS_ALLOWED_FRACTION`=`0.5`);
+            ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=Col2, `FORCE_SIMD_PARSING`=`true`, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`SUB_COLUMNS`, `OTHERS_ALLOWED_FRACTION`=`0.5`, `DICTIONARY_UNIQUE_FRACTION`=`0.5`);
             ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=Col3, `DEFAULT_VALUE`=`5`);
             ALTER TABLE `/Root/test_show_create` ALTER COLUMN Col2 SET COMPRESSION (algorithm=zstd, level=4);
             ALTER TABLE `/Root/test_show_create` ALTER COLUMN Col3 SET ENCODING (DICT);
@@ -1999,7 +2009,7 @@ Y_UNIT_TEST(TableColumnAlterColumn) {
                 AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 2
             );
 
-            ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION = ALTER_COLUMN, NAME = Col2, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME` = `SUB_COLUMNS`, `SPARSED_DETECTOR_KFF` = `20`, `COLUMNS_LIMIT` = `1024`, `MEM_LIMIT_CHUNK` = `52428800`, `OTHERS_ALLOWED_FRACTION` = `0.5`, `DATA_EXTRACTOR_CLASS_NAME` = `JSON_SCANNER`, `SCAN_FIRST_LEVEL_ONLY` = `false`, `FORCE_SIMD_PARSING` = `true`);
+            ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION = ALTER_COLUMN, NAME = Col2, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME` = `SUB_COLUMNS`, `SPARSED_DETECTOR_KFF` = `20`, `COLUMNS_LIMIT` = `1024`, `MEM_LIMIT_CHUNK` = `52428800`, `OTHERS_ALLOWED_FRACTION` = `0.5`, `DICTIONARY_UNIQUE_FRACTION` = `0.5`, `DATA_EXTRACTOR_CLASS_NAME` = `JSON_SCANNER`, `SCAN_FIRST_LEVEL_ONLY` = `false`, `FORCE_SIMD_PARSING` = `true`);
 
             ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION = ALTER_COLUMN, NAME = Col3, `DEFAULT_VALUE` = `5`);
         )"
@@ -2025,6 +2035,7 @@ Y_UNIT_TEST(TableColumnUpsertOptions) {
             )
             PARTITION BY HASH(Col1)
             WITH (STORE = COLUMN, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 2);
+            ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `INSERT_OPTIONS.BUILD_INDEXES_MIN_BLOB_BYTES`=`1048576`, `INSERT_OPTIONS.BUILD_INDEXES_ENABLED`=`true`);
             ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `SCAN_READER_POLICY_NAME`=`SIMPLE`);
             ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `COMPACTION_PLANNER.CLASS_NAME`=`lc-buckets`,
                 `COMPACTION_PLANNER.FEATURES`=`{"levels" : [{"class_name" : "Zero", "portions_live_duration" : "5s", "expected_blobs_size" : 1000000000000, "portions_count_available" : 2},
@@ -2044,7 +2055,7 @@ Y_UNIT_TEST(TableColumnUpsertOptions) {
                 AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 2
             );
 
-            ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION = UPSERT_OPTIONS, `SCAN_READER_POLICY_NAME` = 'SIMPLE', `COMPACTION_PLANNER.CLASS_NAME` = 'lc-buckets', `COMPACTION_PLANNER.FEATURES` = `{"levels":[{"portions_count_available":2,"portions_live_duration":"5.000000s","class_name":"Zero","expected_blobs_size":1000000000000},{"class_name":"Zero"}]}`, `METADATA_MEMORY_MANAGER.CLASS_NAME` = 'local_db', `METADATA_MEMORY_MANAGER.FEATURES` = `{"memory_cache_size":0,"fetch_on_start":false}`);
+            ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION = UPSERT_OPTIONS, `INSERT_OPTIONS.BUILD_INDEXES_ENABLED` = `true`, `INSERT_OPTIONS.BUILD_INDEXES_MIN_BLOB_BYTES` = `1048576`, `SCAN_READER_POLICY_NAME` = 'SIMPLE', `COMPACTION_PLANNER.CLASS_NAME` = 'lc-buckets', `COMPACTION_PLANNER.FEATURES` = `{"levels":[{"portions_count_available":2,"portions_live_duration":"5.000000s","class_name":"Zero","expected_blobs_size":1000000000000},{"class_name":"Zero"}]}`, `METADATA_MEMORY_MANAGER.CLASS_NAME` = 'local_db', `METADATA_MEMORY_MANAGER.FEATURES` = `{"memory_cache_size":0,"fetch_on_start":false}`);
         )"
     );
 }
@@ -2742,6 +2753,72 @@ Y_UNIT_TEST(TableColumnLocalBloomFilterIndex) {
             );
         )"
     );
+}
+
+Y_UNIT_TEST(ExternalDataSource) {
+    TTestEnv env(1, 4, {.StoragePools = 3, .ShowCreateTable = true});
+
+    env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::SYSTEM_VIEWS, NActors::NLog::PRI_DEBUG);
+
+    TShowCreateChecker checker(env);
+
+    auto session = NQuery::TQueryClient(env.GetDriver()).GetSession().GetValueSync().GetSession();
+
+    // The checker's constructor creates `tier1` as an S3-style external data
+    // source with AWS authentication. The output must include every property
+    // that was set on it (source type, location, and each AWS_* setting).
+    auto tier1Query = checker.ShowCreateExternalDataSource(session, "tier1");
+    UNIT_ASSERT_C(tier1Query.find("CREATE EXTERNAL DATA SOURCE") != std::string::npos, tier1Query);
+    UNIT_ASSERT_C(tier1Query.find("SOURCE_TYPE = 'ObjectStorage'") != std::string::npos, tier1Query);
+    UNIT_ASSERT_C(tier1Query.find("LOCATION = 'http://fake.fake/olap-tier1'") != std::string::npos, tier1Query);
+    UNIT_ASSERT_C(tier1Query.find("AUTH_METHOD = 'AWS'") != std::string::npos, tier1Query);
+    UNIT_ASSERT_C(tier1Query.find("AWS_ACCESS_KEY_ID_SECRET_NAME = 'accessKey'") != std::string::npos, tier1Query);
+    UNIT_ASSERT_C(tier1Query.find("AWS_SECRET_ACCESS_KEY_SECRET_NAME = 'secretKey'") != std::string::npos, tier1Query);
+    UNIT_ASSERT_C(tier1Query.find("AWS_REGION = 'ru-central1'") != std::string::npos, tier1Query);
+
+    // Round-trip the AWS-authenticated source: drop tier1, recreate it from
+    // the SHOW CREATE output, and confirm every auth property is preserved.
+    // (Full-string equality is not stable — WITH-clause property order in the
+    // formatted output is not deterministic.)
+    ExecuteQuery(session, "DROP EXTERNAL DATA SOURCE `tier1`;");
+    ExecuteQuery(session, tier1Query);
+    auto tier1Recreated = checker.ShowCreateExternalDataSource(session, "tier1");
+    for (const auto& expected : {
+             "SOURCE_TYPE = 'ObjectStorage'",
+             "LOCATION = 'http://fake.fake/olap-tier1'",
+             "AUTH_METHOD = 'AWS'",
+             "AWS_ACCESS_KEY_ID_SECRET_NAME = 'accessKey'",
+             "AWS_SECRET_ACCESS_KEY_SECRET_NAME = 'secretKey'",
+             "AWS_REGION = 'ru-central1'",
+         }) {
+        UNIT_ASSERT_C(tier1Recreated.find(expected) != std::string::npos,
+            "recreated tier1 is missing '" << expected << "': " << tier1Recreated);
+    }
+
+    // Also exercise the AUTH_METHOD = NONE branch.
+    ExecuteQuery(session, R"(
+        CREATE EXTERNAL DATA SOURCE `eds_none` WITH (
+            SOURCE_TYPE = "ObjectStorage",
+            LOCATION = "http://fake.fake/no-auth",
+            AUTH_METHOD = "NONE"
+        );
+    )");
+    auto noAuthQuery = checker.ShowCreateExternalDataSource(session, "eds_none");
+    UNIT_ASSERT_C(noAuthQuery.find("SOURCE_TYPE = 'ObjectStorage'") != std::string::npos, noAuthQuery);
+    UNIT_ASSERT_C(noAuthQuery.find("LOCATION = 'http://fake.fake/no-auth'") != std::string::npos, noAuthQuery);
+    UNIT_ASSERT_C(noAuthQuery.find("AUTH_METHOD = 'NONE'") != std::string::npos, noAuthQuery);
+
+    ExecuteQuery(session, "DROP EXTERNAL DATA SOURCE `eds_none`;");
+    ExecuteQuery(session, noAuthQuery);
+    auto noAuthRecreated = checker.ShowCreateExternalDataSource(session, "eds_none");
+    for (const auto& expected : {
+             "SOURCE_TYPE = 'ObjectStorage'",
+             "LOCATION = 'http://fake.fake/no-auth'",
+             "AUTH_METHOD = 'NONE'",
+         }) {
+        UNIT_ASSERT_C(noAuthRecreated.find(expected) != std::string::npos,
+            "recreated eds_none is missing '" << expected << "': " << noAuthRecreated);
+    }
 }
 
 Y_UNIT_TEST(TableColumnLocalBloomNgramFilterIndex) {

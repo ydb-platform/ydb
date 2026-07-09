@@ -1,7 +1,7 @@
 {%- macro AnnotationProcessors(func, annotation_processors) -%}
 {%-     if annotation_processors|length -%}
 {%-         set first_ap = annotation_processors|first -%}
-{%-         set annotation_processors = annotation_processors|unique|sort -%}
+{%-         set annotation_processors = annotation_processors|unique -%}
 {%-         set lomboks = annotation_processors|selectattr('jar', 'startsWith', LOMBOK_PATH) -%}
 {%-         set lombok_jars = lomboks|map(attribute='jar')|unique -%}
 {%-         set nolomboks = annotation_processors|rejectattr('jar', 'startsWith', LOMBOK_PATH) -%}
@@ -39,7 +39,7 @@
 {%- macro Kapts(func, kapts, file_jars, alltests_file_jars) -%}
 {%-     if kapts|length -%}
 {%-         set kapt_first = kapts|first -%}
-{%-         set kapt_jars = kapts|map(attribute='jar')|unique|sort -%}
+{%-         set kapt_jars = kapts|map(attribute='jar')|unique -%}
 {%-         for kapt_jar in kapt_jars -%}
 {%-             set kapt = kapts|selectattr('jar', 'eq', kapt_jar)|first -%}
 {%-             if (kapt_jar in file_jars) or (kapt_jar in alltests_file_jars) -%}
@@ -93,10 +93,14 @@
 {%-     endif -%}
 {%- endmacro -%}
 
-{%- macro AddFileJars(file_jars) -%}
-{%-     for file_jar in file_jars %}
+{%- macro AddFileJars(implementation, file_jars) -%}
+{%-     if file_jars|length %}
+    {{ implementation }}(files(listOf(
+{%-         for file_jar in file_jars %}
         "$output_root/{{ file_jar }}",
-{%-     endfor -%}
+{%-         endfor %}
+    )))
+{%-     endif -%}
 {%- endmacro -%}
 
 {%- macro AddNonFileDeps(libraries, file_classpaths, implementationFunc, apiFunc) -%}
@@ -144,62 +148,125 @@
 {%- if not build_contribs -%}
 {%-     set file_deps = file_deps|selectattr('type', 'ne', 'contrib') -%}
 {%- endif -%}
-{%- set file_classpaths = file_deps|map(attribute='classpath')|unique|sort -%}
-{%- set file_jars = file_deps|map(attribute='jar')|unique|sort -%}
+{%- set file_classpaths = file_deps|map(attribute='classpath')|unique -%}
+{%- set file_jars = file_deps|map(attribute='jar')|unique -%}
+{%- set target_jars = target.consumer|selectattr('jar')|map(attribute='jar') -%}
 
-{%- set test_file_deps = extra_targets|selectattr('consumer')|map(attribute='consumer')|sum|selectattr('classpath')|selectattr('jar')|selectattr('prebuilt', 'eq', true) -%}
+{%- set alltests_file_deps = extra_targets|selectattr('consumer')|map(attribute='consumer')|sum|selectattr('classpath')|selectattr('jar')|selectattr('prebuilt', 'eq', true) -%}
 {%- if not build_contribs -%}
-{%-     set test_file_deps = test_file_deps|selectattr('type', 'ne', 'contrib') -%}
+{%-     set alltests_file_deps = alltests_file_deps|selectattr('type', 'ne', 'contrib') -%}
 {%- endif -%}
-{%- set test_file_classpaths = test_file_deps|map(attribute='classpath')|unique|sort -%}
-{%- set test_file_jars = test_file_deps|map(attribute='jar')|reject("in", file_jars)|unique|sort -%}
+{%- set alltests_file_jars = alltests_file_deps|map(attribute='jar')|unique -%}
 
+{%- if target is defined or with_test_errorprones|length or with_errorprone or with_kapt or with_test_kapt or file_jars|length or target.consumer|length or (proto_template and (prepareProtosTask or extractLibrariesProtosTask)) %}
 dependencies {
-{%- if with_errorprone %}
-    errorprone("com.google.errorprone:error_prone_core:{{ with_errorprone }}")
-{%- endif -%}
-{%- if with_test_errorprones|length -%}
-{%-     for with_test_errorprone in with_test_errorprones|reject("eq", with_errorprone) %}
-    errorprone("com.google.errorprone:error_prone_core:{{ with_test_errorprone }}")
-{%-     endfor -%}
-{%- endif -%}
+{%-     if with_test_errorprones|length or with_errorprone -%}
+{%-         set errorprones = with_test_errorprones -%}
+{%-         if with_errorprone -%}
+{%-             set errorprones = errorprones + [with_errorprone] -%}
+{%-         endif -%}
+{%-         for errorprone in errorprones|unique -%}
+{%-             set parts = split(errorprone, '.') -%}
+{%-             if parts[1]|int < 23 -%}
+{#-                 ErrorProne 2.7.1 / 2.10.0 / 2.18.0 crashed with IndexOutOfBoundsException on generated code, 2.23.0	- works good -#}
+{%-                 set errorprone = '2.23.0' -%}
+{%-             endif %}
+    errorprone("com.google.errorprone:error_prone_core:{{ errorprone }}")
+{%-         endfor -%}
+{%-     endif -%}
 {#- glue -#}
 {{ AnnotationProcessors("annotationProcessor", target.use_annotation_processors) }}
-{%- set test_annotation_processors = extra_targets|selectattr('use_annotation_processors')|map(attribute='use_annotation_processors')|sum -%}
-{{ AnnotationProcessors("testAnnotationProcessor", test_annotation_processors) }}
-{%- if with_kapt -%}
-{{ Kapts("kapt", target.kapt.kapts, file_jars, test_file_jars) }}
-{%- endif -%}
-{%- if with_test_kapt -%}
-{%-     for extra_target in extra_targets -%}
-{{ Kapts("kaptTest", extra_target.kapt.kapts, file_jars, test_file_jars) }}
-{%-     endfor -%}
-{%- endif -%}
-{#- glue -#}
-{{ TargetsConfigurations() }}
-{#- glue -#}
+{%-     if with_kapt -%}
+{{ Kapts("kapt", target.kapt.kapts, file_jars, alltests_file_jars) }}
+{%-     endif -%}
+{%-     if with_test_kapt -%}
+{%-         set test_kapts = extra_targets|selectattr('with_kapt', 'eq', true)|selectattr('kapt')|map(attribute='kapt')|selectattr('kapts')|map(attribute='kapts')|sum -%}
+{{ Kapts("kaptTest", test_kapts, file_jars, alltests_file_jars) }}
+{%-     endif -%}
 {{ AddNonFileDeps(target.consumer, file_classpaths, "implementation", "api") }}
-{%- set target_jars = target.consumer|selectattr('jar')|map(attribute='jar') -%}
-{{ AddNonFileDeps(extra_targets|selectattr('consumer')|map(attribute='consumer')|sum|rejectattr('jar', 'in', target_jars), test_file_classpaths, "testImplementation", "testImplementation") }}
+{%-     if file_jars|length -%}
+{{ AddFileJars('implementation', file_jars) }}
+{%-     endif -%}
 
-{%- if file_jars|length %}
-    implementation(files(listOf({#- glue -#}
-{{ AddFileJars(file_jars) }}
-    )))
+{%-     if proto_template -%}
+{%-         if prepareProtosTask %}
+    protobuf(files(prepareMainProtos))
+{%-         endif %}
+{%-         if extractLibrariesProtosTask %}
+    implementation(files(prepareMainIncludeProtos))
+{%-         endif %}
+{%-     endif %}
+}
 {%- endif -%}
 
-{%- if test_file_jars|length %}
-    testImplementation(files(listOf({#- glue -#}
-{{ AddFileJars(test_file_jars) }}
-    )))
-{%- endif %}
-
-{%- if proto_template -%}
-{%-     if prepareProtosTask %}
-    protobuf(files(prepareMainProtos))
-{%-     endif %}
-{%-     if extractLibrariesProtosTask %}
-    implementation(files(prepareMainIncludeProtos))
-{%-     endif %}
-{%- endif %}
+{%- if all_targets|selectattr('runs')|length %}
+dependencies {
+{{ TargetsConfigurations() }}
 }
+{%- endif -%}
+
+{%- if extra_targets|length -%}
+{%-     if named_tests -%}
+{%-         for extra_target in extra_targets %}
+
+dependencies {
+{%-             set testname = SourceSetName(extra_target) -%}
+{%-             if extra_target.use_annotation_processors|length -%}
+{%-                 if testname == NS_TEST -%}
+{%-                     set testAnnotationProcessor = 'testAnnotationProcessor' -%}
+{%-                 else -%}
+{%-                     set testAnnotationProcessor = '"' + testname + 'AnnotationProcessor' + '"' -%}
+{%-                 endif -%}
+{{ AnnotationProcessors(testAnnotationProcessor, extra_target.use_annotation_processors) }}
+{%-             endif -%}
+{%-             if extra_target.consumer -%}
+{%-                 set test_file_deps = extra_target.consumer|selectattr('classpath')|selectattr('jar')|selectattr('prebuilt', 'eq', true) -%}
+{%-                 if not build_contribs -%}
+{%-                     set test_file_deps = test_file_deps|selectattr('type', 'ne', 'contrib') -%}
+{%-                 endif -%}
+{%-                 set test_file_classpaths = test_file_deps|map(attribute='classpath')|unique -%}
+{%-                 set test_file_jars = test_file_deps|map(attribute='jar')|unique -%}
+{%-                 if testname == NS_TEST -%}
+{#-                     testImplementation already consists all main implemenation dependencies -#}
+{%-                     set main_file_jars = [] -%}
+{%-                     set test_file_jars = test_file_jars|reject("in", file_jars) -%}
+{%-                 else -%}
+{%-                     set main_file_jars = test_file_jars|select("in", file_jars) -%}
+{%-                     set test_file_jars = test_file_jars|reject("in", main_file_jars) -%}
+{%-                 endif -%}
+{%-                 set testImplementation = testname + 'Implementation' -%}
+{{ AddNonFileDeps(extra_target.consumer|rejectattr('jar', 'in', target_jars), test_file_classpaths, testImplementation, testImplementation) }}
+{#-
+                    In sem-graph for each target firstly appended direct peers, then it transitive peers.
+                    But direct and transitive peers may be in wrong order, we can't order it right here, this must do yexport.
+                    Try do simple optimization - firstly add test jars exists in main jars, then add only test jars.
+                    This is not best order, but best of bads.
+-#}
+{%-                 if main_file_jars|length -%}
+{#-                     Firstly add test jars, exists in main jars -#}
+{{ AddFileJars(testImplementation, main_file_jars) }}
+{%-                 endif -%}
+{%-                 if test_file_jars|length -%}
+{#-                     Then add only tests jars -#}
+{{ AddFileJars(testImplementation, test_file_jars) }}
+{%-                 endif -%}
+{%-             endif %}
+}
+{%-         endfor %}
+{%      else %}
+
+dependencies {
+{%-         set use_annotation_processors = extra_targets|selectattr('use_annotation_processors')|map(attribute='use_annotation_processors')|sum -%}
+{%-         if use_annotation_processors|length -%}
+{{ AnnotationProcessors('testAnnotationProcessor', use_annotation_processors) }}
+{%-         endif -%}
+{%-         set alltests_file_classpaths = alltests_file_deps|map(attribute='classpath')|unique -%}
+{{ AddNonFileDeps(extra_targets|selectattr('consumer')|map(attribute='consumer')|sum|rejectattr('jar', 'in', target_jars), alltests_file_classpaths, 'testImplementation', 'testImplementation') }}
+{#-         testImplementation already consists all main implemenation dependencies -#}
+{%-         set alltests_file_jars = alltests_file_jars|reject("in", file_jars) -%}
+{%-         if alltests_file_jars|length -%}
+{{ AddFileJars('testImplementation', alltests_file_jars) }}
+{%-         endif %}
+}
+{%      endif -%}
+{%- endif -%}

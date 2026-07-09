@@ -2444,7 +2444,7 @@ bool TFastDqInputChannel::Pop(NKikimr::NMiniKQL::TUnboxedValueBatch& batch, TMay
     bool hasData = popResult && !chunk.Buffer.Empty();
     if (hasData) {
         if (chunk.TransportVersion != Deserializer->TransportVersion || chunk.PackerVersion != Deserializer->PackerVersion) {
-            auto deserializer = CreateDeserializer(Deserializer->RowType, chunk.TransportVersion, chunk.PackerVersion, Nothing(), Deserializer->HolderFactory);
+            auto deserializer = CreateDeserializer(Deserializer->RowType, chunk.TransportVersion, chunk.PackerVersion, Deserializer->DatumValidationMode, Nothing(), Deserializer->HolderFactory);
             Deserializer = std::move(deserializer);
         }
         Deserializer->Deserialize(std::move(chunk.Buffer), batch);

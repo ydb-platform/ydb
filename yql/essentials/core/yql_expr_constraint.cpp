@@ -3478,7 +3478,7 @@ private:
             case TExprNode::EState::Initial:
             case TExprNode::EState::TypeInProgress:
             case TExprNode::EState::TypePending:
-                return TStatus(TStatus::Repeat, true);
+                return TStatus(TStatus::Repeat, /*hasRestart=*/true);
             case TExprNode::EState::TypeComplete:
                 break;
             case TExprNode::EState::ConstrInProgress:
@@ -3496,7 +3496,7 @@ private:
                     break;
                 }
 
-                return TStatus(TStatus::Repeat, true);
+                return TStatus(TStatus::Repeat, /*hasRestart=*/true);
             case TExprNode::EState::ConstrComplete:
             case TExprNode::EState::ExecutionInProgress:
             case TExprNode::EState::ExecutionRequired:
@@ -3571,7 +3571,7 @@ private:
             case TExprNode::EState::Initial:
             case TExprNode::EState::TypeInProgress:
             case TExprNode::EState::TypePending:
-                return TStatus(TStatus::Repeat, true);
+                return TStatus(TStatus::Repeat, /*hasRestart=*/true);
             case TExprNode::EState::TypeComplete:
             case TExprNode::EState::ConstrPending:
                 break;

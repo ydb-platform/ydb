@@ -655,15 +655,6 @@ public:
                 break;
             }
             case TSetColumnConstraintOperationInfo::EOperationState::Locking: {
-                // If cancelled, skip to Finishing to release locks without setting constraint
-                if (operationInfo.IsCancelled) {
-                    LOG_I("TTxProgressSetColumnConstraint: operation cancelled in Locking, jumping to Finishing, id# " << BuildId);
-                    NIceDb::TNiceDb db(txc.DB);
-                    ChangeState(BuildId, TSetColumnConstraintOperationInfo::EOperationState::Finishing);
-                    Progress(BuildId);
-                    break;
-                }
-
                 if (operationInfo.LockTxId == InvalidTxId) {
                     AllocateTxId(BuildId);
                 } else if (operationInfo.LockTxStatus == NKikimrScheme::StatusSuccess) {
@@ -809,3 +800,4 @@ ITransaction* TSchemeShard::CreateTxReplyValidateRowCondition(
 
 } // namespace NSchemeShard
 } // namespace NKikimr
+

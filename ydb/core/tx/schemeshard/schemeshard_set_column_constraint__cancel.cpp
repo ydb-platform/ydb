@@ -17,7 +17,7 @@ public:
 
     bool DoExecute(TTransactionContext& txc, const TActorContext&) override {
         const auto& record = Request->Get()->Record;
-        LOG_D("TTxGetSetColumnConstraint::DoExecute " << record.ShortDebugString());
+        LOG_D("TTxCancelSetColumnConstraint::DoExecute " << record.ShortDebugString());
 
         Response = MakeHolder<TEvSetColumnConstraint::TEvCancelResponse>(record.GetOperationId());
 
@@ -39,10 +39,10 @@ public:
 
         auto& operationInfo = *operationInfoPtr->get();
 
-        if (operationInfo.IsDone()) {
+        if (operationInfo.IsCloseToCompletion()) {
             return Reply(
                 Ydb::StatusIds::PRECONDITION_FAILED,
-                TStringBuilder() << "SetColumnConstraint operation with id <" << BuildId << "> has been finished already"
+                TStringBuilder() << "SetColumnConstraint operation with id <" << BuildId << "> has already finished or is too close to completion to be cancelled"
             );
         }
 

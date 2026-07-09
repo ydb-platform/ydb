@@ -81,6 +81,7 @@ private:
             HFunc(TEvTabletPipe::TEvClientDestroyed, HandleIdle);
             HFunc(TEvTabletPipe::TEvClientConnected, HandleIdle);
             HFunc(NConsole::TEvConsole::TEvConfigNotificationRequest, Handle);
+            IgnoreFunc(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse);
             IgnoreFunc(TEvNodeBroker::TEvExtendLeaseResponse);
 
         default:
@@ -98,6 +99,7 @@ private:
             HFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
             HFunc(TEvTabletPipe::TEvClientConnected, Handle);
             HFunc(NConsole::TEvConsole::TEvConfigNotificationRequest, Handle);
+            IgnoreFunc(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse);
 
         default:
             Y_ABORT("TLeaseHolder::StatePing unexpected event type: %" PRIx32 " event: %s",

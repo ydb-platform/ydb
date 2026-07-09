@@ -242,6 +242,10 @@ public:
 
         TSet<TGroupId> groupIDsToRead;
         TSet<TGroupId> groupsToDiscard;
+        // Effective subscription set for this RegisterNode:
+        // 1) groups inferred from local VSlots on this node,
+        // 2) groups explicitly listed by NodeWarden in RegisterNode.Record.Groups.
+        TSet<TGroupId> groupsToSubscribe;
 
         const TPDiskId minPDiskId(TPDiskId::MinForNode(nodeId));
         const TVSlotId vslotId = TVSlotId::MinForPDisk(minPDiskId);
@@ -249,6 +253,10 @@ public:
             Self->ReadVSlot(*it->second, Response.get());
             if (!it->second->IsBeingDeleted()) {
                 groupIDsToRead.insert(it->second->GroupId);
+                // Local dynamic VSlots imply local interest in group updates even without active proxy.
+                if (NKikimr::IsDynamicGroup(it->second->GroupId)) {
+                    groupsToSubscribe.insert(it->second->GroupId);
+                }
             }
         }
 
@@ -261,7 +269,12 @@ public:
             } else if (!hasGenerations || record.GetGroupGenerations(i) < group->Generation) { // group is obsolete at NW
                 groupIDsToRead.insert(groupId);
             }
-        };
+        }
+        for (ui32 groupIdProto : groups) {
+            // Keep backward-compatible behavior: every group requested explicitly by NodeWarden
+            // must remain in GroupsRequested.
+            groupsToSubscribe.insert(TGroupId::FromValue(groupIdProto));
+        }
 
         Self->ApplySyncerState(nodeId, record.GetSyncerState(), groupIDsToRead, /*comprehensive=*/ true);
         Self->SerializeSyncers(nodeId, &Response->Record, groupIDsToRead);
@@ -302,9 +315,9 @@ public:
         node.DeclarativePDiskManagement = record.GetDeclarativePDiskManagement();
         db.Table<Schema::Node>().Key(nodeId).Update<Schema::Node::LastConnectTimestamp>(node.LastConnectTimestamp);
 
-        for (ui32 groupId : record.GetGroups()) {
-            node.GroupsRequested.insert(TGroupId::FromValue(groupId));
-            Self->GroupToNode.emplace(TGroupId::FromValue(groupId), nodeId);
+        for (const TGroupId groupId : groupsToSubscribe) {
+            node.GroupsRequested.insert(groupId);
+            Self->GroupToNode.emplace(groupId, nodeId);
         }
 
         for (const auto& status : record.GetShredStatus()) {

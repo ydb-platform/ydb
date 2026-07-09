@@ -767,6 +767,41 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         UNIT_ASSERT_C(!FindOperatorByStringFieldContaining(simplifiedPlan, "Name", "TableFullScan"), plan);
     }
 
+    Y_UNIT_TEST(ExplainOriginalRowsHintsOldRbo) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableNewRBO(false);
+        appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
+        appConfig.MutableTableServiceConfig()->SetDefaultCostBasedOptimizationLevel(4);
+        TKikimrRunner kikimr(NKqp::TKikimrSettings(appConfig).SetWithSampleTables(false));
+        CreateOriginalRowsHintTables(kikimr);
+        auto session = CreateQuerySession(kikimr);
+        auto plan = ExecuteExplain(session, R"(
+            PRAGMA ydb.OptimizerHints =
+            '
+                Rows(R # 20e8)
+                Rows(T # 777)
+                Rows(S # 30e8)
+                Rows(R T # 1)
+                Rows(R S # 10e8)
+            ';
+            SELECT * FROM
+                `/Root/R` AS R INNER JOIN `/Root/S` AS S on R.id = S.id
+                    INNER JOIN `/Root/T` AS T on R.id = T.id;
+        )");
+
+        const auto simplifiedPlan = GetSimplifiedPlan(plan);
+        const auto* readR = FindOperatorByStringField(simplifiedPlan, "Table", "R");
+        const auto* readS = FindOperatorByStringField(simplifiedPlan, "Table", "S");
+        const auto* readT = FindOperatorByStringField(simplifiedPlan, "Table", "T");
+
+        UNIT_ASSERT_C(readR, plan);
+        UNIT_ASSERT_C(readS, plan);
+        UNIT_ASSERT_C(readT, plan);
+        UNIT_ASSERT_VALUES_EQUAL_C(GetStringField(*readR, "E-Rows"), "2000000000", plan);
+        UNIT_ASSERT_VALUES_EQUAL_C(GetStringField(*readS, "E-Rows"), "3000000000", plan);
+        UNIT_ASSERT_VALUES_EQUAL_C(GetStringField(*readT, "E-Rows"), "777", plan);
+    }
+
     Y_UNIT_TEST(EliminateUnusedLeftJoin) {
         TExplainPlanTestContext testContext;
         auto& session = testContext.GetSession();

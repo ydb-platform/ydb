@@ -61,7 +61,7 @@ public:
                 {"event", "PlannedItemStart"},
                 {"opType", TxOperator->GetOpType()});
             if (auto txPrepare = TxOperator->BuildTxPrepareForProgress(Self)) {
-                YDB_LOG_DEBUG("Dump event, details, opType",
+                YDB_LOG_DEBUG("",
                     {"event", "PlannedItemStart"},
                     {"details", "BuildTxPrepareForProgress"},
                     {"opType", TxOperator->GetOpType()});
@@ -77,7 +77,7 @@ public:
                 AFL_VERIFY(Self->InProgressTxId == txId);
                 return true;
             } else {
-                YDB_LOG_DEBUG("Dump event, details, opType",
+                YDB_LOG_DEBUG("",
                     {"event", "PlannedItemStart"},
                     {"details", "PopFirstPlannedTx"},
                     {"opType", TxOperator->GetOpType()});

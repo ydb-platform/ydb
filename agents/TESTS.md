@@ -48,6 +48,6 @@ Upgrade/downgrade tests live under `ydb/tests/compatibility/`.
 ./ya make --build relwithdebinfo -tA <folder> -F *test-filter*
 ```
 
-CLI tests (`ya make -tA`) can be run only on Linux.
+CLI tests (`ya make -tA`) run only on Linux.
 
-See [`AGENTS.md`](AGENTS.md) for more build and test conventions.
+Build rules: [`AGENTS.md`](AGENTS.md).

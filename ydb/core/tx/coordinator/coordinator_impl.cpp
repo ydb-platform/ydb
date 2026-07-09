@@ -27,12 +27,12 @@ static constexpr TDuration MaxPlanTickDelay = TDuration::Seconds(30);
 
 static void SendTransactionStatus(const TActorId &proxy, TEvTxProxy::TEvProposeTransactionStatus::EStatus status,
         ui64 txid, ui64 stepId, const TActorContext &ctx, ui64 tabletId) {
-    YDB_LOG_DEBUG_CTX(ctx, "SEND Proxy",
+    YDB_LOG_DEBUG_CTX(ctx, "SEND to proxy",
         {"tablet", tabletId},
         {"txid", txid},
         {"step", stepId},
         {"status", status},
-        {"to", proxy},
+        {"proxy", proxy},
         {"marker", "C1"});
     ctx.Send(proxy, new TEvTxProxy::TEvProposeTransactionStatus(status, txid, stepId));
 }
@@ -274,11 +274,11 @@ void TTxCoordinator::SchedulePlanTick() {
     TDuration delay = Min(TInstant::MilliSeconds(next) - now, MaxPlanTickDelay);
 
     // Schedule using an absolute deadline so we don't wake up early due to stale timer
-    YDB_LOG_TRACE("Scheduling step in",
+    YDB_LOG_TRACE("Scheduling step",
         {"coordinator", TabletID()},
-        {"next", next},
+        {"nextStep", next},
         {"delay", delay},
-        {"monotonicAndDelay", (monotonic + delay)});
+        {"atMonotonic", (monotonic + delay)});
     if (delay > TDuration::Zero()) {
         Schedule(monotonic + delay, new TEvPrivate::TEvPlanTick(next));
     } else {
@@ -302,11 +302,11 @@ void TTxCoordinator::SchedulePlanTickExact(ui64 next) {
 
     TDuration delay = Min(TInstant::MilliSeconds(next) - now, MaxPlanTickDelay);
 
-    YDB_LOG_TRACE("Scheduling step in",
+    YDB_LOG_TRACE("Scheduling step",
         {"coordinator", TabletID()},
-        {"next", next},
+        {"nextStep", next},
         {"delay", delay},
-        {"monotonicAndDelay", (monotonic + delay)});
+        {"atMonotonic", (monotonic + delay)});
     if (delay > TDuration::Zero()) {
         Schedule(monotonic + delay, new TEvPrivate::TEvPlanTick(next));
     } else {
@@ -438,12 +438,12 @@ void TTxCoordinator::Handle(TEvMediatorQueueRestart::TPtr &ev, const TActorConte
 void TTxCoordinator::SendStepConfirmations(TCoordinatorStepConfirmations &confirmations, const TActorContext &ctx) {
     while (!confirmations.Queue.empty()) {
         auto &x = confirmations.Queue.front();
-        YDB_LOG_DEBUG_CTX(ctx, "SEND EvProposeTransactionStatus Proxy",
+        YDB_LOG_DEBUG_CTX(ctx, "SEND EvProposeTransactionStatus to proxy",
             {"tablet", TabletID()},
             {"txid", x.TxId},
             {"step", x.Step},
             {"status", x.Status},
-            {"to", x.ProxyId});
+            {"proxy", x.ProxyId});
         ctx.Send(x.ProxyId, new TEvTxProxy::TEvProposeTransactionStatus(x.Status, x.TxId, x.Step));
         if (VolatileState.LastConfirmedStep < x.Step) {
             VolatileState.LastConfirmedStep = x.Step;
@@ -596,8 +596,8 @@ void TTxCoordinator::SendMediatorStep(TMediator &mediator, const TActorContext &
         }
 
         for (const auto& tx: it->Transactions) {
-            YDB_LOG_DEBUG_CTX(ctx, "Send",
-                {"from", TabletID()},
+            YDB_LOG_DEBUG_CTX(ctx, "Send to mediator",
+                {"tablet", TabletID()},
                 {"mediator", it->MediatorId},
                 {"step", it->Step},
                 {"txid", tx.TxId},

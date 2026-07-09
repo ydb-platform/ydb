@@ -70,8 +70,8 @@ class TTxCoordinatorMediatorQueue : public TActorBootstrapped<TTxCoordinatorMedi
     }
 
     void Sync(const TActorContext &ctx) {
-        YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::TX_COORDINATOR_PRIVATE, "to sync",
-            {"coordinator", Coordinator},
+        YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::TX_COORDINATOR_PRIVATE, "Coordinator to sync mediator",
+            {"tablet", Coordinator},
             {"mediator", Mediator});
 
         if (PipeClient) {

@@ -60,12 +60,12 @@ public:
         const auto& params = domainDescription.GetProcessingParams();
         if (params.GetVersion() < Version) {
             // Wait until the expected version is published
-            YDB_LOG_WARN("Ignoring update for path with processing params version waiting for version",
+            YDB_LOG_WARN("Ignoring update for path with stale version",
                 {"coordinator", TabletId},
                 {"tenantPathId", TenantPathId},
                 {"path", msg->Path},
-                {"paramsVersion", params.GetVersion()},
-                {"version", Version});
+                {"processingParamsVersion", params.GetVersion()},
+                {"waitingForVersion", Version});
             return;
         }
 
@@ -84,8 +84,7 @@ public:
                 {"coordinator", TabletId},
                 {"tenantPathId", TenantPathId},
                 {"path", msg->Path},
-                {"version", params.GetVersion()},
-                {"tabletId", TabletId});
+                {"version", params.GetVersion()});
             return PassAway();
         }
 

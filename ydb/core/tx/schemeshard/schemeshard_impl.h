@@ -490,6 +490,7 @@ public:
     }
 
     TTxId GetCachedTxId(const TActorContext& ctx);
+    void ReturnTxIdToCache(const TTxId txId);
 
     EAttachChildResult AttachChild(TPathElement::TPtr child);
     bool PathIsActive(TPathId pathId) const;

@@ -1,6 +1,7 @@
 #include "datashard_ut_common_kqp.h"
 #include <ydb/core/tablet_flat/shared_cache_counters.h>
 #include <ydb/core/tx/datashard/ut_common/datashard_ut_common.h>
+#include <ydb/core/tx/schemeshard/ut_helpers/helpers_flags_n.h>  // for Y_UNIT_TEST_FLAGS_N
 #include <ydb/core/tablet_flat/shared_sausagecache.h>
 #include <ydb/core/tablet_flat/test/libs/table/test_make.h>
 #include <ydb/core/testlib/actors/block_events.h>
@@ -190,7 +191,7 @@ Y_UNIT_TEST_SUITE(DataShardStats) {
         }
     }
 
-    Y_UNIT_TEST(HistogramStatsCorrect) {
+    Y_UNIT_TEST_FLAGS_N(HistogramStatsCorrect, bool EnableDataShardSplitHistogramSorting, bool EnableDataShardSplitKeySelection, bool EnableDataShardSplitHistogramOmission) {
         const auto gDbStatsDataSizeResolutionBefore = NDataShard::gDbStatsDataSizeResolution;
         const auto gDbStatsRowCountResolutionBefore = NDataShard::gDbStatsRowCountResolution;
         NDataShard::gDbStatsDataSizeResolution = 1; // by page stats
@@ -199,7 +200,12 @@ Y_UNIT_TEST_SUITE(DataShardStats) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root")
-            .SetUseRealThreads(false);
+            .SetUseRealThreads(false)
+            .SetEnableDataShardSplitHistogramSorting(EnableDataShardSplitHistogramSorting)
+            .SetEnableDataShardSplitKeySelection(EnableDataShardSplitKeySelection)
+            .SetEnableDataShardSplitHistogramOmission(EnableDataShardSplitHistogramOmission)
+        ;
+        serverSettings.AppConfig->MutableDataShardConfig()->SetStatsReportIntervalSeconds(1);
 
         TServer::TPtr server = new TServer(serverSettings);
         auto& runtime = *server->GetRuntime();
@@ -246,9 +252,15 @@ Y_UNIT_TEST_SUITE(DataShardStats) {
         {
             auto stats = GetTableStats(runtime, shard1, tableId1.PathId.LocalPathId);
 
-            auto dataSizeHistogram = ReadHistogram(stats.GetDataSizeHistogram());
-            TVector<std::pair<ui64, ui64>> expectedDataSizeHistogram = {{475, 7145}, {950, 14290}, {1425, 21435}, {1900, 28580}};
-            UNIT_ASSERT_VALUES_EQUAL(expectedDataSizeHistogram, dataSizeHistogram);
+            if (EnableDataShardSplitHistogramOmission) {
+                UNIT_ASSERT_VALUES_EQUAL(stats.HasDataSizeHistogram(), false);
+            } else {
+                auto dataSizeHistogram = ReadHistogram(stats.GetDataSizeHistogram());
+                TVector<std::pair<ui64, ui64>> expectedDataSizeHistogram = {{475, 7145}, {950, 14290}, {1425, 21435}, {1900, 28580}};
+                UNIT_ASSERT_VALUES_EQUAL(expectedDataSizeHistogram, dataSizeHistogram);
+            }
+
+            UNIT_ASSERT_VALUES_EQUAL(EnableDataShardSplitKeySelection || EnableDataShardSplitHistogramOmission, stats.HasSplitBySizeSuggestedKey());
 
             auto rowCountHistogram = ReadHistogram(stats.GetRowCountHistogram());
             TVector<std::pair<ui64, ui64>> expectedRowCountHistogram = {{475, 475}, {950, 950}, {1425, 1425}, {1900, 1900}};
@@ -280,12 +292,12 @@ Y_UNIT_TEST_SUITE(DataShardStats) {
 
         auto opts = TShardedTableOptions()
             .Columns({
-                {"key", "Uint32", true, false}, 
-                {"value", "String", false, false}, 
+                {"key", "Uint32", true, false},
+                {"value", "String", false, false},
                 {"value2", "String", false, false, "hdd"}})
             .Families({
-                {.Name = "default", .LogPoolKind = "ssd", .SysLogPoolKind = "ssd", .DataPoolKind = "ssd", 
-                    .ExternalPoolKind = "ext", .DataThreshold = 100u, .ExternalThreshold = 200u}, 
+                {.Name = "default", .LogPoolKind = "ssd", .SysLogPoolKind = "ssd", .DataPoolKind = "ssd",
+                    .ExternalPoolKind = "ext", .DataThreshold = 100u, .ExternalThreshold = 200u},
                 {.Name = "hdd", .DataPoolKind = "hdd"}});
         CreateShardedTable(server, sender, "/Root", "table-1", opts);
         const auto shard1 = GetTableShards(server, sender, "/Root/table-1").at(0);
@@ -293,11 +305,11 @@ Y_UNIT_TEST_SUITE(DataShardStats) {
 
         TString smallValue(150, 'S');
         TString largeValue(1500, 'L');
-        ExecSQL(server, sender, (TString)"UPSERT INTO `/Root/table-1` (key, value, value2) VALUES " + 
-            "(1, \"AAA\", \"AAA\"), " + 
-            "(2, \"" + smallValue + "\", \"BBB\"), " + 
-            "(3, \"CCC\", \"" + smallValue + "\"), " + 
-            "(4, \"" + largeValue + "\", \"BBB\"), " + 
+        ExecSQL(server, sender, (TString)"UPSERT INTO `/Root/table-1` (key, value, value2) VALUES " +
+            "(1, \"AAA\", \"AAA\"), " +
+            "(2, \"" + smallValue + "\", \"BBB\"), " +
+            "(3, \"CCC\", \"" + smallValue + "\"), " +
+            "(4, \"" + largeValue + "\", \"BBB\"), " +
             "(5, \"CCC\", \"" + largeValue + "\")");
 
         {
@@ -353,7 +365,7 @@ Y_UNIT_TEST_SUITE(DataShardStats) {
 
         auto opts = TShardedTableOptions()
             .Columns({
-                {"key", "Uint32", true, false}, 
+                {"key", "Uint32", true, false},
                 {"value", "String", true, false}});
         CreateShardedTable(server, sender, "/Root", "table-1", opts);
         const auto shard1 = GetTableShards(server, sender, "/Root/table-1").at(0);
@@ -417,7 +429,7 @@ Y_UNIT_TEST_SUITE(DataShardStats) {
 
         auto opts = TShardedTableOptions()
             .Columns({
-                {"key", "Uint32", true, false}, 
+                {"key", "Uint32", true, false},
                 {"value", "Uint32", true, false}})
             .Policy(policy.Get());
 
@@ -504,55 +516,6 @@ Y_UNIT_TEST_SUITE(DataShardStats) {
         NDataShard::gDbStatsRowCountResolution = gDbStatsRowCountResolutionBefore;
     }
 
-    Y_UNIT_TEST(Follower) {
-        TPortManager pm;
-        TServerSettings serverSettings(pm.GetPort(2134));
-        serverSettings.SetDomainName("Root")
-            .SetUseRealThreads(false)
-            .SetEnableForceFollowers(true);
-
-        TServer::TPtr server = new TServer(serverSettings);
-        auto& runtime = *server->GetRuntime();
-        auto sender = runtime.AllocateEdgeActor();
-        
-        //runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
-        // runtime.SetLogPriority(NKikimrServices::TABLET_STATS_BUILDER, NLog::PRI_TRACE);
-
-        InitRoot(server, sender);
-
-        auto [shards, tableId1] = CreateShardedTable(server, sender, "/Root", "table-1",
-            TShardedTableOptions()
-                .Followers(3));
-        ui64 shard1 = shards.at(0);
-
-        ExecSQL(server, sender, "UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 1), (2, 2);");
-
-        {
-            Cerr << "... waiting leader stats" << Endl;
-            auto stats = WaitTableStats(runtime, shard1);
-            UNIT_ASSERT_VALUES_EQUAL(stats.GetDatashardId(), shard1);
-            UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetRowUpdates(), 2);
-            UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetRowCount(), 2);
-        }        
-        
-        {
-            auto selectResult = KqpSimpleStaleRoExec(runtime, "SELECT * FROM `/Root/table-1`", "/Root");
-            TString expectedSelectResult = 
-                "{ items { uint32_value: 1 } items { uint32_value: 1 } }, "
-                "{ items { uint32_value: 2 } items { uint32_value: 2 } }";
-            UNIT_ASSERT_VALUES_EQUAL(selectResult, expectedSelectResult);
-        }
-
-        {
-            Cerr << "... waiting for follower stats" << Endl;
-            auto stats = WaitTableFollowerStats(runtime, shard1);
-            UNIT_ASSERT_VALUES_EQUAL(stats.GetDatashardId(), shard1);
-            UNIT_ASSERT_GE(stats.GetFollowerId(), 1);
-            UNIT_ASSERT_LE(stats.GetFollowerId(), 3);
-            UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetRangeReadRows(), 2);
-        }
-    }
-
     Y_UNIT_TEST(Tli) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
@@ -562,7 +525,7 @@ Y_UNIT_TEST_SUITE(DataShardStats) {
         TServer::TPtr server = new TServer(serverSettings);
         auto& runtime = *server->GetRuntime();
         auto sender = runtime.AllocateEdgeActor();
-        
+
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
         runtime.SetLogPriority(NKikimrServices::TABLET_STATS_BUILDER, NLog::PRI_TRACE);
 
@@ -570,7 +533,7 @@ Y_UNIT_TEST_SUITE(DataShardStats) {
 
         const ui64 lockTxId = 1011121314;
         i64 txId = 100;
-        TShardedTableOptions opts;        
+        TShardedTableOptions opts;
         auto [shards, tableId1] = CreateShardedTable(server, sender, "/Root", "table-1", opts);
         ui64 shard1 = shards.at(0);
 
@@ -589,7 +552,7 @@ Y_UNIT_TEST_SUITE(DataShardStats) {
             UNIT_ASSERT_VALUES_EQUAL(stats.GetDatashardId(), shard1);
             UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetRowUpdates(), 1);
             UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetRowCount(), 1);
-        }          
+        }
 
         {
             Cerr << "... Read and set lock" << Endl;
@@ -610,7 +573,7 @@ Y_UNIT_TEST_SUITE(DataShardStats) {
             UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetRowReads(), 1);
             UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetLocksAcquired(), 1);
             UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetLocksBroken(), 0);
-        }        
+        }
 
         {
             Cerr << "... UPSERT and break lock" << Endl;
@@ -627,7 +590,7 @@ Y_UNIT_TEST_SUITE(DataShardStats) {
 
             UNIT_ASSERT_VALUES_EQUAL(readResult2->Record.TxLocksSize(), 0);
             UNIT_ASSERT_VALUES_EQUAL(readResult2->Record.BrokenTxLocksSize(), 1);
-        }     
+        }
 
         {
             Cerr << "... waiting for SELECT stats with broken locks" << Endl;
@@ -637,7 +600,7 @@ Y_UNIT_TEST_SUITE(DataShardStats) {
             UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetLocksAcquired(), 1);
             UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetLocksBroken(), 1);
         }
-    }    
+    }
 
     Y_UNIT_TEST(HasSchemaChanges_BTreeIndex) {
         TPortManager pm;
@@ -874,6 +837,817 @@ Y_UNIT_TEST_SUITE(DataShardStats) {
         // Once every 30 seconds
         UNIT_ASSERT_GE(tableToStatsCount[tableId2.PathId.LocalPathId], 1);
         UNIT_ASSERT_LE(tableToStatsCount[tableId2.PathId.LocalPathId], 2);
+    }
+
+    /**
+     * Send the EvGetTableStats message to the given tablet
+     * and wait for the EvGetTableStatsResult message to come back.
+     *
+     * @param[in] runtime The test runtime
+     * @param[in] senderActorId The ID of the actor to use for sending messages
+     * @param[in] tabletId The ID of the tablet to send the message to
+     * @param[in] tableId The ID of the table to send the message to
+     * @param[in] collectKeySample If true, request the key sample to be collected
+     * @param[in] toFollower If true, send the message to the follower (the leader otherwise)
+     *
+     * @return The corresponding EvGetTableStatsResult response message
+     */
+    NKikimrTxDataShard::TEvGetTableStatsResult SendEvTableStats(
+        TTestActorRuntime& runtime,
+        TActorId senderActorId,
+        ui64 tabletId,
+        ui64 tableId,
+        bool collectKeySample,
+        bool toFollower
+    ) {
+        Cerr << "TEST Sending the EvGetTableStats message to the tablet " << tabletId
+            << ", tableId=" << tableId
+            << ", collectKeySample=" << collectKeySample
+            << ", toFollower=" << toFollower
+            << Endl;
+
+        auto request = MakeHolder<TEvDataShard::TEvGetTableStats>(tableId);
+        request->Record.SetCollectKeySample(collectKeySample);
+
+        auto pipeConfig = GetPipeConfigWithRetries();
+        pipeConfig.ForceFollower = toFollower;
+
+        runtime.SendToPipe(tabletId, senderActorId, request.Release(), 0, pipeConfig);
+        auto ev = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvGetTableStatsResult>(senderActorId);
+
+        Cerr << "TEST Received the TEvGetTableStatsResult response from the tablet " << tabletId
+            << ", tableId=" << tableId
+            << ", collectKeySample=" << collectKeySample
+            << ", toFollower=" << toFollower
+            << Endl
+            << ev->Get()->Record.DebugString()
+            << Endl;
+
+        return ev->Get()->Record;
+    }
+
+    /**
+     * Execute a number of tests, which verify the key sample collection logic
+     * in DataShard by sending various EvGetTableStats messages to the tablet
+     * leader/follower and verifying the responses in EvGetTableStatsResult.
+     *
+     * @param[in] testFollower If true, use the follower for testing (the leader otherwise)
+     */
+    void VerifyKeySampleCollection(bool testFollower, bool EnableDataShardSplitHistogramSorting, bool EnableDataShardSplitKeySelection) {
+        const ui32 expectedSplitProtocolVersion = [&]() {
+            if (EnableDataShardSplitKeySelection) {
+                return 2;
+            } else if (EnableDataShardSplitHistogramSorting) {
+                return 1;
+            } else {
+                return 0;
+            }
+        }();
+
+        // Create a table with a single follower
+        Cerr << "TEST Creating a sample table" << Endl;
+
+        auto serverSettings = TServerSettings(TPortManager().GetPort(2134))
+            .SetDomainName("Root")
+            .SetUseRealThreads(false)
+            .SetEnableForceFollowers(true)
+            .SetEnableDataShardSplitHistogramSorting(EnableDataShardSplitHistogramSorting)
+            .SetEnableDataShardSplitKeySelection(EnableDataShardSplitKeySelection)
+            .SetEnableDataShardSplitHistogramOmission(false)
+        ;
+
+        const ui32 collectionMinInterval = 5;
+        const ui32 collectionMaxInterval = 60;
+        const ui32 collectionValidInterval = 30;
+
+        TServer::TPtr server = new TServer(serverSettings);
+        auto& runtime = *(server->GetRuntime());
+        auto senderActorId = runtime.AllocateEdgeActor();
+
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+
+        InitRoot(server, senderActorId);
+
+        auto [shards, tableId] = CreateShardedTable(
+            server,
+            senderActorId,
+            "/Root",
+            "table-1",
+            TShardedTableOptions()
+                .Followers(1)
+        );
+
+        const auto shardId = shards.at(0);
+
+        // Populate it with some fake data
+        Cerr << "TEST Populating the table with test data" << Endl;
+        UpsertRows(server, senderActorId, 1, 100);
+
+        // Before the key sample collection is active, send some reads
+        // for some keys - they should be ignored in subsequent key samples.
+        // NOTE: also a follower will not be initialized until the first read
+        {
+            auto result = KqpSimpleExec(
+                runtime,
+                (
+                    "SELECT key FROM `/Root/table-1` "
+                    "WHERE (key = 2) OR (key = 4) OR (key = 6) "
+                    "ORDER BY key ASC"
+                ),
+                testFollower /* staleRo */,
+                "/Root"
+            );
+
+            UNIT_ASSERT_VALUES_EQUAL(
+                result,
+                (
+                    "{ items { uint32_value: 2 } }, "
+                    "{ items { uint32_value: 4 } }, "
+                    "{ items { uint32_value: 6 } }"
+                )
+            );
+        }
+
+        // Wait for some time to make sure the average CPU values become ready
+        runtime.SimulateSleep(TDuration::Seconds(20));
+
+        // TEST 1: Send EvGetTableStats before the key sample collection is active
+        //         without requesting a key sample.
+        //
+        // EXPECTED RESULT: No key sample in the EvGetTableStatsResult response
+        //                  because the collection is not active yet
+        {
+            const TString msg = (
+                "TEST 1: EvGetTableStats(collectKeySample=false) "
+                "before starting the key sample collection"
+            );
+
+            Cerr << msg << Endl;
+
+            auto result = SendEvTableStats(
+                runtime,
+                senderActorId,
+                shardId,
+                tableId.PathId.LocalPathId,
+                false /* collectKeySample */,
+                testFollower
+            );
+
+            // UNIT_ASSERT_VALUES_UNEQUAL_C(result.GetTabletMetrics().GetCPU(), 0, msg);
+
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetTableStats().GetSplitProtocolVersion(), expectedSplitProtocolVersion, msg);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetTableStats().HasKeyAccessSample(), false, msg);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetTableStats().HasSplitByLoadSuggestedKey(), false, msg);
+        }
+
+        // TEST 2: Send EvGetTableStats with the collectKeySample flag set to activate
+        //         the collection of the key access statistics.
+        //
+        // EXPECTED RESULT: No key sample in the EvGetTableStatsResult response
+        //                  because the collection has not been running long enough
+        const auto collectionStartTime = runtime.GetCurrentTime();
+
+        {
+            const TString msg = (
+                "TEST 2: EvGetTableStats(collectKeySample=true) "
+                "to activate the key collection"
+            );
+
+            Cerr << msg << Endl;
+
+            auto result = SendEvTableStats(
+                runtime,
+                senderActorId,
+                shardId,
+                tableId.PathId.LocalPathId,
+                true /* collectKeySample */,
+                testFollower
+            );
+
+            // UNIT_ASSERT_VALUES_UNEQUAL_C(result.GetTabletMetrics().GetCPU(), 0, msg);
+
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetTableStats().GetSplitProtocolVersion(), expectedSplitProtocolVersion, msg);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetTableStats().HasKeyAccessSample(), false, msg);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetTableStats().HasSplitByLoadSuggestedKey(), false, msg);
+        }
+
+        // Send some additional reads for new keys - they should be captured
+        // in the key access sample, but only after the minimal collection times has passed
+        {
+            auto result = KqpSimpleExec(
+                runtime,
+                (
+                    "SELECT key FROM `/Root/table-1` "
+                    "WHERE (key = 12) OR (key = 14) OR (key = 16) "
+                    "ORDER BY key ASC"
+                ),
+                testFollower /* staleRo */,
+                "/Root"
+            );
+
+            UNIT_ASSERT_VALUES_EQUAL(
+                result,
+                (
+                    "{ items { uint32_value: 12 } }, "
+                    "{ items { uint32_value: 14 } }, "
+                    "{ items { uint32_value: 16 } }"
+                )
+            );
+        }
+
+        // TEST 3: Send EvGetTableStats before the minimal collection time has passed.
+        //
+        // EXPECTED RESULT: No key sample in the EvGetTableStatsResult response
+        //                  because the collection has not been running long enough
+        {
+            const TString msg = (
+                "TEST 3: EvGetTableStats(collectKeySample=false) "
+                "before the min collection time"
+            );
+
+            Cerr << msg << Endl;
+
+            auto result = SendEvTableStats(
+                runtime,
+                senderActorId,
+                shardId,
+                tableId.PathId.LocalPathId,
+                false /* collectKeySample */,
+                testFollower
+            );
+
+            // UNIT_ASSERT_VALUES_UNEQUAL_C(result.GetTabletMetrics().GetCPU(), 0, msg);
+
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetTableStats().GetSplitProtocolVersion(), expectedSplitProtocolVersion, msg);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetTableStats().HasKeyAccessSample(), false, msg);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetTableStats().HasSplitByLoadSuggestedKey(), false, msg);
+        }
+
+        // Wait for the collection statistics to be accumulated
+        //
+        // NOTE: This is exactly min interval + 1 seconds from the moment
+        //       the key collection was started to ignore the time
+        //       spent on executing the above SELECT queries
+        runtime.SimulateSleep(
+            TDuration::Seconds(collectionMinInterval + 1)
+                - (runtime.GetCurrentTime() - collectionStartTime)
+        );
+
+        // TEST 4: Send EvGetTableStats after the minimal collection time has passed.
+        //
+        // EXPECTED RESULT: The key sample in the EvGetTableStatsResult response
+        //                  should be populated because the collection has been running
+        //                  for longer than the minimal collection time
+        {
+            const TString msg = (
+                "TEST 4: EvGetTableStats(collectKeySample=false) "
+                "after the min collection time"
+            );
+
+            Cerr << msg << Endl;
+
+            auto result = SendEvTableStats(
+                runtime,
+                senderActorId,
+                shardId,
+                tableId.PathId.LocalPathId,
+                false /* collectKeySample */,
+                testFollower
+            );
+
+            // UNIT_ASSERT_VALUES_UNEQUAL_C(result.GetTabletMetrics().GetCPU(), 0, msg);
+
+            const auto keyAccessSample = ReadHistogram(result.GetTableStats().GetKeyAccessSample());
+            const TVector<std::pair<ui64, ui64>> expectedKeyAccessSample = {
+                {12, 1},
+                {14, 1},
+                {16, 1},
+            };
+
+            UNIT_ASSERT_VALUES_EQUAL_C(keyAccessSample, expectedKeyAccessSample, msg);
+
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetTableStats().GetSplitProtocolVersion(), expectedSplitProtocolVersion, msg);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetTableStats().HasSplitByLoadSuggestedKey(), EnableDataShardSplitKeySelection, msg);
+        }
+
+        // TEST 5: Send EvGetTableStats with the collectKeySample flag set to extend
+        //         the collection of the key access statistics.
+        //
+        // EXPECTED RESULT: The key sample in the EvGetTableStatsResult response
+        //                  should be populated because the collection has been running
+        //                  for longer than the minimal collection time
+        const auto collectionExtendTime = runtime.GetCurrentTime();
+
+        {
+            const TString msg = (
+                "TEST 5: EvGetTableStats(collectKeySample=true) "
+                "to extend the duration of the key collection"
+            );
+
+            Cerr << msg << Endl;
+
+            auto result = SendEvTableStats(
+                runtime,
+                senderActorId,
+                shardId,
+                tableId.PathId.LocalPathId,
+                true /* collectKeySample */,
+                testFollower
+            );
+
+            // UNIT_ASSERT_VALUES_UNEQUAL_C(result.GetTabletMetrics().GetCPU(), 0, msg);
+
+            const auto keyAccessSample = ReadHistogram(result.GetTableStats().GetKeyAccessSample());
+            const TVector<std::pair<ui64, ui64>> expectedKeyAccessSample = {
+                {12, 1},
+                {14, 1},
+                {16, 1},
+            };
+
+            UNIT_ASSERT_VALUES_EQUAL_C(keyAccessSample, expectedKeyAccessSample, msg);
+        }
+
+        // TEST 6: Send EvGetTableStats after extending the duration of the key collection
+        //
+        // EXPECTED RESULT: The key sample in the EvGetTableStatsResult response
+        //                  should be populated because the collection has been running
+        //                  for longer than the minimal collection time
+        {
+            const TString msg = (
+                "TEST 6: EvGetTableStats(collectKeySample=false) "
+                "after extending the duration of the key collection"
+            );
+
+            Cerr << msg << Endl;
+
+            auto result = SendEvTableStats(
+                runtime,
+                senderActorId,
+                shardId,
+                tableId.PathId.LocalPathId,
+                false /* collectKeySample */,
+                testFollower
+            );
+
+            // UNIT_ASSERT_VALUES_UNEQUAL_C(result.GetTabletMetrics().GetCPU(), 0, msg);
+
+            const auto keyAccessSample = ReadHistogram(result.GetTableStats().GetKeyAccessSample());
+            const TVector<std::pair<ui64, ui64>> expectedKeyAccessSample = {
+                {12, 1},
+                {14, 1},
+                {16, 1},
+            };
+
+            UNIT_ASSERT_VALUES_EQUAL_C(keyAccessSample, expectedKeyAccessSample, msg);
+        }
+
+        // Wait for the initial key collection period to expire but before
+        // the extended period completes
+        //
+        // NOTE: This is exactly max interval + 6 seconds from the moment
+        //       the key collection was started to ignore the time
+        //       spent on executing the above SELECT queries.
+        //       6 seconds are needed because the collection expiration is handled
+        //       by the periodic task working in DataShard, which runs every 5 seconds
+        runtime.SimulateSleep(
+            TDuration::Seconds(collectionMaxInterval + 6)
+                - (runtime.GetCurrentTime() - collectionStartTime)
+        );
+
+        // Send some additional reads for new keys - they should be captured
+        // in the key access sample, but only if the key collection was extended
+        {
+            auto result = KqpSimpleExec(
+                runtime,
+                (
+                    "SELECT key FROM `/Root/table-1` "
+                    "WHERE (key = 22) OR (key = 24) OR (key = 26) "
+                    "ORDER BY key ASC"
+                ),
+                testFollower /* staleRo */,
+                "/Root"
+            );
+
+            UNIT_ASSERT_VALUES_EQUAL(
+                result,
+                (
+                    "{ items { uint32_value: 22 } }, "
+                    "{ items { uint32_value: 24 } }, "
+                    "{ items { uint32_value: 26 } }"
+                )
+            );
+        }
+
+        // TEST 7: Send EvGetTableStats after the initial collection expires
+        //
+        // EXPECTED RESULT: The key sample in the EvGetTableStatsResult response
+        //                  should be populated because the collection has been extended
+        {
+            const TString msg = (
+                "TEST 7: EvGetTableStats(collectKeySample=false) "
+                "after the initial collection period expires"
+            );
+
+            Cerr << msg << Endl;
+
+            auto result = SendEvTableStats(
+                runtime,
+                senderActorId,
+                shardId,
+                tableId.PathId.LocalPathId,
+                false /* collectKeySample */,
+                testFollower
+            );
+
+            // UNIT_ASSERT_VALUES_UNEQUAL_C(result.GetTabletMetrics().GetCPU(), 0, msg);
+
+            const auto keyAccessSample = ReadHistogram(result.GetTableStats().GetKeyAccessSample());
+            const TVector<std::pair<ui64, ui64>> expectedKeyAccessSample = {
+                {12, 1},
+                {14, 1},
+                {16, 1},
+                {22, 1},
+                {24, 1},
+                {26, 1},
+            };
+
+            UNIT_ASSERT_VALUES_EQUAL_C(keyAccessSample, expectedKeyAccessSample, msg);
+        }
+
+        // Wait for the extended key collection period to expire
+        //
+        // NOTE: This is exactly max interval + 6 seconds from the moment
+        //       the key collection was extended to ignore the time
+        //       spent on executing the above SELECT queries.
+        //       6 seconds are needed because the collection expiration is handled
+        //       by the periodic task working in DataShard, which runs every 5 seconds
+        runtime.SimulateSleep(
+            TDuration::Seconds(collectionMaxInterval + 6)
+                - (runtime.GetCurrentTime() - collectionExtendTime)
+        );
+
+        // Send some additional reads for new keys - they should not be captured
+        // in the key access sample because the collection has already been stopped
+        {
+            auto result = KqpSimpleExec(
+                runtime,
+                (
+                    "SELECT key FROM `/Root/table-1` "
+                    "WHERE (key = 32) OR (key = 34) OR (key = 36) "
+                    "ORDER BY key ASC"
+                ),
+                testFollower /* staleRo */,
+                "/Root"
+            );
+
+            UNIT_ASSERT_VALUES_EQUAL(
+                result,
+                (
+                    "{ items { uint32_value: 32 } }, "
+                    "{ items { uint32_value: 34 } }, "
+                    "{ items { uint32_value: 36 } }"
+                )
+            );
+        }
+
+        // TEST 8: Send EvGetTableStats after the extended collection expires
+        //
+        // EXPECTED RESULT: The key sample in the EvGetTableStatsResult response
+        //                  should be populated because the collected key sample
+        //                  is still valid
+        {
+            const TString msg = (
+                "TEST 8: EvGetTableStats(collectKeySample=false) "
+                "after the extended collection period expires"
+            );
+
+            Cerr << msg << Endl;
+
+            auto result = SendEvTableStats(
+                runtime,
+                senderActorId,
+                shardId,
+                tableId.PathId.LocalPathId,
+                false /* collectKeySample */,
+                testFollower
+            );
+
+            // UNIT_ASSERT_VALUES_UNEQUAL_C(result.GetTabletMetrics().GetCPU(), 0, msg);
+
+            const auto keyAccessSample = ReadHistogram(result.GetTableStats().GetKeyAccessSample());
+            const TVector<std::pair<ui64, ui64>> expectedKeyAccessSample = {
+                {12, 1},
+                {14, 1},
+                {16, 1},
+                {22, 1},
+                {24, 1},
+                {26, 1},
+            };
+
+            UNIT_ASSERT_VALUES_EQUAL_C(keyAccessSample, expectedKeyAccessSample, msg);
+        }
+
+        // Wait for the collected key sample to become invalid
+        runtime.SimulateSleep(TDuration::Seconds(collectionValidInterval + 1));
+
+        // Send some additional reads for new keys - they should not be captured
+        // in the key access sample because the collection has already been stopped
+        {
+            auto result = KqpSimpleExec(
+                runtime,
+                (
+                    "SELECT key FROM `/Root/table-1` "
+                    "WHERE (key = 42) OR (key = 44) OR (key = 46) "
+                    "ORDER BY key ASC"
+                ),
+                testFollower /* staleRo */,
+                "/Root"
+            );
+
+            UNIT_ASSERT_VALUES_EQUAL(
+                result,
+                (
+                    "{ items { uint32_value: 42 } }, "
+                    "{ items { uint32_value: 44 } }, "
+                    "{ items { uint32_value: 46 } }"
+                )
+            );
+        }
+
+        // TEST 9: Send EvGetTableStats after the collected key sample becomes invalid
+        //
+        // EXPECTED RESULT: No key sample in the EvGetTableStatsResult response
+        //                  because the collection is not active and the collected
+        //                  key sample has already expired
+        {
+            const TString msg = (
+                "TEST 9: EvGetTableStats(collectKeySample=false) "
+                "after the collected key sample becomes invalid"
+            );
+
+            Cerr << msg << Endl;
+
+            auto result = SendEvTableStats(
+                runtime,
+                senderActorId,
+                shardId,
+                tableId.PathId.LocalPathId,
+                false /* collectKeySample */,
+                testFollower
+            );
+
+            // UNIT_ASSERT_VALUES_UNEQUAL_C(result.GetTabletMetrics().GetCPU(), 0, msg);
+
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetTableStats().GetSplitProtocolVersion(), expectedSplitProtocolVersion, msg);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetTableStats().HasKeyAccessSample(), false, msg);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetTableStats().HasSplitByLoadSuggestedKey(), false, msg);
+        }
+    }
+
+    /**
+     * Verify that the key sample collection works correctly for the leader.
+     */
+    Y_UNIT_TEST_FLAGS_N(CollectKeySampleLeader, bool EnableDataShardSplitHistogramSorting, bool EnableDataShardSplitKeySelection) {
+        VerifyKeySampleCollection(false /* testFollower */, EnableDataShardSplitHistogramSorting, EnableDataShardSplitKeySelection);
+    }
+
+    // Verify that TableStats.SplitByLoadSuggestedKey is set but empty when split boundary can't be selected from the data.
+    Y_UNIT_TEST_FLAGS_N(SplitByLoadSuggestedKeyIsEmptyOnNotEnoughData, bool EnableDataShardSplitHistogramOmission) {
+        const bool Follower = false;
+
+        const ui32 collectionMinInterval = 5;
+
+        auto serverSettings = TServerSettings(TPortManager().GetPort(2134))
+            .SetDomainName("Root")
+            .SetUseRealThreads(false)
+            .SetEnableForceFollowers(true)
+            .SetEnableDataShardSplitHistogramSorting(true)
+            .SetEnableDataShardSplitKeySelection(true)
+            .SetEnableDataShardSplitHistogramOmission(EnableDataShardSplitHistogramOmission)
+        ;
+
+        const ui32 expectedSplitProtocolVersion = (EnableDataShardSplitHistogramOmission ? 3 : 2);
+
+        TServer::TPtr server = new TServer(serverSettings);
+        auto& runtime = *(server->GetRuntime());
+        auto senderActorId = runtime.AllocateEdgeActor();
+
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+
+        InitRoot(server, senderActorId);
+
+        // Create a table with a single follower
+        Cerr << "TEST Creating a sample table" << Endl;
+
+        auto [shards, tableId] = CreateShardedTable(
+            server,
+            senderActorId,
+            "/Root",
+            "table-1",
+            TShardedTableOptions()
+                .Followers(1)
+        );
+
+        const auto shardId = shards.at(0);
+
+        // Populate it with some fake data
+        Cerr << "TEST Populating the table with test data" << Endl;
+        UpsertRows(server, senderActorId, 1, 100);
+
+        auto readSingleKey = [&](ui32 key) {
+            for (auto i : xrange(3)) {
+                Y_UNUSED(i);
+                auto result = KqpSimpleExec(
+                    runtime,
+                    Sprintf("SELECT key FROM `/Root/table-1` WHERE (key = %u)", key),
+                    Follower /* staleRo */,
+                    "/Root"
+                );
+
+                UNIT_ASSERT_VALUES_EQUAL(
+                    result,
+                    Sprintf("{ items { uint32_value: %u } }", key)
+                );
+            }
+        };
+
+        if (Follower) {
+            Cerr << "TEST Read the follower to initialize" << Endl;
+            // Read from the follower to make it know the table it serves.
+            readSingleKey(10);
+        }
+
+        // Send EvGetTableStats with the collectKeySample flag set to activate
+        // the collection of the key access statistics.
+        //
+        // EXPECTED RESULT: No suggested split key in the EvGetTableStatsResult response
+        // because the collection has not been running long enough
+        const auto collectionStartTime = runtime.GetCurrentTime();
+
+        {
+            const TString msg = (
+                "TEST EvGetTableStats(collectKeySample=true) "
+                "to activate the key collection"
+            );
+
+            Cerr << msg << Endl;
+
+            auto result = SendEvTableStats(
+                runtime,
+                senderActorId,
+                shardId,
+                tableId.PathId.LocalPathId,
+                true /* collectKeySample */,
+                Follower /* toFollower */
+            );
+
+
+            const auto& tableStats = result.GetTableStats();
+            UNIT_ASSERT_VALUES_EQUAL_C(tableStats.GetSplitProtocolVersion(), expectedSplitProtocolVersion, msg);
+
+            UNIT_ASSERT_VALUES_EQUAL_C(tableStats.HasKeyAccessSample(), false, msg);
+
+            UNIT_ASSERT_VALUES_EQUAL_C(tableStats.HasSplitByLoadSuggestedKey(), false, msg);
+        }
+
+        // Send reads for a single key -- they should be captured in the key access sample.
+        readSingleKey(12);
+
+        // Wait for the collection statistics to be accumulated
+        //
+        // NOTE: This is exactly min interval + 1 seconds from the moment
+        // the key collection was started to ignore the time
+        // spent on executing the above SELECT queries
+        runtime.SimulateSleep(
+            TDuration::Seconds(collectionMinInterval + 1)
+                - (runtime.GetCurrentTime() - collectionStartTime)
+        );
+
+        // Send EvGetTableStats after the minimal collection time has passed.
+        //
+        // EXPECTED RESULT: The key access sample in the EvGetTableStatsResult response
+        // is populated, split key present but is empty as it can't be selected
+        // from a single key access histogram.
+        {
+            const TString msg = (
+                "TEST EvGetTableStats(collectKeySample=false) "
+                "after first key reads"
+            );
+
+            Cerr << msg << Endl;
+
+            auto result = SendEvTableStats(
+                runtime,
+                senderActorId,
+                shardId,
+                tableId.PathId.LocalPathId,
+                true /* collectKeySample */,
+                Follower /* toFollower */
+            );
+
+
+            const auto& tableStats = result.GetTableStats();
+            UNIT_ASSERT_VALUES_EQUAL_C(tableStats.GetSplitProtocolVersion(), expectedSplitProtocolVersion, msg);
+
+            UNIT_ASSERT_VALUES_EQUAL_C(tableStats.HasKeyAccessSample(), !EnableDataShardSplitHistogramOmission, msg);
+            if (!EnableDataShardSplitHistogramOmission) {
+                const auto keyAccessSample = ReadHistogram(tableStats.GetKeyAccessSample());
+                const TVector<std::pair<ui64, ui64>> expectedKeyAccessSample = {
+                    {12, 3},
+                };
+                UNIT_ASSERT_VALUES_EQUAL_C(keyAccessSample, expectedKeyAccessSample, msg);
+            }
+
+            UNIT_ASSERT_VALUES_EQUAL_C(tableStats.HasSplitByLoadSuggestedKey(), true, msg);
+            UNIT_ASSERT_VALUES_EQUAL_C(tableStats.GetSplitByLoadSuggestedKey().empty(), true, msg);
+        }
+
+        // Send additional reads for a second single key.
+        readSingleKey(14);
+
+        // Send EvGetTableStats to get updated stats, stats collection is still active.
+        //
+        // EXPECTED RESULT: The key access sample in the EvGetTableStatsResult response
+        // is updated, split key present but is empty as it still can't be selected
+        // from a two key access histogram.
+        {
+            const TString msg = (
+                "TEST EvGetTableStats(collectKeySample=false) "
+                "after second key reads"
+            );
+
+            Cerr << msg << Endl;
+
+            auto result = SendEvTableStats(
+                runtime,
+                senderActorId,
+                shardId,
+                tableId.PathId.LocalPathId,
+                true /* collectKeySample */,
+                Follower /* toFollower */
+            );
+
+
+            const auto& tableStats = result.GetTableStats();
+            UNIT_ASSERT_VALUES_EQUAL_C(tableStats.GetSplitProtocolVersion(), expectedSplitProtocolVersion, msg);
+
+            UNIT_ASSERT_VALUES_EQUAL_C(tableStats.HasKeyAccessSample(), !EnableDataShardSplitHistogramOmission, msg);
+            if (!EnableDataShardSplitHistogramOmission) {
+                const auto keyAccessSample = ReadHistogram(tableStats.GetKeyAccessSample());
+                const TVector<std::pair<ui64, ui64>> expectedKeyAccessSample = {
+                    {12, 3},
+                    {14, 3},
+                };
+                UNIT_ASSERT_VALUES_EQUAL_C(keyAccessSample, expectedKeyAccessSample, msg);
+            }
+
+            UNIT_ASSERT_VALUES_EQUAL_C(tableStats.HasSplitByLoadSuggestedKey(), true, msg);
+            UNIT_ASSERT_VALUES_EQUAL_C(tableStats.GetSplitByLoadSuggestedKey().empty(), true, msg);
+        }
+
+        // Send additional reads for a third single key.
+        readSingleKey(16);
+
+        // Send EvGetTableStats to get updated stats, stats collection is still active.
+        //
+        // EXPECTED RESULT: The key access sample in the EvGetTableStatsResult response
+        // is updated, split key present and is non empty as 3 entries is enough to
+        // select a split key from.
+        {
+            const TString msg = (
+                "TEST EvGetTableStats(collectKeySample=false) "
+                "after third key reads"
+            );
+
+            Cerr << msg << Endl;
+
+            auto result = SendEvTableStats(
+                runtime,
+                senderActorId,
+                shardId,
+                tableId.PathId.LocalPathId,
+                true /* collectKeySample */,
+                Follower /* toFollower */
+            );
+
+
+            const auto& tableStats = result.GetTableStats();
+            UNIT_ASSERT_VALUES_EQUAL_C(tableStats.GetSplitProtocolVersion(), expectedSplitProtocolVersion, msg);
+
+            UNIT_ASSERT_VALUES_EQUAL_C(tableStats.HasKeyAccessSample(), !EnableDataShardSplitHistogramOmission, msg);
+            if (!EnableDataShardSplitHistogramOmission) {
+                const auto keyAccessSample = ReadHistogram(tableStats.GetKeyAccessSample());
+                const TVector<std::pair<ui64, ui64>> expectedKeyAccessSample = {
+                    {12, 3},
+                    {14, 3},
+                    {16, 3},
+                };
+                UNIT_ASSERT_VALUES_EQUAL_C(keyAccessSample, expectedKeyAccessSample, msg);
+            }
+
+            UNIT_ASSERT_VALUES_EQUAL_C(tableStats.HasSplitByLoadSuggestedKey(), true, msg);
+            UNIT_ASSERT_VALUES_EQUAL_C(tableStats.GetSplitByLoadSuggestedKey().empty(), false, msg);
+        }
     }
 }
 

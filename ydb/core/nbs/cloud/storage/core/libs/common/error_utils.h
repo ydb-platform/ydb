@@ -61,6 +61,16 @@ bool HasSuccessOrOutdated(const T& response)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+bool IsBlockedStatus(NKikimrBlobStorage::NDDisk::TReplyStatus_E status);
+
+template <typename T>
+bool IsBlockedStatus(const T& response)
+{
+    return IsBlockedStatus(response.GetStatus());
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 template <typename T>
 void SetCantAcquireStatus(T& record)
 {

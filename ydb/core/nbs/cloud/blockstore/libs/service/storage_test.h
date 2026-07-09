@@ -53,6 +53,19 @@ public:
     {
         return ++LsnGenerator;
     }
+
+    size_t BlockedGenerationCount = 0;
+
+    void OnBlockedGeneration(
+        size_t directBlockGroupIndex,
+        size_t hostIndex,
+        const TString& reason) override
+    {
+        Y_UNUSED(directBlockGroupIndex);
+        Y_UNUSED(hostIndex);
+        Y_UNUSED(reason);
+        ++BlockedGenerationCount;
+    }
 };
 
 struct TTestStorage: public IStorage

@@ -14,6 +14,7 @@
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/storage_transport/ddisk_helpers.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/storage_transport/storage_transport.h>
 
+#include <ydb/core/nbs/cloud/storage/core/libs/common/error_utils.h>
 #include <ydb/core/nbs/cloud/storage/core/libs/common/scheduler.h>
 #include <ydb/core/nbs/cloud/storage/core/libs/coroutine/public.h>
 
@@ -128,6 +129,9 @@ public:
 
     ui64 GetDDiskSessionSeqNo(size_t index) const;
 
+    bool IsDDiskSessionBroken(size_t hostIndex) const;
+    bool IsBlockedGenerationDetected() const;
+
     // IHostStateController implementation
     void SetHostState(
         THostIndex hostIndex,
@@ -191,6 +195,7 @@ private:
         TDuration executionTime);
 
     TDBGFlushResponse HandleSyncWithPBufferResponse(
+        THostIndex ddiskHostIndex,
         const TEvSyncResult& response,
         size_t segmentCount);
 
@@ -224,6 +229,25 @@ private:
 
     [[nodiscard]] bool WaitForSessionLock(THostIndex hostIndex);
 
+    void HandleBlockedGeneration(
+        THostIndex hostIndex,
+        TStringBuf context,
+        NKikimrBlobStorage::NDDisk::TReplyStatus_E status);
+
+    template <typename TRecord>
+    bool CheckBlockedAndMaybeSuicide(
+        THostIndex hostIndex,
+        TStringBuf context,
+        const TRecord& record)
+    {
+        Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
+        if (!IsBlockedStatus(record)) {
+            return false;
+        }
+        HandleBlockedGeneration(hostIndex, context, record.GetStatus());
+        return true;
+    }
+
     TDBGDumpResponse DoDebugPrintDirtyMap();
 
     NActors::TActorSystem* const ActorSystem = nullptr;
@@ -242,6 +266,8 @@ private:
     TDDiskIdToHostIndex PBufferIdToHostIndex;
     TVector<TVChunkWeakPtr> VChunks;
     TOracle Oracle;
+
+    bool BlockedGenerationDetected = false;
 
     // One-shot signal of the FIRST time the locked quorum was reached. Used
     // ONLY to gate the synchronous tablet start (wait for readiness before

@@ -271,6 +271,20 @@ TDirectBlockGroup::ReadBlocksFromDDisk(
                 {
                     Y_ABORT_UNLESS(threadChecker.Check());
 
+                    if (auto self = weakSelf.lock()) {
+                        if (self->CheckBlockedAndMaybeSuicide(
+                                hostIndex,
+                                "ReadFromDDisk",
+                                f.GetValue()))
+                        {
+                            promise.SetValue(TDBGReadBlocksResponse{
+                                .Error = MakeError(
+                                    E_REJECTED,
+                                    "tablet generation blocked")});
+                            return;
+                        }
+                    }
+
                     NProto::TError error = TranslateError(f.GetValue());
                     if (auto self = weakSelf.lock()) {
                         self->OnResponse(
@@ -422,6 +436,20 @@ TDirectBlockGroup::WriteBlocksToDDisk(
                 () mutable
                 {
                     Y_ABORT_UNLESS(threadChecker.Check());
+
+                    if (auto self = weakSelf.lock()) {
+                        if (self->CheckBlockedAndMaybeSuicide(
+                                hostIndex,
+                                "WriteToDDisk",
+                                f.GetValue()))
+                        {
+                            promise.SetValue(TDBGWriteBlocksResponse{
+                                .Error = MakeError(
+                                    E_REJECTED,
+                                    "tablet generation blocked")});
+                            return;
+                        }
+                    }
 
                     NProto::TError error = TranslateError(f.GetValue());
 
@@ -745,6 +773,7 @@ NThreading::TFuture<TDBGFlushResponse> TDirectBlockGroup::SyncWithPBuffer(
 
                     if (auto self = weakSelf.lock()) {
                         flushResponse = self->HandleSyncWithPBufferResponse(
+                            ddiskHostIndex,
                             f.GetValue(),
                             segmentCount);
                         self->OnMultiFlushResponse(
@@ -767,12 +796,25 @@ NThreading::TFuture<TDBGFlushResponse> TDirectBlockGroup::SyncWithPBuffer(
 }
 
 TDBGFlushResponse TDirectBlockGroup::HandleSyncWithPBufferResponse(
+    THostIndex ddiskHostIndex,
     const TEvSyncResult& response,
     size_t segmentCount)
 {
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
 
     TDBGFlushResponse result;
+    if (CheckBlockedAndMaybeSuicide(
+            ddiskHostIndex,
+            "SyncWithPBuffer",
+            response))
+    {
+        result.Errors.reserve(segmentCount);
+        for (size_t i = 0; i < segmentCount; ++i) {
+            result.Errors.push_back(
+                MakeError(E_REJECTED, "tablet generation blocked"));
+        }
+        return result;
+    }
 
     if (HasSuccess(response) &&
         response.GetSegmentResults().size() == static_cast<int>(segmentCount))
@@ -1124,6 +1166,20 @@ ui64 TDirectBlockGroup::GetDDiskSessionSeqNo(size_t index) const
     return DDiskConnections[index].ConfirmedSessionSeqNo;
 }
 
+bool TDirectBlockGroup::IsDDiskSessionBroken(size_t hostIndex) const
+{
+    Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
+    Y_ABORT_UNLESS(hostIndex < DDiskConnections.size());
+    return DDiskConnections[hostIndex].SessionState ==
+           EDDiskSessionState::Broken;
+}
+
+bool TDirectBlockGroup::IsBlockedGenerationDetected() const
+{
+    Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
+    return BlockedGenerationDetected;
+}
+
 void TDirectBlockGroup::DoEstablishConnections()
 {
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
@@ -1242,8 +1298,16 @@ void TDirectBlockGroup::OnConnectionEstablished(
         }
         // INVARIANT: PBuffer does NOT require a session/lock
     } else {
-        // TODO (future phase): handle the error code/BLOCKED, transition to
-        // Broken/suicide.
+        if (IsBlockedStatus(result)) {
+            // Terminal: our tablet generation is stale. Suicide, no reconnect.
+            // TODO rename context
+            HandleBlockedGeneration(index, "Connect/LOCK", result.GetStatus());
+            // Unblock waiters on ConnectFuture with the error.
+            connection.ConnectPromise.SetValue(error);
+            return;
+        }
+        // TODO (future phase): handle non-BLOCKED connect errors
+        // (ERROR/unavailability) via reconnect.
         Y_ABORT("Unhandled branch of connect error");
     }
 
@@ -1270,6 +1334,15 @@ void TDirectBlockGroup::ReEstablishDDiskConnection(
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
     Y_ABORT_UNLESS(index < DDiskConnections.size());
 
+    if (BlockedGenerationDetected) {
+        LOG_WARN(
+            *ActorSystem,
+            NKikimrServices::NBS_PARTITION,
+            "%s reconnect suppressed: blocked generation, suicide in progress",
+            LogTitle.GetWithTime().c_str());
+        return;
+    }
+
     DDiskConnections[index].ResetSession();
     Schedule(
         reconnectDelay,
@@ -1284,6 +1357,15 @@ void TDirectBlockGroup::ReEstablishDDiskConnection(
 void TDirectBlockGroup::OnNodeDisconnected(THostIndex hostIndex, ui32 nodeId)
 {
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
+
+    if (BlockedGenerationDetected) {
+        LOG_WARN(
+            *ActorSystem,
+            NKikimrServices::NBS_PARTITION,
+            "%s reconnect suppressed: blocked generation, suicide in progress",
+            LogTitle.GetWithTime().c_str());
+        return;
+    }
 
     LOG_WARN(
         *ActorSystem,
@@ -1524,6 +1606,37 @@ bool TDirectBlockGroup::WaitForSessionLock(THostIndex hostIndex)
         return conn.SessionState == EDDiskSessionState::Locked;
     }
     return true;
+}
+
+void TDirectBlockGroup::HandleBlockedGeneration(
+    THostIndex hostIndex,
+    TStringBuf context,
+    NKikimrBlobStorage::NDDisk::TReplyStatus_E status)
+{
+    Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
+
+    if (BlockedGenerationDetected) {
+        return;
+    }
+    BlockedGenerationDetected = true;
+
+    DDiskConnections[hostIndex].SessionState = EDDiskSessionState::Broken;
+    const TString reason = TStringBuilder()
+                           << "DDisk returned BLOCKED (stale tablet generation "
+                           << TabletGeneration << "); context=" << context
+                           << "; " << PrintHostIndex(hostIndex) << "; status="
+                           << NKikimrBlobStorage::NDDisk::TReplyStatus_E_Name(
+                                  status);
+
+    LOG_CRIT(
+        *ActorSystem,
+        NKikimrServices::NBS_PARTITION,
+        "%s SUICIDE: %s",
+        LogTitle.GetWithTime().c_str(),
+        reason.c_str());
+
+    // No retry/reconnect: signal the actor to suicide.
+    Service->OnBlockedGeneration(DirectBlockGroupIndex, hostIndex, reason);
 }
 
 TDBGDumpResponse TDirectBlockGroup::DoDebugPrintDirtyMap()

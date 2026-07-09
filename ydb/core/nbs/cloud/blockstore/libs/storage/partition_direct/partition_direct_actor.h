@@ -126,6 +126,10 @@ private:
         const TEvPartitionDirectPrivate::TEvFastPathServiceStopped::TPtr& ev,
         const NActors::TActorContext& ctx);
 
+    void HandlePoisonByBlockedGeneration(
+        const TEvPartitionDirectPrivate::TEvPoisonByBlockedGeneration::TPtr& ev,
+        const NActors::TActorContext& ctx);
+
     void Start(
         const NActors::TActorContext& ctx,
         TDirectBlockGroupsConnections directBlockGroupsConnections,

@@ -43,6 +43,13 @@ struct IPartitionDirectService
     // dirty-map registration happen on the same thread. Also drives periodic
     // persistent buffer cleanup.
     virtual ui64 GenerateLsn() = 0;
+
+    // Called when DDisk replied BLOCKED, meaning DDisk has already
+    // seen a newer tablet generation. The current tablet instance must suicide.
+    virtual void OnBlockedGeneration(
+        size_t directBlockGroupIndex,
+        size_t hostIndex,
+        const TString& reason) = 0;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

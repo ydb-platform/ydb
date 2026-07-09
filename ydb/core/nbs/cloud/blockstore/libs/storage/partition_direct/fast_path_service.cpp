@@ -382,6 +382,20 @@ ui64 TFastPathService::GenerateLsn()
     return lsn;
 }
 
+void TFastPathService::OnBlockedGeneration(
+    size_t directBlockGroupIndex,
+    size_t hostIndex,
+    const TString& reason)
+{
+    // Just forward the signal to the actor thread.
+    auto event = std::make_unique<
+        TEvPartitionDirectPrivate::TEvPoisonByBlockedGeneration>(
+        directBlockGroupIndex,
+        hostIndex,
+        reason);
+    ActorSystem->Send(PartitionActorId, event.release());
+}
+
 TFastPathServiceInfo TFastPathService::GetMonInfo() const
 {
     const ui64 vchunkSize = StorageConfig->GetVChunkSize();

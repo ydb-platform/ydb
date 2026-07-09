@@ -49,6 +49,11 @@ bool HasSuccessOrOutdated(
            errorResponse == NKikimrBlobStorage::NDDisk::TReplyStatus::OUTDATED;
 }
 
+bool IsBlockedStatus(NKikimrBlobStorage::NDDisk::TReplyStatus_E status)
+{
+    return status == NKikimrBlobStorage::NDDisk::TReplyStatus::BLOCKED;
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 }   // namespace NYdb::NBS

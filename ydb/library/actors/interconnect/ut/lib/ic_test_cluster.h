@@ -24,6 +24,8 @@ public:
         USE_TLS = 1 << 1,
         RDMA_POLLING_CQ = 1 << 2,
         DISABLE_RDMA = 1 << 3,
+        USE_URING = 1 << 4,
+        USE_URING_SQPOLL = 1 << 5, // implies USE_URING + EnableUringSQPOLL
     };
 
     using TCheckerFactory = std::function<IActor*(ui32)>;
@@ -80,6 +82,18 @@ public:
             }
         }
 
+        auto effectiveSettingsCustomizer = [flags, settingsCustomizer](ui32 nodeId, NActors::TInterconnectSettings& settings) {
+            if (flags & (USE_URING | USE_URING_SQPOLL)) {
+                settings.UseUring = true;
+            }
+            if (flags & USE_URING_SQPOLL) {
+                settings.EnableUringSQPOLL = true;
+            }
+            if (settingsCustomizer) {
+                settingsCustomizer(nodeId, settings);
+            }
+        };
+
         for (ui32 i = 1; i <= NumNodes; ++i) {
             auto& portMap = tiSettings ? specificNodePortMap[i] : nodeToPortMap;
             Nodes.emplace(i, MakeHolder<TNode>(i, NumNodes, portMap, Address, Counters, DeadPeerTimeout, ChannelsConfig,
@@ -87,7 +101,7 @@ public:
                 flags & USE_ZC ? ESocketSendOptimization::IC_MSG_ZEROCOPY : ESocketSendOptimization::DISABLED,
                 flags & USE_TLS, checkerFactory, flags & RDMA_POLLING_CQ ? NInterconnect::NRdma::ECqMode::POLLING : NInterconnect::NRdma::ECqMode::EVENT,
                 !(flags & DISABLE_RDMA),
-                settingsCustomizer,
+                effectiveSettingsCustomizer,
                 LogBackendFactory));
         }
     }

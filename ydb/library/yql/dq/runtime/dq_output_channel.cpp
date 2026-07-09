@@ -34,7 +34,7 @@ public:
 
     TDqOutputChannel(const TDqChannelSettings& settings, const TLogFunc& logFunc)
         : OutputType(settings.RowType)
-        , Packer(settings.RowType, settings.PackerVersion, settings.BufferPageAllocSize)
+        , Packer(settings.RowType, settings.PackerVersion, settings.DatumValidationMode, settings.BufferPageAllocSize)
         , Width(settings.RowType->IsMulti() ? static_cast<NMiniKQL::TMultiType*>(settings.RowType)->GetElementsCount() : 1u)
         , Storage(settings.ChannelStorage)
         , HolderFactory(settings.HolderFactory)
@@ -44,6 +44,7 @@ public:
         , ChunkSizeLimit(settings.ChunkSizeLimit)
         , ArrayBufferMinFillPercentage(settings.ArrayBufferMinFillPercentage)
         , LogFunc(logFunc)
+        , QuotaManager(settings.ChannelQuotaManager)
     {
         PopStats.Level = settings.Level;
         PushStats.Level = settings.Level;
@@ -52,6 +53,12 @@ public:
 
         if (Packer.IsBlock() && ArrayBufferMinFillPercentage && *ArrayBufferMinFillPercentage > 0) {
             BlockSplitter = NArrow::CreateBlockSplitter(OutputType, (ChunkSizeLimit - MaxChunkBytes) * *ArrayBufferMinFillPercentage / 100);
+        }
+    }
+
+    ~TDqOutputChannel() override {
+        if (QuotedSize && QuotaManager) {
+            QuotaManager->FreeQuota(QuotedSize);
         }
     }
 
@@ -92,6 +99,20 @@ public:
             FillLevel = result;
         }
         return result;
+    }
+
+    void UpdateQuota() {
+        if (QuotaManager) {
+            size_t storedSize = PackedDataSize + Packer.PackedSizeEstimate();
+            if (QuotedSize < storedSize) {
+                if (!QuotaManager->AllocateQuota(storedSize - QuotedSize)) {
+                    throw NKikimr::TMemoryLimitExceededException();
+                }
+            } else if (QuotedSize > storedSize) {
+                QuotaManager->FreeQuota(QuotedSize - storedSize);
+            }
+            QuotedSize = storedSize;
+        }
     }
 
     void SetFillAggregator(std::shared_ptr<TDqFillAggregator> aggregator) override {
@@ -215,6 +236,7 @@ public:
         }
 
         UpdateFillLevel();
+        UpdateQuota();
 
         if (PopStats.CollectFull()) {
             if (FillLevel != NoLimit) {
@@ -280,6 +302,7 @@ public:
         DLOG("Took " << data.RowCount() << " rows");
 
         UpdateFillLevel();
+        UpdateQuota();
 
         if (PopStats.CollectBasic()) {
             PopStats.Bytes += data.Size();
@@ -334,6 +357,7 @@ public:
             }
             PackerCurrentChunkCount = 0;
             PackerCurrentRowCount = 0;
+            UpdateQuota();
             return true;
         }
 
@@ -387,6 +411,7 @@ public:
                 PopStats.Resume();
             }
         }
+        UpdateQuota();
         YQL_ENSURE(!HasData());
         return true;
     }
@@ -433,6 +458,7 @@ public:
         PackerCurrentRowCount = 0;
         FirstStoredId = NextStoredId;
         UpdateFillLevel();
+        UpdateQuota();
         return chunks;
     }
 
@@ -493,6 +519,8 @@ private:
     TMaybe<NDqProto::TCheckpoint> Checkpoint;
     std::shared_ptr<TDqFillAggregator> Aggregator;
     EDqFillLevel FillLevel = NoLimit;
+    IMemoryQuotaManager::TPtr QuotaManager;
+    size_t QuotedSize = 0;
 };
 
 } // anonymous namespace

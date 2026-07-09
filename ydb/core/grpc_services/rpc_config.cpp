@@ -503,6 +503,12 @@ public:
             return;
         }
 
+        if (!NKikimr::IsAdministrator(AppData(), Request_->GetInternalToken().Get())) {
+            self->Reply(Ydb::StatusIds::UNAUTHORIZED, "User is not a cluster administrator.",
+                  NKikimrIssues::TIssuesIds::ACCESS_DENIED, self->ActorContext());
+            return;
+        }
+
         self->Become(&TFetchStorageConfigRequest::StateFunc);
         self->Send(MakeBlobStorageNodeWardenID(ctx.SelfID.NodeId()), new TEvNodeWardenQueryStorageConfig(false));
     }

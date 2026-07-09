@@ -4638,23 +4638,21 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         )", port));
 
         runtime.WaitFor("get object request into 01 partition", [&]{ return blockPartition01.size() >= 1; });
-        bool isCompleted = false;
 
-        while (!isCompleted) {
+        bool found = false;
+        for (int attempt = 0; attempt < 100 && !found; ++attempt) {
+            runtime.SimulateSleep(TDuration::MilliSeconds(100));
             const auto desc = TestGetImport(runtime, txId, "/MyRoot");
-            const auto entry = desc.GetResponse().GetEntry();
-
-            const auto item = entry.GetItemsProgress(0);
+            const auto& item = desc.GetResponse().GetEntry().GetItemsProgress(0);
             if (item.parts_completed() > 0) {
-                isCompleted = true;
+                found = true;
                 UNIT_ASSERT_VALUES_EQUAL(item.parts_total(), 2);
                 UNIT_ASSERT_VALUES_EQUAL(item.parts_completed(), 1);
                 UNIT_ASSERT_VALUES_UNEQUAL(item.start_time().seconds(), 0);
                 UNIT_ASSERT_VALUES_EQUAL(item.end_time().seconds(), 0);
-            } else {
-                runtime.SimulateSleep(TDuration::Seconds(1));
             }
         }
+        UNIT_ASSERT_C(found, "partition 00 import didn't complete in time");
 
         blockPartition01.Stop();
         blockPartition01.Unblock();

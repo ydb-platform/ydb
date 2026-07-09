@@ -12,16 +12,19 @@ SRCS(
     yql_yt_table_data_service_base_writer.cpp
     yql_yt_table_data_service_writer.cpp
     yql_yt_table_data_service_sorted_writer.cpp
+    yql_yt_table_index_marker.cpp
     yql_yt_table_queue_writer_with_lock.cpp
 )
 
 PEERDIR(
     library/cpp/threading/future
+    library/cpp/yson
     library/cpp/yson/node
     yt/cpp/mapreduce/interface
     yt/yql/providers/yt/fmr/job/interface
     yt/yql/providers/yt/fmr/utils
     yt/yql/providers/yt/fmr/utils/comparator
+    yt/yql/providers/yt/fmr/utils/hasher
     yt/yql/providers/yt/fmr/utils/yson_block_iterator/impl
     yt/yql/providers/yt/fmr/job_launcher
     yt/yql/providers/yt/fmr/table_data_service/client/impl

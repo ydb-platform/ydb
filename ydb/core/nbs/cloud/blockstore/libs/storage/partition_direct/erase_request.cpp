@@ -50,7 +50,6 @@ void TEraseRequestExecutor::Run()
     ScheduleRequestTimeout();
 
     auto future = DirectBlockGroup->BatchEraseFromPBuffer(
-        VChunkConfig.GetVChunkIndex(),
         Host,
         Hint.Segments,
         Span.GetTraceId());
@@ -88,11 +87,11 @@ void TEraseRequestExecutor::OnEraseResponse(const TDBGEraseResponse& response)
             LogTitle.GetWithTime().c_str(),
             FormatError(response.Error).c_str());
 
-        Reply({}, Hint.MakeLsnVector());
+        Reply({}, MakeLsnVector(Hint.Segments));
         return;
     }
 
-    Reply(Hint.MakeLsnVector(), {});
+    Reply(MakeLsnVector(Hint.Segments), {});
 }
 
 void TEraseRequestExecutor::Reply(
@@ -140,7 +139,7 @@ void TEraseRequestExecutor::OnRequestTimeout()
         "%s OnRequestTimeout.",
         LogTitle.GetWithTime().c_str());
 
-    Reply({}, Hint.MakeLsnVector());
+    Reply({}, MakeLsnVector(Hint.Segments));
 }
 
 ////////////////////////////////////////////////////////////////////////////////

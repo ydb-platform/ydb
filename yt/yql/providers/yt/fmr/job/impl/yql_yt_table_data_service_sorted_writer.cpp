@@ -56,7 +56,7 @@ NYT::TNode TFmrTableDataServiceSortedWriter::GetKeyRowByIndexes(TStringBuf curre
 
     for (size_t i = 0; i < KeyColumns_.Columns.size(); ++i) {
         const auto& index = indexes[i];
-        TString columnValue =  GetIndexValue(currentYsonContent, index);
+        TString columnValue = GetIndexValue(currentYsonContent, index);
         NYT::TNode columnValueNode = NYT::NodeFromYsonString(
             columnValue,
             NYT::NYson::EYsonType::Node
@@ -84,7 +84,7 @@ TSortedChunkStats TFmrTableDataServiceSortedWriter::GetSortedChunkStats(TStringB
 
 void TFmrTableDataServiceSortedWriter::CheckIsSorted(TStringBuf currentYsonContent, const std::vector<TRowIndexMarkup>& chunkIndexes) const {
     TBinaryYsonComparator comparator(currentYsonContent, KeyColumns_.SortOrders);
-    for (ui64 i = 0; i < chunkIndexes.size() - 1; ++i) {
+    for (ui64 i = 0; i + 1 < chunkIndexes.size(); ++i) {
         const auto& curRowKeys = chunkIndexes[i];
         const auto& nextRowKeys = chunkIndexes[i + 1];
         if (comparator.CompareRows(curRowKeys, nextRowKeys) > 0) {

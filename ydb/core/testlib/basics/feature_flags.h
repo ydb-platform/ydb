@@ -78,7 +78,6 @@ public:
     FEATURE_FLAG_SETTER(EnableStreamingQueries)
     FEATURE_FLAG_SETTER(EnableSecureScriptExecutions)
     FEATURE_FLAG_SETTER(EnableSkipConflictCheckForTopicsInTransaction)
-    FEATURE_FLAG_SETTER(DisableMissingDefaultColumnsInBulkUpsert)
     FEATURE_FLAG_SETTER(EnableTopicMessageLevelParallelism)
     FEATURE_FLAG_SETTER(EnableTopicAutopartitioningForReplication)
     FEATURE_FLAG_SETTER(EnableAccessToIndexImplTables)
@@ -89,6 +88,7 @@ public:
     FEATURE_FLAG_SETTER(EnableDataShardSplitHistogramOmission)
     FEATURE_FLAG_SETTER(EnableCsDictionaryEncoding)
     FEATURE_FLAG_SETTER(EnableDataShardDetailedMetrics)
+    FEATURE_FLAG_SETTER(EnableTopicDeferredPublish)
     #undef FEATURE_FLAG_SETTER
 };
 

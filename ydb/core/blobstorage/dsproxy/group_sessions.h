@@ -23,20 +23,19 @@ namespace NKikimr {
                     TIntrusivePtr<NBackpressure::TFlowRecord> FlowRecord;
                     struct AtomicParameter : public std::atomic<bool> {
                         AtomicParameter& operator=(const AtomicParameter& other) {
-                            store(other.load());
+                            store(other.load(std::memory_order_acquire), std::memory_order_release);
                             return *this;
                         }
 
                         AtomicParameter(const AtomicParameter& other) {
-                            store(other.load());
+                            store(other.load(std::memory_order_acquire), std::memory_order_release);
                         }
 
                         AtomicParameter() {
-                            store(false);
+                            store(false, std::memory_order_release);
                         }
-                    } ExtraBlockChecksSupport, Checksumming;
+                    } ExtraBlockChecksSupport, Checksumming, IsConnected;
                     std::shared_ptr<const TCostModel> CostModel = nullptr;
-                    volatile bool IsConnected = false;
                 };
                 TQueue PutTabletLog;
                 TQueue PutAsyncBlob;
@@ -189,8 +188,11 @@ namespace NKikimr {
                 ui64 cookie, NWilson::TTraceId traceId, const TVDiskID vdiskId, NKikimrBlobStorage::EVDiskQueueId queueId) {
             auto& queues = FailDomains[topology.GetFailDomainOrderNumber(vdiskId)].VDisks[vdiskId.VDisk].Queues;
             TActorId queueActorId = queues.GetQueue(queueId).ActorId;
-            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::BS_PROXY, "Send to queueActorId# " << queueActorId
-                << " " << TypeName(*event) << "# " << event->ToString() << " cookie# " << cookie);
+            YDB_LOG_DEBUG_COMP(NKikimrServices::BS_PROXY, "Send",
+                {"toQueueActorId", queueActorId},
+                {"typeName", TypeName(*event)},
+                {"event", event->ToString()},
+                {"cookie", cookie});
             TActivationContext::Send(new IEventHandle(queueActorId, actor.SelfId(), event.release(), 0, cookie, nullptr,
                 std::move(traceId)));
         }

@@ -195,4 +195,8 @@ Below are examples of explicitly setting the "random choice" balancing algorithm
 
   {% endlist %}
 
+- Rust
+
+  The RandomChoice policy (random endpoint selection among discovery nodes) is enabled **by default** — no extra configuration is required.
+
 {% endlist %}

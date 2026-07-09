@@ -92,7 +92,7 @@ private:
         }
 
         for (auto& binding : *bindings) {
-            auto result = Build(std::move(binding));
+            auto result = Build(binding);
             if (!result) {
                 return std::unexpected(result.error());
             }
@@ -194,7 +194,7 @@ private:
         }
 
         TReadyCTE cte = {
-            .Alias = std::move(binding.Alias),
+            .Alias = binding.Alias,
             .Node = std::move(*result),
         };
 
@@ -1118,7 +1118,12 @@ private:
             case TRule_table_ref_TBlock3::kAlt2:
                 return Unsupported("an_id_expr LPAREN (table_arg (COMMA table_arg)* COMMA?)? RPAREN");
             case TRule_table_ref_TBlock3::kAlt3:
-                return Build(block.GetAlt3(), isAnonymous, isClusterExplicit)
+                return Build(
+                           block.GetAlt3(),
+                           std::move(service),
+                           std::move(cluster),
+                           isAnonymous,
+                           isClusterExplicit)
                     .transform([](auto x) { return TYqlSource{.Node = std::move(x)}; });
             case TRule_table_ref_TBlock3::ALT_NOT_SET:
                 YQL_ENSURE(false, "Unreachable");
@@ -1139,10 +1144,6 @@ private:
             return std::unexpected(ESQLError::Basic);
         }
 
-        if (cluster.GetLiteral() == nullptr) {
-            return Unsupported("not literal cluster");
-        }
-
         if (rule.HasBlock2()) {
             return Unsupported("(VIEW view_name)");
         }
@@ -1154,8 +1155,8 @@ private:
 
         TYqlTableRefArgs args = {
             .Service = std::move(service),
-            .Cluster = *cluster.GetLiteral(),
-            .Key = key,
+            .Cluster = std::move(cluster),
+            .Key = TDeferredAtom(Ctx_.Pos(), key),
             .IsAnonymous = isAnonymous,
         };
 
@@ -1171,19 +1172,13 @@ private:
 
     TNodeResult Build(
         const TRule_table_ref::TBlock3::TAlt3& alt,
+        TString service,
+        TDeferredAtom cluster,
         bool isAnonymous,
         bool isClusterExplicit)
     {
         const auto& bindParameter = alt.GetRule_bind_parameter1();
         Token(bindParameter.GetToken1());
-
-        if (isAnonymous) {
-            return Unsupported("COMMAT bind_parameter");
-        }
-
-        if (isClusterExplicit) {
-            return Unsupported("cluster_expr DOT bind_parameter");
-        }
 
         TString name;
         if (!NamedNodeImpl(bindParameter, name, *this)) {
@@ -1195,7 +1190,29 @@ private:
             return std::unexpected(ESQLError::Basic);
         }
 
-        return TNonNull(node);
+        if (auto source = GetYqlSource(node)) {
+            if (isAnonymous) {
+                return Unsupported("COMMAT bind_parameter");
+            }
+
+            if (isClusterExplicit && !Ctx_.Warning(Ctx_.Pos(), TIssuesIds::WARNING, [](auto& out) {
+                    out << "Explicit cluster is ignored";
+                }))
+            {
+                return std::unexpected(ESQLError::Basic);
+            }
+
+            return TNonNull(node);
+        }
+
+        TYqlTableRefArgs args = {
+            .Service = std::move(service),
+            .Cluster = std::move(cluster),
+            .Key = TDeferredAtom(node, Ctx_),
+            .IsAnonymous = isAnonymous,
+        };
+
+        return TNonNull(BuildYqlTableRef(Ctx_.Pos(), std::move(args)));
     }
 
     TSQLResult<TVector<TNodePtr>> Build(const TRule_values_source_row& rule) {
@@ -1446,7 +1463,7 @@ private:
             YQL_ENSURE(false, "Unexpected ORDER BY direction " << direction);
         }
 
-        return new TSortSpecification(std::move(*expr), isAscending);
+        return new TSortSpecification(*expr, isAscending);
     }
 
     template <class TRule>

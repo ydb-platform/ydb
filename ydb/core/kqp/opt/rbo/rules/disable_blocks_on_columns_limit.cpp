@@ -16,6 +16,10 @@ bool IsSuitableToDisableOlapBlocks(const TIntrusivePtr<IOperator>& input, TTypeA
 
 } // anonymous namespace
 
+bool TDisableBlocksOnColumnsLimitRule::QuickMatch(const TIntrusivePtr<IOperator>& input) const {
+    return input->Kind == EOperator::Limit;
+}
+
 TIntrusivePtr<IOperator> TDisableBlocksOnColumnsLimitRule::SimpleMatchAndApply(const TIntrusivePtr<IOperator>& input, TRBOContext& rboCtx, TPlanProps& props) {
     Y_UNUSED(props);
     auto& typesCtx = rboCtx.TypeCtx;

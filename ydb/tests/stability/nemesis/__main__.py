@@ -10,7 +10,7 @@ warnings.filterwarnings("ignore", category=DeprecationWarning)
 
 from ydb.tests.library.harness.kikimr_cluster import ExternalKiKiMRCluster  # noqa: E402
 from ydb.tests.stability.nemesis.internal.config import Settings, get_orchestrator_settings  # noqa: E402
-from ydb.tests.stability.nemesis.internal.orchestrator.install import get_hosts_from_yaml, install_on_hosts, stop_agent_services # noqa: E402
+from ydb.tests.stability.nemesis.internal.orchestrator.install import get_hosts_from_yaml, install_on_hosts, stop_agent_services  # noqa: E402
 from ydb.tests.tools.nemesis.library import monitor  # noqa: E402
 from ydb.tests.stability.nemesis.internal.orchestrator.orchestrator_warden_execution import run_orchestrator_liveness_cli_batch  # noqa: E402
 

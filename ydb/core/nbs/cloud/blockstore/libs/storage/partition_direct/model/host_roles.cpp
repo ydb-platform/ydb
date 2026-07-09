@@ -63,6 +63,16 @@ void THostRoles::AppendRole(EHostRole assignment)
     Assignments[Count++] = assignment;
 }
 
+void THostRoles::RemoveHost(THostIndex host)
+{
+    Y_ABORT_UNLESS(host < Count);
+
+    for (size_t i = host; i + 1 < Count; ++i) {
+        Assignments[i] = Assignments[i + 1];
+    }
+    Assignments[--Count] = EHostRole::None;
+}
+
 THostMask THostRoles::GetPrimary() const
 {
     THostMask result;

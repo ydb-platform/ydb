@@ -40,6 +40,10 @@ public:
     void Reset(THostIndex host);
     [[nodiscard]] bool Get(THostIndex host) const;
 
+    // Drops the host's bit and shifts all higher bits down by one; the
+    // remove-host renumbering.
+    void RemoveHost(THostIndex host);
+
     [[nodiscard]] bool Empty() const;
     [[nodiscard]] size_t Count() const;
 

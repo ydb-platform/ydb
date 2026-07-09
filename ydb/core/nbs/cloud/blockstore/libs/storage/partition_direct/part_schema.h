@@ -53,13 +53,25 @@ struct TPartitionSchema: public NKikimr::NIceDb::Schema
                 ::NYdb::NBS::PartitionDirect::NProto::TAddHostInProgress;
         };
 
+        // Set while a RemoveHost is in flight, cleared when the removal
+        // commits. Replayed on restart by re-sending the deletion (safe: an
+        // already-applied delete answers NOT_FOUND, see
+        // TRemoveHostInProgress).
+        struct RemoveHostInProgress
+            : public Column<6, NKikimr::NScheme::NTypeIds::String>
+        {
+            using Type =
+                ::NYdb::NBS::PartitionDirect::NProto::TRemoveHostInProgress;
+        };
+
         using TKey = TableKey<Id>;
         using TColumns = TableColumns<
             Id,
             StorageConfig,
             VolumeConfig,
             DirectBlockGroupsConnections,
-            AddHostInProgress>;
+            AddHostInProgress,
+            RemoveHostInProgress>;
 
         using StoragePolicy = TStoragePolicy<IndexChannel>;
     };

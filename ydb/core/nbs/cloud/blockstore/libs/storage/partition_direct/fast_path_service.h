@@ -114,6 +114,8 @@ public:
 
     void QueryAddHost(size_t directBlockGroupId, size_t newHostIndex) override;
 
+    void QueryRemoveHost(size_t directBlockGroupId, size_t hostIndex) override;
+
     ui64 GenerateLsn() override;
 
     void StopTablet(const TString& reason) override;

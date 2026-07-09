@@ -7,8 +7,9 @@ namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-// The index of the host in the direct block group. Hosts can only be appended
-// to the direct block group, so you can refer to the host by its index.
+// The index of the host in the direct block group. Indices are stable within
+// a tablet run: hosts are only appended live, and a committed removal shifts
+// the higher indices down at the next tablet start.
 using THostIndex = ui8;
 
 constexpr THostIndex InvalidHostIndex = 0xFF;

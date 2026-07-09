@@ -47,6 +47,11 @@ struct THostStateControllerMock: public IHostStateController
     {
         AddHostQueries.push_back(hostIndex);
     }
+
+    void QueryRemoveHost(THostIndex hostIndex) override
+    {
+        Y_UNUSED(hostIndex);
+    }
 };
 
 TStorageConfigPtr MakeStorageConfig()

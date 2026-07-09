@@ -34,6 +34,12 @@ public:
         THostIndex hostIndex) const = 0;
 
     virtual void QueryAddHost(THostIndex newHostIndex) = 0;
+
+    // Asks to durably remove the host from the group. Preconditions (host
+    // disabled in every vchunk, its pbuffer drained, quorum preserved) are
+    // validated by the implementation; an invalid request is dropped with a
+    // log.
+    virtual void QueryRemoveHost(THostIndex hostIndex) = 0;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

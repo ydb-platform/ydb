@@ -63,6 +63,16 @@ bool THostMask::Get(THostIndex host) const
     return (Bits & (ui32(1) << host)) != 0;
 }
 
+void THostMask::RemoveHost(THostIndex host)
+{
+    Y_ABORT_UNLESS(host < MaxHostCount);
+    const ui32 low = Bits & ((ui32(1) << host) - 1);
+    // The wide shift keeps `host + 1 == 32` (removing host 31) defined.
+    const ui32 high =
+        static_cast<ui32>((static_cast<ui64>(Bits) >> (host + 1)) << host);
+    Bits = low | high;
+}
+
 bool THostMask::Empty() const
 {
     return Bits == 0;

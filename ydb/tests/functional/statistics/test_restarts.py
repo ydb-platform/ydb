@@ -19,6 +19,9 @@ CLUSTER_CONFIG = dict(
     additional_log_configs={
         'STATISTICS': LogLevels.DEBUG,
     },
+    column_shard_config={
+        'max_read_staleness_ms': 200,
+    },
 )
 
 

@@ -62,7 +62,7 @@ private:
             , Hash(XXH3_64bits(Prefix.data(), Prefix.size()) ^ XXH3_64bits(Key.data(), Key.size())) {
         }
 
-        operator size_t() const {
+        explicit operator size_t() const {
             return Hash;
         }
 

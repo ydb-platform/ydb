@@ -31,6 +31,8 @@ Protocol layers (each has its own `AGENTS.md`):
   inter-actor messages; extract large logic into separate actors or classes.
 * `*_fwd.h` for forward declarations; `.pb.h` only when needed.
   Config helpers: [`public/config.h`](public/config.h).
+* Put method implementations in `.cpp` files, not in headers — except
+  template functions and template classes.
 
 ## Tests
 

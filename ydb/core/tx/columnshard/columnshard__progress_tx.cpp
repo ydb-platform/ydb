@@ -35,11 +35,8 @@ public:
         YDB_LOG_CREATE_CONTEXT_COMP(NKikimrServices::TX_COLUMNSHARD_TX,
             {"tabletId", Self->TabletID()},
             {"txState", "TTxProgressTx::Execute"},
-            {"txCurrent", Self->ProgressTxInFlight});
-        if (!Self->ProgressTxInFlight) {
-            AbortedThroughRemoveExpired = true;
-            return true;
-        }
+            {"txCurrent", Self->InProgressTxId});
+        AFL_VERIFY(Self->ProgressTxScheduled);
         Self->Counters.GetTabletCounters()->SetCounter(COUNTER_TX_COMPLETE_LAG, Self->GetTxCompleteLag().MilliSeconds());
 
         const size_t removedCount = Self->ProgressTxController->CleanExpiredTxs();
@@ -50,6 +47,7 @@ public:
             return true;
         }
 
+        Self->ProgressTxScheduled = false;
         // Process a single transaction at the front of the queue
         const auto plannedItem = Self->ProgressTxController->GetFirstPlannedTx();
         if (!!plannedItem) {
@@ -58,17 +56,17 @@ public:
             const ui64 txId = plannedItem->TxId;
             YDB_LOG_CREATE_CONTEXT_COMP(NKikimrServices::TX_COLUMNSHARD_TX,
                 {"txId", txId});
-            TxOperator = Self->ProgressTxController->GetTxOperatorVerified(txId);
+            TxOperator = Self->ProgressTxController->GetTxOperator(txId, ETxOperatorStatus::InProgress);
             YDB_LOG_DEBUG("",
                 {"event", "PlannedItemStart"},
                 {"opType", TxOperator->GetOpType()});
             if (auto txPrepare = TxOperator->BuildTxPrepareForProgress(Self)) {
-                YDB_LOG_DEBUG("",
+                YDB_LOG_DEBUG("Dump event, details, opType",
                     {"event", "PlannedItemStart"},
                     {"details", "BuildTxPrepareForProgress"},
                     {"opType", TxOperator->GetOpType()});
                 AbortedThroughRemoveExpired = true;
-                Self->ProgressTxInFlight = txId;
+                Self->InProgressTxId = txId;
                 Self->Execute(txPrepare.release(), ctx);
                 return true;
             } else if (TxOperator->IsInProgress()) {
@@ -76,10 +74,10 @@ public:
                 YDB_LOG_DEBUG("",
                     {"event", "PlannedItemContinue"},
                     {"opType", TxOperator->GetOpType()});
-                AFL_VERIFY(Self->ProgressTxInFlight == txId);
+                AFL_VERIFY(Self->InProgressTxId == txId);
                 return true;
             } else {
-                YDB_LOG_DEBUG("",
+                YDB_LOG_DEBUG("Dump event, details, opType",
                     {"event", "PlannedItemStart"},
                     {"details", "PopFirstPlannedTx"},
                     {"opType", TxOperator->GetOpType()});
@@ -98,9 +96,9 @@ public:
             Self->ProgressTxController->ProgressOnExecute(txId, txc);
             Self->Counters.GetTabletCounters()->IncCounter(COUNTER_PLANNED_TX_COMPLETED);
         }
-        Self->ProgressTxInFlight = std::nullopt;
+        Self->InProgressTxId = 0;
         if (!!Self->ProgressTxController->GetPlannedTx()) {
-            Self->EnqueueProgressTx(ctx, std::nullopt);
+            Self->EnqueueProgressTx(ctx);
         }
         return true;
     }
@@ -132,21 +130,23 @@ public:
     }
 };
 
-void TColumnShard::EnqueueProgressTx(const TActorContext& ctx, const std::optional<ui64> continueTxId) {
+void TColumnShard::EnqueueProgressTx(const TActorContext& ctx, const ui64 continueTxId) {
     YDB_LOG_DEBUG("",
         {"event", "EnqueueProgressTx"},
         {"tabletId", TabletID()},
         {"txId", continueTxId});
-    if (continueTxId) {
-        AFL_VERIFY(!ProgressTxInFlight || ProgressTxInFlight == continueTxId)("current", ProgressTxInFlight)("expected", continueTxId);
+    // While a particular tx is in the distributed commit process, only its own nudge can advance it.
+    // So, skip everything else.
+    if (InProgressTxId != 0 && continueTxId != InProgressTxId) {
+        return;
     }
-    if (!ProgressTxInFlight || ProgressTxInFlight == continueTxId) {
+    if (!ProgressTxScheduled) {
         YDB_LOG_DEBUG("",
             {"event", "EnqueueProgressTxStart"},
             {"tabletId", TabletID()},
             {"txId", continueTxId},
-            {"txCurrent", ProgressTxInFlight});
-        ProgressTxInFlight = continueTxId.value_or(0);
+            {"txCurrent", InProgressTxId});
+        ProgressTxScheduled = true;
         Execute(new TTxProgressTx(this), ctx);
     }
 }

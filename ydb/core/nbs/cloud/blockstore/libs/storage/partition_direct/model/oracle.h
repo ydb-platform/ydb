@@ -121,6 +121,10 @@ public:
     [[nodiscard]] TDuration GetDDiskReconnectDelay(
         THostIndex hostIndex) override;
 
+    void OnHostAdded();
+
+    [[nodiscard]] size_t GetHostCount() const;
+
     [[nodiscard]] THostIndex SelectBestPBufferHost(
         THostMask hosts,
         EOperation operation) const override;

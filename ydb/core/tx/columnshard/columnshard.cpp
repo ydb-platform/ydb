@@ -92,7 +92,7 @@ void TColumnShard::TrySwitchToWork(const TActorContext& ctx) {
             {"event", "initialize_shard"},
             {"step", "SignalTabletActive"});
         TryRegisterMediatorTimeCast();
-        EnqueueProgressTx(ctx, std::nullopt);
+        EnqueueProgressTx(ctx);
         OnTieringModified();
     }
     Counters.GetCSCounters().OnIndexMetadataLimit(NOlap::IColumnEngine::GetMetadataLimit());

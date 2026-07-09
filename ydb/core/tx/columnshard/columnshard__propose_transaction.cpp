@@ -101,7 +101,7 @@ public:
             TxOperator->SendReply(*Self, ctx);
             return;
         }
-        auto internalOp = Self->GetProgressTxController().GetTxOperatorOptional(txId);
+        auto internalOp = Self->GetProgressTxController().GetTxOperator(txId, ETxOperatorStatus::InProgress, /*optional*/ true);
         if (!internalOp) {
             YDB_LOG_WARN("",
                 {"event", "removed tx operator"});

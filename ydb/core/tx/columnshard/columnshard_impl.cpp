@@ -56,6 +56,8 @@
 #include <util/generic/object_counter.h>
 #include <ydb/library/actors/struct_log/log_stack.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD
+
 namespace NKikimr::NColumnShard {
 
 LWTRACE_USING(YDB_CS);
@@ -479,7 +481,7 @@ void TColumnShard::RunAlterStore(
 
 void TColumnShard::EnqueueBackgroundActivities(const bool periodic) {
     TLogContextGuard gLogging(NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("tablet_id", TabletID()));
-    YDB_LOG_DEBUG_COMP(NActors::NStructuredLog::TLogStack::GetComponent(), "",
+    YDB_LOG_DEBUG_COMP(NActors::NStructuredLog::TLogStack::GetComponent(), "Dump event, periodic",
         {"event", "EnqueueBackgroundActivities"},
         {"periodic", periodic});
     StoragesManager->GetOperatorVerified(NOlap::IStoragesManager::DefaultStorageId);
@@ -723,7 +725,7 @@ void TColumnShard::StartCompactionTasksUpToLimit() {
 void TColumnShard::StartCompaction(const std::shared_ptr<NPrioritiesQueue::TAllocationGuard>& guard) {
     if (TablesManager.GetPrimaryIndexSafe().UsesPullCompactionScheduling()) {
         if (!BackgroundController.CanStartMoreCompactions() && BackgroundController.GetCompactionsCount()) {
-            YDB_LOG_DEBUG_COMP(NKikimrServices::TX_COLUMNSHARD, "",
+            YDB_LOG_DEBUG_COMP(NKikimrServices::TX_COLUMNSHARD, "Dump event, reason",
                 {"event", "skip_start_compaction"},
                 {"reason", "compaction_inflight_full"});
             return;
@@ -741,7 +743,7 @@ void TColumnShard::StartCompaction(const std::shared_ptr<NPrioritiesQueue::TAllo
     }
 
     if (BackgroundController.GetCompactionsCount()) {
-        YDB_LOG_DEBUG_COMP(NKikimrServices::TX_COLUMNSHARD, "",
+        YDB_LOG_DEBUG_COMP(NKikimrServices::TX_COLUMNSHARD, "Dump event, reason",
             {"event", "skip_start_compaction"},
             {"reason", "compaction_in_progress"});
         return;
@@ -888,7 +890,7 @@ bool TColumnShard::SetupTtl() {
         TablesManager.MutablePrimaryIndex().StartTtl({}, DataLocksManager, memoryUsageLimit);
 
     if (indexChanges.empty()) {
-        YDB_LOG_DEBUG_COMP(NActors::NStructuredLog::TLogStack::GetComponent(), "",
+        YDB_LOG_DEBUG_COMP(NActors::NStructuredLog::TLogStack::GetComponent(), "Dump background, skipReason",
             {"background", "ttl"},
             {"skipReason", "no_changes"});
         return false;
@@ -927,7 +929,7 @@ void TColumnShard::SetupCleanupPortions() {
         return;
     }
     if (BackgroundController.IsCleanupPortionsActive()) {
-        YDB_LOG_DEBUG_COMP(NActors::NStructuredLog::TLogStack::GetComponent(), "",
+        YDB_LOG_DEBUG_COMP(NActors::NStructuredLog::TLogStack::GetComponent(), "Dump background, skipReason",
             {"background", "cleanup_portions"},
             {"skipReason", "in_progress"});
         Counters.GetCSCounters().OnSetupCleanupSkippedByInProgress();
@@ -937,7 +939,7 @@ void TColumnShard::SetupCleanupPortions() {
     const auto& pathsToDrop = TablesManager.GetPathsToDrop();
     auto changes = TablesManager.MutablePrimaryIndex().StartCleanupPortions(*GetSnapshotHolders(), pathsToDrop, DataLocksManager);
     if (!changes) {
-        YDB_LOG_DEBUG_COMP(NActors::NStructuredLog::TLogStack::GetComponent(), "",
+        YDB_LOG_DEBUG_COMP(NActors::NStructuredLog::TLogStack::GetComponent(), "Dump background, skipReason",
             {"background", "cleanup"},
             {"skipReason", "no_changes"});
         return;
@@ -960,7 +962,7 @@ void TColumnShard::SetupCleanupPortions() {
 void TColumnShard::SetupCleanupTables() {
     Counters.GetCSCounters().OnSetupCleanup();
     if (BackgroundController.IsCleanupTablesActive()) {
-        YDB_LOG_DEBUG_COMP(NActors::NStructuredLog::TLogStack::GetComponent(), "",
+        YDB_LOG_DEBUG_COMP(NActors::NStructuredLog::TLogStack::GetComponent(), "Dump background, skipReason",
             {"background", "cleanup_tables"},
             {"skipReason", "in_progress"});
         return;
@@ -973,13 +975,13 @@ void TColumnShard::SetupCleanupTables() {
 
     auto changes = TablesManager.MutablePrimaryIndex().StartCleanupTables(pathIdsEmptyInInsertTable, DataLocksManager);
     if (!changes) {
-        YDB_LOG_DEBUG_COMP(NActors::NStructuredLog::TLogStack::GetComponent(), "",
+        YDB_LOG_DEBUG_COMP(NActors::NStructuredLog::TLogStack::GetComponent(), "Dump background, skipReason",
             {"background", "cleanup"},
             {"skipReason", "no_changes"});
         return;
     }
 
-    YDB_LOG_DEBUG_COMP(NActors::NStructuredLog::TLogStack::GetComponent(), "",
+    YDB_LOG_DEBUG_COMP(NActors::NStructuredLog::TLogStack::GetComponent(), "Dump background, changesInfo",
         {"background", "cleanup"},
         {"changesInfo", changes->DebugString()});
     auto actualIndexInfo = TablesManager.GetPrimaryIndex()->GetVersionedIndexReadonlyCopy();
@@ -1091,7 +1093,7 @@ void TColumnShard::SetupCleanupSchemas() {
     }
     Counters.GetCSCounters().OnSetupCleanup();
     if (BackgroundController.IsCleanupSchemasActive()) {
-        YDB_LOG_DEBUG_COMP(NActors::NStructuredLog::TLogStack::GetComponent(), "",
+        YDB_LOG_DEBUG_COMP(NActors::NStructuredLog::TLogStack::GetComponent(), "Dump background, skipReason",
             {"background", "cleanup_schemas"},
             {"skipReason", "in_progress"});
         return;
@@ -1099,7 +1101,7 @@ void TColumnShard::SetupCleanupSchemas() {
 
     std::vector<TTablesManager::TSchemasChain> chainsToClean = TablesManager.ExtractSchemasToClean();
     if (chainsToClean.empty()) {
-        YDB_LOG_DEBUG_COMP(NActors::NStructuredLog::TLogStack::GetComponent(), "",
+        YDB_LOG_DEBUG_COMP(NActors::NStructuredLog::TLogStack::GetComponent(), "Dump background, skipReason",
             {"background", "cleanup_schemas"},
             {"skipReason", "no_changes"});
         return;
@@ -1264,20 +1266,23 @@ void TColumnShard::Handle(NActors::TEvents::TEvUndelivered::TPtr& ev, const TAct
 }
 
 void TColumnShard::Handle(TEvTxProcessing::TEvReadSet::TPtr& ev, const TActorContext& ctx) {
+    auto& txController = GetProgressTxController();
     const ui64 txId = ev->Get()->Record.GetTxId();
     const ui64 tabletDest = ev->Get()->Record.GetTabletProducer();
-    if (!GetProgressTxController().GetTxOperatorOptional(txId)) {
-        YDB_LOG_DEBUG_COMP(NKikimrServices::TX_COLUMNSHARD, "",
+
+    auto op = txController.GetTxOperatorAs<TEvWriteCommitSyncTransactionOperator>(txId, ETxOperatorStatus::Any, /*optional*/ true);
+    if (!op) {
+        YDB_LOG_DEBUG("",
             {"event", "read_set_ignored"},
             {"proto", ev->Get()->Record.DebugString()});
         TEvWriteCommitSyncTransactionOperator::SendBrokenFlagAck(*this, ev->Get()->Record.GetStep(), txId, tabletDest);
         return;
     }
-    auto op = GetProgressTxController().GetTxOperatorVerifiedAs<TEvWriteCommitSyncTransactionOperator>(txId);
-    YDB_LOG_DEBUG_COMP(NKikimrServices::TX_COLUMNSHARD, "",
+    YDB_LOG_DEBUG("",
         {"event", "read_set"},
         {"proto", ev->Get()->Record.DebugString()},
         {"lockId", op->GetLockId()});
+
     NKikimrTx::TReadSetData data;
     AFL_VERIFY(data.ParseFromArray(ev->Get()->Record.GetReadSet().data(), ev->Get()->Record.GetReadSet().size()));
     auto tx = op->CreateReceiveBrokenFlagTx(*this, tabletDest, data.GetDecision() != NKikimrTx::TReadSetData::DECISION_COMMIT);
@@ -1285,19 +1290,21 @@ void TColumnShard::Handle(TEvTxProcessing::TEvReadSet::TPtr& ev, const TActorCon
 }
 
 void TColumnShard::Handle(TEvTxProcessing::TEvReadSetAck::TPtr& ev, const TActorContext& ctx) {
-    auto opPtr = GetProgressTxController().GetTxOperatorOptional(ev->Get()->Record.GetTxId());
-    if (!opPtr) {
-        YDB_LOG_DEBUG_COMP(NKikimrServices::TX_COLUMNSHARD, "",
+    auto& txController = GetProgressTxController();
+    const ui64 txId = ev->Get()->Record.GetTxId();
+    auto op = txController.GetTxOperatorAs<TEvWriteCommitSyncTransactionOperator>(txId, ETxOperatorStatus::Any, /*optional*/ true);
+    if (!op) {
+        YDB_LOG_DEBUG("",
             {"event", "missed_read_set_ack"},
             {"proto", ev->Get()->Record.DebugString()},
             {"txId", ev->Get()->Record.GetTxId()});
         return;
     }
-    auto op = TValidator::CheckNotNull(dynamic_pointer_cast<TEvWriteCommitSyncTransactionOperator>(opPtr));
-    YDB_LOG_DEBUG_COMP(NKikimrServices::TX_COLUMNSHARD, "",
+    YDB_LOG_DEBUG("",
         {"event", "read_set_ack"},
         {"proto", ev->Get()->Record.DebugString()},
         {"lockId", op->GetLockId()});
+
     auto tx = op->CreateReceiveResultAckTx(*this, ev->Get()->Record.GetTabletConsumer());
     Execute(tx.release(), ctx);
 }
@@ -1407,7 +1414,7 @@ void TColumnShard::Handle(NOlap::NDataSharing::NEvents::TEvSendDataFromSource::T
         YDB_LOG_WARN_COMP(NKikimrServices::TX_COLUMNSHARD, "",
             {"event", "skip_received_data"});
     } else {
-        YDB_LOG_DEBUG_COMP(NKikimrServices::TX_COLUMNSHARD, "",
+        YDB_LOG_DEBUG_COMP(NKikimrServices::TX_COLUMNSHARD, "Dump event",
             {"event", "on_received_data"});
         Execute(txConclusion->release(), ctx);
     }
@@ -1430,7 +1437,7 @@ void TColumnShard::Handle(NOlap::NDataSharing::NEvents::TEvAckDataToSource::TPtr
         YDB_LOG_WARN_COMP(NKikimrServices::TX_COLUMNSHARD, "",
             {"event", "skip_ack_data"});
     } else {
-        YDB_LOG_DEBUG_COMP(NKikimrServices::TX_COLUMNSHARD, "",
+        YDB_LOG_DEBUG_COMP(NKikimrServices::TX_COLUMNSHARD, "Dump event",
             {"event", "on_ack_data"});
         Execute(txConclusion->release(), ctx);
     }
@@ -1453,7 +1460,7 @@ void TColumnShard::Handle(NOlap::NDataSharing::NEvents::TEvAckFinishToSource::TP
         YDB_LOG_WARN_COMP(NKikimrServices::TX_COLUMNSHARD, "",
             {"event", "skip_ack_finish"});
     } else {
-        YDB_LOG_DEBUG_COMP(NKikimrServices::TX_COLUMNSHARD, "",
+        YDB_LOG_DEBUG_COMP(NKikimrServices::TX_COLUMNSHARD, "Dump event",
             {"event", "on_ack_finish"});
         Execute(txConclusion->release(), ctx);
     }
@@ -1477,7 +1484,7 @@ void TColumnShard::Handle(NOlap::NDataSharing::NEvents::TEvFinishedFromSource::T
             {"event", "skip_finished_data"},
             {"error", txConclusion.GetErrorMessage()});
     } else {
-        YDB_LOG_DEBUG_COMP(NKikimrServices::TX_COLUMNSHARD, "",
+        YDB_LOG_DEBUG_COMP(NKikimrServices::TX_COLUMNSHARD, "Dump event",
             {"event", "on_finished_data"});
         Execute(txConclusion->release(), ctx);
     }
@@ -1583,12 +1590,13 @@ public:
 
         TBlobGroupSelector selector(Self->Info());
         bool reask = false;
-        NActors::TLogContextGuard lGuard = NActors::TLogContextBuilder::Build()("event", "TTxAskPortionChunks::Execute");
+        YDB_LOG_CREATE_CONTEXT(
+            {"event", "TTxAskPortionChunks::Execute"});
         for (auto&& i : PortionsByPath) {
             const auto& granule = Self->GetIndexAs<NOlap::TColumnEngineForLogs>().GetGranuleVerified(i.first);
             for (auto&& c : i.second.GetConsumers()) {
                 NActors::TLogContextGuard lcGuard = NActors::TLogContextBuilder::Build()("consumer", c.first)("path_id", i.first);
-                YDB_LOG_TRACE_COMP(NKikimrServices::TX_COLUMNSHARD, "",
+                YDB_LOG_TRACE_COMP(NKikimrServices::TX_COLUMNSHARD, "Dump size",
                     {"size", c.second.GetPortionsCount()});
                 for (auto&& portion : c.second.GetPortions(granule)) {
                     const ui64 p = portion->GetPortionId();
@@ -1645,7 +1653,7 @@ public:
             FetchedAccessors.emplace_back(std::move(i.second));
         }
 
-        YDB_LOG_TRACE_COMP(NKikimrServices::TX_COLUMNSHARD, "",
+        YDB_LOG_TRACE_COMP(NKikimrServices::TX_COLUMNSHARD, "Dump stage",
             {"stage", "finished"});
         NConveyorComposite::TScanServiceOperator::SendTaskToExecute(
             std::make_shared<TAccessorsParsingTask>(FetchCallback, std::move(FetchedAccessors)), 0);
@@ -1754,7 +1762,7 @@ void TColumnShard::Handle(NOlap::NDataSharing::NEvents::TEvAckFinishFromInitiato
         YDB_LOG_WARN_COMP(NKikimrServices::TX_COLUMNSHARD, "",
             {"event", "skip_initiator_ack_finished_data"});
     } else {
-        YDB_LOG_DEBUG_COMP(NKikimrServices::TX_COLUMNSHARD, "",
+        YDB_LOG_DEBUG_COMP(NKikimrServices::TX_COLUMNSHARD, "Dump event",
             {"event", "on_initiator_ack_finished_data"});
         Execute(txConclusion->release(), ctx);
     }
@@ -1800,7 +1808,7 @@ void TColumnShard::Handle(NOlap::NDataSharing::NEvents::TEvApplyLinksModificatio
             {"error", txConclusion.GetErrorMessage()},
             {"tabletId", modifiedTabletId});
     } else {
-        YDB_LOG_DEBUG_COMP(NKikimrServices::TX_COLUMNSHARD, "",
+        YDB_LOG_DEBUG_COMP(NKikimrServices::TX_COLUMNSHARD, "Dump event, tabletId",
             {"event", "on_change_links_finish"},
             {"tabletId", modifiedTabletId});
         Execute(txConclusion->release(), ctx);
@@ -1823,7 +1831,7 @@ void TColumnShard::Handle(NOlap::NBlobOperations::NEvents::TEvDeleteSharedBlobs:
             new NOlap::NBlobOperations::NEvents::TEvDeleteSharedBlobsFinished(
                 (NOlap::TTabletId)TabletID(), NKikimrColumnShardBlobOperationsProto::TEvDeleteSharedBlobsFinished::DestinationCurrenlyLocked));
         for (auto&& i : ev->Get()->Record.GetBlobIds()) {
-            YDB_LOG_DEBUG_COMP(NKikimrServices::TX_COLUMNSHARD_BLOBS, "",
+            YDB_LOG_DEBUG_COMP(NKikimrServices::TX_COLUMNSHARD_BLOBS, "Dump event, blobId, fromTablet",
                 {"event", "sharing_in_progress"},
                 {"blobId", i},
                 {"fromTablet", ev->Get()->Record.GetSourceTabletId()});
@@ -1872,7 +1880,7 @@ void TColumnShard::Enqueue(STFUNC_SIG) {
 }
 
 void TColumnShard::OnTieringModified(const std::optional<TInternalPathId> pathId) {
-    YDB_LOG_DEBUG_COMP(NKikimrServices::TX_COLUMNSHARD, "",
+    YDB_LOG_DEBUG_COMP(NKikimrServices::TX_COLUMNSHARD, "Dump event, pathId",
         {"event", "OnTieringModified"},
         {"pathId", pathId});
     StoragesManager->OnTieringModified(Tiers);

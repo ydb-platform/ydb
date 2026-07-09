@@ -7,8 +7,16 @@
 namespace NKikimr {
 namespace NSchemeShard {
 
+class TSchemeShard;
+struct TSetColumnConstraintOperationInfo;
+
 TString SerializeSetColumnConstraintColumnNames(const std::vector<TString>& columns);
 std::vector<TString> DeserializeSetColumnConstraintColumnNames(const TString& serialized);
+
+void FillSetColumnConstraint(
+    NKikimrSetColumnConstraint::TSetColumnConstraint& proto,
+    const TSetColumnConstraintOperationInfo& operationInfo,
+    TSchemeShard* self);
 
 
 struct TEvSetColumnConstraint {
@@ -17,6 +25,8 @@ struct TEvSetColumnConstraint {
         EvCreateResponse,
         EvGetRequest,
         EvGetResponse,
+        EvListRequest,
+        EvListResponse,
 
         EvEnd
     };
@@ -58,6 +68,20 @@ struct TEvSetColumnConstraint {
     };
 
     struct TEvGetResponse: public TEventPB<TEvGetResponse, NKikimrSetColumnConstraint::TEvGetResponse, EvGetResponse> {};
+
+    struct TEvListRequest: public TEventPB<TEvListRequest, NKikimrSetColumnConstraint::TEvListRequest, EvListRequest> {
+        TEvListRequest() = default;
+
+        explicit TEvListRequest(const TString& dbName, ui64 pageSize, const TString& pageToken) {
+            Record.SetDatabaseName(dbName);
+            Record.SetPageSize(pageSize);
+            Record.SetPageToken(pageToken);
+        }
+    };
+
+    struct TEvListResponse: public TEventPB<TEvListResponse, NKikimrSetColumnConstraint::TEvListResponse, EvListResponse> {
+        TEvListResponse() = default;
+    };
 }; // TEvSetColumnConstraint
 
 } // NSchemeShard

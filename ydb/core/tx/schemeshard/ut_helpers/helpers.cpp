@@ -2329,7 +2329,7 @@ namespace NSchemeShardUT_Private {
         UNIT_ASSERT(event);
 
         Cerr << "BUILDINDEX RESPONSE LIST: " << event->ToString() << Endl;
-        UNIT_ASSERT_EQUAL_C(event->Record.GetStatus(), 400000, event->Record.GetIssues());
+        UNIT_ASSERT_EQUAL_C(event->Record.GetStatus(), Ydb::StatusIds::SUCCESS, event->Record.GetIssues());
         return event->Record;
     }
 
@@ -2348,7 +2348,7 @@ namespace NSchemeShardUT_Private {
         UNIT_ASSERT(event);
 
         Cerr << "BUILDINDEX RESPONSE Get: " << event->ToString() << Endl;
-        UNIT_ASSERT_EQUAL_C(event->Record.GetStatus(), 400000, event->Record.GetIssues());
+        UNIT_ASSERT_EQUAL_C(event->Record.GetStatus(), Ydb::StatusIds::SUCCESS, event->Record.GetIssues());
         return event->Record;
     }
 
@@ -3571,6 +3571,32 @@ namespace NSchemeShardUT_Private {
         ForwardToTablet(runtime, schemeShard, sender, request.Release());
     }
 
+    TEvSetColumnConstraint::TEvListRequest* ListSetColumnConstraintRequest(const TString& dbName, ui64 pageSize, const TString& pageToken) {
+        return new TEvSetColumnConstraint::TEvListRequest(dbName, pageSize, pageToken);
+    }
+
+    NKikimrSetColumnConstraint::TEvListResponse TestListSetColumnConstraint(TTestActorRuntime& runtime, ui64 schemeShard, const TString &dbName) {
+        return TestListSetColumnConstraint(runtime, schemeShard, dbName, 100, "", Ydb::StatusIds::SUCCESS);
+    }
+
+    NKikimrSetColumnConstraint::TEvListResponse TestListSetColumnConstraint(
+        TTestActorRuntime& runtime, ui64 schemeShard, const TString &dbName,
+        ui64 pageSize, const TString& pageToken, Ydb::StatusIds::StatusCode expectedStatus)
+    {
+        auto sender = runtime.AllocateEdgeActor();
+        auto request = ListSetColumnConstraintRequest(dbName, pageSize, pageToken);
+
+        ForwardToTablet(runtime, schemeShard, sender, request);
+
+        TAutoPtr<IEventHandle> handle;
+        TEvSetColumnConstraint::TEvListResponse* event = runtime.GrabEdgeEvent<TEvSetColumnConstraint::TEvListResponse>(handle);
+        UNIT_ASSERT(event);
+
+        Cerr << "SET COLUMN CONSTRAINT RESPONSE LIST: " << event->ToString() << Endl;
+        UNIT_ASSERT_EQUAL_C(event->Record.GetStatus(), expectedStatus, event->Record.GetIssues());
+        return event->Record;
+    }
+
     void TestCheckColumnsNotNull(
         TTestActorRuntime& runtime,
         const TString& tablePath,
@@ -3601,3 +3627,4 @@ namespace NSchemeShardUT_Private {
         }
     }
 }
+

@@ -212,10 +212,10 @@
 
 - Rust
 
-  Для `QueryClient` размер пула задаётся через [`QuerySessionPoolSettings::with_limit`](https://docs.rs/ydb/latest/ydb/struct.QuerySessionPoolSettings.html#method.with_limit) и [`with_implicit_session_pool`](https://docs.rs/ydb/latest/ydb/struct.QueryClient.html#method.with_implicit_session_pool) (или [`with_session_pool`](https://docs.rs/ydb/latest/ydb/struct.QueryClient.html#method.with_session_pool) для явных сессий):
+  Размер пула сессий задаётся на драйвере через [`Client::with_session_pool`](https://docs.rs/ydb/latest/ydb/struct.Client.html#method.with_session_pool) и [`SessionPoolSettings::with_limit`](https://docs.rs/ydb/latest/ydb/struct.SessionPoolSettings.html#method.with_limit). Пул общий для table- и query-клиентов:
 
   ```rust
-  use ydb::{ClientBuilder, QuerySessionPoolSettings, YdbResult};
+  use ydb::{ClientBuilder, SessionPoolSettings, YdbResult};
 
   #[tokio::main]
   async fn main() -> YdbResult<()> {
@@ -225,12 +225,11 @@
       .client()?;
       client.wait().await?;
 
-      let mut qc = client
-          .query_client()
-          .with_implicit_session_pool(
-              QuerySessionPoolSettings::new().with_limit(500),
-          );
+      let client = client
+          .with_session_pool(SessionPoolSettings::new().with_limit(500))
+          .await?;
 
+      let mut qc = client.query_client();
       let mut row = qc.query_row("SELECT 1 AS one").await?;
       Ok(())
   }

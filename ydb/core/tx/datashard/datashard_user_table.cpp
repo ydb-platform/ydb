@@ -330,8 +330,8 @@ void TUserTable::ParseProto(const NKikimrSchemeOp::TTableDescription& descr)
     if (descr.GetPartitionConfig().HasUniqueIndexKeySize()) {
         UniqueIndexKeySize = descr.GetPartitionConfig().GetUniqueIndexKeySize();
     }
-    if (descr.HasTableType()) {
-        TableType = descr.GetTableType();
+    if (descr.GetPartitionConfig().HasSpecialTableType()) {
+        SpecialTableType = descr.GetPartitionConfig().GetSpecialTableType();
     }
 
     CheckSpecialColumns();
@@ -512,8 +512,8 @@ void TUserTable::DoApplyCreate(
         }
     }
 
-    if (TableType != NKikimrSchemeOp::ESpecialTableTypeNone) {
-        alter.SetSpecialTableType(tid, static_cast<ui32>(TableType));
+    if (SpecialTableType != NKikimrSchemeOp::ESpecialTableTypeNone) {
+        alter.SetSpecialTableType(tid, SpecialTableType);
     }
 
     // N.B. some settings only apply to the main table

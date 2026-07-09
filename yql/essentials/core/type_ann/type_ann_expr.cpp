@@ -918,6 +918,17 @@ public:
             return IGraphTransformer::TStatus::Ok;
         }
 
+        if (input->IsCallable("Materialize!")) {
+            if (!EnsureMinArgsCount(*input, 3, ctx)) {
+                return IGraphTransformer::TStatus::Error;
+            }
+            TTypeAnnotationNode::TListType children;
+            children.push_back(ctx.MakeType<TWorldExprType>());
+            children.push_back(input->Child(2)->GetTypeAnn());
+            input->SetTypeAnn(ctx.MakeType<TTupleExprType>(children));
+            return IGraphTransformer::TStatus::Ok;
+        }
+
         if (input->IsCallable("Read!")) {
             TTypeAnnotationNode::TListType children;
             children.push_back(ctx.MakeType<TWorldExprType>());

@@ -141,6 +141,9 @@ struct TSettings {
         }
 
         for (const auto& [name, value] : jsonInfo.GetMapSafe()) {
+            if (name == "node_portions_count_limit" || name == "weight_kff") {
+                continue;
+            }
             auto it = JsonValueHandlers.find(name);
             if (it == JsonValueHandlers.end()) {
                 return TConclusionStatus::Fail(TStringBuilder() << "unknown tiling compaction setting " << name);

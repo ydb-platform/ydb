@@ -309,11 +309,17 @@ bool CreateConsistentCopyTables(
                 continue;
             }
 
+            Y_ABORT_UNLESS(srcIndexPath.Base()->PathId == pathId);
+            TTableIndexInfo::TPtr indexInfo = context.SS->Indexes.at(pathId);
+            if (indexInfo->State != NKikimrSchemeOp::EIndexState::EIndexStateReady) {
+                LOG_TRACE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                    "CreateConsistentCopyTables: Skipping a non-ready index " << name << " in state " << indexInfo->State);
+                continue;
+            }
+
             LOG_TRACE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                 "CreateConsistentCopyTables: Creating index copy operation for: " << name);
 
-            Y_ABORT_UNLESS(srcIndexPath.Base()->PathId == pathId);
-            TTableIndexInfo::TPtr indexInfo = context.SS->Indexes.at(pathId);
             auto scheme = CreateIndexTask(indexInfo, dstIndexPath);
             if (!scheme) {
                 result = {CreateReject(nextId, NKikimrScheme::EStatus::StatusInvalidParameter,

@@ -1005,6 +1005,11 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
         return ctx.ProgramBuilder.BlockGuess(blockVariantValue, node.Child(1)->Content());
     });
 
+    AddCallable("BlockWay", [](const TExprNode& node, TMkqlBuildContext& ctx) {
+        const auto blockVariantValue = MkqlBuildExpr(*node.Child(0), ctx);
+        return ctx.ProgramBuilder.BlockWay(blockVariantValue);
+    });
+
     AddCallable("Visit", [](const TExprNode& node, TMkqlBuildContext& ctx) {
         const auto variantObj = MkqlBuildExpr(node.Head(), ctx);
         const auto type = node.Head().GetTypeAnn()->Cast<TVariantExprType>();

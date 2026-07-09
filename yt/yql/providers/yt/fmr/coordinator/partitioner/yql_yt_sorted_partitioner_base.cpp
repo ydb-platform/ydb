@@ -474,7 +474,7 @@ TPartitionResult TSortedPartitionerBase::PartitionFmrTables(const std::vector<TF
         ui64 totalWeight = CollectFmrTotalWeight(inputTables);
         ui64 estimatedParts = (totalWeight + maxWeight - 1) / maxWeight;
         if (estimatedParts > maxParts && maxParts > 0) {
-            maxWeight = totalWeight / maxParts;
+            maxWeight = (totalWeight + maxParts - 1) / maxParts;
             YQL_CLOG(INFO, FastMapReduce) << "AdjustDataWeightPerPartition (sorted): adjusted MaxDataWeightPerPart from "
                 << FmrPartitionSettings_.MaxDataWeightPerPart << " to " << maxWeight
                 << " (totalWeight=" << totalWeight << ", maxParts=" << maxParts << ")";

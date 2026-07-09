@@ -33,6 +33,7 @@ Scramp supports the following mechanisms:
 * [OpenSSF Scorecard](#openssf-scorecard)
 * [Doing A Release Of Scramp](#doing-a-release-of-scramp)
 * [Release Notes](#release-notes)
+  * [Version 1.4.9, 2026-06-19](#version-149-2026-06-19)
   * [Version 1.4.8, 2026-01-06](#version-148-2026-01-06)
   * [Version 1.4.7, 2026-01-04](#version-147-2026-01-04)
   * [Version 1.4.6, 2025-07-05](#version-146-2025-07-05)
@@ -361,6 +362,14 @@ Run `tox` to make sure all tests pass, then update the release notes, then do:
 
 
 ## Release Notes
+
+### Version 1.4.9, 2026-06-19
+
+- Fix typo in error message.
+* Strictly validate on base 64 decoding
+* Handle escaping in usernames according to the spec.
+* [SASLprep](https://www.rfc-editor.org/info/rfc8265/): Raise exception rather than using assert
+
 
 ### Version 1.4.8, 2026-01-06
 

@@ -275,6 +275,13 @@ protected:
         }
     }
 
+    bool IsBulkUpsertValidationEnabled() const {
+        if (!HasAppData()) {
+            return true;
+        }
+        return AppDataVerified().ColumnShardConfig.GetEnableBulkUpsertValidation();
+    }
+
 private:
     virtual void OnBeforeStart(const TActorContext&) {
         // nothing by default

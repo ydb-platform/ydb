@@ -232,6 +232,10 @@ protected:
         return Core.DoGetUsefulMetric();
     }
 
+    TConclusion<bool> DoCheckNoIntersections() const override {
+        return Core.HasNoIntersections();
+    }
+
     bool DoIsOverloaded() const override {
         return Core.IsOverloaded();
     }
@@ -250,8 +254,9 @@ protected:
 
 public:
     TOptimizerPlannerAdapter(const TInternalPathId pathId, const std::shared_ptr<IStoragesManager>& storagesManager,
-        const std::shared_ptr<arrow::Schema>& /*primaryKeysSchema*/, const TPlannerSettings& settings)
-        : TBase(pathId, std::nullopt)
+        const std::shared_ptr<arrow::Schema>& /*primaryKeysSchema*/, const TPlannerSettings& settings,
+        const std::optional<ui64>& nodePortionsCountLimit)
+        : TBase(pathId, nodePortionsCountLimit)
         , Counters()
         , Core(MakeCoreSettings(settings), Counters)
         , StoragesManager(storagesManager)
@@ -302,7 +307,8 @@ private:
     TConclusion<std::shared_ptr<IOptimizerPlanner>> DoBuildPlanner(const TBuildContext& context) const override {
         YDB_LOG_DEBUG("",
             {"message", "creating tiling++ compaction optimizer"});
-        return std::make_shared<TOptimizerPlannerAdapter>(context.GetPathId(), context.GetStorages(), context.GetPKSchema(), Settings);
+        return std::make_shared<TOptimizerPlannerAdapter>(
+            context.GetPathId(), context.GetStorages(), context.GetPKSchema(), Settings, GetNodePortionsCountLimit());
     }
 
 public:

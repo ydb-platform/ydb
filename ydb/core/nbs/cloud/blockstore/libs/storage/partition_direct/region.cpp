@@ -44,11 +44,12 @@ TRegion::TRegion(
             counters->GetSubgroup("vchunk", ToString(vChunkIndex));
 
         const auto* persisted = vChunkConfigs.FindPtr(vChunkIndex);
-        const auto vChunkConfig = persisted ? *persisted
-                                            : TVChunkConfig::MakeDefault(
-                                                  vChunkIndex,
-                                                  DirectBlockGroupHostCount,
-                                                  DefaultPrimaryCount);
+        auto vChunkConfig = persisted ? *persisted
+                                      : TVChunkConfig::MakeDefault(
+                                            vChunkIndex,
+                                            DirectBlockGroupHostCount,
+                                            DefaultPrimaryCount);
+        vChunkConfig.SetDBGIndex(dbgIndex);
         Y_ABORT_UNLESS(vChunkConfig.IsValid());
         Y_ABORT_UNLESS(vChunkConfig.GetVChunkIndex() == vChunkIndex);
 

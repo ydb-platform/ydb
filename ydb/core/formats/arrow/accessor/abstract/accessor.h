@@ -283,6 +283,9 @@ private:
     virtual ui32 DoGetValueRawBytes() const = 0;
     virtual std::shared_ptr<IChunkedArray> DoApplyFilter(const TColumnFilter& filter) const;
     virtual void DoVisitValues(const TValuesSimpleVisitor& visitor) const = 0;
+    virtual void DoVisitDistinctValues(const TValuesSimpleVisitor& visitor) const {
+        DoVisitValues(visitor);
+    }
 
 protected:
     virtual std::shared_ptr<arrow::ChunkedArray> GetChunkedArrayTrivial() const;
@@ -373,6 +376,12 @@ public:
 
     void VisitValues(const TValuesSimpleVisitor& visitor) const {
         DoVisitValues(visitor);
+    }
+
+    // Optimized version of VisitValues for consumers that do not care about order, positions, nulls and duplicate
+    // multiplicity. For implementations that do not have an optimized version it is the same as VisitValues.
+    void VisitDistinctValues(const TValuesSimpleVisitor& visitor) const {
+        DoVisitDistinctValues(visitor);
     }
 
     template <class TResult, class TActor>

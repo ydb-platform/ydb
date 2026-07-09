@@ -32,6 +32,7 @@ SRCS(
     row_ut.cpp
     schema_ut.cpp
     table_consumer_ut.cpp
+    table_mount_cache_ut.cpp
     unordered_reader_ut.cpp
     unversioned_row_ut.cpp
     validate_logical_type_ut.cpp

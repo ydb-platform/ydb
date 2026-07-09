@@ -586,6 +586,7 @@ ydb/core/tablet_flat/ut TPageHandleTest.HandleRef
 ydb/core/tablet_flat/ut TPageHandleTest.PinnedRef
 ydb/core/transfer/ut/column_table Transfer_ColumnTable.BigBatchSize_Local
 ydb/core/transfer/ut/column_table Transfer_ColumnTable.BigBatchSize_Remote
+ydb/core/transfer/ut/column_table Transfer_ColumnTable.MessageField_ProducerId
 ydb/core/transfer/ut/column_table Transfer_ColumnTable.ProcessingCDCMessage
 ydb/core/transfer/ut/column_table unittest.sole chunk
 ydb/core/transfer/ut/functional Transfer.CheckCommittedOffsetEmptyBatch_Local
@@ -644,6 +645,7 @@ ydb/core/tx/datashard/ut_stats unittest.sole chunk
 ydb/core/tx/datashard/ut_validate_row_condition DataShardCheckConstraintScan.CheckSpecificColumnWithNull
 ydb/core/tx/datashard/ut_validate_row_condition unittest.sole chunk
 ydb/core/tx/schemeshard/ut_full_backup unittest.sole chunk
+ydb/core/tx/schemeshard/ut_index_build IndexBuildTest.CancellationNotEnoughRetriesUniq
 ydb/core/tx/schemeshard/ut_index_build unittest.[*/*] chunk
 ydb/core/tx/schemeshard/ut_login TSchemeShardLoginTest.CheckThatLockedOutParametersIsRestoredFromLocalDb
 ydb/core/tx/schemeshard/ut_metrics unittest.[*/*] chunk
@@ -658,6 +660,7 @@ ydb/core/tx/schemeshard/ut_shred_reboots ShredReboots.SimpleShredTest
 ydb/core/tx/schemeshard/ut_shred_reboots unittest.[*/*] chunk
 ydb/core/tx/schemeshard/ut_split_merge_reboots TSchemeShardSplitTestReboots.SplitWithTxInFlightWithReboots[TabletRebootsBucket0]
 ydb/core/tx/schemeshard/ut_subdomain TSchemeShardSubDomainTest.SimultaneousCreateTenantTable
+ydb/core/tx/tiering/ut ColumnShardTiers.DSConfigsWithQueryServiceDdl
 ydb/core/tx/tx_proxy/ut_base_tenant TSubDomainTest.CoordinatorRunAtSubdomainNodeWhenAvailable
 ydb/core/tx/tx_proxy/ut_ext_tenant TExtSubDomainTest.CreateTableInsideAndAlterDomainAndTable-AlterDatabaseCreateHiveFirst-false
 ydb/core/viewer/tests test.py.TestViewer.test_viewer_cluster

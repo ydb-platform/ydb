@@ -2,6 +2,7 @@
 
 #include <ydb/core/tx/columnshard/data_sharing/modification/events/change_owning.h>
 #include <ydb/core/tx/columnshard/data_sharing/modification/tasks/modification.h>
+
 #include <ydb/library/actors/struct_log/log_stack.h>
 
 namespace NKikimr::NOlap::NDataSharing {

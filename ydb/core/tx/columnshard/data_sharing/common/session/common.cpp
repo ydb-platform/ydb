@@ -4,8 +4,9 @@
 #include <ydb/core/tx/columnshard/data_locks/locks/snapshot.h>
 #include <ydb/core/tx/columnshard/engines/column_engine_logs.h>
 
-#include <util/string/builder.h>
 #include <ydb/library/actors/struct_log/log_stack.h>
+
+#include <util/string/builder.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD
 

@@ -30,6 +30,15 @@ using TResponseCb = std::function<void(TResponse*, TPlainStatus status)>;
 using TDeferredOperationCb = std::function<void(Ydb::Operations::Operation*, TPlainStatus status)>;
 using TDelayedCb = std::function<void(bool ok)>;
 
+inline TPlainStatus MakeClientStoppedStatus() {
+    return TPlainStatus(EStatus::CLIENT_CANCELLED, "Client is stopped");
+}
+
+class TQueueResponse : public IObjectInQueue {
+public:
+    virtual void Cancel() = 0;
+};
+
 template<typename TCb>
 class TGenericCbHolder {
 protected:
@@ -119,7 +128,7 @@ private:
 template<typename TResponse>
 class TGRpcErrorResponse
     : public TGenericCbHolder<TResponseCb<TResponse>>
-    , public IObjectInQueue
+    , public TQueueResponse
 {
 public:
     TGRpcErrorResponse(
@@ -147,6 +156,12 @@ public:
         delete this;
     }
 
+    void Cancel() override {
+        this->Context_.reset();
+        this->UserResponseCb_(nullptr, MakeClientStoppedStatus());
+        delete this;
+    }
+
 private:
     NYdbGrpc::TGrpcStatus GRpcStatus_;
     std::string Endpoint_;
@@ -155,7 +170,7 @@ private:
 template<typename TResponse>
 class TResult
     : public TGenericCbHolder<TResponseCb<TResponse>>
-    , public IObjectInQueue
+    , public TQueueResponse
 {
 public:
     TResult(
@@ -175,6 +190,12 @@ public:
     void Process(void*) override {
         this->Context_.reset();
         this->UserResponseCb_(&Response_, TPlainStatus{GRpcStatus_, Endpoint_, std::move(Metadata_)});
+        delete this;
+    }
+
+    void Cancel() override {
+        this->Context_.reset();
+        this->UserResponseCb_(nullptr, MakeClientStoppedStatus());
         delete this;
     }
 

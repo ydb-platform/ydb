@@ -203,6 +203,16 @@ class TScheduledObject : public TThrRefBase {
         return static_cast<TDerived*>(this);
     }
 
+    void Complete(bool ok) {
+        bool entered = true;
+        std::unique_ptr<NYdbGrpc::IQueueClientCallbackGuard> guard;
+        if (CallbackGuardFactory) {
+            guard = CallbackGuardFactory();
+            entered = !guard || guard->IsEntered();
+        }
+        Derived()->OnComplete(entered ? ok : false);
+    }
+
 protected:
     TScheduledObject() { }
 
@@ -210,9 +220,7 @@ protected:
         CallbackGuardFactory = provider->GetCallbackGuardFactory();
         auto context = provider->CreateContext();
         if (!context) {
-            NYdbGrpc::RunQueueClientCallback(CallbackGuardFactory, [&] {
-                Derived()->OnComplete(false);
-            });
+            Complete(false);
             return;
         }
 
@@ -239,9 +247,7 @@ private:
             Context.reset();
         }
 
-        NYdbGrpc::RunQueueClientCallback(CallbackGuardFactory, [&] {
-            Derived()->OnComplete(ok);
-        });
+        Complete(ok);
     }
 
 private:
@@ -415,6 +421,8 @@ void TGRpcConnectionsImpl::AddPeriodicTask(TPeriodicCb&& cb, TDeadline::Duration
         TSdkCallbackGuard guard(StopState_);
         if (guard.IsEntered()) {
             cb(std::move(issues), EStatus::CLIENT_INTERNAL_ERROR);
+        } else {
+            cb(std::move(issues), EStatus::CLIENT_CANCELLED);
         }
     } else {
         auto action = MakeIntrusive<TPeriodicAction>(
@@ -555,10 +563,7 @@ void TGRpcConnectionsImpl::Stop(bool wait) {
                 return cb();
             }
 
-            auto promise = NThreading::NewPromise<void>();
-            auto future = promise.GetFuture();
-            promise.SetValue();
-            return future;
+            return NThreading::MakeFuture();
         }).Wait();
     GRpcClientLow_.Stop(wait);
     if (wait) {
@@ -717,7 +722,11 @@ void TGRpcConnectionsImpl::EnqueueResponse(IObjectInQueue* action) {
     ResponseQueue_->Post([action, stopState = std::move(stopState)]() {
         TSdkCallbackGuard guard(stopState);
         if (!guard.IsEntered()) {
-            delete action;
+            if (auto* response = dynamic_cast<TQueueResponse*>(action)) {
+                response->Cancel();
+            } else {
+                delete action;
+            }
             return;
         }
         action->Process(nullptr);

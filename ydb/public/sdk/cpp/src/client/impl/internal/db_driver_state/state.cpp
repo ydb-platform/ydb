@@ -18,12 +18,6 @@ namespace {
         url.assign(to, Quote(to, TStringBuf(url), safe));
     }
 
-    NThreading::TFuture<void> MakeReadyFuture() {
-        auto promise = NThreading::NewPromise<void>();
-        auto future = promise.GetFuture();
-        promise.SetValue();
-        return future;
-    }
 }
 
 namespace NYdb::inline Dev {
@@ -321,7 +315,7 @@ NThreading::TFuture<void> TDbDriverStateTracker::SendNotification(
         }
     }
     if (results.empty()) {
-        return MakeReadyFuture();
+        return NThreading::MakeFuture();
     }
     return NThreading::WaitExceptionOrAll(results);
 }

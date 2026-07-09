@@ -13,7 +13,7 @@ In `public/` and `common/`, nested dirs by **purpose**; in `pqrb/` and
 * **`events/`** — internal events and protos.
 * **`pqrb/`** — whole-topic tablet (balancing, stats, autopartitioning).
 * **`pqtablet/`** — one or more partitions (reads, writes, batching, …).
-* **`writer/`**, **`dread_cache_service/`**, **`deferred_publish/`** — write path,
+* **`writer/`**, **`dread_cache_service/`**, **`deferred_publish/`** — writer,
   direct-read cache, deferred publish.
 
 Protocol layers (each has its own `AGENTS.md`):

@@ -137,7 +137,7 @@ TUnboxedValue MakeUuidValue(const IValueBuilder* valueBuilder, bool isV8, ui64 p
         bytes = NUuidKeyGen::MakeV8Bytes(prefix, epochSeconds, hasPrefix);
     } else {
         ui64 timestampMs = MilliSeconds();
-        bytes = NUuidKeyGen::MakeV7Bytes(timestampMs, prefix, hasPrefix);
+        bytes = NUuidKeyGen::MakeV7Bytes(prefix, timestampMs, hasPrefix);
     }
 
     return valueBuilder->NewString(TStringRef(

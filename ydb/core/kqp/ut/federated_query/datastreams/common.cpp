@@ -6,6 +6,8 @@
 #include <ydb/core/kqp/proxy_service/kqp_script_executions.h>
 #include <ydb/core/kqp/ut/federated_query/generic_ut/iceberg_ut_data.h>
 #include <ydb/core/kqp/ut/federated_query/s3/s3_recipe_ut_helpers.h>
+#include <ydb/core/protos/auth.pb.h>
+#include <ydb/core/protos/replication.pb.h>
 #include <ydb/library/testlib/solomon_helpers/solomon_emulator_helpers.h>
 #include <ydb/library/yql/dq/actors/compute/dq_checkpoints.h>
 #include <ydb/library/yql/providers/s3/actors/yql_s3_actors_factory_impl.h>
@@ -100,6 +102,32 @@ std::shared_ptr<TKikimrRunner> TStreamingTestFixture::GetKikimrRunner() {
 
         auto& tableServiceConfig = *AppConfig->MutableTableServiceConfig();
         tableServiceConfig.SetDqChannelVersion(2u);
+
+        auto& authConfig = *AppConfig->MutableAuthConfig();
+
+        if (auto vmMetadataEmulatorHost = getenv("VM_METADATA_EMULATOR_HOST")) {
+            auto& localMetadataService = *authConfig.MutableLocalMetadataService();
+            localMetadataService.SetHost(vmMetadataEmulatorHost);
+            localMetadataService.SetPort(80);
+        }
+
+        if (auto iamEndpoint = getenv("IAM_EMULATOR_ENDPOINT")) {
+            auto& iamServiceControl = *AppConfig->MutableReplicationConfig()->MutableIamServiceControl();
+            iamServiceControl.SetEndpoint(iamEndpoint);
+            iamServiceControl.SetEnableSsl(false);
+
+            iamServiceControl.SetServiceId("ydb");
+            iamServiceControl.SetMicroserviceId("data-plane");
+            iamServiceControl.SetResourceType("resource-manager.cloud");
+
+            authConfig.SetAccessServiceEndpoint(iamEndpoint);
+            authConfig.SetUseAccessServiceTLS(false);
+        }
+
+        {
+            auto useAccessServiceV2 = getenv("USE_ACCESS_SERVICE_V2");
+            featureFlags.SetEnableAccessServiceV2Interface(!useAccessServiceV2 || FromString<bool>(useAccessServiceV2));
+        }
 
         LogSettings
             .AddLogPriority(NKikimrServices::STREAMS_STORAGE_SERVICE, NLog::PRI_DEBUG)

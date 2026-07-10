@@ -55,6 +55,10 @@ def get_ydb_config(request):
         extra_feature_flags.add("enable_user_attributes_in_topic_query")
     else:
         disabled_feature_flags.append("enable_user_attributes_in_topic_query")
+    if os.environ.get("USE_ACCESS_SERVICE_V2", "true") == "true"
+        extra_feature_flags.add("enable_access_service_v2_interface")
+    else
+        disabled_feature_flags.append("enable_access_service_v2_interface")
 
     config = KikimrConfigGenerator(
         erasure=Erasure.MIRROR_3_DC,
@@ -91,6 +95,8 @@ def get_ydb_config(request):
         "host": os.environ.get("VM_METADATA_EMULATOR_HOST", "localhost"),
         "port": int(os.environ.get("VM_METADATA_EMULATOR_PORT", 80)),
     }
+    config.yaml_config["auth_config"]["access_service_endpoint"] = os.environ.get("IAM_EMULATOR_ENDPOINT", "localhost:6666")
+    config.yaml_config["auth_config"]["use_access_service_tls"] = False
     return config
 
 

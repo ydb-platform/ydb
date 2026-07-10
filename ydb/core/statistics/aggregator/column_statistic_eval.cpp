@@ -4,11 +4,14 @@
 #include <ydb/core/scheme/scheme_types_proto.h>
 #include <ydb/public/api/protos/ydb_value.pb.h>
 #include <ydb/library/yql/udfs/statistics_internal/all_agg_funcs.h>
+#include <ydb/library/actors/core/log.h>
 #include <yql/essentials/core/minsketch/count_min_sketch.h>
 #include <yql/essentials/core/histogram/eq_width_histogram.h>
 #include <yql/essentials/public/udf/udf_data_type.h>
 
 #include <numbers>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::STATISTICS
 
 namespace NKikimr::NStat {
 
@@ -291,8 +294,16 @@ public:
         // so size as if every tuple were unique (ndv == n).
         const double n = rowCount;
         const double eps = (TCountMinSketchState::RELATIVE_ERROR - 1) / n;
+        const ui64 width = TCountMinSketchState::WidthForEps(eps);
+        if (width >= TCountMinSketchState::MAX_WIDTH - 1) {
+            YDB_LOG_WARN("[TMultiColumnCountMinSketchEval] Multi-column CMS sized at max width due to ndv==n assumption"
+                    " (no NDV estimate is available for column tuples); sketch may provide low selectivity value"
+                    " if the tuple is not actually high-cardinality",
+                {"rowCount", rowCount},
+                {"width", width});
+        }
         return std::make_unique<TMultiColumnCountMinSketchEval>(
-            std::move(columnNames), std::move(columnIds), TCountMinSketchState::WidthForEps(eps));
+            std::move(columnNames), std::move(columnIds), width);
     }
 
     EStatType GetType() const final { return EStatType::COUNT_MIN_SKETCH; }

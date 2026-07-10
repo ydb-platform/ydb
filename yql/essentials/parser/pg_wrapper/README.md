@@ -15,8 +15,6 @@ How to upgrade to newer PostgreSQL:
 
 1. Make sure you have folloing packages installed (assuming you have Ubuntu Linux):
 
-libicu-dev
-icu-devtools
 pkg-config
 liblz4-dev
 libreadline-dev

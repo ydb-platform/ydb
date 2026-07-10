@@ -2456,9 +2456,9 @@ Y_UNIT_TEST(TableSystemTableWithEmptyKeyColumnIds) {
     // When trying to SHOW CREATE TABLE on a system table that has empty key column IDs,
     // the formatter crashes at line 347 with: Y_ENSURE(!tableDesc.GetKeyColumnIds().empty())
     //
-    // The issue specifically mentions `.sys/tables` as causing the crash.
-    // This test verifies that SHOW CREATE TABLE on system tables either succeeds
-    // or returns a proper error status, but does not crash the server.
+    // The issue was triggered by system tables with empty key column IDs (e.g. some
+    // `.sys/*` views). This test verifies that SHOW CREATE TABLE on representative
+    // system tables either succeeds or returns a proper error status, but does not crash.
 
     TTestEnv env(1, 4, {.StoragePools = 3, .ShowCreateTable = true});
 

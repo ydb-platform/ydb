@@ -3502,6 +3502,36 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
             CompareYson(output, R"([[1u;1u]])");
         }
     }
+
+    Y_UNIT_TEST(RejectSyntaxPgMarker) {
+        TKikimrRunner kikimr;
+        auto client = kikimr.GetQueryClient();
+
+        auto result = client.ExecuteQuery(
+            "--!syntax_pg\nSELECT 1 AS result;",
+            NYdb::NQuery::TTxControl::BeginTx().CommitTx()
+        ).ExtractValueSync();
+
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
+        UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "PostgreSQL syntax is not supported", result.GetIssues().ToString());
+    }
+
+    Y_UNIT_TEST(RejectSyntaxPgProto) {
+        TKikimrRunner kikimr;
+        auto client = kikimr.GetQueryClient();
+
+        auto settings = NYdb::NQuery::TExecuteQuerySettings()
+            .Syntax(NYdb::NQuery::ESyntax::Pg);
+
+        auto result = client.ExecuteQuery(
+            "SELECT 1 AS result",
+            NYdb::NQuery::TTxControl::BeginTx().CommitTx(),
+            settings
+        ).ExtractValueSync();
+
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
+        UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "PostgreSQL syntax is not supported", result.GetIssues().ToString());
+    }
 }
 Y_UNIT_TEST_SUITE(KqpQueryDiscard) {
     TKikimrRunner CreateKikimrWithDiscardSelect(bool useRealThreads = true) {
@@ -3853,36 +3883,6 @@ Y_UNIT_TEST_SUITE(KqpQueryDiscard) {
             CompareYson(Sprintf(R"([[["%s"]]])", insertedValue.c_str()),
                 FormatResultSetYson(result.GetResultSet(0)));
         }
-    }
-
-    Y_UNIT_TEST(RejectSyntaxPgMarker) {
-        TKikimrRunner kikimr;
-        auto client = kikimr.GetQueryClient();
-
-        auto result = client.ExecuteQuery(
-            "--!syntax_pg\nSELECT 1 AS result;",
-            NYdb::NQuery::TTxControl::BeginTx().CommitTx()
-        ).ExtractValueSync();
-
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
-        UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "PostgreSQL syntax is not supported", result.GetIssues().ToString());
-    }
-
-    Y_UNIT_TEST(RejectSyntaxPgProto) {
-        TKikimrRunner kikimr;
-        auto client = kikimr.GetQueryClient();
-
-        auto settings = NYdb::NQuery::TExecuteQuerySettings()
-            .Syntax(NYdb::NQuery::ESyntax::Pg);
-
-        auto result = client.ExecuteQuery(
-            "SELECT 1 AS result",
-            NYdb::NQuery::TTxControl::BeginTx().CommitTx(),
-            settings
-        ).ExtractValueSync();
-
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
-        UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "PostgreSQL syntax is not supported", result.GetIssues().ToString());
     }
 }
 

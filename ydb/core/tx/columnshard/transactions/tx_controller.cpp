@@ -100,8 +100,7 @@ bool TTxController::Load(NTabletFlatExecutor::TTransactionContext& txc) {
 std::shared_ptr<TTxController::ITransactionOperator> TTxController::UpdateTxSourceInfo(
     const TFullTxInfo& tx, NTabletFlatExecutor::TTransactionContext& txc) {
     auto op = GetTxOperator(tx.GetTxId(), ETxOperatorStatus::InProgress);
-    const bool sourceChanged = op->GetTxInfo().Source != tx.Source;
-    op->ResetStatusOnUpdate(sourceChanged);
+    op->ResetStatusOnUpdate();
 
     auto& txInfo = op->MutableTxInfo();
     txInfo.Source = tx.Source;

@@ -39,7 +39,6 @@ public:
 private:
     ui64 TxId = 0;
     bool DoComplete = false;
-    TActorId Subscriber;
 };
 
 void TColumnShard::Handle(TEvDataShard::TEvCancelBackup::TPtr& ev, const TActorContext& ctx) {

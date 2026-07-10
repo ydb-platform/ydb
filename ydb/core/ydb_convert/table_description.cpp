@@ -966,6 +966,10 @@ void FillColumnDescription(Ydb::Table::CreateTableRequest& out,
 }
 
 template <typename TYdbProto>
+void FillMultiColumnStatisticsDescriptionImpl(TYdbProto& out,
+        const google::protobuf::RepeatedPtrField<NKikimrSchemeOp::TMultiColumnStatisticsDescription>& in);
+
+template <typename TYdbProto>
 void FillColumnDescriptionImpl(TYdbProto& out, const NKikimrSchemeOp::TColumnTableDescription& in) {
     auto& schema = in.GetSchema();
 
@@ -1015,22 +1019,7 @@ void FillColumnDescriptionImpl(TYdbProto& out, const NKikimrSchemeOp::TColumnTab
         }
     }
 
-    for (const auto& statistics : in.GetMultiColumnStatistics()) {
-        auto* outMultiColumnStatistics = out.add_statistics();
-        outMultiColumnStatistics->set_name(statistics.GetName());
-        for (const auto& column : statistics.GetColumnNames()) {
-            outMultiColumnStatistics->add_columns(column);
-        }
-        for (const auto type : statistics.GetTypes()) {
-            switch (type) {
-                case NKikimrSchemeOp::EMultiColumnStatisticsType::COUNT_MIN_SKETCH:
-                    outMultiColumnStatistics->add_types(Ydb::Table::TableMultiColumnStatistics::COUNT_MIN_SKETCH);
-                    break;
-                default:
-                    break;
-            }
-        }
-    }
+    FillMultiColumnStatisticsDescriptionImpl(out, in.GetMultiColumnStatistics());
 
     out.set_store_type(Ydb::Table::StoreType::STORE_TYPE_COLUMN);
 }
@@ -2129,8 +2118,9 @@ void FillIndexDescription(Ydb::Table::CreateTableRequest& out,
 }
 
 template <typename TYdbProto>
-void FillMultiColumnStatisticsDescriptionImpl(TYdbProto& out, const NKikimrSchemeOp::TTableDescription& in) {
-    for (const auto& statistics : in.GetMultiColumnStatistics()) {
+void FillMultiColumnStatisticsDescriptionImpl(TYdbProto& out,
+        const google::protobuf::RepeatedPtrField<NKikimrSchemeOp::TMultiColumnStatisticsDescription>& in) {
+    for (const auto& statistics : in) {
         auto* outMultiColumnStatistics = out.add_statistics();
         outMultiColumnStatistics->set_name(statistics.GetName());
         for (const auto& column : statistics.GetColumnNames()) {
@@ -2150,12 +2140,12 @@ void FillMultiColumnStatisticsDescriptionImpl(TYdbProto& out, const NKikimrSchem
 
 void FillMultiColumnStatisticsDescription(Ydb::Table::DescribeTableResult& out,
         const NKikimrSchemeOp::TTableDescription& in) {
-    FillMultiColumnStatisticsDescriptionImpl(out, in);
+    FillMultiColumnStatisticsDescriptionImpl(out, in.GetMultiColumnStatistics());
 }
 
 void FillMultiColumnStatisticsDescription(Ydb::Table::CreateTableRequest& out,
         const NKikimrSchemeOp::TTableDescription& in) {
-    FillMultiColumnStatisticsDescriptionImpl(out, in);
+    FillMultiColumnStatisticsDescriptionImpl(out, in.GetMultiColumnStatistics());
 }
 
 void FillMultiColumnStatistics(NKikimrSchemeOp::TMultiColumnStatisticsDescription& out,

@@ -2962,7 +2962,9 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
     }
 
     void TestTableWithMultiColumnStatisticsBackupRestore() {
-        TKikimrWithGrpcAndRootSchema server;
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableFeatureFlags()->SetEnableColumnStatistics(true);
+        TKikimrWithGrpcAndRootSchema server{std::move(appConfig)};
         auto driver = TDriver(TDriverConfig().SetEndpoint(Sprintf("localhost:%u", server.GetPort())).SetDatabase("/Root"));
         TTableClient tableClient(driver);
         auto session = tableClient.GetSession().ExtractValueSync().GetSession();
@@ -3956,6 +3958,10 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
             UNIT_ASSERT_STRINGS_EQUAL_C(entries[0].Name, "/Root/with_one_dir", entries[0]);
             UNIT_ASSERT_STRINGS_EQUAL_C(entries[1].Name, "/Root/with_one_file", entries[1]);
         }
+    }
+
+    Y_UNIT_TEST(BackupRestoreTableWithMultiColumnStatistics) {
+        TestTableWithMultiColumnStatisticsBackupRestore();
     }
 
 }

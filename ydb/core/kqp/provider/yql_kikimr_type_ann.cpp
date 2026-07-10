@@ -1597,6 +1597,11 @@ private:
             TMultiColumnStatisticsDescription statisticsDesc;
             statisticsDesc.Name = TString(statistics.Name().Value());
             for (const auto& column : statistics.Columns()) {
+                if (!meta->Columns.contains(TString(column.Value()))) {
+                    ctx.AddError(TIssue(ctx.GetPosition(column.Pos()), TStringBuilder()
+                        << "Statistics column: " << column.Value() << " was not found in the table"));
+                    return TStatus::Error;
+                }
                 statisticsDesc.Columns.push_back(TString(column.Value()));
             }
             for (const auto& type : statistics.Types()) {

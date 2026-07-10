@@ -16,7 +16,7 @@ namespace {
 
 class TCheckpointOutputStream : public arrow::io::OutputStream {
 public:
-    TCheckpointOutputStream() : Buffer_(), TotalWritten_(0), IsOpen_(true) {}
+    TCheckpointOutputStream() : Buffer(), TotalWritten(0), IsOpen(true) {}
 
     arrow::Status Close() override {
         IsOpen = false;

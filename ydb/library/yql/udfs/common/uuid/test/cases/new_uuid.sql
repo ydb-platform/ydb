@@ -9,6 +9,8 @@ SELECT Uuid::newPrefixV8($p) != Uuid::newV8() AS v8_prefix_differs;
 SELECT Uuid::newPrefixV7(3) != Uuid::newV7() AS v7_small_prefix_differs;
 
 SELECT Uuid::newV7(1) != Uuid::newV7(2) AS v7_dep_unique;
+SELECT Uuid::newV8(1) != Uuid::newV8(2) AS v8_dep_unique;
 SELECT Uuid::newPrefixV7($p, 1) != Uuid::newPrefixV7($p, 2) AS v7_prefix_dep_unique;
+SELECT Uuid::newPrefixV8($p, 1) != Uuid::newPrefixV8($p, 2) AS v8_prefix_dep_unique;
 
 SELECT $p != 0ul OR $p == 0ul AS prefix_is_uint64;

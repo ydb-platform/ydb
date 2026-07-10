@@ -64,7 +64,8 @@ class TestYdbTopicWorkload(StressFixture):
                 "enable_kafka_native_balancing",
                 "enable_kafka_transactions",
                 "enable_topic_compactification_by_key",
-                "enable_serverless_exclusive_dynamic_nodes"
+                "enable_serverless_exclusive_dynamic_nodes",
+                "enable_serverless_transactions"
             ],
             erasure=Erasure.NONE,
             nodes=1,

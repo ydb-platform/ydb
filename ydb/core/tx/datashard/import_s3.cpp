@@ -178,6 +178,12 @@ private:
 template <typename TSettings>
 class TS3Downloader: public TActorBootstrapped<TS3Downloader<TSettings>> {
     using TThis = TS3Downloader<TSettings>;
+
+    enum EWakeupTag: ui64 {
+        RestartTag = 0,
+        ProcessTag = 1,
+    };
+
     // IReadController
     //
     // Work cycle:
@@ -664,6 +670,23 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader<TSettings>> {
         Restart();
     }
 
+    void Handle(TEvents::TEvWakeup::TPtr& ev) {
+        switch (ev->Get()->Tag) {
+        case RestartTag:
+            Restart();
+            break;
+        case ProcessTag:
+            Process();
+            break;
+        }
+    }
+
+    void HandleChecksum(TEvents::TEvWakeup::TPtr& ev) {
+        if (ev->Get()->Tag == RestartTag) {
+            Restart();
+        }
+    }
+
     void Restart() {
         IMPORT_LOG_N("Restart"
             << ": attempt# " << Attempt);
@@ -949,6 +972,7 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader<TSettings>> {
         Reader->Confirm(DownloadState);
 
         if (DirectPartImportEnabled) {
+            Counters.LatencyProcess.Finish(Now());
             ContinueDirectImport();
         } else {
             UploadRows();
@@ -1060,7 +1084,8 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader<TSettings>> {
         }
 
         if (DirectImport->CanFeed()) {
-            Process(); // fetches/parses the next chunk
+            // fetches/parses the next chunk
+            this->Send(this->SelfId(), new TEvents::TEvWakeup(ProcessTag));
         } else {
             DirectImport->Pause(); // resumed on TEvPutResult
         }
@@ -1275,7 +1300,7 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader<TSettings>> {
     void Retry() {
         Delay = Min(Delay * ++Attempt, MaxDelay);
         const TDuration random = TDuration::FromValue(TAppData::RandomProvider->GenRand64() % Delay.MicroSeconds());
-        this->Schedule(Delay + random, new TEvents::TEvWakeup());
+        this->Schedule(Delay + random, new TEvents::TEvWakeup(RestartTag));
     }
 
     template <typename T>
@@ -1402,7 +1427,7 @@ public:
             hFunc(TEvDataShard::TEvS3DirectWriteFinishResult, Handle);
             hFunc(TEvBlobStorage::TEvPutResult, Handle);
 
-            sFunc(TEvents::TEvWakeup, Restart);
+            hFunc(TEvents::TEvWakeup, Handle);
             sFunc(TEvents::TEvPoisonPill, NotifyDied);
         }
     }
@@ -1412,7 +1437,7 @@ public:
             hFunc(TEvExternalStorage::TEvHeadObjectResponse, HandleChecksum);
             hFunc(TEvExternalStorage::TEvGetObjectResponse, HandleChecksum);
 
-            sFunc(TEvents::TEvWakeup, Restart);
+            hFunc(TEvents::TEvWakeup, HandleChecksum);
             sFunc(TEvents::TEvPoisonPill, NotifyDied);
         }
     }

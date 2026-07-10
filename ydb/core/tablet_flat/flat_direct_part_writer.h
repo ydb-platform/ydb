@@ -94,7 +94,7 @@ namespace NTabletFlatExecutor {
         bool CanFeed() const noexcept { return !Failed && !Finishing && Flushing < MaxFlight; }
 
         // True once all rows have been fed (Finalize called) and all blobs acked.
-        bool IsComplete() const noexcept { return Finishing && Flushing == 0; }
+        bool IsComplete() const noexcept { return !Failed && Finishing && Flushing == 0; }
 
         /**
          * Append a single committed row from parsed cells, laying it out by the

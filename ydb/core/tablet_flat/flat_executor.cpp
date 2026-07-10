@@ -2800,15 +2800,15 @@ void TExecutor::CommitTransactionLog(std::unique_ptr<TSeat> seat, TPageCollectio
 
                 { /*_ register all new blobs (including external) with gc logic */
                     partStore->SaveAllBlobIdsTo(commit->GcDelta.Created);
-                    for (auto &hole : result->Growth[i])
-                        for (auto seq : xrange(hole.Begin, hole.End))
+                    for (auto &hole : result->Growth[i]) {
+                        for (auto seq : xrange(hole.Begin, hole.End)) {
                             commit->GcDelta.Created.push_back(partStore->Blobs->Glob(seq).Logo);
+                        }
+                    }
                 }
 
                 Database->Merge(attachTableId, partView);
-                if (CompactionLogic) {
-                    CompactionLogic->BorrowedPart(attachTableId, partView);
-                }
+                CompactionLogic->BorrowedPart(attachTableId, partView);
 
                 TPageCollectionProtoHelper::Snap(snap, partView, attachTableId, CompactionLogic->BorrowedPartLevel());
                 TPageCollectionProtoHelper(true).Do(bySwitchAux->AddHotBundles(), partView);

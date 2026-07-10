@@ -6,7 +6,6 @@
 #include <ydb/core/kqp/gateway/utils/metadata_helpers.h>
 #include <ydb/core/kqp/gateway/utils/scheme_helpers.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
-#include <ydb/public/sdk/cpp/src/library/grpc/client/grpc_client_low.h>
 
 #include <ydb/library/conclusion/generic/result.h>
 #include <ydb/library/actors/core/actor.h>
@@ -367,17 +366,29 @@ TYqlConclusionStatus YqlConclusionFromGrpcStatus(const NYdbGrpc::TGrpcStatus& gr
     }
     NYql::TIssuesIds::EIssueCode code;
     switch (grpcStatus.GRpcStatusCode) {
-        case grpc::StatusCode::UNAVAILABLE:
-            code = NYql::TIssuesIds::KIKIMR_TEMPORARILY_UNAVAILABLE;
-            break;
         case grpc::StatusCode::CANCELLED:
             code = NYql::TIssuesIds::KIKIMR_OPERATION_CANCELLED;
+            break;
+        case grpc::StatusCode::INVALID_ARGUMENT:
+            code = NYql::TIssuesIds::KIKIMR_BAD_OPERATION;
+            break;
+        case grpc::StatusCode::FAILED_PRECONDITION:
+            code = NYql::TIssuesIds::KIKIMR_PRECONDITION_FAILED;
+            break;
+        case grpc::StatusCode::OUT_OF_RANGE:
+            code = NYql::TIssuesIds::KIKIMR_CONSTRAINT_VIOLATION;
+            break;
+        case grpc::StatusCode::UNAVAILABLE:
+            code = NYql::TIssuesIds::KIKIMR_TEMPORARILY_UNAVAILABLE;
             break;
         case grpc::StatusCode::UNAUTHENTICATED:
             code = NYql::TIssuesIds::KIKIMR_UNAUTHENTICATED;
             break;
+        case grpc::StatusCode::PERMISSION_DENIED:
+            code = NYql::TIssuesIds::KIKIMR_ACCESS_DENIED;
+            break;
         case grpc::StatusCode::UNIMPLEMENTED:
-            code = NYql::TIssuesIds::KIKIMR_UNSUPPORTED;
+            code = NYql::TIssuesIds::KIKIMR_UNIMPLEMENTED;
             break;
         case grpc::StatusCode::RESOURCE_EXHAUSTED:
             code = NYql::TIssuesIds::KIKIMR_OVERLOADED;
@@ -385,31 +396,26 @@ TYqlConclusionStatus YqlConclusionFromGrpcStatus(const NYdbGrpc::TGrpcStatus& gr
         case grpc::StatusCode::DEADLINE_EXCEEDED:
             code = NYql::TIssuesIds::KIKIMR_TIMEOUT;
             break;
-        case grpc::StatusCode::OUT_OF_RANGE:
-            code = NYql::TIssuesIds::KIKIMR_PRECONDITION_FAILED;
-            break;
         default:
             code = NYql::TIssuesIds::KIKIMR_INTERNAL_ERROR;
             break;
     }
-    return TYqlConclusionStatus::Fail(code, TStringBuilder() << "Grpc error: " << grpcStatus.Msg << ", details: " << grpcStatus.Details);
+    return TYqlConclusionStatus::Fail(code, grpcStatus.ToDebugString());
 }
 
 TAsyncStatus ValidateServiceAccount(TAsyncStatus validationFuture, const TExternalDataSourceManager::TExternalModificationContext& context, const std::shared_ptr<NKikimrSchemeOp::TModifyScheme>& schemeTxState, const std::shared_ptr<std::vector<TString>>& secrets) {
-    return ChainFeatures(validationFuture, [schemeTxState, context, secrets] {
-        auto actorSystem = context.GetActorSystem();
+    auto actorSystem = context.GetActorSystem();
+    return ChainFeatures(validationFuture, [schemeTxState, actorSystem, secrets] {
         Y_ENSURE(secrets && secrets->size() == 1);
         auto& iamAuth = schemeTxState->GetCreateExternalDataSource().GetAuth().GetIam();
         return AuthorizeServiceAccountUse(iamAuth.GetServiceAccountId(),
                 (*secrets)[0],
                 actorSystem
-        ).Apply([](const NThreading::TFuture<void>& future) {
+        ).Apply([](const NThreading::TFuture<NYdbGrpc::TGrpcStatus>& future) {
             try {
-                future.GetValueSync();
-                return TYqlConclusionStatus::Success();
-            } catch (const NYdbGrpc::TGrpcStatus& grpcStatus) {
+                auto grpcStatus = future.GetValueSync();
                 return YqlConclusionFromGrpcStatus(grpcStatus);
-            } catch (...) {
+            } catch (std::exception&) {
                 return TYqlConclusionStatus::Fail(NYql::TIssuesIds::KIKIMR_INTERNAL_ERROR, TStringBuilder() << "Unexpected exception: " << CurrentExceptionMessage());
             }
         });

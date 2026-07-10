@@ -314,7 +314,7 @@ inline bool IsRetryableGrpcError(const NYdbGrpc::TGrpcStatus& status) {
 class TAuthorizeServiceAccountUseActor : public NActors::TActorBootstrapped<TAuthorizeServiceAccountUseActor> {
 public:
     using TBase = NActors::TActorBootstrapped<TAuthorizeServiceAccountUseActor>;
-    TAuthorizeServiceAccountUseActor(const TString& serviceAccountId, const TString& token, NThreading::TPromise<void> promise)
+    TAuthorizeServiceAccountUseActor(const TString& serviceAccountId, const TString& token, NThreading::TPromise<NYdbGrpc::TGrpcStatus> promise)
         : Promise(std::move(promise))
         , ServiceAccountId(serviceAccountId)
         , Token(token)
@@ -339,19 +339,18 @@ public:
         if (EnableAccessServiceV2Interface) {
             auto request = MakeHolder<NCloud::TEvAccessService::TEvAuthorizeRequestV2>();
             setupRequest(request);
-            Send(MakeKqpAccessServiceId(), std::move(request));
+            Send(MakeKqpAccessServiceId(), std::move(request), NActors::IEventHandle::FlagTrackDelivery);
         } else {
             auto request = MakeHolder<NCloud::TEvAccessService::TEvAuthorizeRequest>();
             setupRequest(request);
-            Send(MakeKqpAccessServiceId(), std::move(request));
+            Send(MakeKqpAccessServiceId(), std::move(request), NActors::IEventHandle::FlagTrackDelivery);
         }
     }
 
     template <typename TEvResponse>
     void HandleAuthorizeResultImpl(typename TEvResponse::TPtr& ev) {
         if (ev->Get()->Status.Ok()) {
-            ALOG_DEBUG(NKikimrServices::KQP_GATEWAY, "Authorize success: " << ev->Get()->Response.DebugString());
-            Promise.SetValue();
+            ALOG_DEBUG(NKikimrServices::KQP_GATEWAY, "Authorize success, response# " << ev->Get()->Response.DebugString());
         } else {
             ALOG_WARN(NKikimrServices::KQP_GATEWAY, "Authorize failure"
                     << ", status# " << ev->Get()->Status.ToDebugString()
@@ -361,12 +360,8 @@ public:
                 Schedule(delay, new NActors::TEvents::TEvWakeup());
                 return;
             }
-            try {
-                throw ev->Get()->Status;
-            } catch(...) {
-                Promise.SetException(std::current_exception());
-            }
         }
+        Promise.SetValue(std::move(ev->Get()->Status));
         PassAway();
     }
 
@@ -378,13 +373,26 @@ public:
         HandleAuthorizeResultImpl<NCloud::TEvAccessService::TEvAuthorizeResponseV2>(ev);
     }
 
+    void Handle(NActors::TEvents::TEvUndelivered::TPtr& ev) {
+        try {
+            throw yexception() << "AccessService: "
+                << "Undelivered Event " << ev->Get()->SourceType
+                << " from " << SelfId() << " (Self) to " << ev->Sender
+                << " Reason: " << ev->Get()->Reason << " Cookie: " << ev->Cookie;
+        } catch(...) {
+            Promise.SetException(std::current_exception());
+        }
+        PassAway();
+    }
+
     STRICT_STFUNC(StateFunc,
         hFunc(NCloud::TEvAccessService::TEvAuthorizeResponse, HandleAuthorizeResult)
         hFunc(NCloud::TEvAccessService::TEvAuthorizeResponseV2, HandleAuthorizeResult)
         sFunc(NActors::TEvents::TEvWakeup, SendRequest)
+        hFunc(NActors::TEvents::TEvUndelivered, Handle)
     )
 
-    NThreading::TPromise<void> Promise;
+    NThreading::TPromise<NYdbGrpc::TGrpcStatus> Promise;
     const TString ServiceAccountId;
     const TString Token;
     bool EnableAccessServiceV2Interface;
@@ -392,12 +400,12 @@ public:
 };
 }
 
-NThreading::TFuture<void> AuthorizeServiceAccountUse(
+NThreading::TFuture<NYdbGrpc::TGrpcStatus> AuthorizeServiceAccountUse(
     const TString& serviceAccount,
     const TString& token,
     NActors::TActorSystem* actorSystem
 ) {
-    auto promise = NThreading::NewPromise<void>();
+    auto promise = NThreading::NewPromise<NYdbGrpc::TGrpcStatus>();
     auto actor = new TAuthorizeServiceAccountUseActor(serviceAccount, token, promise);
     actorSystem->Register(actor);
     return promise.GetFuture();

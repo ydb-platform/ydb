@@ -2,6 +2,7 @@
 
 #include <ydb/core/kqp/common/events/script_executions.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/driver/driver.h>
+#include <ydb/public/sdk/cpp/src/library/grpc/client/grpc_client_low.h>
 
 #include <library/cpp/threading/future/future.h>
 
@@ -59,7 +60,7 @@ NThreading::TFuture<TEvDescribeResourceIdResponse::TDescription> DescribeExterna
 
 NActors::IActor* CreateDescribeResourceIdServiceActor(const std::shared_ptr<NYdb::TDriver>& driver);
 
-NThreading::TFuture<void> AuthorizeServiceAccountUse(
+NThreading::TFuture<NYdbGrpc::TGrpcStatus> AuthorizeServiceAccountUse(
     const TString& serviceAccount,
     const TString& token,
     NActors::TActorSystem* actorSystem

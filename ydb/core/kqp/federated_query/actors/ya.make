@@ -14,10 +14,10 @@ PEERDIR(
     ydb/library/aclib
     ydb/library/actors/core
     ydb/library/ycloud/api
-    ydb/public/sdk/cpp/src/client/driver
-    ydb/services/scheme_secret
-    ydb/library/ycloud/api
     ydb/library/ycloud/impl
+    ydb/public/sdk/cpp/src/client/driver
+    ydb/public/sdk/cpp/src/library/grpc/client
+    ydb/services/scheme_secret
 )
 
 YQL_LAST_ABI_VERSION()

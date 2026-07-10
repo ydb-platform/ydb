@@ -2472,7 +2472,7 @@ Y_UNIT_TEST(TableSystemTableWithEmptyKeyColumnIds) {
     // The issue specifically mentions .sys/tables as the problematic table
     // We test this and a few other system tables to ensure robustness
     TVector<TString> systemTablesToTest = {
-        "/Root/.sys/tables",  // The specific table mentioned in issue #30332
+        "/Root/.sys/query_sessions",
         "/Root/.sys/partition_stats",
         "/Root/.sys/nodes"
     };

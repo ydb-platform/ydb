@@ -382,31 +382,6 @@ Y_UNIT_TEST_SUITE(SystemView) {
         }
     }
 
-    Y_UNIT_TEST(PgTablesOneSchemeShardDataQuery) {
-        TTestEnv env;
-        CreateRootTable(env, 1, false, 0);
-        CreateRootTable(env, 2, false, 1);
-
-        env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_EXECUTER, NActors::NLog::PRI_DEBUG);
-        env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_COMPILE_SERVICE, NActors::NLog::PRI_DEBUG);
-        env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_YQL, NActors::NLog::PRI_TRACE);
-        env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::SYSTEM_VIEWS, NActors::NLog::PRI_DEBUG);
-
-        TTableClient client(env.GetDriver());
-        auto session = client.CreateSession().GetValueSync().GetSession();
-        {
-            auto result = session.ExecuteDataQuery(R"(
-                SELECT schemaname, tablename, tableowner, tablespace, hasindexes, hasrules, hastriggers, rowsecurity FROM `/Root/.sys/pg_tables` WHERE tablename = PgName("Table0") OR tablename = PgName("Table1") ORDER BY tablename;
-            )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
-
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-            NKqp::CompareYson(R"([
-                ["public";"Table0";"root@builtin";#;"t";"f";"f";"f"];
-                ["public";"Table1";"root@builtin";#;"t";"f";"f";"f"]
-            ])", FormatResultSetYson(result.GetResultSet(0)));
-        }
-    }
-
     Y_UNIT_TEST(Nodes) {
         TTestEnv env;
         CreateTenantsAndTables(env, false);

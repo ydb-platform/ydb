@@ -12,7 +12,6 @@
 #include <ydb/core/sys_view/nodes/nodes.h>
 #include <ydb/core/sys_view/partition_stats/partition_stats.h>
 #include <ydb/core/sys_view/partition_stats/top_partitions.h>
-#include <ydb/core/sys_view/pg_tables/pg_tables.h>
 #include <ydb/core/sys_view/query_stats/query_metrics.h>
 #include <ydb/core/sys_view/query_stats/query_stats.h>
 #include <ydb/core/sys_view/resource_pool_classifiers/resource_pool_classifiers.h>
@@ -250,12 +249,6 @@ THolder<NActors::IActor> CreateSystemViewScan(
     case ESysViewType::ETopPartitionsByTliOneMinute:
     case ESysViewType::ETopPartitionsByTliOneHour:
         return CreateTopPartitionsByTliScan(ownerId, scanId, database, sysViewDescription, tableRange, columns);
-    case ESysViewType::EPgTables:
-        return CreatePgTablesScan(ownerId, scanId, database, sysViewDescription, tablePath, tableRange, columns);
-    case ESysViewType::EInformationSchemaTables:
-        return CreateInformationSchemaTablesScan(ownerId, scanId, database, sysViewDescription, tablePath, tableRange, columns);
-    case ESysViewType::EPgClass:
-        return CreatePgClassScan(ownerId, scanId, database, sysViewDescription, tablePath, tableRange, columns);
     case ESysViewType::EResourcePoolClassifiers:
         return CreateResourcePoolClassifiersScan(ownerId, scanId, database, sysViewDescription, tableRange, columns,
                                                  std::move(userToken), reverse);

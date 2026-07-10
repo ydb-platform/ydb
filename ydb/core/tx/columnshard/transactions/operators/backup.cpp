@@ -18,20 +18,9 @@ bool TBackupTransactionOperator::DoParse(TColumnShard& owner, const TString& dat
     }
 
     if (const auto* completedTx = owner.LastCompletedBackupTransactionsByTxId.FindPtr(GetTxId())) {
-<<<<<<< HEAD
-        if (completedTx->GetOpResult().GetSuccess()) {
-            AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("event", "backup_already_completed")("tx_id", GetTxId())(
-                "success", completedTx->GetOpResult().GetSuccess())("explain", completedTx->GetOpResult().GetExplain());
-            AlreadyCompleted = true;
-        }
-=======
-        YDB_LOG_INFO("",
-            {"event", "backup_already_completed"},
-            {"txId", GetTxId()},
-            {"success", completedTx->GetOpResult().GetSuccess()},
-            {"explain", completedTx->GetOpResult().GetExplain()});
+        AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("event", "backup_already_completed")("tx_id", GetTxId())(
+            "success", completedTx->GetOpResult().GetSuccess())("explain", completedTx->GetOpResult().GetExplain());
         AlreadyCompleted = true;
->>>>>>> abb000a3607 (simplify tx (#45970))
         return true;
     }
 

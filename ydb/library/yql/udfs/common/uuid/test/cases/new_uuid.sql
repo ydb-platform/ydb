@@ -17,4 +17,31 @@ SELECT Uuid::newPrefixV8($p, 1) != Uuid::newPrefixV8($p, 2) AS v8_prefix_dep_uni
 SELECT Uuid::newPrefixV7($p, 1, 2, 3) != Uuid::newPrefixV7($p, 1, 2, 4) AS v7_prefix_three_dep_unique;
 SELECT Uuid::newPrefixV8($p, 1, 2, 3) != Uuid::newPrefixV8($p, 1, 2, 4) AS v8_prefix_three_dep_unique;
 
+SELECT
+    Substring(CAST(Uuid::newV7() AS String), 8, 1) = '-'
+    AND Substring(CAST(Uuid::newV7() AS String), 13, 1) = '-'
+    AND Substring(CAST(Uuid::newV7() AS String), 18, 1) = '-'
+    AND Substring(CAST(Uuid::newV7() AS String), 23, 1) = '-'
+    AND Substring(CAST(Uuid::newV7() AS String), 14, 1) = '7'
+    AS v7_string_format;
+SELECT
+    Substring(CAST(Uuid::newPrefixV7($p) AS String), 8, 1) = '-'
+    AND Substring(CAST(Uuid::newPrefixV7($p) AS String), 13, 1) = '-'
+    AND Substring(CAST(Uuid::newPrefixV7($p) AS String), 18, 1) = '-'
+    AND Substring(CAST(Uuid::newPrefixV7($p) AS String), 23, 1) = '-'
+    AND Substring(CAST(Uuid::newPrefixV7($p) AS String), 14, 1) = '7'
+    AS v7_prefix_string_format;
+SELECT
+    Substring(CAST(Uuid::newV8() AS String), 8, 1) = '-'
+    AND Substring(CAST(Uuid::newV8() AS String), 13, 1) = '-'
+    AND Substring(CAST(Uuid::newV8() AS String), 18, 1) = '-'
+    AND Substring(CAST(Uuid::newV8() AS String), 23, 1) = '-'
+    AS v8_string_has_dashes;
+SELECT
+    Substring(CAST(Uuid::newPrefixV8($p) AS String), 8, 1) = '-'
+    AND Substring(CAST(Uuid::newPrefixV8($p) AS String), 13, 1) = '-'
+    AND Substring(CAST(Uuid::newPrefixV8($p) AS String), 18, 1) = '-'
+    AND Substring(CAST(Uuid::newPrefixV8($p) AS String), 23, 1) = '-'
+    AS v8_prefix_string_has_dashes;
+
 SELECT $p != 0ul OR $p == 0ul AS prefix_is_uint64;

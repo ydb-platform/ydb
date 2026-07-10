@@ -7,7 +7,7 @@
         "client": "total",
         "important": "0",
         "topic": "rt3.dc1--asdfgs--topic",
-        "sensor": "PQ/ConsumerBatchProcessorCPUUsage"
+        "sensor": "PQ/ConsumerBatchRecompressionCpuElapsedMicrosec"
       },
       "value": 0
     },
@@ -315,7 +315,7 @@
         "client": "total",
         "important": "total",
         "topic": "rt3.dc1--asdfgs--topic",
-        "sensor": "PQ/ConsumerBatchProcessorCPUUsage"
+        "sensor": "PQ/ConsumerBatchRecompressionCpuElapsedMicrosec"
       },
       "value": 0
     },
@@ -623,7 +623,7 @@
         "client": "total",
         "important": "total",
         "topic": "total",
-        "sensor": "PQ/ConsumerBatchProcessorCPUUsage"
+        "sensor": "PQ/ConsumerBatchRecompressionCpuElapsedMicrosec"
       },
       "value": 0
     },
@@ -931,7 +931,7 @@
         "client": "user",
         "important": "0",
         "topic": "rt3.dc1--asdfgs--topic",
-        "sensor": "PQ/ConsumerBatchProcessorCPUUsage"
+        "sensor": "PQ/ConsumerBatchRecompressionCpuElapsedMicrosec"
       },
       "value": 0
     },
@@ -1239,7 +1239,7 @@
         "client": "user",
         "important": "0",
         "topic": "total",
-        "sensor": "PQ/ConsumerBatchProcessorCPUUsage"
+        "sensor": "PQ/ConsumerBatchRecompressionCpuElapsedMicrosec"
       },
       "value": 0
     },
@@ -1547,7 +1547,7 @@
         "client": "user",
         "important": "total",
         "topic": "total",
-        "sensor": "PQ/ConsumerBatchProcessorCPUUsage"
+        "sensor": "PQ/ConsumerBatchRecompressionCpuElapsedMicrosec"
       },
       "value": 0
     },

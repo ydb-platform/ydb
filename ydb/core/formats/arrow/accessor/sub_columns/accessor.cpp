@@ -4,6 +4,7 @@
 
 #include <util/generic/overloaded.h>
 #include <ydb/core/formats/arrow/accessor/composite_serial/accessor.h>
+#include <ydb/core/formats/arrow/accessor/dictionary/constructor.h>
 #include <ydb/core/formats/arrow/accessor/plain/constructor.h>
 #include <ydb/core/formats/arrow/accessor/sub_columns/json_value_path.h>
 #include <ydb/core/formats/arrow/save_load/loader.h>
@@ -74,8 +75,19 @@ TString TSubColumnsArray::SerializeToString(const TChunkConstructionData& extern
     TMonotonic pred = TMonotonic::Now();
     for (auto&& i : ColumnsData.GetRecords()->GetColumns()) {
         TChunkConstructionData cData(GetRecordsCount(), nullptr, arrow::binary(), externalInfo.GetDefaultSerializer());
-        blobRanges.emplace_back(ColumnsData.GetStats().GetAccessorConstructor(columnIdx).SerializeToString(i, cData));
         auto* cInfo = proto.AddKeyColumns();
+        if (ColumnsData.GetStats().GetAccessorType(columnIdx) == IChunkedArray::EType::Dictionary) {
+            // Dictionary columns produce [dictionary blob][positions blob]; the split is not
+            // recoverable from the blob, so persist it in the per-column proto (the sub-columns
+            // analog of TIndexColumnMeta.AdditionalAccessorData for scalar columns).
+            auto blobAndMeta = NDictionary::TConstructor::SerializeToBlobAndMeta(i, cData);
+            if (auto additional = blobAndMeta.Meta->SerializeToProto()) {
+                *cInfo->MutableAdditionalAccessorData() = std::move(*additional);
+            }
+            blobRanges.emplace_back(std::move(blobAndMeta.Blob));
+        } else {
+            blobRanges.emplace_back(ColumnsData.GetStats().GetAccessorConstructor(columnIdx).SerializeToString(i, cData));
+        }
         cInfo->SetSize(blobRanges.back().size());
         TMonotonic next = TMonotonic::Now();
         NSubColumns::TSignals::GetColumnSignals().OnBlobSize(ColumnsData.GetStats().GetColumnSize(columnIdx), blobRanges.back().size(), next - pred);

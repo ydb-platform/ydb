@@ -2,7 +2,10 @@
 
 #include <library/cpp/monlib/service/pages/templates.h>
 
+#include <util/generic/map.h>
 #include <util/stream/str.h>
+#include <util/string/builder.h>
+#include <util/string/cast.h>
 #include <util/string/subst.h>
 
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
@@ -26,6 +29,8 @@ const char* PageParam(EMonPage page)
     switch (page) {
         case EMonPage::Overview:
             return "overview";
+        case EMonPage::Dbg:
+            return "dbg";
     }
     return "overview";
 }
@@ -35,8 +40,23 @@ const char* PageTitle(EMonPage page)
     switch (page) {
         case EMonPage::Overview:
             return "Overview";
+        case EMonPage::Dbg:
+            return "DBGs";
     }
     return "";
+}
+
+// "6 Online" or "4 Online / 2 Sufferer".
+TString HealthRollup(const TMap<EHostHealth, size_t>& counts)
+{
+    TStringBuilder sb;
+    for (const auto& [health, count]: counts) {
+        if (!sb.empty()) {
+            sb << " / ";
+        }
+        sb << count << " " << ToString(health);
+    }
+    return sb.empty() ? TString("-") : TString(sb);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -93,6 +113,7 @@ void RenderMenu(
 {
     static const EMonPage pages[] = {
         EMonPage::Overview,
+        EMonPage::Dbg,
     };
     str << "<div style='margin:0.5em 0 1em;'>";
     for (EMonPage page: pages) {
@@ -144,6 +165,184 @@ void RenderOverview(IOutputStream& str, const TFastPathServiceInfo& info)
     }
 }
 
+void RenderDbgList(
+    IOutputStream& str,
+    const TTabletInfo& tabletInfo,
+    const TVector<TDbgSnapshot>& dbgs)
+{
+    HTML (str) {
+        TAG (TH3) {
+            str << "Direct Block Groups";
+        }
+        TABLE_CLASS ("table table-condensed") {
+            TABLEHEAD () {
+                TABLER () {
+                    TABLEH () {
+                        str << "DBG";
+                    }
+                    TABLEH () {
+                        str << "Hosts";
+                    }
+                    TABLEH () {
+                        str << "VChunks";
+                    }
+                    TABLEH () {
+                        str << "Host health";
+                    }
+                    TABLEH () {
+                        str << "Inflight";
+                    }
+                    TABLEH () {
+                        str << "Consecutive errors";
+                    }
+                    TABLEH () {
+                        str << "Consecutive success";
+                    }
+                }
+            }
+            TABLEBODY () {
+                for (const auto& dbg: dbgs) {
+                    TMap<EHostHealth, size_t> healthCounts;
+                    size_t inflight = 0;
+                    size_t consecutiveErrors = 0;
+                    size_t consecutiveSuccesses = 0;
+                    for (const auto& host: dbg.Hosts) {
+                        ++healthCounts[host.Health];
+                        consecutiveErrors += host.Errors.ConsecutiveErrorCount;
+                        consecutiveSuccesses +=
+                            host.Errors.ConsecutiveSuccessCount;
+                        for (size_t operation = 0; operation < OperationCount;
+                             ++operation)
+                        {
+                            inflight += host.InflightByOperation[operation];
+                        }
+                    }
+                    TABLER () {
+                        TABLED () {
+                            str << "<a href='?TabletID=" << tabletInfo.TabletId
+                                << "&page=dbg&dbg=" << dbg.Index << "'>#"
+                                << dbg.Index << "</a>";
+                        }
+                        TABLED () {
+                            str << dbg.Hosts.size();
+                        }
+                        TABLED () {
+                            str << dbg.VChunkCount;
+                        }
+                        TABLED () {
+                            str << HealthRollup(healthCounts);
+                        }
+                        TABLED () {
+                            str << inflight;
+                        }
+                        TABLED () {
+                            str << consecutiveErrors;
+                        }
+                        TABLED () {
+                            str << consecutiveSuccesses;
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+void RenderDbgDetail(
+    IOutputStream& str,
+    const TTabletInfo& tabletInfo,
+    const TDbgSnapshot& dbg)
+{
+    str << "<div style='margin-bottom:0.5em;'><a href='?TabletID="
+        << tabletInfo.TabletId << "&page=dbg'>&larr; back to DBGs</a></div>";
+    HTML (str) {
+        TAG (TH3) {
+            str << "DBG #" << dbg.Index;
+        }
+        TABLE_CLASS ("table table-condensed") {
+            TABLEHEAD () {
+                TABLER () {
+                    TABLEH () {
+                        str << "Host";
+                    }
+                    TABLEH () {
+                        str << "State";
+                    }
+                    TABLEH () {
+                        str << "Health";
+                    }
+                    TABLEH () {
+                        str << "PBuffer used";
+                    }
+                    TABLEH () {
+                        str << "Consecutive errors";
+                    }
+                    TABLEH () {
+                        str << "Consecutive success";
+                    }
+                    for (size_t operation = 0; operation < OperationCount;
+                         ++operation)
+                    {
+                        TABLEH () {
+                            str << ToString(static_cast<EOperation>(operation));
+                        }
+                    }
+                }
+            }
+            TABLEBODY () {
+                for (const auto& host: dbg.Hosts) {
+                    TABLER () {
+                        TABLED () {
+                            str << (int)host.Index;
+                        }
+                        TABLED () {
+                            str << ToString(host.State);
+                        }
+                        TABLED () {
+                            str << ToString(host.Health);
+                        }
+                        TABLED () {
+                            str << host.PBufferUsedSize;
+                        }
+                        TABLED () {
+                            str << host.Errors.ConsecutiveErrorCount;
+                        }
+                        TABLED () {
+                            str << host.Errors.ConsecutiveSuccessCount;
+                        }
+                        for (size_t operation = 0; operation < OperationCount;
+                             ++operation)
+                        {
+                            TABLED () {
+                                str << host.InflightByOperation[operation];
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+void RenderDbg(IOutputStream& str, const TMonPageData& data)
+{
+    if (!data.SelectedDbg) {
+        RenderDbgList(str, data.TabletInfo, data.Dbgs);
+        return;
+    }
+    for (const auto& dbg: data.Dbgs) {
+        if (dbg.Index == *data.SelectedDbg) {
+            RenderDbgDetail(str, data.TabletInfo, dbg);
+            return;
+        }
+    }
+    HTML (str) {
+        DIV_CLASS ("alert alert-warning") {
+            str << "DBG #" << *data.SelectedDbg << " not found.";
+        }
+    }
+}
+
 }   // namespace
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -155,14 +354,24 @@ TString RenderMonPage(const TMonPageData& data)
     RenderHeader(str, data.TabletInfo);
     RenderMenu(str, data.TabletInfo, data.Page);
 
-    if (data.FastPathServiceInfo) {
-        RenderOverview(str, *data.FastPathServiceInfo);
-    } else {
+    if (data.RuntimeError) {
         HTML (str) {
             DIV_CLASS ("alert alert-warning") {
-                str << "Runtime state unavailable (tablet is initializing).";
+                str << HtmlEscape(*data.RuntimeError);
             }
         }
+        return str.Str();
+    }
+
+    switch (data.Page) {
+        case EMonPage::Overview:
+            if (data.FastPathServiceInfo) {
+                RenderOverview(str, *data.FastPathServiceInfo);
+            }
+            break;
+        case EMonPage::Dbg:
+            RenderDbg(str, data);
+            break;
     }
     return str.Str();
 }

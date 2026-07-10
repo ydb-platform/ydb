@@ -719,6 +719,145 @@ Y_UNIT_TEST_SUITE(TPartitionDirectTest)
         StopFastPathService(env, partition, edge);
     }
 
+    Y_UNIT_TEST(ShouldRequestDDiskAllocationForAddedHost)
+    {
+        TEnvironmentSetup env{{
+            .NodeCount = 8,
+            .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
+        }};
+        auto& runtime = env.Runtime;
+        runtime->SetLogPriority(
+            NKikimrServices::NBS_PARTITION,
+            NActors::NLog::PRI_DEBUG);
+
+        auto scopedService = SetupStorage(env, EWriteMode::DirectWrite);
+
+        // The add-host allocation is the only request that uses
+        // DirectBlockGroupOperations (the initial bulk allocation uses
+        // Queries).
+        ui32 addHostRequestCount = 0;
+        ui32 addHostNumDDisks = 0;
+        runtime->FilterFunction = [&](ui32, std::unique_ptr<IEventHandle>& ev)
+        {
+            if (ev->GetTypeRewrite() ==
+                TEvBlobStorage::TEvControllerAllocateDDiskBlockGroup::EventType)
+            {
+                auto* msg = ev->Get<
+                    TEvBlobStorage::TEvControllerAllocateDDiskBlockGroup>();
+                if (msg->Record.DirectBlockGroupOperationsSize() > 0) {
+                    ++addHostRequestCount;
+                    addHostNumDDisks =
+                        msg->Record.GetDirectBlockGroupOperations(0)
+                            .GetDefineDirectBlockGroup()
+                            .GetNumDDisks();
+                }
+            }
+            return true;
+        };
+
+        const ui64 partition = CreatePartitionTablet(env);
+
+        // Drop the throwaway sender right after sending: its strict edge actor
+        // would otherwise abort on the pipe notifications during the
+        // free-running Sim. The payload is still delivered by the pipe client.
+        const TActorId sender = runtime->AllocateEdgeActor(
+            env.Settings.ControllerNodeId,
+            __FILE__,
+            __LINE__);
+        env.Runtime->SendToPipe(
+            partition,
+            sender,
+            new TEvPartitionDirectPrivate::TEvAddHostToDBG(0),
+            0,
+            TTestActorSystem::GetPipeConfigWithRetries());
+        runtime->DestroyActor(sender);
+
+        env.Sim(TDuration::Seconds(10));
+
+        // The add persisted its intent and asked BSController to grow the group
+        // to DirectBlockGroupHostCount + 1 DDisks.
+        UNIT_ASSERT_VALUES_EQUAL(1u, addHostRequestCount);
+        UNIT_ASSERT_VALUES_EQUAL(
+            static_cast<ui32>(DirectBlockGroupHostCount + 1),
+            addHostNumDDisks);
+    }
+
+    Y_UNIT_TEST(ShouldReplayInFlightAddHostAfterRestart)
+    {
+        TEnvironmentSetup env{{
+            .NodeCount = 8,
+            .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
+        }};
+        auto& runtime = env.Runtime;
+        runtime->SetLogPriority(
+            NKikimrServices::NBS_PARTITION,
+            NActors::NLog::PRI_DEBUG);
+
+        auto scopedService = SetupStorage(env, EWriteMode::DirectWrite);
+
+        ui32 addHostRequestCount = 0;
+        bool dropNextAddHostResult = false;
+        runtime->FilterFunction = [&](ui32, std::unique_ptr<IEventHandle>& ev)
+        {
+            const auto type = ev->GetTypeRewrite();
+            if (type ==
+                TEvBlobStorage::TEvControllerAllocateDDiskBlockGroup::EventType)
+            {
+                auto* msg = ev->Get<
+                    TEvBlobStorage::TEvControllerAllocateDDiskBlockGroup>();
+                if (msg->Record.DirectBlockGroupOperationsSize() > 0) {
+                    ++addHostRequestCount;
+                }
+            }
+            // Drop the first add-host result so the connection is never
+            // persisted (the intent stays), forcing a replay on restart.
+            if (dropNextAddHostResult &&
+                type ==
+                    TEvBlobStorage::TEvControllerAllocateDDiskBlockGroupResult::
+                        EventType)
+            {
+                dropNextAddHostResult = false;
+                return false;
+            }
+            return true;
+        };
+
+        const ui64 partition = CreatePartitionTablet(env);
+
+        // Trigger an add whose BSController result is dropped: the intent is
+        // persisted but the connection is not.
+        dropNextAddHostResult = true;
+        {
+            const TActorId sender = runtime->AllocateEdgeActor(
+                env.Settings.ControllerNodeId,
+                __FILE__,
+                __LINE__);
+            env.Runtime->SendToPipe(
+                partition,
+                sender,
+                new TEvPartitionDirectPrivate::TEvAddHostToDBG(0),
+                0,
+                TTestActorSystem::GetPipeConfigWithRetries());
+            runtime->DestroyActor(sender);
+        }
+        env.Sim(TDuration::Seconds(10));
+        UNIT_ASSERT_VALUES_EQUAL(1u, addHostRequestCount);
+
+        // Restart: the persisted intent must be replayed.
+        {
+            scopedService.reset();
+            env.RestartNode(env.Settings.ControllerNodeId);
+            env.Sim(TDuration::Seconds(1));
+            scopedService = std::make_unique<TScopedNbsService>(
+                CreateNbsConfig(EWriteMode::DirectWrite));
+        }
+        WaitForTabletBoot(env);
+        env.Sim(TDuration::Seconds(10));
+
+        // The replay re-sent the BSController allocation request.
+        UNIT_ASSERT_VALUES_EQUAL(2u, addHostRequestCount);
+    }
+
     Y_UNIT_TEST(BasicWriteReadPBufferReplication)
     {
         BasicWriteRead(EWriteMode::IndirectWrite);

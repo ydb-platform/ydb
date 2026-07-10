@@ -21,7 +21,6 @@
 
 #include <library/cpp/threading/future/core/coroutine_traits.h>
 
-
 namespace NYdb::inline Dev {
 namespace NTable {
 
@@ -45,7 +44,7 @@ public:
 
     bool LinkObjToEndpoint(const TEndpointKey& endpoint, TEndpointObj* obj, const void* tag);
     void InitStopper();
-    NThreading::TFuture<void> Drain();
+    NThreading::TFuture<void> Drain(bool closeRemote = true);
     NThreading::TFuture<void> Stop();
     void ScheduleTaskUnsafe(std::function<void()>&& fn, TDeadline::Duration timeout);
     void StartPeriodicSessionPoolTask();

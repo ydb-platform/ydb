@@ -744,6 +744,9 @@ private:
         request->SetAction(NKikimrKqp::QUERY_ACTION_EXECUTE);
         request->SetDatabase(settings.Database_ ? settings.Database_ : Settings_.DomainName_);
         request->SetPoolId(*settings.PoolId_);
+        if (!settings.ApplicationName_.empty()) {
+            request->SetApplicationName(settings.ApplicationName_);
+        }
 
         return event;
     }
@@ -877,6 +880,26 @@ void IYdbSetup::WaitFor(TDuration timeout, TString description, std::function<bo
         Sleep(TDuration::Seconds(1));
     }
     UNIT_ASSERT_C(false, "Waiting " << description << " timeout. Spent time " << TInstant::Now() - start << " exceeds limit " << timeout);
+}
+
+//// Classifier helpers
+
+void WaitForClassifierFail(TIntrusivePtr<IYdbSetup> ydb, const TQueryRunnerSettings& settings, const TString& poolId) {
+    ydb->WaitFor(TDuration::Seconds(10), "Resource pool classifier fail", [ydb, settings, poolId](TString& errorString) {
+        auto result = ydb->ExecuteQuery(TSampleQueries::TSelect42::Query, settings);
+
+        errorString = result.GetIssues().ToOneLineString();
+        return result.GetStatus() == NYdb::EStatus::PRECONDITION_FAILED && errorString.Contains(TStringBuilder() << "Resource pool " << poolId << " was disabled due to zero concurrent query limit");
+    });
+}
+
+void WaitForClassifierSuccess(TIntrusivePtr<IYdbSetup> ydb, const TQueryRunnerSettings& settings) {
+    ydb->WaitFor(TDuration::Seconds(30), "Resource pool classifier success", [ydb, settings](TString& errorString) {
+        auto result = ydb->ExecuteQuery(TSampleQueries::TSelect42::Query, settings);
+
+        errorString = result.GetIssues().ToOneLineString();
+        return result.GetStatus() == NYdb::EStatus::SUCCESS;
+    });
 }
 
 //// TSampleQueriess

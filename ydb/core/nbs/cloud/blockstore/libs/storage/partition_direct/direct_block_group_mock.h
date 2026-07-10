@@ -16,6 +16,7 @@ struct TOracleMock: public IOracle
     TDuration WriteRequestTimeout;
     TDuration PBufferReplyTimeout;
     EWriteMode WriteMode = EWriteMode::DirectWrite;
+    TDuration FlushRequestCooldown;
     TDuration FlushRequestTimeout;
     TDuration EraseRequestTimeout;
     TVector<THostStat> HostStatistics;
@@ -50,14 +51,19 @@ struct TOracleMock: public IOracle
         THostIndex host,
         EDataLocation dataLocation) const override;
     [[nodiscard]] TDuration GetReadRequestTimeout() const override;
+
+    [[nodiscard]] EWriteMode GetWriteMode() const override;
     [[nodiscard]] TDuration GetWriteHedgingDelay(
         THostMask hosts,
         bool indirect) const override;
     [[nodiscard]] TDuration GetWriteRequestTimeout() const override;
     [[nodiscard]] TDuration GetIndirectWriteReplyTimeout() const override;
+
+    [[nodiscard]] TDuration GetFlushRequestCooldown(
+        THostMask hosts) const override;
     [[nodiscard]] TDuration GetFlushRequestTimeout() const override;
+
     [[nodiscard]] TDuration GetEraseRequestTimeout() const override;
-    [[nodiscard]] EWriteMode GetWriteMode() const override;
 
     [[nodiscard]] const THostStat& GetHostStatistics(
         THostIndex hostIndex) const override;
@@ -132,6 +138,12 @@ public:
     using TDBGDumpHandler =
         std::function<NThreading::TFuture<TDBGDumpResponse>()>;
 
+    using TOnAddHostResultHandler = std::function<void(
+        const NProto::TError& error,
+        THostIndex newHostIndex,
+        NKikimrBlobStorage::NDDisk::TDDiskId ddiskId,
+        NKikimrBlobStorage::NDDisk::TDDiskId pbufferId)>;
+
     TExecutorPtr Executor;
     TOracleMock Oracle;
     TScheduleHandler ScheduleHandler;
@@ -145,6 +157,7 @@ public:
     TDBGRestoreHandler RestoreDBGPBuffersHandler;
     TListPBuffersHandler ListPBuffersHandler;
     TDBGDumpHandler DumpHandler;
+    TOnAddHostResultHandler OnAddHostResultHandler;
 
     TVector<TVChunkWeakPtr> VChunks;
 
@@ -228,6 +241,14 @@ public:
         THostIndex hostIndex) override;
 
     NThreading::TFuture<TDBGDumpResponse> Dump() override;
+
+    void OnAddHostResult(
+        const NProto::TError& error,
+        THostIndex newHostIndex,
+        NKikimrBlobStorage::NDDisk::TDDiskId ddiskId,
+        NKikimrBlobStorage::NDDisk::TDDiskId pbufferId) override;
+
+    NThreading::TFuture<TDbgSnapshot> BuildMonSnapshot() override;
 };
 
 using TDirectBlockGroupMockPtr = std::shared_ptr<TDirectBlockGroupMock>;

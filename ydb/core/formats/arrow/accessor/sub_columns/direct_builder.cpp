@@ -66,8 +66,6 @@ void TColumnElements::BuildPlainAccessor(const ui32 recordsCount, const EValueTy
             Accessor = BuildTypedPlain<arrow::BooleanType>(Values, RecordIndexes, recordsCount, 0,
                 &ExtractBoolScalar);
             break;
-        default:
-            AFL_VERIFY(valueType == EValueType::String)("value_type", (ui32)valueType);
     }
 }
 

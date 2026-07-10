@@ -13,7 +13,7 @@ Then it copies all necessary *.c and *.h files to postgresql/ directory, automat
 
 How to upgrade to newer PostgreSQL:
 
-1. Make sure you have folloing packages installed (assuming you have Ubuntu Linux):
+1. Make sure you have following packages installed (assuming you have Ubuntu Linux):
 
 pkg-config
 liblz4-dev

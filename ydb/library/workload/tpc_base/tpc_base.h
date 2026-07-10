@@ -13,6 +13,7 @@ public:
     };
     void ConfigureOpts(NLastGetopt::TOpts& opts, const ECommandType commandType, int workloadType) override;
     YDB_READONLY(EFloatMode, FloatMode, EFloatMode::DOUBLE);
+    YDB_READONLY(EQuerySyntax, Syntax, EQuerySyntax::YQL);
     YDB_READONLY(double, Scale, 1);
     YDB_READONLY_DEF(TSet<TString>, Tables);
     YDB_READONLY(ui32, ProcessIndex, 0);

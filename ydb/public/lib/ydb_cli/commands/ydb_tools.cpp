@@ -8,6 +8,7 @@
 #include <ydb/public/lib/ydb_cli/common/log.h>
 #include <ydb/public/lib/ydb_cli/common/normalize_path.h>
 #include <ydb/public/lib/ydb_cli/common/scheme_path_completer.h>
+#include <ydb/public/lib/ydb_cli/common/pg_dump_parser.h>
 #include <ydb/public/lib/ydb_cli/dump/dump.h>
 #include <ydb/library/backup/util.h>
 
@@ -27,6 +28,7 @@ TCommandTools::TCommandTools()
     AddCommand(std::make_unique<TCommandRestore>());
     AddCommand(std::make_unique<TCommandCopy>());
     AddCommand(std::make_unique<TCommandRename>());
+    AddHiddenCommand(std::make_unique<TCommandPgConvert>());
     AddCommand(std::make_unique<TCommandToolsInfer>());
 }
 
@@ -467,6 +469,40 @@ int TCommandRename::Run(TConfig& config) {
             FillSettings(NTable::TRenameTablesSettings())
         ).GetValueSync()
     );
+    return EXIT_SUCCESS;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+//  PgConvert
+////////////////////////////////////////////////////////////////////////////////
+
+TCommandPgConvert::TCommandPgConvert()
+    : TToolsCommand("pg-convert", {}, "Convert pg_dump result SQL file to format readable by YDB postgres layer")
+{}
+
+void TCommandPgConvert::Config(TConfig& config) {
+    TToolsCommand::Config(config);
+    config.NeedToConnect = false;
+    config.SetFreeArgsNum(0);
+
+    config.Opts->AddLongOption('i', "input", "Path to input SQL file. Read from stdin if not specified.").StoreResult(&Path);
+    config.Opts->AddLongOption("ignore-unsupported", "Comment unsupported statements in result dump file if specified.").StoreTrue(&IgnoreUnsupported);
+}
+
+int TCommandPgConvert::Run(TConfig& config) {
+    Y_UNUSED(config);
+    TPgDumpParser parser(Cout, IgnoreUnsupported);
+    if (Path) {
+        std::unique_ptr<TFileInput> fileInput = std::make_unique<TFileInput>(Path);
+        parser.Prepare(*fileInput);
+        fileInput = std::make_unique<TFileInput>(Path);
+        parser.WritePgDump(*fileInput);
+    } else {
+        TFixedStringStream stream(Cin.ReadAll());
+        parser.Prepare(stream);
+        stream.MovePointer();
+        parser.WritePgDump(stream);
+    }
     return EXIT_SUCCESS;
 }
 

@@ -62,6 +62,21 @@ TVector<IWorkloadQueryGenerator::TWorkloadType> TClickbenchWorkloadGenerator::Ge
 
 void TClickbenchWorkloadParams::ConfigureOpts(NLastGetopt::TOpts& opts, const ECommandType commandType, int workloadType) {
     TWorkloadBaseParams::ConfigureOpts(opts, commandType, workloadType);
+    switch (commandType) {
+    case TWorkloadParams::ECommandType::Run:
+        opts.AddLongOption("syntax", "Query syntax [yql]")
+            .Hidden()
+            .Handler1T<TString>("yql", [this](const TString& arg) {
+                if (arg == "yql") {
+                    Syntax = EQuerySyntax::YQL;
+                } else {
+                    throw yexception() << "Unknown syntax option \"" << arg << "\"";
+                }
+            });
+        break;
+    default:
+        break;
+    }
 }
 
 

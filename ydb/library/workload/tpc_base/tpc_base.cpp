@@ -186,6 +186,15 @@ void TTpcBaseWorkloadParams::ConfigureOpts(NLastGetopt::TOpts& opts, const EComm
         << "    Use Decimal type with canonical precision and scale." << Endl;
     switch (commandType) {
     case TWorkloadParams::ECommandType::Run:
+        opts.AddLongOption("syntax", "Query syntax [yql]")
+            .Hidden()
+            .Handler1T<TString>("yql", [this](const TString& arg) {
+                if (arg == "yql") {
+                    Syntax = EQuerySyntax::YQL;
+                } else {
+                    throw yexception() << "Unknown syntax option \"" << arg << "\"";
+                }
+            });
         opts.AddLongOption("scale", "Sets the percentage of the benchmark's data size and workload to use, relative to full scale.")
             .DefaultValue(Scale).StoreResult(&Scale);
         break;

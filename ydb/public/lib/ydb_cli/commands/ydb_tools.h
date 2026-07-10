@@ -115,5 +115,16 @@ private:
     TString DatabaseName;
 };
 
+class TCommandPgConvert : public TToolsCommand {
+public:
+    TCommandPgConvert();
+    virtual void Config(TConfig& config) override;
+    virtual int Run(TConfig& config) override;
+
+private:
+    TString Path;
+    bool IgnoreUnsupported = false;
+};
+
 }
 }

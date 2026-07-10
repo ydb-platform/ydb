@@ -103,15 +103,8 @@ public:
             return;
         }
 
-<<<<<<< HEAD
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "actual tx operator");
-        const bool waitForAsyncCompletion = internalOp->IsAsync() && (!internalOp->NeedResendReply() || !internalOp->IsProposeReplyReady(*Self));
-        if (waitForAsyncCompletion) {
-=======
-        YDB_LOG_DEBUG("",
-            {"event", "actual tx operator"});
         if (internalOp->IsAsync()) {
->>>>>>> abb000a3607 (simplify tx (#45970))
             Self->GetProgressTxController().StartProposeOnComplete(*internalOp, ctx);
         } else {
             Self->GetProgressTxController().FinishProposeOnComplete(*internalOp, ctx);

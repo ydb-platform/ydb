@@ -1,5 +1,6 @@
 import json
 import logging
+import pytest
 import time
 from typing import Callable
 
@@ -38,6 +39,7 @@ class TestIamAuth(StreamingTestBase):
         source_name: str,
         secret_path: str,
         endpoint: Endpoint,
+        shared_reading: bool = True,
     ) -> None:
         """Create an External Data Source that authenticates via IAM."""
         kikimr.ydb_client.query(f"""
@@ -48,13 +50,15 @@ class TestIamAuth(StreamingTestBase):
                 AUTH_METHOD = "IAM",
                 INITIAL_TOKEN_SECRET_PATH = "{secret_path}",
                 SERVICE_ACCOUNT_ID = "{FAKE_SERVICE_ACCOUNT_ID}",
-                SHARED_READING="TRUE"
+                SHARED_READING="{shared_reading}"
             );
         """)
 
+    @pytest.mark.parametrize("shared_reading", [False, True], ids=["no_shared", "shared"])
     def test_read_topic_iam_auth(
         self,
         kikimr: Kikimr,
+        shared_reading,
         entity_name: Callable[[str], str],
     ) -> None:
         """Write a message to a local topic, process it through a CREATE STREAMING QUERY
@@ -62,8 +66,8 @@ class TestIamAuth(StreamingTestBase):
         receives the transformed message."""
 
         endpoint = self.get_endpoint(kikimr, local_topics=True)
-        source_name = entity_name("iam_source")
-        query_name = entity_name("iam_query")
+        source_name = entity_name(f"iam_source{shared_reading!s:.1}")
+        query_name = entity_name(f"iam_query!s:.1")
 
         # 1. Create the secret and set cloud_id on the database root.
         secret_name = entity_name("iam_secret")
@@ -73,7 +77,7 @@ class TestIamAuth(StreamingTestBase):
 
         # 2. Create input + output topics and an IAM-auth external data source.
         self.init_topics(source_name, create_output=True, partitions_count=10, endpoint=endpoint)
-        self.create_iam_source(kikimr, source_name, secret_name, endpoint)
+        self.create_iam_source(kikimr, source_name, secret_name, endpoint, shared_reading=shared_reading)
 
         inp = f"`{source_name}`.`{self.input_topic}`"
         out = f"`{self.output_topic}`"

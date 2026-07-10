@@ -55,9 +55,10 @@ def get_ydb_config(request):
         extra_feature_flags.add("enable_user_attributes_in_topic_query")
     else:
         disabled_feature_flags.append("enable_user_attributes_in_topic_query")
-    if os.environ.get("USE_ACCESS_SERVICE_V2", "true") == "true"
+
+    if os.environ.get("USE_ACCESS_SERVICE_V2", "true") == "true":
         extra_feature_flags.add("enable_access_service_v2_interface")
-    else
+    else:
         disabled_feature_flags.append("enable_access_service_v2_interface")
 
     config = KikimrConfigGenerator(

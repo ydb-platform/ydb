@@ -201,6 +201,7 @@ THolder<NActors::IActor> CreateSystemViewScan(
     TIntrusiveConstPtr<NACLib::TUserToken> userToken,
     bool reverse
 ) {
+    Y_UNUSED(tablePath);
     NKikimrSysView::TSysViewDescription sysViewDescription;
     if (sysViewInfo) {
         sysViewDescription = *sysViewInfo;

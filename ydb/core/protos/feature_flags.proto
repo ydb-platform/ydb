@@ -337,4 +337,5 @@ message TFeatureFlags {
     optional bool EnableExportFiltering = 291 [default = false];
     optional bool EnableNodeBrokerLongLease = 292 [default = false];
     optional bool EnableExportInParquet = 293 [default = false];
+    optional bool EnableCutHistory = 294 [default = false];
 }

@@ -3147,6 +3147,14 @@ private:
         bool useSkiff = false;
         bool forceYsonInputFormat = true;
         mapJobBuilder.SetMapJobParams(mapJob.get(), execCtx,remapperMap, remapperAllFiles, useSkiff, forceYsonInputFormat, false);
+
+        // See the equivalent block in DoMapReduce for why this must be an operation-level decision
+        // rather than a per-task heuristic. Table_index tagging distinguishes individual PHYSICAL
+        // input tables (e.g. so the mapper's TableName()/TablePath() or Visit(...) can tell rows
+        // apart), not sections/Group — a single CONCAT(Input1, Input2) section already has 2
+        // distinct tables sharing one Group, and still needs marking.
+        mapJob->SetForceTableIndexMarking(execCtx->InputTables_.size() > 1);
+
         auto mapJobType = ordered ? EFmrJobType::OrderedMap : EFmrJobType::Map;
         mapJob->SetFmrJobType(mapJobType);
         mapJob->SetSettings(TFmrUserJobSettings());
@@ -3510,24 +3518,38 @@ private:
         // columns directly, without running any user lambda.
         const bool hasMapper = !mapReduce.Mapper().Maybe<TCoVoid>().IsValid();
 
-        // Multi-input MapReduce (JOIN) with an explicit mapper requires Variant-tagged input
-        // rows, which FMR does not yet support. Fall back to the native gateway.
-        if (hasMapper && mapReduce.Input().Size() > 1U) {
-            YQL_CLOG(WARN, FastMapReduce) << "DoMapReduce: explicit mapper with multiple input tables"
-                << " (JOIN) is not yet supported by FMR — falling back to native gateway";
-            TFmrOperationResult fallback;
-            fallback.Errors.emplace_back(TFmrError{
-                .Component = EFmrComponent::Gateway,
-                .Reason = EFmrErrorReason::FallbackOperation,
-                .ErrorMessage = "MapReduce with explicit mapper and multiple input tables is not yet supported"
-            });
-            return MakeFuture(fallback);
-        }
-
         // -- Mapper setup --
         auto mapJob = std::make_shared<TFmrUserJob>();
         TMapJobBuilder mapJobBuilder;
         TString mapLambda;
+
+        // Mapper producing Variant<Tuple<T0..TK>> splits into K extra tables written directly by
+        // the map stage (indices 1..K, bypassing reduce) plus the shuffle-bound row type (index 0,
+        // T0). Mirrors the native gateway's DoMapReduce (yql_yt_native.cpp). Only possible when an
+        // explicit mapper is present — an identity (TCoVoid) mapper has no Variant to split on, so
+        // everything always goes to shuffle.
+        size_t mapDirectOutputsCount = 0;
+        const TTypeAnnotationNode* mapReduceBoundItem = nullptr;
+        TTypeAnnotationNode::TListType mapDirectOutputItems;
+        if (hasMapper) {
+            const auto mapTypeSet = NYql::GetSetting(mapReduce.Settings().Ref(), EYtSettingType::MapOutputType);
+            const TTypeAnnotationNode* mapResultItem = mapTypeSet
+                ? mapTypeSet->Tail().GetTypeAnn()->Cast<TTypeExprType>()->GetType()
+                : GetSequenceItemType(mapReduce.Mapper(), true);
+            if (mapResultItem->GetKind() == ETypeAnnotationKind::Variant) {
+                const auto& items = mapResultItem->Cast<TVariantExprType>()->GetUnderlyingType()->Cast<TTupleExprType>()->GetItems();
+                YQL_ENSURE(!items.empty());
+                mapDirectOutputsCount = items.size() - 1;
+                mapReduceBoundItem = items.front();
+                mapDirectOutputItems.assign(items.begin() + 1, items.end());
+            } else {
+                mapReduceBoundItem = mapResultItem;
+            }
+        }
+
+        YQL_ENSURE(mapDirectOutputsCount < fmrOutputTables.size());
+        std::vector<TFmrTableRef> directMapOutputTables(fmrOutputTables.begin(), fmrOutputTables.begin() + mapDirectOutputsCount);
+        fmrOutputTables = std::vector<TFmrTableRef>(fmrOutputTables.begin() + mapDirectOutputsCount, fmrOutputTables.end());
 
         if (hasMapper) {
             TString mapInputType = NCommon::WriteTypeToYson(
@@ -3544,17 +3566,33 @@ private:
             bool forceYsonInputFormat = true;
             mapJobBuilder.SetMapJobParams(mapJob.get(), execCtx, remapperMap, remapperAllFiles, useSkiff, forceYsonInputFormat, false);
 
+            // Whether the mapper reads from more than one distinct physical input table (e.g. a
+            // self-JOIN's two sections, or a single CONCAT(Input1, Input2) section with 2 tables).
+            // This must be decided once, globally, for the whole operation — NOT per map task —
+            // since once an input table is large enough to be split into byte-range partitions, any
+            // individual task ends up touching only one physical input, which would make a per-task
+            // diversity check wrongly conclude marking is unnecessary even though the mapper
+            // globally expects Variant-tagged/table_index-tagged rows (see
+            // TFmrUserJob::SetForceTableIndexMarking). Table_index tagging distinguishes individual
+            // physical tables, not sections/Group — using Group diversity here would miss the
+            // CONCAT-within-one-section case.
+            mapJob->SetForceTableIndexMarking(execCtx->InputTables_.size() > 1);
+
             // Override OutSpec: SetMapJobParams uses the final output tables, but the mapper
-            // writes to the intermediate table whose schema matches the mapper's own output type.
+            // writes to the intermediate table whose schema matches the mapper's own output type,
+            // followed by one entry per direct (map-bypass) output table.
             {
-                const auto mapTypeSet = NYql::GetSetting(mapReduce.Settings().Ref(), EYtSettingType::MapOutputType);
-                const TTypeAnnotationNode* mapResultItem = mapTypeSet
-                    ? mapTypeSet->Tail().GetTypeAnn()->Cast<TTypeExprType>()->GetType()
-                    : GetSequenceItemType(mapReduce.Mapper(), true);
-                NYT::TNode tableSpec = NYT::TNode::CreateMap();
-                tableSpec[YqlRowSpecAttribute][TString{RowSpecAttrType}] = NCommon::TypeToYsonNode(mapResultItem);
+                NYT::TNode outSpecTables = NYT::TNode::CreateList();
+                NYT::TNode reduceBoundTableSpec = NYT::TNode::CreateMap();
+                reduceBoundTableSpec[YqlRowSpecAttribute][TString{RowSpecAttrType}] = NCommon::TypeToYsonNode(mapReduceBoundItem);
+                outSpecTables.Add(reduceBoundTableSpec);
+                for (const auto* directItem : mapDirectOutputItems) {
+                    NYT::TNode directTableSpec = NYT::TNode::CreateMap();
+                    directTableSpec[YqlRowSpecAttribute][TString{RowSpecAttrType}] = NCommon::TypeToYsonNode(directItem);
+                    outSpecTables.Add(directTableSpec);
+                }
                 NYT::TNode intermediateOutSpec = NYT::TNode::CreateMap();
-                intermediateOutSpec[TString{YqlIOSpecTables}] = NYT::TNode::CreateList().Add(tableSpec);
+                intermediateOutSpec[TString{YqlIOSpecTables}] = outSpecTables;
                 mapJob->SetOutSpec(NYT::NodeToYsonString(intermediateOutSpec));
             }
 
@@ -3601,15 +3639,24 @@ private:
 
         reduceJobBuilder.SetReduceJobParams(reduceJob.get(), execCtx, groups, tables, rowOffsets, auxColumns);
 
+        // SetReduceJobParams derives InputGroups/TableNames/RowOffsets from execCtx->InputTables_
+        // (the ORIGINAL pre-map-stage input tables, e.g. distinct join-side sections for a
+        // multi-input MapReduce). That's meaningless here: the reduce stage always reads from
+        // exactly ONE physical intermediate table (written by the map stage), regardless of how
+        // many original inputs fed the mapper. A non-empty InputGroups makes the reader wrap every
+        // row in a Variant holder keyed by table index (mismatching the plain intermediate row
+        // type below), and stale TableNames/RowOffsets sized for the original inputs mismatch the
+        // single actual input at read time — so reset all three for the single intermediate table.
+        reduceJob->SetInputGroups({});
+        reduceJob->SetTableNames({TString()});
+        reduceJob->SetRowOffsets({0});
+
         // Override InputSpec: the reducer reads from the intermediate FMR table, not the original
-        // input, so its InputSpec must match the mapper's output type.
+        // input, so its InputSpec must match the shuffle-bound row type (the mapper's own output
+        // type, or item 0 of its Variant tuple if it has extra direct outputs).
         if (hasMapper) {
-            const auto mapTypeSet = NYql::GetSetting(mapReduce.Settings().Ref(), EYtSettingType::MapOutputType);
-            const TTypeAnnotationNode* mapResultItem = mapTypeSet
-                ? mapTypeSet->Tail().GetTypeAnn()->Cast<TTypeExprType>()->GetType()
-                : GetSequenceItemType(mapReduce.Mapper(), true);
             NYT::TNode tableSpec = NYT::TNode::CreateMap();
-            tableSpec[YqlRowSpecAttribute][TString{RowSpecAttrType}] = NCommon::TypeToYsonNode(mapResultItem);
+            tableSpec[YqlRowSpecAttribute][TString{RowSpecAttrType}] = NCommon::TypeToYsonNode(mapReduceBoundItem);
             if (!execCtx->InputTables_.empty() && execCtx->InputTables_[0].Spec.HasKey(TString{YqlSysColumnPrefix})) {
                 tableSpec[TString{YqlSysColumnPrefix}] = execCtx->InputTables_[0].Spec[TString{YqlSysColumnPrefix}];
             }
@@ -3668,6 +3715,7 @@ private:
             TMapReduceOperationParams mapReduceOperationParams{
                 .Input = mapReduceInputTables,
                 .Output = fmrOutputTables,
+                .DirectMapOutput = directMapOutputTables,
                 .SerializedMapJobState = mapJobStateStream.Str(),
                 .SerializedReduceJobState = reduceJobStateStream.Str(),
                 .ReduceOperationSpec = reduceOperationSpec

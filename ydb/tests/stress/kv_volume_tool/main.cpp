@@ -9,6 +9,7 @@
 #include <util/system/env.h>
 #include <util/stream/file.h>
 #include <util/string/strip.h>
+#include <util/system/fstat.h>
 
 #include <google/protobuf/text_format.h>
 
@@ -34,6 +35,8 @@ static TString AuthToken;
 namespace {
 
 constexpr auto GrpcDeadline = 30s;
+constexpr ui64 GrpcMaxMessageSize = 64000000;
+constexpr ui64 FileTransferChunkSize = 32 * 1024 * 1024;
 constexpr const char* YdbAuthHeader = "x-ydb-auth-ticket";
 constexpr const char* YdbDatabaseHeader = "x-ydb-database";
 
@@ -77,6 +80,13 @@ std::shared_ptr<grpc::ChannelCredentials> MakeChannelCredentials(bool useTls) {
     return grpc::InsecureChannelCredentials();
 }
 
+std::shared_ptr<grpc::Channel> CreateGrpcChannel(const TString& endpoint, bool useTls) {
+    grpc::ChannelArguments args;
+    args.SetMaxSendMessageSize(GrpcMaxMessageSize);
+    args.SetMaxReceiveMessageSize(GrpcMaxMessageSize);
+    return grpc::CreateCustomChannel(endpoint, MakeChannelCredentials(useTls), args);
+}
+
 TString MakeVolumePath(const TString& database, const TString& path) {
     if (database.empty() || path.StartsWith(database)) {
         return path;
@@ -88,7 +98,7 @@ TString MakeVolumePath(const TString& database, const TString& path) {
 }
 
 int DescribeVolume(const TString& endpoint, const TString& database, const TString& path, bool useTls) {
-    auto channel = grpc::CreateChannel(endpoint, MakeChannelCredentials(useTls));
+    auto channel = CreateGrpcChannel(endpoint, useTls);
     auto stub = Ydb::KeyValue::V1::KeyValueService::NewStub(channel);
 
     Ydb::KeyValue::DescribeVolumeRequest request;
@@ -160,7 +170,7 @@ int DescribeVolume(const TString& endpoint, const TString& database, const TStri
 }
 
 int CreateVolume(const TString& endpoint, const TString& database, const TString& path, ui32 partitionCount, const TVector<TString>& channelMedia, bool useTls) {
-    auto channel = grpc::CreateChannel(endpoint, MakeChannelCredentials(useTls));
+    auto channel = CreateGrpcChannel(endpoint, useTls);
     auto stub = Ydb::KeyValue::V1::KeyValueService::NewStub(channel);
 
     Ydb::KeyValue::CreateVolumeRequest request;
@@ -215,7 +225,7 @@ int CreateVolume(const TString& endpoint, const TString& database, const TString
 }
 
 int RemoveVolume(const TString& endpoint, const TString& database, const TString& path, bool useTls) {
-    auto channel = grpc::CreateChannel(endpoint, MakeChannelCredentials(useTls));
+    auto channel = CreateGrpcChannel(endpoint, useTls);
     auto stub = Ydb::KeyValue::V1::KeyValueService::NewStub(channel);
 
     Ydb::KeyValue::DropVolumeRequest request;
@@ -262,7 +272,7 @@ int RemoveVolume(const TString& endpoint, const TString& database, const TString
 }
 
 int AlterVolume(const TString& endpoint, const TString& database, const TString& path, ui32 partitionCount, const TVector<TString>& channelMedia, bool useTls) {
-    auto channel = grpc::CreateChannel(endpoint, MakeChannelCredentials(useTls));
+    auto channel = CreateGrpcChannel(endpoint, useTls);
     auto stub = Ydb::KeyValue::V1::KeyValueService::NewStub(channel);
 
     Ydb::KeyValue::AlterVolumeRequest request;
@@ -320,7 +330,7 @@ int AlterVolume(const TString& endpoint, const TString& database, const TString&
 }
 
 int ReadValue(const TString& endpoint, const TString& database, const TString& path, ui64 partitionId, const TString& key, ui64 offset, ui64 size, bool useTls) {
-    auto channel = grpc::CreateChannel(endpoint, MakeChannelCredentials(useTls));
+    auto channel = CreateGrpcChannel(endpoint, useTls);
     auto stub = Ydb::KeyValue::V1::KeyValueService::NewStub(channel);
 
     Ydb::KeyValue::ReadRequest request;
@@ -385,7 +395,7 @@ int ReadValue(const TString& endpoint, const TString& database, const TString& p
 }
 
 int WriteValue(const TString& endpoint, const TString& database, const TString& path, ui64 partitionId, const TString& key, const TString& value, ui32 storageChannel, bool useTls) {
-    auto channel = grpc::CreateChannel(endpoint, MakeChannelCredentials(useTls));
+    auto channel = CreateGrpcChannel(endpoint, useTls);
     auto stub = Ydb::KeyValue::V1::KeyValueService::NewStub(channel);
 
     Ydb::KeyValue::ExecuteTransactionRequest request;
@@ -471,6 +481,251 @@ int WriteValue(const TString& endpoint, const TString& database, const TString& 
     return 0;
 }
 
+TString MakePartKey(const TString& key, ui64 partIndex) {
+    return TStringBuilder() << key << "_part_" << partIndex;
+}
+
+int ExecuteTransaction(
+    Ydb::KeyValue::V1::KeyValueService::Stub& stub,
+    const TString& database,
+    Ydb::KeyValue::ExecuteTransactionRequest request,
+    const char* operationName)
+{
+    if (VerboseMode) {
+        TString requestText;
+        google::protobuf::TextFormat::PrintToString(request, &requestText);
+        Cerr << "=== Request ===" << Endl;
+        Cerr << requestText << Endl;
+    }
+
+    Ydb::KeyValue::ExecuteTransactionResponse response;
+    grpc::ClientContext context;
+    AdjustContext(context, database);
+
+    grpc::Status status = stub.ExecuteTransaction(&context, request, &response);
+
+    if (VerboseMode) {
+        TString responseText;
+        google::protobuf::TextFormat::PrintToString(response, &responseText);
+        Cerr << "=== Response ===" << Endl;
+        Cerr << responseText << Endl;
+    }
+
+    if (!status.ok()) {
+        Cerr << "gRPC call failed: " << status.error_message() << Endl;
+        return 1;
+    }
+
+    if (response.operation().status() != Ydb::StatusIds::SUCCESS) {
+        Cerr << operationName << " failed with status: " << StatusToString(response.operation().status()) << Endl;
+        if (response.operation().issues_size() > 0) {
+            Cerr << "Issues:" << Endl;
+            for (const auto& issue : response.operation().issues()) {
+                Cerr << "  " << issue.message() << Endl;
+            }
+        }
+        return 1;
+    }
+
+    Ydb::KeyValue::ExecuteTransactionResult result;
+    if (!response.operation().result().UnpackTo(&result)) {
+        Cerr << "Failed to unpack ExecuteTransactionResult" << Endl;
+        return 1;
+    }
+
+    return 0;
+}
+
+bool ReadValueChunk(
+    Ydb::KeyValue::V1::KeyValueService::Stub& stub,
+    const TString& database,
+    const TString& path,
+    ui64 partitionId,
+    const TString& key,
+    ui64 offset,
+    ui64 limitBytes,
+    Ydb::KeyValue::ReadResult& result)
+{
+    Ydb::KeyValue::ReadRequest request;
+    request.set_path(path);
+    request.set_partition_id(partitionId);
+    request.set_key(key);
+    request.set_offset(offset);
+    request.set_size(0);
+    request.set_limit_bytes(limitBytes);
+
+    if (VerboseMode) {
+        TString requestText;
+        google::protobuf::TextFormat::PrintToString(request, &requestText);
+        Cerr << "=== Request ===" << Endl;
+        Cerr << requestText << Endl;
+    }
+
+    Ydb::KeyValue::ReadResponse response;
+    grpc::ClientContext context;
+    AdjustContext(context, database);
+
+    grpc::Status status = stub.Read(&context, request, &response);
+
+    if (VerboseMode) {
+        TString responseText;
+        google::protobuf::TextFormat::PrintToString(response, &responseText);
+        Cerr << "=== Response ===" << Endl;
+        Cerr << responseText << Endl;
+    }
+
+    if (!status.ok()) {
+        Cerr << "gRPC call failed: " << status.error_message() << Endl;
+        return false;
+    }
+
+    if (response.operation().status() != Ydb::StatusIds::SUCCESS) {
+        Cerr << "Read failed with status: " << StatusToString(response.operation().status()) << Endl;
+        if (response.operation().issues_size() > 0) {
+            Cerr << "Issues:" << Endl;
+            for (const auto& issue : response.operation().issues()) {
+                Cerr << "  " << issue.message() << Endl;
+            }
+        }
+        return false;
+    }
+
+    if (!response.operation().result().UnpackTo(&result)) {
+        Cerr << "Failed to unpack ReadResult" << Endl;
+        return false;
+    }
+
+    return true;
+}
+
+int UploadFile(const TString& endpoint, const TString& database, const TString& path, ui64 partitionId, const TString& key, const TString& filePath, ui32 storageChannel, bool useTls) {
+    const i64 fileSize = GetFileLength(filePath);
+    if (fileSize < 0) {
+        Cerr << "Failed to get file size: " << filePath << Endl;
+        return 1;
+    }
+
+    Cout << "Uploading file: " << filePath << " (" << fileSize << " bytes)" << Endl;
+
+    auto channel = CreateGrpcChannel(endpoint, useTls);
+    auto stub = Ydb::KeyValue::V1::KeyValueService::NewStub(channel);
+
+    if (static_cast<ui64>(fileSize) <= FileTransferChunkSize) {
+        TFileInput fileInput(filePath);
+        const TString value = fileInput.ReadAll();
+
+        Ydb::KeyValue::ExecuteTransactionRequest request;
+        request.set_path(path);
+        request.set_partition_id(partitionId);
+
+        auto* write = request.add_commands()->mutable_write();
+        write->set_key(key);
+        write->set_value(value);
+        if (storageChannel > 0) {
+            write->set_storage_channel(storageChannel);
+        }
+
+        if (ExecuteTransaction(*stub, database, std::move(request), "Write") != 0) {
+            return 1;
+        }
+    } else {
+        TVector<TString> partKeys;
+        partKeys.reserve((fileSize + FileTransferChunkSize - 1) / FileTransferChunkSize);
+
+        TFileInput fileInput(filePath);
+        TVector<char> buffer(FileTransferChunkSize);
+        ui64 partIndex = 0;
+
+        while (true) {
+            const size_t readBytes = fileInput.Read(buffer.data(), buffer.size());
+            if (readBytes == 0) {
+                break;
+            }
+
+            const TString partKey = MakePartKey(key, partIndex);
+            partKeys.push_back(partKey);
+
+            Ydb::KeyValue::ExecuteTransactionRequest request;
+            request.set_path(path);
+            request.set_partition_id(partitionId);
+
+            auto* write = request.add_commands()->mutable_write();
+            write->set_key(partKey);
+            write->set_value(TStringBuf(buffer.data(), readBytes));
+            if (storageChannel > 0) {
+                write->set_storage_channel(storageChannel);
+            }
+
+            Cout << "Uploading part " << partIndex << ": key=" << partKey << " (" << readBytes << " bytes)" << Endl;
+            if (ExecuteTransaction(*stub, database, std::move(request), "Write") != 0) {
+                return 1;
+            }
+
+            ++partIndex;
+        }
+
+        if (partKeys.empty()) {
+            Cerr << "File is empty: " << filePath << Endl;
+            return 1;
+        }
+
+        Ydb::KeyValue::ExecuteTransactionRequest request;
+        request.set_path(path);
+        request.set_partition_id(partitionId);
+
+        auto* concat = request.add_commands()->mutable_concat();
+        for (const auto& partKey : partKeys) {
+            concat->add_input_keys(partKey);
+        }
+        concat->set_output_key(key);
+        concat->set_keep_inputs(false);
+
+        Cout << "Concatenating " << partKeys.size() << " part(s) into key=" << key << Endl;
+        if (ExecuteTransaction(*stub, database, std::move(request), "Concat") != 0) {
+            return 1;
+        }
+    }
+
+    Cout << "File uploaded successfully: " << filePath << " -> key=" << key << " (" << fileSize << " bytes)" << Endl;
+    return 0;
+}
+
+int DownloadFile(const TString& endpoint, const TString& database, const TString& path, ui64 partitionId, const TString& key, const TString& filePath, bool useTls) {
+    auto channel = CreateGrpcChannel(endpoint, useTls);
+    auto stub = Ydb::KeyValue::V1::KeyValueService::NewStub(channel);
+
+    TFixedBufferFileOutput out(filePath);
+    ui64 offset = 0;
+    ui64 totalBytes = 0;
+
+    while (true) {
+        Ydb::KeyValue::ReadResult result;
+        if (!ReadValueChunk(*stub, database, path, partitionId, key, offset, FileTransferChunkSize, result)) {
+            return 1;
+        }
+
+        if (result.value().empty()) {
+            if (offset == 0) {
+                Cerr << "Read returned empty value for key=" << key << Endl;
+                return 1;
+            }
+            break;
+        }
+
+        out.Write(result.value().data(), result.value().size());
+        totalBytes += result.value().size();
+        offset += result.value().size();
+
+        if (!result.is_overrun()) {
+            break;
+        }
+    }
+
+    out.Finish();
+
+    Cout << "File downloaded successfully: key=" << key << " -> " << filePath << " (" << totalBytes << " bytes)" << Endl;
+    return 0;
+}
 
 bool DoWriteValue(Ydb::KeyValue::V1::KeyValueService::Stub& stub, const TString& database, const TString& path, ui64 partitionId, const TString& key, const TString& value, ui32 storageChannel) {
     Ydb::KeyValue::ExecuteTransactionRequest request;
@@ -608,7 +863,7 @@ int LoadVolume(
 
     for (ui32 t = 0; t < threads; ++t) {
         workers.emplace_back([&, t] {
-            auto channel = grpc::CreateChannel(endpoint, MakeChannelCredentials(useTls));
+            auto channel = CreateGrpcChannel(endpoint, useTls);
             auto stub = Ydb::KeyValue::V1::KeyValueService::NewStub(channel);
             std::mt19937 rng(static_cast<unsigned>(runId + t));
             std::uniform_int_distribution<int> percent(1, 100);
@@ -711,6 +966,8 @@ struct TOptions {
     TVector<TString> ChannelMedia;
     TString Key;
     TString Value;
+    TString ValueFile;
+    TString FilePath;
     ui64 ReadOffset = 0;
     ui64 ReadSize = 0;
     ui32 StorageChannel = 0;
@@ -729,15 +986,15 @@ TOptions ParseOptions(int argc, char** argv) {
     NLastGetopt::TOpts opts = NLastGetopt::TOpts::Default();
     opts.SetTitle("KeyValue volume management tool");
     opts.SetFreeArgsNum(1);
-    opts.SetFreeArgTitle(0, "COMMAND", "Command to execute: create, describe, alter, remove, read, write or load");
+    opts.SetFreeArgTitle(0, "COMMAND", "Command to execute: create, describe, alter, remove, read, write, upload, download or load");
 
     opts.AddLongOption('e', "endpoint", "YDB endpoint (e.g., grpc://localhost:2135)")
         .Required()
         .StoreResult(&options.Endpoint);
 
     opts.AddLongOption('d', "database", "Database path")
-        .StoreResult(&options.Database)
-        .DefaultValue("");
+        .Required()
+        .StoreResult(&options.Database);
 
     opts.AddLongOption('p', "path", "Volume path (relative to database)")
         .Required()
@@ -760,6 +1017,9 @@ TOptions ParseOptions(int argc, char** argv) {
 
     opts.AddLongOption("value", "Value to write")
         .StoreResult(&options.Value);
+
+    opts.AddLongOption("file", "Path to local file (source for upload, destination for download)")
+        .StoreResult(&options.FilePath);
 
     opts.AddLongOption("read-offset", "Offset in bytes for read operation (default: 0)")
         .StoreResult(&options.ReadOffset)
@@ -815,8 +1075,9 @@ TOptions ParseOptions(int argc, char** argv) {
     options.Command = parseResult.GetFreeArgs()[0];
 
     if (options.Command != "create" && options.Command != "describe" && options.Command != "alter" &&
-        options.Command != "remove" && options.Command != "read" && options.Command != "write" && options.Command != "load") {
-        throw std::runtime_error("command must be 'create', 'describe', 'alter', 'remove', 'read', 'write' or 'load'");
+        options.Command != "remove" && options.Command != "read" && options.Command != "write" &&
+        options.Command != "upload" && options.Command != "download" && options.Command != "load") {
+        throw std::runtime_error("command must be 'create', 'describe', 'alter', 'remove', 'read', 'write', 'upload', 'download' or 'load'");
     }
 
     if (options.Command == "create" && options.PartitionCount == 0) {
@@ -845,6 +1106,31 @@ TOptions ParseOptions(int argc, char** argv) {
 
     if (options.Command == "write" && options.Value.empty()) {
         throw std::runtime_error("for write command, --value must be specified");
+    }
+
+    
+    if (options.Command == "upload" && !options.PartitionIdSpecified) {
+        throw std::runtime_error("for upload command, --partition-id must be specified");
+    }
+
+    if (options.Command == "upload" && options.Key.empty()) {
+        throw std::runtime_error("for upload command, --key must be specified");
+    }
+
+    if (options.Command == "upload" && options.FilePath.empty()) {
+        throw std::runtime_error("for upload command, --file must be specified");
+    }
+
+    if (options.Command == "download" && !options.PartitionIdSpecified) {
+        throw std::runtime_error("for download command, --partition-id must be specified");
+    }
+
+    if (options.Command == "download" && options.Key.empty()) {
+        throw std::runtime_error("for download command, --key must be specified");
+    }
+
+    if (options.Command == "download" && options.FilePath.empty()) {
+        throw std::runtime_error("for download command, --file must be specified");
     }
 
     if (options.Command == "load" && options.PartitionCount == 0) {
@@ -895,6 +1181,10 @@ int main(int argc, char** argv) {
             return ReadValue(hostPort, options.Database, volumePath, options.PartitionId, options.Key, options.ReadOffset, options.ReadSize, useTls);
         } else if (options.Command == "write") {
             return WriteValue(hostPort, options.Database, volumePath, options.PartitionId, options.Key, options.Value, options.StorageChannel, useTls);
+        } else if (options.Command == "upload") {
+            return UploadFile(hostPort, options.Database, volumePath, options.PartitionId, options.Key, options.FilePath, options.StorageChannel, useTls);
+        } else if (options.Command == "download") {
+            return DownloadFile(hostPort, options.Database, volumePath, options.PartitionId, options.Key, options.FilePath, useTls);
         } else if (options.Command == "load") {
             return LoadVolume(hostPort, options.Database, volumePath, options.PartitionCount, options.StorageChannel, options.Seconds, options.Threads, options.ValueSize, options.ReadPercent, options.DeletePercent, options.ReportPeriod, useTls);
         }

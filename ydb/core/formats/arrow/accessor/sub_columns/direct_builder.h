@@ -192,7 +192,7 @@ public:
                 valueType = DetectValueTypeForArray(i->GetValues());
             }
             IChunkedArray::EType accessorType = IChunkedArray::EType::Array;
-            if (separateColumns && DictionaryApplicableForValueType(valueType) &&
+            if (separateColumns && GetCodecForValueType(valueType)->CanBeDictionaryEncoded() &&
                 settings.IsDictionary(presentCount, enumerateValues)) {
                 accessorType = IChunkedArray::EType::Dictionary;
             }

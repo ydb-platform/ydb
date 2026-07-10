@@ -12,55 +12,26 @@
 
 namespace NKikimr::NArrow::NAccessor::NSubColumns {
 
-namespace {
-
-std::string_view MakeStoredBytesView(const NBinaryJson::TBinaryJson& rec, const EValueType valueType) {
-    if (valueType == EValueType::BinaryJson) {
-        return std::string_view(rec.Data(), rec.Size());
-    }
-    AFL_VERIFY(valueType == EValueType::String)("value_type", (ui32)valueType);
-    const auto scalar = ExtractStringScalar(rec);
-    return std::string_view(scalar.data(), scalar.size());
-}
-
-template <class TArrow, class TExtractor>
-std::shared_ptr<IChunkedArray> BuildTypedPlain(const std::deque<NBinaryJson::TBinaryJson>& values,
-    const std::vector<ui32>& recordIndexes, const ui32 recordsCount, const ui32 reserveData, const TExtractor& extract) {
-    TTrivialArray::TPlainBuilder<TArrow> builder(recordsCount, reserveData);
-    for (ui32 i = 0; i < recordIndexes.size(); ++i) {
-        builder.AddValue(recordIndexes[i], extract(values[i]));
-    }
-    return builder.Finish(recordsCount);
-}
-}   // namespace
-
 void TColumnElements::BuildPlainAccessor(const ui32 recordsCount, const EValueType valueType) {
     AFL_VERIFY(!Accessor);
-    switch (valueType) {
-        case EValueType::BinaryJson:
-        case EValueType::String:
-            Accessor = BuildTypedPlain<arrow::BinaryType>(Values, RecordIndexes, recordsCount, DataSize,
-                [valueType](const NBinaryJson::TBinaryJson& rec) {
-                    const auto sv = MakeStoredBytesView(rec, valueType);
-                    return arrow::util::string_view(sv.data(), sv.size());
-                });
-            break;
-        case EValueType::Double:
-            // No need to reserve by size for fixed-size arrays
-            Accessor = BuildTypedPlain<arrow::DoubleType>(Values, RecordIndexes, recordsCount, 0,
-                &ExtractDoubleScalar);
-            break;
-        case EValueType::Bool:
-            Accessor = BuildTypedPlain<arrow::BooleanType>(Values, RecordIndexes, recordsCount, 0,
-                &ExtractBoolScalar);
-            break;
+    const auto codec = GetCodecForValueType(valueType);
+    auto builder = codec->MakeBuilder(recordsCount, DataSize);
+    ui32 nextExpected = 0;
+    for (ui32 i = 0; i < RecordIndexes.size(); ++i) {
+        AFL_VERIFY(nextExpected <= RecordIndexes[i]);
+        TStatusValidator::Validate(builder->AppendNulls(RecordIndexes[i] - nextExpected));
+        codec->AppendFromBinaryJson(*builder, Values[i]);
+        nextExpected = RecordIndexes[i] + 1;
     }
+    AFL_VERIFY(nextExpected <= recordsCount);
+    TStatusValidator::Validate(builder->AppendNulls(recordsCount - nextExpected));
+    Accessor = std::make_shared<TTrivialArray>(NArrow::FinishBuilder(std::move(builder)));
 }
 
 void TColumnElements::BuildDictionaryAccessor(const ui32 recordsCount, const EValueType valueType) {
     BuildPlainAccessor(recordsCount, valueType);
-    const TChunkConstructionData cData(
-        recordsCount, nullptr, GetArrowTypeForValueType(valueType), NSerialization::TSerializerContainer::GetDefaultSerializer());
+    const TChunkConstructionData cData(recordsCount, nullptr, GetCodecForValueType(valueType)->GetArrowType(),
+        NSerialization::TSerializerContainer::GetDefaultSerializer());
     Accessor = NDictionary::TConstructor().Construct(Accessor, cData).DetachResult();
 }
 

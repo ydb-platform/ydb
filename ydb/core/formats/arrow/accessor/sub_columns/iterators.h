@@ -15,8 +15,8 @@ private:
     bool IsValidFlag = false;
     bool HasValueFlag = false;
     bool IsColumnKeyFlag = false;
-    EValueType ValueType = EValueType::BinaryJson;
-    // Current value as (array, local index); the reader interprets it per ValueType.
+    std::shared_ptr<const IValueArrowCodec> Codec;
+    // Current physical position as (array, local index)
     const arrow::Array* CurrentArray = nullptr;
     i64 LocalIndex = 0;
 
@@ -72,12 +72,14 @@ public:
     TGeneralIterator(TColumnsData::TIterator&& iterator, const EValueType valueType, const std::optional<ui32> remappedKey = {})
         : Iterator(iterator)
         , RemappedKey(remappedKey)
-        , ValueType(valueType) {
+        , Codec(GetCodecForValueType(valueType)) {
         Initialize();
     }
     TGeneralIterator(TOthersData::TIterator&& iterator, const std::vector<ui32>& remapKeys = {})
         : Iterator(iterator)
-        , RemapKeys(remapKeys) {
+        , RemapKeys(remapKeys)
+        // The Others store holds every value as BinaryJson.
+        , Codec(GetCodecForValueType(EValueType::BinaryJson)) {
         Initialize();
     }
     bool IsColumnKey() const {
@@ -160,7 +162,7 @@ public:
     // bytes through directly; native columns are re-encoded into an owned buffer.
     NBinaryJson::TBinaryJson GetValueAsBinaryJson() {
         AFL_VERIFY(IsValidFlag);
-        return ArrayElementToBinaryJson(*CurrentArray, LocalIndex, ValueType);
+        return Codec->ReadToBinaryJson(*CurrentArray, LocalIndex);
     }
 
     NJson::TJsonValue GetValue() const;

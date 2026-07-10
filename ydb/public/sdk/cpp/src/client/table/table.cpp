@@ -3478,6 +3478,7 @@ void TMultiColumnStatisticsDescription::SerializeTo(Ydb::Table::TableMultiColumn
             proto.add_types(Ydb::Table::TableMultiColumnStatistics::COUNT_MIN_SKETCH);
             break;
         case EMultiColumnStatisticsType::Unknown:
+            proto.add_types(Ydb::Table::TableMultiColumnStatistics::STATISTIC_TYPE_UNSPECIFIED);
             break;
         }
     }

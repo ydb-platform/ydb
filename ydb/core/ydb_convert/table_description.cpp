@@ -2160,6 +2160,7 @@ void FillMultiColumnStatistics(NKikimrSchemeOp::TMultiColumnStatisticsDescriptio
                 out.AddTypes(NKikimrSchemeOp::EMultiColumnStatisticsType::COUNT_MIN_SKETCH);
                 break;
             default:
+                out.AddTypes(NKikimrSchemeOp::EMultiColumnStatisticsType::MULTI_COLUMN_STATISTICS_UNSPECIFIED);
                 break;
         }
     }

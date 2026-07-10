@@ -25,10 +25,10 @@ TConclusionStatus TRequestedConstuctor::DoDeserializeFromRequest(NYql::TFeatures
         if (*fraction < 0 || *fraction > 1) {
             return TConclusionStatus::Fail("DICTIONARY_UNIQUE_FRACTION must be in [0, 1] interval");
         }
-        Settings.SetDictionaryUniqueFraction(*fraction);
+        Settings.SetDictionaryUniqueFraction(fraction);
     }
     if (auto enable = features.Extract<bool>("ENABLE_NATIVE_COLUMNS")) {
-        Settings.SetEnableNativeColumns(*enable);
+        Settings.SetEnableNativeColumns(enable);
     }
     THolder<IDataAdapter> extractor;
     if (auto dataExtractorClassName = features.Extract<TString>("DATA_EXTRACTOR_CLASS_NAME")) {

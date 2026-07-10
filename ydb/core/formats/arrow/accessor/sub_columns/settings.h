@@ -19,8 +19,8 @@ private:
     YDB_ACCESSOR(ui32, ColumnsLimit, 1024);
     YDB_ACCESSOR(ui32, ChunkMemoryLimit, 50 * 1024 * 1024);
     YDB_READONLY(double, OthersAllowedFraction, 0.05);
-    YDB_ACCESSOR(double, DictionaryUniqueFraction, 0);
-    YDB_ACCESSOR(bool, EnableNativeColumns, false);
+    YDB_ACCESSOR(std::optional<double>, DictionaryUniqueFraction, std::nullopt);
+    YDB_ACCESSOR(std::optional<bool>, EnableNativeColumns, std::nullopt);
     YDB_ACCESSOR_DEF(TDataAdapterContainer, DataExtractor);
 
 public:
@@ -77,8 +77,12 @@ public:
         result.InsertValue("columns_limit", ColumnsLimit);
         result.InsertValue("memory_limit", ChunkMemoryLimit);
         result.InsertValue("others_allowed_fraction", OthersAllowedFraction);
-        result.InsertValue("dictionary_unique_fraction", DictionaryUniqueFraction);
-        result.InsertValue("enable_native_columns", EnableNativeColumns);
+        if (DictionaryUniqueFraction) {
+            result.InsertValue("dictionary_unique_fraction", *DictionaryUniqueFraction);
+        }
+        if (EnableNativeColumns) {
+            result.InsertValue("enable_native_columns", *EnableNativeColumns);
+        }
         result.InsertValue("data_extractor", DataExtractor->DebugJson());
         return result;
     }
@@ -115,13 +119,14 @@ public:
     // `enumerate` feeds the values counted toward the distinct set. Short-circuits as soon as the verdict is clear.
     template <class TEnumerator>
     bool IsDictionary(const ui32 presentCount, const TEnumerator& enumerate) const {
-        if (DictionaryUniqueFraction == 0) {
+        double fraction = GetDictionaryUniqueFractionResolved();
+        if (fraction == 0) {
             return false;
         }
-        if (DictionaryUniqueFraction == 1) {
+        if (fraction == 1) {
             return true;
         }
-        const ui32 tooManyUnique = static_cast<ui32>(DictionaryUniqueFraction * presentCount) + 1;
+        const ui32 tooManyUnique = static_cast<ui32>(fraction * presentCount) + 1;
         return !HasAtLeastUniqueValues(tooManyUnique, enumerate);
     }
 
@@ -131,8 +136,14 @@ public:
         result.SetColumnsLimit(ColumnsLimit);
         result.SetChunkMemoryLimit(ChunkMemoryLimit);
         result.SetOthersAllowedFraction(OthersAllowedFraction);
-        result.SetDictionaryUniqueFraction(DictionaryUniqueFraction);
-        result.SetEnableNativeColumns(EnableNativeColumns);
+        // These are set only when non-default, so an unset option (equivalent to its default)
+        // is not persisted and not surfaced back by SHOW CREATE.
+        if (DictionaryUniqueFraction) {
+            result.SetDictionaryUniqueFraction(*DictionaryUniqueFraction);
+        }
+        if (EnableNativeColumns) {
+            result.SetEnableNativeColumns(*EnableNativeColumns);
+        }
         DataExtractor.SerializeToProto(*result.MutableDataExtractor());
     }
 
@@ -142,14 +153,26 @@ public:
         ColumnsLimit = proto.GetColumnsLimit();
         ChunkMemoryLimit = proto.GetChunkMemoryLimit();
         OthersAllowedFraction = proto.GetOthersAllowedFraction();
-        DictionaryUniqueFraction = proto.GetDictionaryUniqueFraction();
-        EnableNativeColumns = proto.GetEnableNativeColumns();
+        if (proto.HasDictionaryUniqueFraction()) {
+            DictionaryUniqueFraction = proto.GetDictionaryUniqueFraction();
+        }
+        if (proto.HasEnableNativeColumns()) {
+            EnableNativeColumns = proto.GetEnableNativeColumns();
+        }
         if (!proto.HasDataExtractor()) {
             AFL_VERIFY(DataExtractor.Initialize(TJsonScanExtractor::GetClassNameStatic()));
         } else if (!DataExtractor.DeserializeFromProto(proto.GetDataExtractor())) {
             return false;
         }
         return true;
+    }
+
+    double GetDictionaryUniqueFractionResolved() const {
+        return DictionaryUniqueFraction.value_or(0);
+    }
+
+    bool GetEnableNativeColumnsResolved() const {
+        return EnableNativeColumns.value_or(false);
     }
 
     NKikimrArrowAccessorProto::TConstructor::TSubColumns::TSettings SerializeToProto() const {

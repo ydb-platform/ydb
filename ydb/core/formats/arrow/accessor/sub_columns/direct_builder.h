@@ -189,7 +189,7 @@ public:
             };
             // Native scalar storage applies only to separated columns, the Others store is always BinaryJson.
             EValueType valueType = EValueType::BinaryJson;
-            if (separateColumns && settings.GetEnableNativeColumns()) {
+            if (separateColumns && settings.GetEnableNativeColumnsResolved()) {
                 valueType = DetectValueTypeForArray(i->GetValues());
             }
             IChunkedArray::EType accessorType = IChunkedArray::EType::Array;

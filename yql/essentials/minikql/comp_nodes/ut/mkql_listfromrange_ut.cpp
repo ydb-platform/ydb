@@ -19,7 +19,7 @@ TRuntimeNode MakeList(TSetup<UseLLVM>& setup, T Start, T End, i64 Step, const au
     const auto step = pb.NewDataLiteral<NUdf::EDataSlot::Interval>(
         NUdf::TStringRef((const char*)&Step, sizeof(Step)));
 
-    return pb.Collect(pb.ToFlow(pb.ListFromRange(start, end, step)));
+    return pb.Collect(pb.ToFlow(pb.ListFromRange(start, end, step), {}));
 }
 } // namespace
 
@@ -385,7 +385,7 @@ Y_UNIT_TEST_LLVM(TestResverseUnsignedShorts) {
     const auto to = NTest::ConvertValueToLiteralNode(pb, ui16(59990U));
     const auto step = NTest::ConvertValueToLiteralNode(pb, i16(-2));
 
-    const auto dates = pb.Collect(pb.ToFlow(pb.ListFromRange(from, to, step)));
+    const auto dates = pb.Collect(pb.ToFlow(pb.ListFromRange(from, to, step), {}));
 
     const auto graph = setup.BuildGraph(dates);
     const auto list = graph->GetValue();

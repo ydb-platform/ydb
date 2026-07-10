@@ -146,7 +146,7 @@ TRuntimeNode Combine(TProgramBuilder& pb, TRuntimeNode stream, std::function<TRu
         });
     };
 
-    return OverFlow ? pb.FromFlow(pb.CombineCore(pb.ToFlow(stream), keyExtractor, init, update, finishLambda, 64ul << 20)) : pb.CombineCore(stream, keyExtractor, init, update, finishLambda, 64ul << 20);
+    return OverFlow ? pb.FromFlow(pb.CombineCore(pb.ToFlow(stream, {}), keyExtractor, init, update, finishLambda, 64ul << 20)) : pb.CombineCore(stream, keyExtractor, init, update, finishLambda, 64ul << 20);
 }
 
 template <bool SPILLING>
@@ -201,7 +201,7 @@ Y_UNIT_TEST_LLVM(TestLongStringsRefCounting) {
                                                                {"very long key two", "very long value 9"},
                                                            });
 
-    const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.WideCombiner(pb.ExpandMap(pb.ToFlow(list),
+    const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.WideCombiner(pb.ExpandMap(pb.ToFlow(list, {}),
                                                                                 [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; }), -100000LL,
                                                                    [&](TRuntimeNode::TList items) -> TRuntimeNode::TList { return {items.front()}; },
                                                                    [&](TRuntimeNode::TList keys, TRuntimeNode::TList items) -> TRuntimeNode::TList { return {pb.NewOptional(items.back()), pb.NewOptional(keys.front()), pb.NewEmptyOptional(optionalType), pb.NewEmptyOptional(optionalType)}; },
@@ -240,7 +240,7 @@ Y_UNIT_TEST_LLVM(TestLongStringsPasstroughtRefCounting) {
                                                                {"very long key two", "very long value 9"},
                                                            });
 
-    const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.WideCombiner(pb.ExpandMap(pb.ToFlow(list),
+    const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.WideCombiner(pb.ExpandMap(pb.ToFlow(list, {}),
                                                                                 [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; }), -1000000LL,
                                                                    [&](TRuntimeNode::TList items) -> TRuntimeNode::TList { return {items.front()}; },
                                                                    [&](TRuntimeNode::TList keys, TRuntimeNode::TList items) -> TRuntimeNode::TList { return {items.back(), keys.front(), items.back(), items.front()}; },
@@ -281,7 +281,7 @@ Y_UNIT_TEST_LLVM(TestDoNotCalculateUnusedInput) {
 
     const auto landmine = NTest::ConvertValueToLiteralNode(pb, TStringBuf("ACHTUNG MINEN!"));
 
-    const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.WideCombiner(pb.ExpandMap(pb.ToFlow(list),
+    const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.WideCombiner(pb.ExpandMap(pb.ToFlow(list, {}),
                                                                                 [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Unwrap(pb.Nth(item, 1U), landmine, __FILE__, __LINE__, 0), pb.Nth(item, 2U)}; }), -1000000LL,
                                                                    [&](TRuntimeNode::TList items) -> TRuntimeNode::TList { return {items.front()}; },
                                                                    [&](TRuntimeNode::TList keys, TRuntimeNode::TList items) -> TRuntimeNode::TList { return {items.back(), keys.front(), empty, empty}; },
@@ -318,7 +318,7 @@ Y_UNIT_TEST_LLVM(TestDoNotCalculateUnusedOutput) {
 
     const auto landmine = NTest::ConvertValueToLiteralNode(pb, TStringBuf("ACHTUNG MINEN!"));
 
-    const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.WideCombiner(pb.ExpandMap(pb.ToFlow(list),
+    const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.WideCombiner(pb.ExpandMap(pb.ToFlow(list, {}),
                                                                                 [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U), pb.Nth(item, 2U)}; }), 0ULL,
                                                                    [&](TRuntimeNode::TList items) -> TRuntimeNode::TList { return {items.front()}; },
                                                                    [&](TRuntimeNode::TList, TRuntimeNode::TList items) -> TRuntimeNode::TList { return {items[1U], items.back()}; },
@@ -342,7 +342,7 @@ Y_UNIT_TEST_LLVM(TestThinAllLambdas) {
 
     const auto list = pb.NewList(tupleType, {data, data, data, data});
 
-    const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.WideCombiner(pb.ExpandMap(pb.ToFlow(list),
+    const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.WideCombiner(pb.ExpandMap(pb.ToFlow(list, {}),
                                                                                 [](TRuntimeNode) -> TRuntimeNode::TList { return {}; }), 0ULL,
                                                                    [](TRuntimeNode::TList items) { return items; },
                                                                    [](TRuntimeNode::TList, TRuntimeNode::TList items) { return items; },
@@ -361,7 +361,7 @@ Y_UNIT_TEST_LLVM(TestHasLimitButPasstroughtYields) {
     TProgramBuilder& pb = *setup.PgmBuilder;
 
     const auto stream = MakeStream<LLVM>(setup);
-    const auto pgmReturn = pb.FromFlow(pb.NarrowMap(pb.WideCombiner(pb.ExpandMap(pb.ToFlow(stream),
+    const auto pgmReturn = pb.FromFlow(pb.NarrowMap(pb.WideCombiner(pb.ExpandMap(pb.ToFlow(stream, {}),
                                                                                  [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Member(item, "a"), pb.Member(item, "b")}; }), -123456789LL,
                                                                     [&](TRuntimeNode::TList items) -> TRuntimeNode::TList { return {items.front()}; },
                                                                     [&](TRuntimeNode::TList, TRuntimeNode::TList items) -> TRuntimeNode::TList { return items; },
@@ -402,7 +402,7 @@ Y_UNIT_TEST_LLVM(TestSkipYieldRespectsMemLimit) {
     TProgramBuilder& pb = *setup.PgmBuilder;
 
     const auto stream = MakeStream<LLVM>(setup);
-    const auto pgmReturn = pb.FromFlow(pb.NarrowMap(pb.WideCombiner(pb.ExpandMap(pb.ToFlow(stream),
+    const auto pgmReturn = pb.FromFlow(pb.NarrowMap(pb.WideCombiner(pb.ExpandMap(pb.ToFlow(stream, {}),
                                                                                  [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Member(item, "a"), pb.Member(item, "b")}; }), -memLimit,
                                                                     [&](TRuntimeNode::TList items) -> TRuntimeNode::TList { return {items.front()}; },
                                                                     [&](TRuntimeNode::TList, TRuntimeNode::TList items) -> TRuntimeNode::TList { return items; },
@@ -444,7 +444,7 @@ Y_UNIT_TEST_LLVM(TestSumDoubleBooleanKeys) {
     const auto listType = NTest::ConvertToMinikqlType<TVector<double>>(pb);
     const auto list = TCallableBuilder(pb.GetTypeEnvironment(), "TestList", listType).Build();
 
-    const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.WideCombiner(pb.ExpandMap(pb.ToFlow(TRuntimeNode(list, false)),
+    const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.WideCombiner(pb.ExpandMap(pb.ToFlow(TRuntimeNode(list, false), {}),
                                                                                 [&](TRuntimeNode item) -> TRuntimeNode::TList { return {item}; }), 0ULL,
                                                                    [&](TRuntimeNode::TList items) -> TRuntimeNode::TList { return {pb.AggrGreater(items.front(), pb.NewDataLiteral(0.0))}; },
                                                                    [&](TRuntimeNode::TList, TRuntimeNode::TList items) -> TRuntimeNode::TList { return items; },
@@ -500,7 +500,7 @@ Y_UNIT_TEST_LLVM(TestMinMaxSumDoubleBooleanKeys) {
     const auto listType = NTest::ConvertToMinikqlType<TVector<double>>(pb);
     const auto list = TCallableBuilder(pb.GetTypeEnvironment(), "TestList", listType).Build();
 
-    const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.WideCombiner(pb.ExpandMap(pb.ToFlow(TRuntimeNode(list, false)),
+    const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.WideCombiner(pb.ExpandMap(pb.ToFlow(TRuntimeNode(list, false), {}),
                                                                                 [&](TRuntimeNode item) -> TRuntimeNode::TList { return {item}; }), 0ULL,
                                                                    [&](TRuntimeNode::TList items) -> TRuntimeNode::TList { return {pb.AggrGreater(items.front(), pb.NewDataLiteral(0.0))}; },
                                                                    [&](TRuntimeNode::TList, TRuntimeNode::TList items) -> TRuntimeNode::TList { return {items.front(), items.front(), items.front()}; },
@@ -562,7 +562,7 @@ Y_UNIT_TEST_LLVM(TestSumDoubleSmallKey) {
     const auto listType = NTest::ConvertToMinikqlType<TVector<std::tuple<i8, double>>>(pb);
     const auto list = TCallableBuilder(pb.GetTypeEnvironment(), "TestList", listType).Build();
 
-    const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.WideCombiner(pb.ExpandMap(pb.ToFlow(TRuntimeNode(list, false)),
+    const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.WideCombiner(pb.ExpandMap(pb.ToFlow(TRuntimeNode(list, false), {}),
                                                                                 [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; }), 0ULL,
                                                                    [&](TRuntimeNode::TList items) -> TRuntimeNode::TList { return {items.front()}; },
                                                                    [&](TRuntimeNode::TList, TRuntimeNode::TList items) -> TRuntimeNode::TList { return {items.back()}; },
@@ -622,7 +622,7 @@ Y_UNIT_TEST_LLVM(TestMinMaxSumDoubleSmallKey) {
     const auto listType = NTest::ConvertToMinikqlType<TVector<std::tuple<i8, double>>>(pb);
     const auto list = TCallableBuilder(pb.GetTypeEnvironment(), "TestList", listType).Build();
 
-    const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.WideCombiner(pb.ExpandMap(pb.ToFlow(TRuntimeNode(list, false)),
+    const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.WideCombiner(pb.ExpandMap(pb.ToFlow(TRuntimeNode(list, false), {}),
                                                                                 [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; }), 0ULL,
                                                                    [&](TRuntimeNode::TList items) -> TRuntimeNode::TList { return {items.front()}; },
                                                                    [&](TRuntimeNode::TList, TRuntimeNode::TList items) -> TRuntimeNode::TList { return {items.back(), items.back(), items.back()}; },
@@ -682,7 +682,7 @@ Y_UNIT_TEST_LLVM(TestSumDoubleStringKey) {
     const auto listType = NTest::ConvertToMinikqlType<TVector<std::tuple<TStringBuf, double>>>(pb);
     const auto list = TCallableBuilder(pb.GetTypeEnvironment(), "TestList", listType).Build();
 
-    const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.WideCombiner(pb.ExpandMap(pb.ToFlow(TRuntimeNode(list, false)),
+    const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.WideCombiner(pb.ExpandMap(pb.ToFlow(TRuntimeNode(list, false), {}),
                                                                                 [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; }), 0ULL,
                                                                    [&](TRuntimeNode::TList items) -> TRuntimeNode::TList { return {items.front()}; },
                                                                    [&](TRuntimeNode::TList, TRuntimeNode::TList items) -> TRuntimeNode::TList { return {items.back()}; },
@@ -745,7 +745,7 @@ Y_UNIT_TEST_LLVM(TestMinMaxSumDoubleStringKey) {
     const auto listType = NTest::ConvertToMinikqlType<TVector<std::tuple<TStringBuf, double>>>(pb);
     const auto list = TCallableBuilder(pb.GetTypeEnvironment(), "TestList", listType).Build();
 
-    const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.WideCombiner(pb.ExpandMap(pb.ToFlow(TRuntimeNode(list, false)),
+    const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.WideCombiner(pb.ExpandMap(pb.ToFlow(TRuntimeNode(list, false), {}),
                                                                                 [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; }), 0ULL,
                                                                    [&](TRuntimeNode::TList items) -> TRuntimeNode::TList { return {items.front()}; },
                                                                    [&](TRuntimeNode::TList, TRuntimeNode::TList items) -> TRuntimeNode::TList { return {items.back(), items.back(), items.back()}; },
@@ -814,7 +814,7 @@ Y_UNIT_TEST_LLVM(TestMinMaxSumTupleKey) {
     const auto listType = NTest::ConvertToMinikqlType<TVector<std::tuple<std::tuple<ui32, TStringBuf>, double>>>(pb);
     const auto list = TCallableBuilder(pb.GetTypeEnvironment(), "TestList", listType).Build();
 
-    const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.WideCombiner(pb.ExpandMap(pb.ToFlow(TRuntimeNode(list, false)),
+    const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.WideCombiner(pb.ExpandMap(pb.ToFlow(TRuntimeNode(list, false), {}),
                                                                                 [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(pb.Nth(item, 0U), 0U), pb.Nth(pb.Nth(item, 0U), 1U), pb.Nth(item, 1U)}; }), 0ULL,
                                                                    [&](TRuntimeNode::TList items) -> TRuntimeNode::TList { return {items.front(), items[1U]}; },
                                                                    [&](TRuntimeNode::TList, TRuntimeNode::TList items) -> TRuntimeNode::TList { return {items.back(), items.back(), items.back()}; },
@@ -895,7 +895,7 @@ Y_UNIT_TEST_LLVM(TestTpch) {
     const auto list = TCallableBuilder(pb.GetTypeEnvironment(), "TestList", listType).Build();
 
     const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.WideCombiner(
-                                                       pb.WideFilter(pb.ExpandMap(pb.ToFlow(TRuntimeNode(list, false)),
+                                                       pb.WideFilter(pb.ExpandMap(pb.ToFlow(TRuntimeNode(list, false), {}),
                                                                                   [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U), pb.Nth(item, 2U), pb.Nth(item, 3U), pb.Nth(item, 4U), pb.Nth(item, 5U), pb.Nth(item, 6U)}; }),
                                                                      [&](TRuntimeNode::TList items) { return pb.AggrLessOrEqual(items.front(), pb.NewDataLiteral<ui64>(border)); }), 0ULL,
                                                        [&](TRuntimeNode::TList item) -> TRuntimeNode::TList { return {item[1U], item[2U]}; },
@@ -967,7 +967,7 @@ Y_UNIT_TEST_LLVM_SPILLING(TestLongStringsRefCounting) {
                                                                {"very long key two", "very long value 9"},
                                                            });
 
-    const auto pgmReturn = pb.FromFlow(pb.NarrowMap(WideLastCombiner<SPILLING>(pb, pb.ExpandMap(pb.ToFlow(list),
+    const auto pgmReturn = pb.FromFlow(pb.NarrowMap(WideLastCombiner<SPILLING>(pb, pb.ExpandMap(pb.ToFlow(list, {}),
                                                                                                 [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; }),
                                                                                [&](TRuntimeNode::TList items) -> TRuntimeNode::TList { return {items.front()}; },
                                                                                [&](TRuntimeNode::TList keys, TRuntimeNode::TList items) -> TRuntimeNode::TList { return {pb.NewOptional(items.back()), pb.NewOptional(keys.front()), pb.NewEmptyOptional(optionalType), pb.NewEmptyOptional(optionalType)}; },
@@ -1012,7 +1012,7 @@ Y_UNIT_TEST_LLVM_SPILLING(TestLongStringsPasstroughtRefCounting) {
                                                                {"very long key two", "very long value 9"},
                                                            });
 
-    const auto pgmReturn = pb.FromFlow(pb.NarrowMap(WideLastCombiner<SPILLING>(pb, pb.ExpandMap(pb.ToFlow(list),
+    const auto pgmReturn = pb.FromFlow(pb.NarrowMap(WideLastCombiner<SPILLING>(pb, pb.ExpandMap(pb.ToFlow(list, {}),
                                                                                                 [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; }),
                                                                                [&](TRuntimeNode::TList items) -> TRuntimeNode::TList { return {items.front()}; },
                                                                                [&](TRuntimeNode::TList keys, TRuntimeNode::TList items) -> TRuntimeNode::TList { return {items.back(), keys.front(), items.back(), items.front()}; },
@@ -1064,7 +1064,7 @@ Y_UNIT_TEST_LLVM_SPILLING(TestDoNotCalculateUnusedInput) {
 
     const auto landmine = NTest::ConvertValueToLiteralNode(pb, TStringBuf("ACHTUNG MINEN!"));
 
-    const auto pgmReturn = pb.FromFlow(pb.NarrowMap(WideLastCombiner<SPILLING>(pb, pb.ExpandMap(pb.ToFlow(list),
+    const auto pgmReturn = pb.FromFlow(pb.NarrowMap(WideLastCombiner<SPILLING>(pb, pb.ExpandMap(pb.ToFlow(list, {}),
                                                                                                 [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Unwrap(pb.Nth(item, 1U), landmine, __FILE__, __LINE__, 0), pb.Nth(item, 2U)}; }),
                                                                                [&](TRuntimeNode::TList items) -> TRuntimeNode::TList { return {items.front()}; },
                                                                                [&](TRuntimeNode::TList keys, TRuntimeNode::TList items) -> TRuntimeNode::TList { return {items.back(), keys.front(), empty, empty}; },
@@ -1107,7 +1107,7 @@ Y_UNIT_TEST_LLVM_SPILLING(TestDoNotCalculateUnusedOutput) {
 
     const auto landmine = NTest::ConvertValueToLiteralNode(pb, TStringBuf("ACHTUNG MINEN!"));
 
-    const auto pgmReturn = pb.FromFlow(pb.NarrowMap(WideLastCombiner<SPILLING>(pb, pb.ExpandMap(pb.ToFlow(list),
+    const auto pgmReturn = pb.FromFlow(pb.NarrowMap(WideLastCombiner<SPILLING>(pb, pb.ExpandMap(pb.ToFlow(list, {}),
                                                                                                 [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U), pb.Nth(item, 2U)}; }),
                                                                                [&](TRuntimeNode::TList items) -> TRuntimeNode::TList { return {items.front()}; },
                                                                                [&](TRuntimeNode::TList, TRuntimeNode::TList items) -> TRuntimeNode::TList { return {items[1U], items.back()}; },
@@ -1137,7 +1137,7 @@ Y_UNIT_TEST_LLVM_SPILLING(TestThinAllLambdas) {
 
     const auto list = pb.NewList(tupleType, {data, data, data, data});
 
-    const auto pgmReturn = pb.FromFlow(pb.NarrowMap(WideLastCombiner<SPILLING>(pb, pb.ExpandMap(pb.ToFlow(list),
+    const auto pgmReturn = pb.FromFlow(pb.NarrowMap(WideLastCombiner<SPILLING>(pb, pb.ExpandMap(pb.ToFlow(list, {}),
                                                                                                 [](TRuntimeNode) -> TRuntimeNode::TList { return {}; }),
                                                                                [](TRuntimeNode::TList items) { return items; },
                                                                                [](TRuntimeNode::TList, TRuntimeNode::TList items) { return items; },
@@ -1169,7 +1169,7 @@ Y_UNIT_TEST_LLVM(TestSpillingBucketsDistribution) {
     const auto listType = NTest::ConvertToMinikqlType<TVector<std::tuple<ui64, ui64>>>(pb);
     const auto list = TCallableBuilder(pb.GetTypeEnvironment(), "TestList", listType).Build();
 
-    const auto pgmReturn = pb.FromFlow(pb.NarrowMap(pb.WideLastCombinerWithSpilling(pb.ExpandMap(pb.ToFlow(TRuntimeNode(list, false)),
+    const auto pgmReturn = pb.FromFlow(pb.NarrowMap(pb.WideLastCombinerWithSpilling(pb.ExpandMap(pb.ToFlow(TRuntimeNode(list, false), {}),
                                                                                                  [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; }),
                                                                                     [&](TRuntimeNode::TList items) -> TRuntimeNode::TList { return {items.front()}; },
                                                                                     [&](TRuntimeNode::TList, TRuntimeNode::TList items) -> TRuntimeNode::TList { return {items.back()}; },
@@ -1225,7 +1225,7 @@ Y_UNIT_TEST_LLVM(TestSumDoubleBooleanKeys) {
     const auto listType = NTest::ConvertToMinikqlType<TVector<double>>(pb);
     const auto list = TCallableBuilder(pb.GetTypeEnvironment(), "TestList", listType).Build();
 
-    const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.WideLastCombiner(pb.ExpandMap(pb.ToFlow(TRuntimeNode(list, false)),
+    const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.WideLastCombiner(pb.ExpandMap(pb.ToFlow(TRuntimeNode(list, false), {}),
                                                                                     [&](TRuntimeNode item) -> TRuntimeNode::TList { return {item}; }),
                                                                        [&](TRuntimeNode::TList items) -> TRuntimeNode::TList { return {pb.AggrGreater(items.front(), pb.NewDataLiteral(0.0))}; },
                                                                        [&](TRuntimeNode::TList, TRuntimeNode::TList items) -> TRuntimeNode::TList { return items; },
@@ -1279,7 +1279,7 @@ Y_UNIT_TEST_LLVM(TestMinMaxSumDoubleBooleanKeys) {
     const auto listType = NTest::ConvertToMinikqlType<TVector<double>>(pb);
     const auto list = TCallableBuilder(pb.GetTypeEnvironment(), "TestList", listType).Build();
 
-    const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.WideLastCombiner(pb.ExpandMap(pb.ToFlow(TRuntimeNode(list, false)),
+    const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.WideLastCombiner(pb.ExpandMap(pb.ToFlow(TRuntimeNode(list, false), {}),
                                                                                     [&](TRuntimeNode item) -> TRuntimeNode::TList { return {item}; }),
                                                                        [&](TRuntimeNode::TList items) -> TRuntimeNode::TList { return {pb.AggrGreater(items.front(), pb.NewDataLiteral(0.0))}; },
                                                                        [&](TRuntimeNode::TList, TRuntimeNode::TList items) -> TRuntimeNode::TList { return {items.front(), items.front(), items.front()}; },
@@ -1341,7 +1341,7 @@ Y_UNIT_TEST_LLVM(TestSumDoubleSmallKey) {
     const auto listType = NTest::ConvertToMinikqlType<TVector<std::tuple<i8, double>>>(pb);
     const auto list = TCallableBuilder(pb.GetTypeEnvironment(), "TestList", listType).Build();
 
-    const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.WideLastCombiner(pb.ExpandMap(pb.ToFlow(TRuntimeNode(list, false)),
+    const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.WideLastCombiner(pb.ExpandMap(pb.ToFlow(TRuntimeNode(list, false), {}),
                                                                                     [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; }),
                                                                        [&](TRuntimeNode::TList items) -> TRuntimeNode::TList { return {items.front()}; },
                                                                        [&](TRuntimeNode::TList, TRuntimeNode::TList items) -> TRuntimeNode::TList { return {items.back()}; },
@@ -1401,7 +1401,7 @@ Y_UNIT_TEST_LLVM(TestMinMaxSumDoubleSmallKey) {
     const auto listType = NTest::ConvertToMinikqlType<TVector<std::tuple<i8, double>>>(pb);
     const auto list = TCallableBuilder(pb.GetTypeEnvironment(), "TestList", listType).Build();
 
-    const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.WideLastCombiner(pb.ExpandMap(pb.ToFlow(TRuntimeNode(list, false)),
+    const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.WideLastCombiner(pb.ExpandMap(pb.ToFlow(TRuntimeNode(list, false), {}),
                                                                                     [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; }),
                                                                        [&](TRuntimeNode::TList items) -> TRuntimeNode::TList { return {items.front()}; },
                                                                        [&](TRuntimeNode::TList, TRuntimeNode::TList items) -> TRuntimeNode::TList { return {items.back(), items.back(), items.back()}; },
@@ -1461,7 +1461,7 @@ Y_UNIT_TEST_LLVM(TestSumDoubleStringKey) {
     const auto listType = NTest::ConvertToMinikqlType<TVector<std::tuple<TStringBuf, double>>>(pb);
     const auto list = TCallableBuilder(pb.GetTypeEnvironment(), "TestList", listType).Build();
 
-    const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.WideLastCombiner(pb.ExpandMap(pb.ToFlow(TRuntimeNode(list, false)),
+    const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.WideLastCombiner(pb.ExpandMap(pb.ToFlow(TRuntimeNode(list, false), {}),
                                                                                     [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; }),
                                                                        [&](TRuntimeNode::TList items) -> TRuntimeNode::TList { return {items.front()}; },
                                                                        [&](TRuntimeNode::TList, TRuntimeNode::TList items) -> TRuntimeNode::TList { return {items.back()}; },
@@ -1524,7 +1524,7 @@ Y_UNIT_TEST_LLVM(TestMinMaxSumDoubleStringKey) {
     const auto listType = NTest::ConvertToMinikqlType<TVector<std::tuple<TStringBuf, double>>>(pb);
     const auto list = TCallableBuilder(pb.GetTypeEnvironment(), "TestList", listType).Build();
 
-    const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.WideLastCombiner(pb.ExpandMap(pb.ToFlow(TRuntimeNode(list, false)),
+    const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.WideLastCombiner(pb.ExpandMap(pb.ToFlow(TRuntimeNode(list, false), {}),
                                                                                     [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; }),
                                                                        [&](TRuntimeNode::TList items) -> TRuntimeNode::TList { return {items.front()}; },
                                                                        [&](TRuntimeNode::TList, TRuntimeNode::TList items) -> TRuntimeNode::TList { return {items.back(), items.back(), items.back()}; },
@@ -1593,7 +1593,7 @@ Y_UNIT_TEST_LLVM(TestMinMaxSumTupleKey) {
     const auto listType = NTest::ConvertToMinikqlType<TVector<std::tuple<std::tuple<ui32, TStringBuf>, double>>>(pb);
     const auto list = TCallableBuilder(pb.GetTypeEnvironment(), "TestList", listType).Build();
 
-    const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.WideLastCombiner(pb.ExpandMap(pb.ToFlow(TRuntimeNode(list, false)),
+    const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.WideLastCombiner(pb.ExpandMap(pb.ToFlow(TRuntimeNode(list, false), {}),
                                                                                     [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(pb.Nth(item, 0U), 0U), pb.Nth(pb.Nth(item, 0U), 1U), pb.Nth(item, 1U)}; }),
                                                                        [&](TRuntimeNode::TList items) -> TRuntimeNode::TList { return {items.front(), items[1U]}; },
                                                                        [&](TRuntimeNode::TList, TRuntimeNode::TList items) -> TRuntimeNode::TList { return {items.back(), items.back(), items.back()}; },
@@ -1674,7 +1674,7 @@ Y_UNIT_TEST_LLVM(TestTpch) {
     const auto list = TCallableBuilder(pb.GetTypeEnvironment(), "TestList", listType).Build();
 
     const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.WideLastCombiner(
-                                                       pb.WideFilter(pb.ExpandMap(pb.ToFlow(TRuntimeNode(list, false)),
+                                                       pb.WideFilter(pb.ExpandMap(pb.ToFlow(TRuntimeNode(list, false), {}),
                                                                                   [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U), pb.Nth(item, 2U), pb.Nth(item, 3U), pb.Nth(item, 4U), pb.Nth(item, 5U), pb.Nth(item, 6U)}; }),
                                                                      [&](TRuntimeNode::TList items) { return pb.AggrLessOrEqual(items.front(), pb.NewDataLiteral<ui64>(border)); }),
                                                        [&](TRuntimeNode::TList item) -> TRuntimeNode::TList { return {item[1U], item[2U]}; },

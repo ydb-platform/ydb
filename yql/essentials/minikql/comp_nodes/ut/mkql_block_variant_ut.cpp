@@ -96,7 +96,7 @@ Y_UNIT_TEST(StructVariantRoundtrip) {
         }
 
         auto list = pb.NewList(varType, items);
-        auto flow = pb.ToFlow(list);
+        auto flow = pb.ToFlow(list, {});
         auto pgmReturn = pb.ForwardList(pb.FromBlocks(pb.ToBlocks(flow)));
         auto graph = setup.BuildGraph(pgmReturn);
         auto iterator = graph->GetValue().GetListIterator();

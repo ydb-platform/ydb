@@ -2,6 +2,8 @@
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/iam/common/generic_provider.h>
 
+#include <library/cpp/threading/future/core/coroutine_traits.h>
+
 namespace NYdb::inline Dev {
 
 template<typename TRequest, typename TResponse, typename TService>
@@ -40,12 +42,14 @@ private:
         // because TSimpleCoreFacility allows only one periodic task.
         TCredentialsProvider(const TIamServiceParams& params,
                              std::weak_ptr<ICoreFacility> outerFacility,
-                             TCredentialsProviderPtr authProvider)
+                             TCredentialsProviderPtr authProvider,
+                             bool waitForToken = true)
             : TGrpcIamCredentialsProvider<TRequest, TResponse, TService>(params,
                 MakeRequestFiller(params),
                 MakeRpc(),
                 std::move(outerFacility),
-                std::move(authProvider))
+                std::move(authProvider),
+                waitForToken)
         {}
     };
 
@@ -71,8 +75,41 @@ public:
             });
     }
 
+    NThreading::TFuture<TCredentialsProviderPtr> CreateProviderAsync() const override {
+        auto params = Params_;
+        auto authProvider = co_await params.SystemServiceAccountCredentials->CreateProviderAsync();
+        auto outerFacility = CreateSimpleCoreFacility();
+        auto serviceProvider = std::make_shared<TCredentialsProvider>(
+            params,
+            std::weak_ptr<ICoreFacility>(outerFacility),
+            std::move(authProvider),
+            false);
+        auto ready = serviceProvider->GetReadyFuture();
+        TCredentialsProviderPtr provider = std::make_shared<TOwningFacilityCredentialsProvider>(
+            std::move(outerFacility),
+            std::move(serviceProvider));
+
+        co_await ready;
+        co_return provider;
+    }
+
     TCredentialsProviderPtr CreateProvider(std::weak_ptr<ICoreFacility> facility) const override {
         return std::make_shared<TCredentialsProvider>(Params_, std::move(facility));
+    }
+
+    NThreading::TFuture<TCredentialsProviderPtr> CreateProviderAsync(std::weak_ptr<ICoreFacility> facility) const override {
+        auto params = Params_;
+        auto authProvider = co_await params.SystemServiceAccountCredentials->CreateProviderAsync(facility);
+        auto serviceProvider = std::make_shared<TCredentialsProvider>(
+            params,
+            std::move(facility),
+            std::move(authProvider),
+            false);
+        auto ready = serviceProvider->GetReadyFuture();
+        TCredentialsProviderPtr provider = std::move(serviceProvider);
+
+        co_await ready;
+        co_return provider;
     }
 
     std::string GetClientIdentity() const override final {

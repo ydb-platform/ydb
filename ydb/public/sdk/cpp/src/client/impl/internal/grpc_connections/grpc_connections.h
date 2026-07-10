@@ -4,6 +4,7 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/common_client/ssl_credentials.h>
 
 #include "actions.h"
+#include "credentials_ready.h"
 #include "params.h"
 
 #include <ydb/public/api/grpc/ydb_discovery_v1.grpc.pb.h>
@@ -145,6 +146,57 @@ public:
     static void SetGrpcKeepAlive(NYdbGrpc::TGRpcClientConfig& config, const TDeadline::Duration& timeout, bool permitWithoutCalls);
 
     static void SetGrpcCompressionAlgorithm(NYdbGrpc::TGRpcClientConfig& config, EGrpcCompressionAlgorithm algorithm);
+
+    bool SubscribeCancel(const IQueueClientContextPtr& context, TSimpleCb&& callback) {
+        if (!context) {
+            return false;
+        }
+        context->SubscribeCancel(std::move(callback));
+        return true;
+    }
+
+    template <typename TCallbackFactory>
+    bool MaybeDeferUntilCredentialsReady(
+        const TDbDriverStatePtr& dbState,
+        const TRpcRequestSettings& requestSettings,
+        IQueueClientContextPtr& context,
+        TCallbackFactory&& callbackFactory)
+    {
+        IQueueClientContextPtr contextForCancel;
+        IQueueClientContextPtr contextForCheck = context;
+
+        if (requestSettings.UseAuth) {
+            auto credentialsReady = dbState->GetCredentialsReady();
+            if (credentialsReady.Initialized() && !credentialsReady.IsReady()) {
+                if (!context) {
+                    if (!TryCreateContext(context)) {
+                        callbackFactory()(NDeferredCredentials::InitCancelledStatus());
+                        return true;
+                    }
+                    contextForCancel = context;
+                    contextForCheck = context;
+                }
+            }
+        }
+
+        return NDeferredCredentials::DeferUntilReady(
+            dbState,
+            requestSettings.UseAuth,
+            requestSettings.Deadline,
+            std::forward<TCallbackFactory>(callbackFactory),
+            [this](TSimpleCb&& cb, TDeadline deadline) {
+                ScheduleDelayedTask(std::move(cb), deadline);
+            },
+            [this, contextForCancel = std::move(contextForCancel)](TSimpleCb&& cb) {
+                if (!contextForCancel) {
+                    return true;
+                }
+                return SubscribeCancel(contextForCancel, std::move(cb));
+            },
+            [contextForCheck = std::move(contextForCheck)] {
+                return contextForCheck && contextForCheck->IsCancelled();
+            });
+    }
 
     template<typename TService>
     std::pair<std::unique_ptr<TServiceConnection<TService>>, TEndpointKey> GetServiceConnection(
@@ -309,6 +361,26 @@ public:
         using NYdbGrpc::TGrpcStatus;
         using TConnection = std::unique_ptr<TServiceConnection<TService>>;
         Y_ABORT_UNLESS(dbState);
+
+        if (MaybeDeferUntilCredentialsReady(dbState, requestSettings, context, [&]() mutable {
+            return [this, requestWrapper = std::move(requestWrapper), userResponseCb = std::move(userResponseCb),
+                    rpc, dbState, requestSettings, context = std::move(context)]
+                (std::optional<TPlainStatus> status) mutable {
+                    if (status) {
+                        userResponseCb(nullptr, std::move(*status));
+                        return;
+                    }
+                    Run<TService, TRequest, TResponse>(
+                        std::move(requestWrapper),
+                        std::move(userResponseCb),
+                        rpc,
+                        std::move(dbState),
+                        requestSettings,
+                        std::move(context));
+                };
+        })) {
+            return;
+        }
 
         if (auto tlsValidationStatus = ValidateClientTlsCredentials(dbState)) {
             RunResponseCallback<TResponse>(userResponseCb, nullptr, std::move(*tlsValidationStatus), StopState_);
@@ -547,6 +619,25 @@ public:
         using TConnection = std::unique_ptr<TServiceConnection<TService>>;
         using TProcessor = typename NYdbGrpc::IStreamRequestReadProcessor<TResponse>::TPtr;
 
+        if (MaybeDeferUntilCredentialsReady(dbState, requestSettings, context, [&]() mutable {
+            return [this, request, responseCb = std::move(responseCb), rpc, dbState, requestSettings, context = std::move(context)]
+                (std::optional<TPlainStatus> status) mutable {
+                    if (status) {
+                        responseCb(std::move(*status), nullptr);
+                        return;
+                    }
+                    StartReadStream<TService, TRequest, TResponse>(
+                        request,
+                        std::move(responseCb),
+                        rpc,
+                        std::move(dbState),
+                        requestSettings,
+                        std::move(context));
+                };
+        })) {
+            return;
+        }
+
         if (auto tlsValidationStatus = ValidateClientTlsCredentials(dbState)) {
             RunStreamCallback(responseCb, std::move(*tlsValidationStatus), nullptr, StopState_);
             return;
@@ -633,6 +724,24 @@ public:
         using NYdbGrpc::TGrpcStatus;
         using TConnection = std::unique_ptr<TServiceConnection<TService>>;
         using TProcessor = typename NYdbGrpc::IStreamRequestReadWriteProcessor<TRequest, TResponse>::TPtr;
+
+        if (MaybeDeferUntilCredentialsReady(dbState, requestSettings, context, [&]() mutable {
+            return [this, connectedCallback = std::move(connectedCallback), rpc, dbState, requestSettings, context = std::move(context)]
+                (std::optional<TPlainStatus> status) mutable {
+                    if (status) {
+                        connectedCallback(std::move(*status), nullptr);
+                        return;
+                    }
+                    StartBidirectionalStream<TService, TRequest, TResponse>(
+                        std::move(connectedCallback),
+                        rpc,
+                        std::move(dbState),
+                        requestSettings,
+                        std::move(context));
+                };
+        })) {
+            return;
+        }
 
         if (auto tlsValidationStatus = ValidateClientTlsCredentials(dbState)) {
             RunStreamCallback(connectedCallback, std::move(*tlsValidationStatus), nullptr, StopState_);

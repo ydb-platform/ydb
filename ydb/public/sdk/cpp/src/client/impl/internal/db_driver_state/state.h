@@ -40,6 +40,9 @@ public:
     NThreading::TFuture<void> DiscoveryCompleted() const;
 
     void SignalDiscoveryCompleted();
+    NThreading::TFuture<void> InitCredentials(std::shared_ptr<ICredentialsProviderFactory> credentialsProviderFactory);
+    NThreading::TFuture<void> GetCredentialsReady() const;
+    std::shared_ptr<ICredentialsProvider> GetCredentialsProvider() const;
 
     void AddPeriodicTask(TPeriodicCb&& cb, TDeadline::Duration period) override;
     void PostToResponseQueue(TPostTaskCb&& f) override;
@@ -58,7 +61,6 @@ public:
     const std::string DiscoveryEndpoint;
     const EDiscoveryMode DiscoveryMode;
     const TSslCredentials SslCredentials;
-    std::shared_ptr<ICredentialsProvider> CredentialsProvider;
     IInternalClient* Client;
     TEndpointPool EndpointPool;
     // StopCb allow client to subscribe for notifications from lower layer
@@ -73,8 +75,10 @@ public:
     NSdkStats::TStatCollector StatCollector;
     TLog Log;
     NThreading::TPromise<void> DiscoveryCompletedPromise;
+    NThreading::TFuture<void> CredentialsReady;
 
 private:
+    std::shared_ptr<ICredentialsProvider> CredentialsProvider;
     mutable std::once_flag ClientTlsValidationOnceFlag_;
     mutable bool ClientTlsCredentialsValid_ = true;
     mutable std::string ClientTlsValidationDetail_;

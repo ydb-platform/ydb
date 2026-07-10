@@ -7,6 +7,9 @@
 
 #include <library/cpp/string_utils/quote/quote.h>
 
+#include <util/generic/yexception.h>
+
+#include <atomic>
 #include <thread>
 #include <unordered_map>
 
@@ -60,11 +63,38 @@ TDbDriverState::TDbDriverState(
 }
 
 void TDbDriverState::SetCredentialsProvider(std::shared_ptr<ICredentialsProvider> credentialsProvider) {
-    CredentialsProvider = std::move(credentialsProvider);
+    auto authenticatorProvider = credentialsProvider;
+    std::atomic_store(&CredentialsProvider, std::move(credentialsProvider));
 #ifndef YDB_GRPC_UNSECURE_AUTH
-    CallCredentials = grpc::MetadataCredentialsFromPlugin(
-        std::unique_ptr<grpc::MetadataCredentialsPlugin>(new TYdbAuthenticator(CredentialsProvider)));
+    auto callCredentials = grpc::MetadataCredentialsFromPlugin(
+        std::unique_ptr<grpc::MetadataCredentialsPlugin>(new TYdbAuthenticator(std::move(authenticatorProvider))));
+    std::atomic_store(&CallCredentials, std::move(callCredentials));
 #endif
+}
+
+NThreading::TFuture<void> TDbDriverState::InitCredentials(
+    std::shared_ptr<ICredentialsProviderFactory> credentialsProviderFactory
+) {
+    std::weak_ptr<TDbDriverState> weakSelf = shared_from_this();
+    std::weak_ptr<ICoreFacility> facility = weakSelf;
+
+    return credentialsProviderFactory->CreateProviderAsync(std::move(facility)).Apply(
+        [weakSelf](const NThreading::TFuture<TCredentialsProviderPtr>& future) {
+            auto provider = future.GetValue();
+            auto self = weakSelf.lock();
+            if (!self) {
+                ythrow yexception() << "Driver state was destroyed before credentials were initialized";
+            }
+            self->SetCredentialsProvider(std::move(provider));
+        });
+}
+
+NThreading::TFuture<void> TDbDriverState::GetCredentialsReady() const {
+    return CredentialsReady;
+}
+
+std::shared_ptr<ICredentialsProvider> TDbDriverState::GetCredentialsProvider() const {
+    return std::atomic_load(&CredentialsProvider);
 }
 
 bool TDbDriverState::AreClientTlsCredentialsValid() const {
@@ -231,10 +261,10 @@ TDbDriverStatePtr TDbDriverStateTracker::GetDriverState(
                         DiscoveryClient_),
                     deleter);
 
-                strongState->SetCredentialsProvider(
+                strongState->CredentialsReady = strongState->InitCredentials(
                     credentialsProviderFactory
-                        ? credentialsProviderFactory->CreateProvider(strongState)
-                        : CreateInsecureCredentialsProviderFactory()->CreateProvider(strongState));
+                        ? std::move(credentialsProviderFactory)
+                        : CreateInsecureCredentialsProviderFactory());
 
                 if (discoveryMode != EDiscoveryMode::Off) {
                     DiscoveryClient_->AddPeriodicTask(CreatePeriodicDiscoveryTask(strongState), DISCOVERY_RECHECK_PERIOD);

@@ -19,11 +19,8 @@
 #include <ydb/core/util/aws.h>
 #include <ydb/core/wrappers/s3_wrapper.h>
 #include <ydb/core/wrappers/ut_helpers/s3_mock.h>
-<<<<<<< HEAD
-=======
 #include <ydb/library/aws_init/aws.h>
 #include <ydb/public/lib/value/value.h>
->>>>>>> 673263db5e4 (backup cancel on propose for cs (#45851))
 
 #include <library/cpp/testing/hook/hook.h>
 
@@ -1110,8 +1107,6 @@ namespace {
             return *TestEnv;
         }
 
-<<<<<<< HEAD
-=======
         void ExportImportStandaloneColumnTableWithLocalBloomIndexes(bool enableLocalIndexAsSchemeObject) {
             Env();
             Runtime().GetAppData().FeatureFlags.SetEnableColumnTablesBackup(true);
@@ -1354,7 +1349,6 @@ namespace {
             FinalizeColumnTableSlowS3Export(ctx);
         }
 
->>>>>>> 673263db5e4 (backup cancel on propose for cs (#45851))
     private:
         TPortManager PortManager;
         ui16 S3ServerPort = 0;

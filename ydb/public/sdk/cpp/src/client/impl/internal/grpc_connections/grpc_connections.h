@@ -173,9 +173,9 @@ public:
                         callbackFactory()(NDeferredCredentials::InitCancelledStatus());
                         return true;
                     }
-                    contextForCancel = context;
-                    contextForCheck = context;
                 }
+                contextForCancel = context;
+                contextForCheck = context;
             }
         }
 

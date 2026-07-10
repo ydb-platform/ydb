@@ -168,7 +168,8 @@ private:
                 ContextReady_.wait(guard, [this]() { return !Context_.has_value(); });
             }
             if (setStoppedException) {
-                FirstTokenReady_.SetException("IAM-token provider stopped before token was ready");
+                FirstTokenReady_.SetException(
+                    std::make_exception_ptr(yexception() << "IAM-token provider stopped before token was ready"));
             }
             Stub_.reset();
             Channel_.reset();
@@ -307,6 +308,7 @@ private:
 
         bool OnPeriodicTick() {
             std::optional<std::string> firstTokenError;
+            bool updateTicket = false;
             {
                 std::unique_lock guard(Lock_);
                 if (NeedStop_) {
@@ -334,14 +336,16 @@ private:
                 }
                 if (!Context_.has_value()) {
                     RescheduleOnFailure();
-                    if (firstTokenError) {
-                        guard.unlock();
-                        FirstTokenReady_.SetException(std::make_exception_ptr(yexception() << *firstTokenError));
-                    }
-                    return true;
+                } else {
+                    updateTicket = true;
                 }
             }
-            UpdateTicket();
+            if (firstTokenError) {
+                FirstTokenReady_.SetException(std::make_exception_ptr(yexception() << *firstTokenError));
+            }
+            if (updateTicket) {
+                UpdateTicket();
+            }
             return true;
         }
 

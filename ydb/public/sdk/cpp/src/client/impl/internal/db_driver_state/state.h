@@ -8,6 +8,8 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/common_client/ssl_credentials.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/core_facility/core_facility.h>
 
+#include <library/cpp/threading/atomic_shared_ptr/atomic_shared_ptr.h>
+
 #include <mutex>
 
 namespace NYdb::inline Dev {
@@ -43,6 +45,9 @@ public:
     NThreading::TFuture<void> InitCredentials(std::shared_ptr<ICredentialsProviderFactory> credentialsProviderFactory);
     NThreading::TFuture<void> GetCredentialsReady() const;
     std::shared_ptr<ICredentialsProvider> GetCredentialsProvider() const;
+#ifndef YDB_GRPC_UNSECURE_AUTH
+    std::shared_ptr<grpc::CallCredentials> GetCallCredentials() const;
+#endif
 
     void AddPeriodicTask(TPeriodicCb&& cb, TDeadline::Duration period) override;
     void PostToResponseQueue(TPostTaskCb&& f) override;
@@ -66,9 +71,6 @@ public:
     // StopCb allow client to subscribe for notifications from lower layer
     std::mutex NotifyCbsLock;
     std::array<std::vector<TCb>, static_cast<size_t>(ENotifyType::COUNT)> NotifyCbs;
-#ifndef YDB_GRPC_UNSECURE_AUTH
-    std::shared_ptr<grpc::CallCredentials> CallCredentials;
-#endif
     // Status of last discovery call, used in sync mode, coresponding mutex
     std::shared_mutex LastDiscoveryStatusRWLock;
     TPlainStatus LastDiscoveryStatus;
@@ -78,7 +80,10 @@ public:
     NThreading::TFuture<void> CredentialsReady;
 
 private:
-    std::shared_ptr<ICredentialsProvider> CredentialsProvider;
+    TTrueAtomicSharedPtr<std::shared_ptr<ICredentialsProvider>> CredentialsProvider;
+#ifndef YDB_GRPC_UNSECURE_AUTH
+    TTrueAtomicSharedPtr<std::shared_ptr<grpc::CallCredentials>> CallCredentials;
+#endif
     mutable std::once_flag ClientTlsValidationOnceFlag_;
     mutable bool ClientTlsCredentialsValid_ = true;
     mutable std::string ClientTlsValidationDetail_;

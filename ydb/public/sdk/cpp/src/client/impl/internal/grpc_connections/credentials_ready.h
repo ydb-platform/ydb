@@ -62,9 +62,13 @@ NThreading::TFuture<TWaitResult> WaitUntilReady(
     }
 
     if (deadline != TDeadline::Max()) {
-        scheduleDelayedTask([result]() mutable {
-            result.TrySetValue(InitDeadlineExceededStatus());
-        }, deadline);
+        try {
+            scheduleDelayedTask([result]() mutable {
+                result.TrySetValue(InitDeadlineExceededStatus());
+            }, deadline);
+        } catch (...) {
+            result.TrySetValue(InitCancelledStatus());
+        }
     }
 
     return result.GetFuture();
@@ -87,6 +91,21 @@ public:
 private:
     std::optional<TCallback> Callback_;
 };
+
+template <typename TCallback, typename TScheduleDelayedTask>
+void ScheduleCompletion(
+    const std::shared_ptr<TCallbackOnce<TCallback>>& callback,
+    TScheduleDelayedTask& scheduleDelayedTask,
+    TWaitResult status)
+{
+    try {
+        scheduleDelayedTask([callback, status = std::move(status)]() mutable {
+            callback->Complete(std::move(status));
+        }, TDeadline::Now());
+    } catch (...) {
+        callback->Complete(InitCancelledStatus());
+    }
+}
 
 template <typename TCallbackFactory, typename TScheduleDelayedTask, typename TSubscribeCancel, typename TIsCancelled>
 bool DeferUntilReady(
@@ -126,9 +145,7 @@ bool DeferUntilReady(
         if (status) {
             auto callbackValue = callbackFactory();
             auto callback = std::make_shared<TCallbackOnce<decltype(callbackValue)>>(std::move(callbackValue));
-            schedule([callback, status = std::move(status)]() mutable {
-                callback->Complete(std::move(status));
-            }, TDeadline::Now());
+            ScheduleCompletion(callback, schedule, std::move(status));
             return true;
         }
         return false;
@@ -147,9 +164,7 @@ bool DeferUntilReady(
         if (!status && cancelled()) {
             status = InitCancelledStatus();
         }
-        schedule([callback, status = std::move(status)]() mutable {
-            callback->Complete(std::move(status));
-        }, TDeadline::Now());
+        ScheduleCompletion(callback, schedule, std::move(status));
     });
 
     return true;

@@ -300,6 +300,29 @@ public:
                     << ", but requested " << settings.max_shards_in_flight());
         }
 
+        if (Self->MaxStoredIndexBuilds > 0 &&
+            Self->IndexBuilds.size() >= Self->MaxStoredIndexBuilds) {
+            // Remove oldest items from IndexBuilds
+            std::vector<std::shared_ptr<TIndexBuildInfo>> toErase;
+            for (auto& [timestamp, id]: Self->IndexBuildsByTime) {
+                auto olderBuild = Self->IndexBuilds.at(id);
+                if (olderBuild->IsFinished()) {
+                    toErase.push_back(olderBuild);
+                    if (Self->IndexBuilds.size() - toErase.size() < Self->MaxStoredIndexBuilds) {
+                        break;
+                    }
+                }
+            }
+            for (auto& olderBuild: toErase) {
+                if (!Self->PersistBuildIndexForget(db, *olderBuild)) {
+                    return false;
+                }
+            }
+            for (auto& olderBuild: toErase) {
+                EraseBuildInfo(*olderBuild);
+            }
+        }
+
         buildInfo->ScanSettings.CopyFrom(settings.GetScanSettings());
         if (settings.max_shards_in_flight() > 0) {
             buildInfo->MaxInProgressShards = settings.max_shards_in_flight();

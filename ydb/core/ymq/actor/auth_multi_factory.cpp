@@ -437,9 +437,17 @@ void TBaseCloudAuthRequestProxy::Authorize() {
         signature.Service = "sqs";
         signature.Region = AccessKeySignature_->Region;
         signature.SignedAt = AccessKeySignature_->SignedAt;
-        request = MakeHolder<TEvTicketParser::TEvAuthorizeTicket>(std::move(signature), "", entries);
+        request = MakeHolder<TEvTicketParser::TEvAuthorizeTicket>(TEvTicketParser::TEvAuthorizeTicket::TInitializationFieldsWithSignature{
+            .Signature = std::move(signature),
+            .PeerName = SourceAddress_,
+            .Entries = entries,
+        });
     } else {
-        request = MakeHolder<TEvTicketParser::TEvAuthorizeTicket>(IamToken_, "", entries);
+        request = MakeHolder<TEvTicketParser::TEvAuthorizeTicket>(TEvTicketParser::TEvAuthorizeTicket::TInitializationFieldsWithTicket{
+            .Ticket = IamToken_,
+            .PeerName = SourceAddress_,
+            .Entries = entries,
+        });
     }
 
     AuthorizeRequestStartTimestamp_ = TActivationContext::Now();
@@ -489,6 +497,7 @@ void TBaseCloudAuthRequestProxy::ProposeStaticCreds(TProto& req) {
     req.MutableAuth()->SetUserSID(UserSID_);
     req.MutableAuth()->SetAuthType(AuthType_);
     req.MutableAuth()->SetMaskedToken(MaskedToken_);
+    req.MutableAuth()->SetSourceAddress(SourceAddress_);
 }
 
 void TBaseCloudAuthRequestProxy::Bootstrap() {
@@ -536,6 +545,9 @@ void TCloudAuthRequestProxy::DoReply() {
 void TCloudAuthRequestProxy::SetError(const TErrorClass& errorClass, const TString& message) {
     auto* error = MakeMutableError();
     ::NKikimr::NSQS::MakeError(error, errorClass, Sprintf("%s Request id to report: %s.", message.c_str(), RequestId_.c_str()));
+    if (Callback_) {
+        Callback_->OnIamAuthError();
+    }
 }
 
 void TCloudAuthRequestProxy::OnSuccessfulAuth() {

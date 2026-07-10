@@ -395,6 +395,11 @@
                 "ColumnId": 15,
                 "ColumnName": "DetailedMetricsSettings",
                 "ColumnType": "String"
+            },
+            {
+                "ColumnId": 16,
+                "ColumnName": "MultiColumnStatistics",
+                "ColumnType": "String"
             }
         ],
         "ColumnsDropped": [],
@@ -415,7 +420,8 @@
                     12,
                     13,
                     14,
-                    15
+                    15,
+                    16
                 ],
                 "RoomID": 0,
                 "Codec": 0,
@@ -1570,6 +1576,11 @@
                 "ColumnId": 32,
                 "ColumnName": "ColumnTableColumnsLimit",
                 "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 33,
+                "ColumnName": "SmallBlobsQuotaExceeded",
+                "ColumnType": "Bool"
             }
         ],
         "ColumnsDropped": [],
@@ -1607,7 +1618,8 @@
                     29,
                     30,
                     31,
-                    32
+                    32,
+                    33
                 ],
                 "RoomID": 0,
                 "Codec": 0,
@@ -3930,6 +3942,11 @@
         ],
         "ColumnsAdded": [
             {
+                "ColumnId": 17,
+                "ColumnName": "MultiColumnStatistics",
+                "ColumnType": "String"
+            },
+            {
                 "ColumnId": 1,
                 "ColumnName": "OwnerPathId",
                 "ColumnType": "Uint64"
@@ -4014,6 +4031,7 @@
         "ColumnFamilies": {
             "0": {
                 "Columns": [
+                    17,
                     1,
                     2,
                     3,
@@ -6887,11 +6905,6 @@
         ],
         "ColumnsAdded": [
             {
-                "ColumnId": 7,
-                "ColumnName": "IsReadOnly",
-                "ColumnType": "Bool"
-            },
-            {
                 "ColumnId": 1,
                 "ColumnName": "PathId",
                 "ColumnType": "Uint64"
@@ -6920,19 +6933,30 @@
                 "ColumnId": 6,
                 "ColumnName": "IsRestore",
                 "ColumnType": "Bool"
+            },
+            {
+                "ColumnId": 7,
+                "ColumnName": "IsReadOnly",
+                "ColumnType": "Bool"
+            },
+            {
+                "ColumnId": 8,
+                "ColumnName": "MultiColumnStatistics",
+                "ColumnType": "String"
             }
         ],
         "ColumnsDropped": [],
         "ColumnFamilies": {
             "0": {
                 "Columns": [
-                    7,
                     1,
                     2,
                     3,
                     4,
                     5,
-                    6
+                    6,
+                    7,
+                    8
                 ],
                 "RoomID": 0,
                 "Codec": 0,
@@ -6960,6 +6984,11 @@
             1
         ],
         "ColumnsAdded": [
+            {
+                "ColumnId": 7,
+                "ColumnName": "MultiColumnStatistics",
+                "ColumnType": "String"
+            },
             {
                 "ColumnId": 1,
                 "ColumnName": "PathId",
@@ -6995,6 +7024,7 @@
         "ColumnFamilies": {
             "0": {
                 "Columns": [
+                    7,
                     1,
                     2,
                     3,
@@ -10369,6 +10399,21 @@
                 "ColumnId": 10,
                 "ColumnName": "LockTxId",
                 "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 11,
+                "ColumnName": "UserSID",
+                "ColumnType": "Utf8"
+            },
+            {
+                "ColumnId": 12,
+                "ColumnName": "StartTime",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 13,
+                "ColumnName": "EndTime",
+                "ColumnType": "Uint64"
             }
         ],
         "ColumnsDropped": [],
@@ -10384,7 +10429,10 @@
                     7,
                     8,
                     9,
-                    10
+                    10,
+                    11,
+                    12,
+                    13
                 ],
                 "RoomID": 0,
                 "Codec": 0,
@@ -10449,6 +10497,62 @@
                     3,
                     4,
                     5
+                ],
+                "RoomID": 0,
+                "Codec": 0,
+                "InMemory": false,
+                "Cache": 0,
+                "Small": 4294967295,
+                "Large": 4294967295
+            }
+        },
+        "Rooms": {
+            "0": {
+                "Main": 1,
+                "Outer": 1,
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
+            }
+        }
+    },
+    {
+        "TableId": 140,
+        "TableName": "TestShardSet",
+        "TableKey": [
+            1
+        ],
+        "ColumnsAdded": [
+            {
+                "ColumnId": 1,
+                "ColumnName": "PathId",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 2,
+                "ColumnName": "AlterVersion",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 3,
+                "ColumnName": "TestShards",
+                "ColumnType": "String"
+            },
+            {
+                "ColumnId": 4,
+                "ColumnName": "CmdInitialize",
+                "ColumnType": "String"
+            }
+        ],
+        "ColumnsDropped": [],
+        "ColumnFamilies": {
+            "0": {
+                "Columns": [
+                    1,
+                    2,
+                    3,
+                    4
                 ],
                 "RoomID": 0,
                 "Codec": 0,

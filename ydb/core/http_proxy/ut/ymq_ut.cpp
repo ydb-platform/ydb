@@ -3,6 +3,7 @@
 #include <ydb/core/http_proxy/http_req.h>
 #include <ydb/core/persqueue/public/constants.h>
 #include <ydb/core/testlib/test_client.h>
+#include <ydb/core/ymq/actor/auth_factory.h>
 #include <ydb/core/ymq/actor/metering.h>
 #include <ydb/core/ymq/base/limits.h>
 #include <ydb/library/testlib/service_mocks/access_service_mock.h>
@@ -16,6 +17,7 @@
 #include <library/cpp/string_utils/base64/base64.h>
 #include <library/cpp/testing/unittest/registar.h>
 
+#include <mutex>
 #include <optional>
 #include <thread>
 
@@ -137,6 +139,44 @@ Y_UNIT_TEST_SUITE(TestYmqHttpProxy) {
         const auto json = ParseSqsResponse(protocol, res.Body);
         UNIT_ASSERT_VALUES_EQUAL(GetByPath<TString>(json, "__type"), "AWS.SimpleQueueService.NonExistentQueue");
     }
+
+    class TCapturingSqsAuthFactory final : public NKikimr::NSQS::IAuthFactory {
+    public:
+        explicit TCapturingSqsAuthFactory(NKikimr::NSQS::IAuthFactory& delegate)
+            : Delegate_(delegate)
+        {}
+
+        void Initialize(
+            NActors::TActorSystemSetup::TLocalServices& services,
+            const TAppData& appData,
+            const TSqsConfig& config) override
+        {
+            Delegate_.Initialize(services, appData, config);
+        }
+
+        void RegisterAuthActor(NActors::TActorSystem& system, NKikimr::NSQS::TAuthActorData&& data) override {
+            {
+                std::lock_guard<std::mutex> guard(Mutex_);
+                CapturedSourceAddress_ = TString(data.SourceAddress);
+            }
+
+            Delegate_.RegisterAuthActor(system, std::move(data));
+        }
+
+        TCredentialsFactoryPtr CreateCredentialsProviderFactory(const TSqsConfig& config) override {
+            return Delegate_.CreateCredentialsProviderFactory(config);
+        }
+
+        TString GetCapturedSourceAddress() const {
+            std::lock_guard<std::mutex> guard(Mutex_);
+            return CapturedSourceAddress_;
+        }
+
+    private:
+        NKikimr::NSQS::IAuthFactory& Delegate_;
+        mutable std::mutex Mutex_;
+        TString CapturedSourceAddress_;
+    };
 
     TString CreateQueueForAuthMatrix(THttpProxyTestMock& fixture, ESqsProtocol protocol, bool withFolderId) {
         auto createQueueReq = THttpProxyTestMock::CreateSqsCreateQueueRequest();
@@ -891,6 +931,37 @@ Y_UNIT_TEST_SUITE(TestYmqHttpProxy) {
         UNIT_ASSERT(NJson::ReadJsonTree(sendMessageRes.Body, &sendMessageJson));
         UNIT_ASSERT(!GetByPath<TString>(sendMessageJson, "MD5OfMessageBody").empty());
         UNIT_ASSERT(!GetByPath<TString>(sendMessageJson, "MessageId").empty());
+    }
+
+    Y_UNIT_TEST_F(TestHttpProxySetsAuthSourceAddressFromForwardedFor, THttpProxyTestMock) {
+        PrepareConfigs(KikimrServer.Get());
+        auto& appData = KikimrServer->GetRuntime()->GetAppData();
+        appData.FeatureFlags.SetEnableSQSMigrationTopicCreation(true);
+        appData.FeatureFlags.SetEnableSQSMigrationCompatibility(true);
+        auto* previousAuthFactory = appData.SqsAuthFactory;
+
+        TCapturingSqsAuthFactory authFactory(*previousAuthFactory);
+        appData.SqsAuthFactory = &authFactory;
+        struct TRestoreAuthFactory {
+            TAppData& AppData;
+            NKikimr::NSQS::IAuthFactory* PreviousAuthFactory;
+
+            ~TRestoreAuthFactory() {
+                AppData.SqsAuthFactory = PreviousAuthFactory;
+            }
+        } restoreAuthFactory{appData, previousAuthFactory};
+
+        const TString sourceAddress = "203.0.113.42";
+        auto createQueueReq = CreateSqsCreateQueueRequest();
+        createQueueReq["QueueName"] = "HttpProxySourceAddressQueue";
+        const TString authorization = TStringBuilder()
+            << "X-YaCloud-SubjectToken: proxy_sa@builtin"
+            << "\r\nX-Forwarded-For:" << sourceAddress;
+
+        auto createQueueRes = SendHttpRequest("/Root", "AmazonSQS.CreateQueue", std::move(createQueueReq), authorization);
+        UNIT_ASSERT_VALUES_EQUAL_C(createQueueRes.HttpCode, 200, createQueueRes.Body);
+
+        UNIT_ASSERT_VALUES_EQUAL(authFactory.GetCapturedSourceAddress(), sourceAddress);
     }
 
     Y_UNIT_TEST_F(TestSendMessageWithIAMWithoutFolderId_TableImplementation, THttpProxyTestMock) {
@@ -3539,6 +3610,129 @@ Y_UNIT_TEST_SUITE(TestYmqHttpProxy) {
             {"VisibilityTimeout", 10}
         });
         UNIT_ASSERT_VALUES_EQUAL(json["Messages"][0]["Body"], "MessageBody-1");
+    }
+
+    Y_UNIT_TEST_F(NoBillingRecordsOnJsonApiAuthFailure, THttpProxyTestMockWithMetering) {
+        PrepareConfigs(KikimrServer.Get());
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationTopicCreation(true);
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationCompatibility(true);
+
+        auto meteringLogFilePath = KikimrServer->ServerSettings->AppConfig->GetSqsConfig().GetMeteringLogFilePath();
+
+        auto loadBillingRecords = [](const TString& filepath) -> TVector<NSc::TValue> {
+            TString data = TFileInput(filepath).ReadAll();
+            auto rawRecords = SplitString(data, "\n");
+            TVector<NSc::TValue> records;
+            for (auto& record : rawRecords) {
+                records.push_back(NSc::TValue::FromJson(record));
+            }
+            return records;
+        };
+
+        // First, create a queue with valid auth to generate baseline billing records
+        // Each successful SQS request generates 3 billing records (2 traffic + 1 request)
+        auto json = CreateQueue({{"QueueName", "MeteringTestQueue"}});
+
+        // Wait for metering flush interval to pass (flush interval is 100ms, wait 2 seconds to be safe)
+        Sleep(TDuration::Seconds(2));
+        TVector<NSc::TValue> records = loadBillingRecords(meteringLogFilePath);
+
+        const size_t baselineRecordCount = records.size();
+
+        // Disable authorization so that subsequent requests are sent without an
+        // Authorization header (FormAuthorizationStr returns an empty string).
+        DisableAuthorization();
+
+        // Send a JSON API CreateQueue request without authorization header.
+        // This triggers an IAM auth failure in TYmqHttpRequestActor::HandleYmqCloudAuthorizationResponse,
+        // which sets IamAuthFailed_ = true, causing DoMetering() to skip billing record generation.
+        // Auth failures are reported with HTTP code 400.
+        CreateQueue({{"QueueName", "AuthFailQueue"}}, 400);
+
+        // Wait for metering flush interval to pass (flush interval is 100ms, wait 2 seconds to be safe)
+        Sleep(TDuration::Seconds(2));
+
+        // Verify no additional billing records were generated for the failed auth request
+        records = loadBillingRecords(meteringLogFilePath);
+        UNIT_ASSERT_VALUES_EQUAL_C(records.size(), baselineRecordCount,
+            "Auth failure should not generate billing records, but got "
+            << records.size() << " records instead of " << baselineRecordCount);
+
+        // Re-enable authorization and verify that metering resumes: a successful
+        // request must again produce billing records (3 per request).
+        EnableAuthorization();
+        CreateQueue({{"QueueName", "AuthReenabledQueue"}});
+
+        // Wait for metering flush interval to pass (flush interval is 100ms, wait 2 seconds to be safe)
+        Sleep(TDuration::Seconds(2));
+        const size_t expectedAfterReenable = baselineRecordCount + 3;
+        records = loadBillingRecords(meteringLogFilePath);
+
+        UNIT_ASSERT_VALUES_EQUAL_C(records.size(), expectedAfterReenable,
+            "Metering should resume after authorization is re-enabled, but got "
+            << records.size() << " records instead of " << expectedAfterReenable);
+    }
+
+    Y_UNIT_TEST_F(NoBillingRecordsOnXmlApiAuthFailure, THttpProxyTestMockWithMetering) {
+        PrepareConfigs(KikimrServer.Get());
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationTopicCreation(true);
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationCompatibility(true);
+
+        auto meteringLogFilePath = KikimrServer->ServerSettings->AppConfig->GetSqsConfig().GetMeteringLogFilePath();
+
+        auto loadBillingRecords = [](const TString& filepath) -> TVector<NSc::TValue> {
+            TString data = TFileInput(filepath).ReadAll();
+            auto rawRecords = SplitString(data, "\n");
+            TVector<NSc::TValue> records;
+            for (auto& record : rawRecords) {
+                records.push_back(NSc::TValue::FromJson(record));
+            }
+            return records;
+        };
+
+        // First, create a queue with valid auth (via JSON API) to generate baseline billing records
+        auto json = CreateQueue({{"QueueName", "MeteringTestQueue"}});
+
+        // Wait for metering flush interval to pass (flush interval is 100ms, wait 2 seconds to be safe)
+        Sleep(TDuration::Seconds(2));
+        TVector<NSc::TValue> records = loadBillingRecords(meteringLogFilePath);
+
+        const size_t baselineRecordCount = records.size();
+
+        // Disable authorization so that subsequent requests are sent without an
+        // Authorization header (FormAuthorizationStr returns an empty string).
+        DisableAuthorization();
+
+        // Send an XML API CreateQueue request without authorization header.
+        // This triggers the XML API auth path (TCloudAuthRequestProxy) which calls
+        // Callback_->OnIamAuthError(), setting SkipMetering on the response.
+        // Auth failures are reported with HTTP code 400 and an IncompleteSignature error.
+        auto json2 = CreateQueueXml({{"QueueName", "XmlAuthFailQueue"}}, 400);
+        UNIT_ASSERT_STRING_CONTAINS(GetByPath<TString>(json2, "__type"), "IncompleteSignature");
+
+        // Wait for metering flush interval to pass
+        Sleep(TDuration::Seconds(2));
+
+        // Verify no additional billing records were generated for the failed auth request
+        records = loadBillingRecords(meteringLogFilePath);
+        UNIT_ASSERT_VALUES_EQUAL_C(records.size(), baselineRecordCount,
+            "Auth failure on XML API should not generate billing records, but got "
+            << records.size() << " records instead of " << baselineRecordCount);
+
+        // Re-enable authorization and verify that metering resumes: a successful
+        // XML API request must again produce billing records (3 per request).
+        EnableAuthorization();
+        CreateQueueXml({{"QueueName", "XmlAuthReenabledQueue"}});
+
+        const size_t expectedAfterReenable = baselineRecordCount + 3;
+
+        // Wait for metering flush interval to pass (flush interval is 100ms, wait 2 seconds to be safe)
+        Sleep(TDuration::Seconds(2));
+        records = loadBillingRecords(meteringLogFilePath);
+
+        UNIT_ASSERT_VALUES_EQUAL_C(records.size(), expectedAfterReenable,
+            "Metering should resume after authorization is re-enabled, but got "
+            << records.size() << " records instead of " << expectedAfterReenable);
     }
 
 

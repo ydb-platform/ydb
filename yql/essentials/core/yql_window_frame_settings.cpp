@@ -670,7 +670,7 @@ TMaybe<TWindowFrameSettings> TryParseRangeForNotNumericFrameSettings(TExprNode::
 TMaybe<TWindowFrameSettings> TryParseRangeWindowFrameSettings(TExprNode::TPtr frameSpec, TExprContext& ctx) {
     auto sortTraits = ExtractSortTraitsInfo(GetSettingByName(frameSpec->Children(), "sortSpec"));
     if (std::holds_alternative<TUnsortedTag>(sortTraits)) {
-        return TryParseRangeForNotNumericFrameSettings(frameSpec, nullptr, ctx);
+        return TryParseRangeForNotNumericFrameSettings(frameSpec, /*sortColumnType=*/nullptr, ctx);
     }
     YQL_ENSURE(std::holds_alternative<TSorted>(sortTraits));
     auto sortedTraits = std::get<TSorted>(sortTraits);

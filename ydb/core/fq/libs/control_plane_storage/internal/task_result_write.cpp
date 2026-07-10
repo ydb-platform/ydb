@@ -2,6 +2,8 @@
 
 #include <ydb/core/fq/libs/control_plane_storage/ydb_control_plane_storage_impl.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT ::NKikimrServices::YQ_CONTROL_PLANE_STORAGE
+
 namespace NFq {
 
 NYql::TIssues TControlPlaneStorageBase::ValidateRequest(TEvControlPlaneStorage::TEvWriteResultDataRequest::TPtr& ev) const {
@@ -30,10 +32,21 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvWriteResult
     const auto resultSetRowsSize = resultSet.rows().size();
     const int byteSize = resultSet.ByteSize();
 
-    CPS_LOG_T("WriteResultDataRequest: " << resultId << " " << resultSetId << " " << startRowId << " " << resultSet.ByteSize() << " " << deadline);
+    YDB_LOG_TRACE("Dump writeResultDataRequest, resultSetId, startRowId, resultSetSize, deadline",
+        {"writeResultDataRequest", resultId},
+        {"resultSetId", resultSetId},
+        {"startRowId", startRowId},
+        {"resultSetSize", resultSet.ByteSize()},
+        {"deadline", deadline});
 
     if (const auto& issues = ValidateRequest(ev)) {
-        CPS_LOG_D("WriteResultDataRequest, validation failed: " << resultId << " " << resultSetId << " " << startRowId << " " << resultSet.DebugString() << " " << deadline << " error: " << issues.ToString());
+        YDB_LOG_DEBUG("WriteResultDataRequest, validation",
+            {"failed", resultId},
+            {"resultSetId", resultSetId},
+            {"startRowId", startRowId},
+            {"resultSet", resultSet.DebugString()},
+            {"deadline", deadline},
+            {"error", issues});
         const TDuration delta = TInstant::Now() - startTime;
         SendResponseIssues<TEvControlPlaneStorage::TEvWriteResultDataResponse>(ev->Sender, issues, ev->Cookie, delta, requestCounters);
         LWPROBE(WriteResultDataRequest, resultId, resultSetId, startRowId, resultSetRowsSize, delta, deadline, byteSize, false);

@@ -11,6 +11,14 @@ using namespace NThreading;
 
 const TKeepAliveSettings TTableClient::TImpl::KeepAliveSettings = TKeepAliveSettings().ClientTimeout(KEEP_ALIVE_CLIENT_TIMEOUT);
 
+namespace {
+    NThreading::TFuture<void> MakeReadyFuture() {
+        auto promise = NThreading::NewPromise<void>();
+        auto future = promise.GetFuture();
+        promise.SetValue();
+        return future;
+    }
+}
 
 TDuration GetMinTimeToTouch(const TSessionPoolSettings& settings) {
     return Min(settings.CloseIdleThreshold_, settings.KeepAliveIdleThreshold_);
@@ -73,7 +81,11 @@ std::shared_ptr<NObservability::TRequestSpan> TTableClient::TImpl::CreateRetryAt
 
 TTableClient::TImpl::~TImpl() {
     if (Connections_->GetDrainOnDtors()) {
-        Drain().Wait(DRAIN_TIMEOUT);
+        const bool waitForDrain = !TGRpcConnectionsImpl::IsCurrentThreadInSdkCallback();
+        auto drainFuture = Drain();
+        if (waitForDrain) {
+            drainFuture.Wait(DRAIN_TIMEOUT);
+        }
     }
 }
 
@@ -86,9 +98,7 @@ void TTableClient::TImpl::InitStopper() {
     auto cb = [weak]() mutable {
         auto strong = weak.lock();
         if (!strong) {
-            auto promise = NThreading::NewPromise<void>();
-            promise.SetException("no more client");
-            return promise.GetFuture();
+            return MakeReadyFuture();
         }
         return strong->Drain();
     };
@@ -109,9 +119,13 @@ NThreading::TFuture<void> TTableClient::TImpl::Drain() {
     for (auto& s : sessions) {
         if (!s->GetId().empty()) {
             closeResults.push_back(CloseInternal(s.get()));
+            DbDriverState_->StatCollector.DecSessionsOnHost(s->GetEndpoint());
         }
     }
     sessions.clear();
+    if (closeResults.empty()) {
+        return MakeReadyFuture();
+    }
     return NThreading::WaitExceptionOrAll(closeResults);
 }
 
@@ -1424,6 +1438,9 @@ void TTableClient::TImpl::SetTxSettings(const TTxSettings& txSettings, Ydb::Tabl
             break;
         case TTxSettings::TS_SNAPSHOT_RW:
             proto->mutable_snapshot_read_write();
+            break;
+        case TTxSettings::TS_STRICT_SERIALIZABLE_RW:
+            proto->mutable_strict_serializable_read_write();
             break;
         default:
             throw TContractViolation("Unexpected transaction mode.");

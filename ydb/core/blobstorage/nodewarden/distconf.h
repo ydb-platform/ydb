@@ -358,7 +358,7 @@ namespace NKikimr::NStorage {
         std::vector<std::tuple<TActorId, TString, ui64>> ConsoleConfigValidationQ;
 
         // retro trace root-side batching
-        static constexpr TDuration RetroTraceBatchInterval = TDuration::Seconds(2);
+        TControlWrapper RootRetroTraceBatchIntervalSec = TControlWrapper(10, 1, 3600);
         std::vector<NWilson::TTraceId> PendingRetroTraceIds;
         bool RetroTraceBatchFlushScheduled = false;
 
@@ -484,7 +484,9 @@ namespace NKikimr::NStorage {
             const NBsController::TGroupMapper::TForbiddenPDisks& forbid,
             i64 requiredSpace, NKikimrBlobStorage::TBaseConfig *baseConfig,
             bool convertToDonor, bool ignoreVSlotQuotaCheck, bool isSelfHealReasonDecommit, TBridgePileId bridgePileId,
-            std::optional<TGroupId> bridgeProxyGroupId);
+            std::optional<TGroupId> bridgeProxyGroupId,
+            const NProtoBuf::RepeatedField<ui32>& selfHealAllowedNodes = {},
+            bool applyNodeAllowList = false);
 
         bool UpdateConfig(NKikimrBlobStorage::TStorageConfig *config);
 

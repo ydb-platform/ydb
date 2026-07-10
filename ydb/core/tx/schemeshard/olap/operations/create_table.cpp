@@ -1,5 +1,7 @@
 #include <ydb/core/scheme/protos/type_info.pb.h>
 #include <ydb/core/tx/schemeshard/olap/operations/checks.h>
+#include <ydb/core/tx/schemeshard/olap/statistics/schema.h>
+#include <ydb/core/tx/schemeshard/olap/statistics/update.h>
 #include <ydb/core/tx/schemeshard/schemeshard__operation_part.h>
 #include <ydb/core/tx/schemeshard/schemeshard__operation_common.h>
 #include <ydb/core/tx/schemeshard/schemeshard_impl.h>
@@ -168,6 +170,7 @@ private:
 
 class TOlapTableConstructor : public TTableConstructorBase {
     TOlapSchema TableSchema;
+    TOlapMultiColumnStatisticsDescription TableMultiColumnStatistics;
     ui32 ChannelsCount = 64;
 private:
     bool DoDeserialize(const NKikimrSchemeOp::TColumnTableDescription& description, IErrorCollector& errors) override {
@@ -185,7 +188,15 @@ private:
             ChannelsCount = description.GetStorageConfig().GetDataChannelCount();
         }
 
-        return TableSchema.ParseFromProto(description.GetSchema(), errors, AppData()->ColumnShardConfig.GetAllowNullableColumnsInPK());
+        if (!TableSchema.ParseFromProto(description.GetSchema(), errors, AppData()->ColumnShardConfig.GetAllowNullableColumnsInPK())) {
+            return false;
+        }
+
+        TOlapMultiColumnStatisticsUpdate statisticsUpdate;
+        if (!statisticsUpdate.Parse(description, errors)) {
+            return false;
+        }
+        return TableMultiColumnStatistics.ApplyUpdate(TableSchema, statisticsUpdate, errors);
     }
 
 private:
@@ -193,6 +204,7 @@ private:
         auto& description = table->Description;
         description.MutableStorageConfig()->SetDataChannelCount(ChannelsCount);
         TableSchema.Serialize(*description.MutableSchema());
+        TableMultiColumnStatistics.Serialize(description);
         return TConclusionStatus::Success();
     }
 

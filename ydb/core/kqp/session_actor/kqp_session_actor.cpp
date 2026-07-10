@@ -26,6 +26,7 @@
 #include <ydb/core/kqp/opt/kqp_query_plan.h>
 #include <ydb/core/kqp/provider/yql_kikimr_provider.h>
 #include <ydb/core/kqp/provider/yql_kikimr_results.h>
+#include <ydb/core/kqp/workload_service/kqp_query_classifier.h>
 #include <ydb/core/kqp/rm_service/kqp_snapshot_manager.h>
 #include <ydb/core/ydb_convert/ydb_convert.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
@@ -53,6 +54,7 @@
 #include <ydb/library/security/util.h>
 
 #include <util/string/printf.h>
+#include <util/generic/overloaded.h>
 
 #include <yql/essentials/public/issue/yql_issue_message.h>
 
@@ -340,13 +342,10 @@ public:
     }
 
     void PassRequestToResourcePool() {
-        if (QueryState->UserRequestContext->PoolConfig) {
-            STLOG_D("Request placed into pool from cache",
-                (pool_id, QueryState->UserRequestContext->PoolId),
-                (trace_id, TraceId()));
-            CompileQuery();
-            return;
-        }
+        // PoolConfig should not be set when calling PassRequestToResourcePool
+        // If it's set, WLM admission was already done and we shouldn't be here
+        Y_VALIDATE(!QueryState->UserRequestContext->PoolConfig,
+            "Cannot send to workload manager: PoolConfig is already resolved");
 
         Send(MakeKqpWorkloadServiceId(SelfId().NodeId()), new NWorkload::TEvPlaceRequestIntoPool(
             QueryState->UserRequestContext->DatabaseId,
@@ -579,18 +578,71 @@ public:
 
         QueryState->UpdateTempTablesState(TempTablesState);
 
-        if (QueryState->UserRequestContext->PoolId) {
-            PassRequestToResourcePool();
-        } else {
-            CompileQuery();
+        if (WmPreCompileClassify()) {
+            return;
         }
+
+        CompileQuery();
+    }
+
+    bool WmPreCompileClassify() {
+        auto classifier = QueryState->QueryClassifier;
+
+        if (!classifier) {
+            QueryState->UserRequestContext->PoolId = NResourcePool::DEFAULT_POOL_ID;
+            return false;
+        }
+
+        bool sent = false;
+        const auto result = classifier->PreCompileClassify();
+
+        using TError = std::optional<std::pair<Ydb::StatusIds::StatusCode, TString>>;
+        auto error = std::visit(TOverloaded {
+            [this, &sent](const NWorkload::IQueryClassifier::TResolvedPoolId& s) -> TError {
+                STLOG_D("PreCompile Classify resolved",
+                    (pool_id, s.PoolId),
+                    (skip_admission, s.SkipAdmission),
+                    (trace_id, TraceId()));
+                QueryState->UserRequestContext->PoolId = s.PoolId;
+                if (s.SkipAdmission) {
+                    QueryState->UserRequestContext->PoolConfig = s.PoolConfig;
+                    return std::nullopt;
+                }
+                sent = true;
+                PassRequestToResourcePool();
+                return std::nullopt;
+            },
+            [this](const NWorkload::IQueryClassifier::TReject& r) -> TError {
+                STLOG_N("PreCompile Classify rejected",
+                    (trace_id, TraceId()));
+                return std::make_pair(r.Code, r.Message);
+            },
+            [this](const NWorkload::IQueryClassifier::TBypass&) -> TError {
+                STLOG_D("PreCompile Classify bypass, compiling",
+                    (trace_id, TraceId()));
+                QueryState->UserRequestContext->PoolId = NResourcePool::DEFAULT_POOL_ID;
+                return std::nullopt;
+            },
+            [this](const NWorkload::IQueryClassifier::TPendingCompilation&) -> TError {
+                STLOG_D("PreCompile Classify pending, compiling",
+                    (trace_id, TraceId()));
+                return std::nullopt;
+            },
+        }, result);
+
+        if (error) {
+            ReplyQueryError(error->first, error->second);
+            return true;
+        }
+
+        return sent;
     }
 
     void Handle(TEvents::TEvUndelivered::TPtr& ev) {
         if (ev->Get()->SourceType == TKqpWorkloadServiceEvents::EvPlaceRequestIntoPool) {
-            STLOG_I("Failed to deliver request to workload service",
+            STLOG_W("Failed to deliver request to workload service, bypassing WLM",
                 (trace_id, TraceId()));
-            CompileQuery();
+            ContinueAfterWmAdmission();
             return;
         }
 
@@ -615,7 +667,7 @@ public:
             STLOG_T("Failed to place request in resource pool, feature flag is disabled",
                 (trace_id, TraceId()));
             QueryState->UserRequestContext->PoolId.clear();
-            CompileQuery();
+            ContinueAfterWmAdmission();
             return;
         }
 
@@ -641,7 +693,29 @@ public:
         QueryState->UserRequestContext->PoolId = poolId;
         QueryState->UserRequestContext->PoolConfig = ev->Get()->PoolConfig;
 
-        CompileQuery();
+        ContinueAfterWmAdmission();
+    }
+
+    // Precondition: QueryClassifier is set. Reached only as a continuation after
+    // PassRequestToResourcePool(), which requires a classifier — null here is a
+    // caller-side invariant violation, not a runtime edge case to handle.
+    void ContinueAfterWmAdmission() {
+        Y_VALIDATE(QueryState->QueryClassifier, "ContinueAfterWmAdmission called without QueryClassifier");
+
+        auto classifier = QueryState->QueryClassifier;
+        auto state = classifier->GetState();
+
+        if (state == NWorkload::IQueryClassifier::EState::PreCompileDone) {
+            STLOG_D("Pre-compile admission completed, compiling", (trace_id, TraceId()));
+            CompileQuery();
+        } else if (state == NWorkload::IQueryClassifier::EState::PostCompileDone) {
+            STLOG_D("Post-compile admission completed, executing", (trace_id, TraceId()));
+            OnSuccessCompileRequest();
+        } else {
+            Y_VALIDATE(false, TStringBuilder()
+                << "WmQueryClassifier with invalid state after admission: "
+                << static_cast<int>(state));
+        }
     }
 
     bool AreAllTheTopicsAndPartitionsKnown() const {
@@ -920,7 +994,57 @@ public:
         return false;
     }
 
+    bool WmPostCompileClassify() {
+        auto classifier = QueryState->QueryClassifier;
+
+        if (!classifier || classifier->GetState() != NWorkload::IQueryClassifier::EState::WaitCompile) {
+            return false;
+        }
+
+        bool sent = false;
+        const auto result = classifier->PostCompileClassify(*QueryState->PreparedQuery);
+
+        using TError = std::optional<std::pair<Ydb::StatusIds::StatusCode, TString>>;
+        auto error = std::visit(TOverloaded {
+            [this, &sent](const NWorkload::IQueryClassifier::TResolvedPoolId& r) -> TError {
+                STLOG_D("PostCompile Classify resolved",
+                    (pool_id, r.PoolId),
+                    (skip_admission, r.SkipAdmission),
+                    (trace_id, TraceId()));
+                QueryState->UserRequestContext->PoolId = r.PoolId;
+                if (r.SkipAdmission) {
+                    QueryState->UserRequestContext->PoolConfig = r.PoolConfig;
+                    return std::nullopt;
+                }
+                sent = true;
+                PassRequestToResourcePool();
+                return std::nullopt;
+            },
+            [this](const NWorkload::IQueryClassifier::TBypass&) -> TError {
+                STLOG_D("PostCompile Classify bypass",
+                    (trace_id, TraceId()));
+                return std::nullopt;
+            },
+            [this](const NWorkload::IQueryClassifier::TReject& r) -> TError {
+                STLOG_N("PostCompile Classify rejected",
+                    (trace_id, TraceId()));
+                return std::make_pair(r.Code, r.Message);
+            }
+        }, result);
+
+        if (error) {
+            ReplyQueryError(error->first, error->second);
+            return true;
+        }
+
+        return sent;
+    }
+
     void OnSuccessCompileRequest() {
+        if (WmPostCompileClassify()) {
+            co_return;
+        }
+
         if (QueryState->GetAction() == NKikimrKqp::QUERY_ACTION_EXPLAIN) {
             TVector<IKqpGateway::TPhysicalTxData> txs;
             std::map<TString, TString> secureParams;
@@ -1168,12 +1292,19 @@ public:
         }
 
         QueryState->TxCtx->SetIsolationLevel(settings);
+        QueryState->TxCtx->TxManager->SetIsolationLevel(*QueryState->TxCtx->EffectiveIsolationLevel);
         QueryState->TxCtx->OnBeginQuery(QueryState->GetQuerySpanId(), QueryState->ExtractQueryText());
 
         if (QueryState->TxCtx->EffectiveIsolationLevel == NKqpProto::ISOLATION_LEVEL_SNAPSHOT_RW
                 && !Settings.TableService.GetEnableSnapshotIsolationRW()) {
             ythrow TRequestFail(Ydb::StatusIds::BAD_REQUEST)
                 << "Writes aren't supported for Snapshot Isolation";
+        }
+
+        if (QueryState->TxCtx->EffectiveIsolationLevel == NKqpProto::ISOLATION_LEVEL_STRICT_SERIALIZABLE
+                && !Settings.TableService.GetEnableStrictSerializableIsolation()) {
+            ythrow TRequestFail(Ydb::StatusIds::BAD_REQUEST)
+                << "Strict Serializable mode is disabled";
         }
 
         if (!Transactions.CreateNew(QueryState->TxId.GetValue(), QueryState->TxCtx)) {
@@ -1214,6 +1345,9 @@ public:
             switch (isolation) {
                 case NKqpProto::ISOLATION_LEVEL_SERIALIZABLE:
                     settings.mutable_serializable_read_write();
+                    break;
+                case NKqpProto::ISOLATION_LEVEL_STRICT_SERIALIZABLE:
+                    settings.mutable_strict_serializable_read_write();
                     break;
                 case NKqpProto::ISOLATION_LEVEL_SNAPSHOT_RW:
                     settings.mutable_snapshot_read_write();
@@ -1352,6 +1486,7 @@ public:
         QueryState->TxCtx->HasTableRead |= hasOlapRead || hasOltpRead;
 
         if (QueryState->TxCtx->EffectiveIsolationLevel != NKqpProto::ISOLATION_LEVEL_SERIALIZABLE
+                && QueryState->TxCtx->EffectiveIsolationLevel != NKqpProto::ISOLATION_LEVEL_STRICT_SERIALIZABLE
                 && QueryState->TxCtx->EffectiveIsolationLevel != NKqpProto::ISOLATION_LEVEL_SNAPSHOT_RO
                 && QueryState->TxCtx->EffectiveIsolationLevel != NKqpProto::ISOLATION_LEVEL_SNAPSHOT_RW
                 && QueryState->GetType() != NKikimrKqp::QUERY_TYPE_SQL_SCAN
@@ -1555,7 +1690,7 @@ public:
         AFL_ENSURE(txCtx.TxManager);
         const bool broken = !!txCtx.TxManager->GetLockIssue();
 
-        if (!txCtx.DeferredEffects.Empty() && broken) {
+        if ((!txCtx.DeferredEffects.Empty() || txCtx.HasUnflushedEffectsInBuffer) && broken) {
             EmitVictimTliLog(
                 txCtx.TxManager->GetVictimQuerySpanId(),
                 std::nullopt,
@@ -1571,6 +1706,16 @@ public:
                 std::nullopt,
                 txCtx.TxManager->GetBrokenLocksCount());
             ReplyQueryError(Ydb::StatusIds::ABORTED, "tx has effects, but locks are broken",
+                MessageFromIssues(std::vector<TIssue>{*txCtx.TxManager->GetLockIssue()}));
+            return false;
+        }
+
+        if (txCtx.TxManager->BrokenLocks()) {
+            EmitVictimTliLog(
+                txCtx.TxManager->GetVictimQuerySpanId(),
+                std::nullopt,
+                txCtx.TxManager->GetBrokenLocksCount());
+            ReplyQueryError(Ydb::StatusIds::ABORTED, "transaction locks invalidated",
                 MessageFromIssues(std::vector<TIssue>{*txCtx.TxManager->GetLockIssue()}));
             return false;
         }
@@ -1783,7 +1928,8 @@ public:
         }
 
         request.AcquireLocksTxId = txCtx.LockHandle.GetLockId();
-        request.UseImmediateEffects = true;
+        request.FlushEffects = true;
+        txCtx.HasUnflushedEffectsInBuffer = false;
         request.PerShardKeysSizeLimitBytes = Config->_CommitPerShardKeysSizeLimitBytes.Get().GetRef();
 
         txCtx.HasImmediateEffects = true;
@@ -1924,8 +2070,20 @@ public:
             request.AcquireLocksTxId = txCtx.LockHandle.GetLockId();
 
             if (!txCtx.CanDeferEffects()) {
-                request.UseImmediateEffects = true;
+                request.FlushEffects = true;
+            } else {
+                // When CanDeferEffects() is true, GetCurrentPhyTx() defers all
+                // effect-only txs (ResultsSize() == 0), so the remaining tx
+                // must have results (RETURNING clause).
+                AFL_ENSURE(tx->ResultsSize() > 0);
             }
+        }
+
+        if (request.FlushEffects || commit) {
+            txCtx.HasUnflushedEffectsInBuffer = false;
+        } else if (tx && tx->GetHasEffects()) {
+            // Has unflushed effects in buffer (used for RETURNING)
+            txCtx.HasUnflushedEffectsInBuffer = true;
         }
 
         LWTRACK(KqpSessionPhyQueryProposeTx,

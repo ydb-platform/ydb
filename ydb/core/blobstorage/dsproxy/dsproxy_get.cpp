@@ -5,6 +5,7 @@
 #include <ydb/core/blobstorage/vdisk/common/vdisk_events.h>
 #include <ydb/core/blobstorage/lwtrace_probes/blobstorage_probes.h>
 #include <ydb/core/util/stlog.h>
+#include <ydb/library/actors/retro_tracing/collector/retro_collector.h>
 #include <library/cpp/containers/stack_vector/stack_vec.h>
 #include <library/cpp/digest/crc32c/crc32c.h>
 #include <util/generic/set.h>
@@ -406,25 +407,33 @@ class TBlobStorageGroupGetRequest : public TBlobStorageGroupRequestActor {
                 success);
         DSP_LOG_LOG_S(success ? NLog::PRI_INFO : NLog::PRI_NOTICE, "BPG68", "Result# " << evResult->Print(false) <<" GroupId# " << Info->GroupID);
 
+        if ((TActivationContext::Monotonic() - RequestStartTime >= LongRequestThreshold)) {
+            if (PopAllowToken(handleClass)) {
+                YDB_LOG_WARN_COMP(BS_PROXY_GET, "Long TEvGet request detected",
+                    {"marker", "BPG71"},
+                    {"longRequestThreshold", LongRequestThreshold},
+                    {"groupId", Info->GroupID},
+                    {"subrequestsCount", evResult->ResponseSz},
+                    {"requestTotalSize", requestSize},
+                    {"handleClass", NKikimrBlobStorage::EGetHandleClass_Name(handleClass)},
+                    {"restartCounter", RestartCounter},
+                    {"history", GetImpl.PrintHistory()});
+            }
 
-        if ((TActivationContext::Monotonic() - RequestStartTime >= LongRequestThreshold) && PopAllowToken(handleClass)) {
-            STLOG(PRI_WARN, BS_PROXY_GET, BPG71, "Long TEvGet request detected",
-                    (LongRequestThreshold, LongRequestThreshold),
-                    (GroupId, Info->GroupID),
-                    (SubrequestsCount, evResult->ResponseSz),
-                    (RequestTotalSize, requestSize),
-                    (HandleClass, NKikimrBlobStorage::EGetHandleClass_Name(handleClass)),
-                    (RestartCounter, RestartCounter),
-                    (History, GetImpl.PrintHistory()));
+            if (EnableStorageRetroTraceCollectionSlowRequests) {
+                if (TNamedSpan* retroSpan = Span.GetRetroSpanPtr()) {
+                    retroSpan->DemandTraceOnEnd();
+                }
+            }
         }
 
         auto resultStatusPriority = PriorityForStatusResult(evResult->Status);
         if (IS_LOG_PRIORITY_ENABLED(resultStatusPriority, LogCtx.LogComponent) && PopAllowToken(handleClass)) {
-            STLOG(resultStatusPriority,
-                BS_PROXY_GET, BPG72, "Query history",
-                (GroupId, Info->GroupID),
-                (HandleClass, NKikimrBlobStorage::EGetHandleClass_Name(handleClass)),
-                (History, GetImpl.PrintHistory()));
+            YDB_LOG_COMP(resultStatusPriority, BS_PROXY_GET, "Query history",
+                {"marker", "BPG72"},
+                {"groupId", Info->GroupID},
+                {"handleClass", NKikimrBlobStorage::EGetHandleClass_Name(handleClass)},
+                {"history", GetImpl.PrintHistory()});
         }
 
         return SendResponseAndDie(std::unique_ptr<TEvBlobStorage::TEvGetResult>(evResult.Release()));

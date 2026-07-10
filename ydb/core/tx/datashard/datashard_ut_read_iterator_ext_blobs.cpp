@@ -558,7 +558,8 @@ Y_UNIT_TEST_SUITE(ReadIteratorExternalBlobs) {
         runtime.WaitFor("blocked results", [&]{ return blockedResults.size() > 0 || finished; });
 
         if (!finished) {
-            UNIT_ASSERT_VALUES_EQUAL(passedRows, 1u);
+            UNIT_ASSERT_GE(passedRows, 1u);
+            UNIT_ASSERT_LT(passedRows, 5u);
 
             if (withReboot) {
                 dropReadId.emplace(

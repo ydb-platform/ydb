@@ -1,6 +1,8 @@
 #include "test_simplebs.h"
 #include "helpers.h"
 
+#define YDB_LOG_THIS_FILE_COMPONENT NActorsServices::TEST
+
 
 using namespace NKikimr;
 
@@ -30,7 +32,7 @@ private:
     void Handle(TEvBlobStorage::TEvVPutResult::TPtr &ev, const TActorContext &ctx) {
         Y_ABORT_UNLESS(ev->Get()->Record.GetStatus() == NKikimrProto::OK, "Status=%s",
                NKikimrProto::EReplyStatus_Name(ev->Get()->Record.GetStatus()).data());
-        LOG_NOTICE(ctx, NActorsServices::TEST, "  TEvVPutResult succeded");
+        YDB_LOG_NOTICE_CTX(ctx, "TEvVPutResult succeeded");
 
         --Counter;
         HandlePutPhaseFinish(ctx);
@@ -331,7 +333,9 @@ protected:
     using TBasePutAllFromDataSet::SendReadRequests;
 
     virtual void SendReadRequests(const TActorContext &ctx, const TLogoBlobID &from, const TLogoBlobID &to) {
-        LOG_NOTICE(ctx, NActorsServices::TEST, "  Test: from=%s to=%s\n", from.ToString().data(), to.ToString().data());
+        YDB_LOG_NOTICE_CTX(ctx, "Test range",
+            {"from", from},
+            {"to", to});
         auto req = TEvBlobStorage::TEvVGet::CreateRangeIndexQuery(VDiskInfo.VDiskID, TInstant::Max(),
                 NKikimrBlobStorage::EGetHandleClass::AsyncRead, TEvBlobStorage::TEvVGet::EFlags::None, {},
                 from, to, 10);
@@ -490,7 +494,9 @@ class TRangeGetFromEmptyDBActor : public TActorBootstrapped<TRangeGetFromEmptyDB
 
         TLogoBlobID from(DefaultTestTabletId, 4294967295, 4294967295, 0, 0, 0, TLogoBlobID::MaxPartId);
         TLogoBlobID to  (DefaultTestTabletId, 0, 0, 0, 0, 0, 1);
-        LOG_NOTICE(ctx, NActorsServices::TEST, "  Test: from=%s to=%s\n", from.ToString().data(), to.ToString().data());
+        YDB_LOG_NOTICE_CTX(ctx, "Test: from= to=\n",
+            {"from", from},
+            {"to", to});
         auto req = TEvBlobStorage::TEvVGet::CreateRangeIndexQuery(VDiskInfo.VDiskID, TInstant::Max(),
                 NKikimrBlobStorage::EGetHandleClass::AsyncRead, TEvBlobStorage::TEvVGet::EFlags::None, {}, from, to, 10);
         ctx.Send(VDiskInfo.ActorID, req.release());

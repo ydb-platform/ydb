@@ -6,6 +6,7 @@
 
 #include <yql/essentials/core/type_ann/type_ann_types.h>
 #include <yql/essentials/core/yql_join.h>
+#include <yql/essentials/core/yql_opt_utils.h>
 #include <yql/essentials/minikql/mkql_program_builder.h>
 
 
@@ -1548,11 +1549,62 @@ namespace NYql::NTypeAnnImpl {
 
     namespace {
 
-    IGraphTransformer::TStatus BuildListJoinCoreArgType(const TStructExprType* streamStructType, TExprNode::TPtr& inputTypeNode, const TStringBuf inputPrefix, const TTypeAnnotationNode*& inputPremapArgType, TExprContext& ctx) {
+    bool EnsureListJoinInputMember(const TPosition& pos, const TStructExprType* streamStructType, TStringBuf memberName, const TTypeAnnotationNode* memberType, TExprContext& ctx) {
+        const auto memberIdx = streamStructType->FindItem(memberName);
+        if (!memberIdx) {
+            ctx.AddError(TIssue(pos, TStringBuilder() << memberName << " member is missing in the input stream"));
+            return false;
+        }
+        const auto& items = streamStructType->GetItems();
+        const auto itemType = items[*memberIdx]->GetItemType();
+        if (itemType != memberType && RemoveOptionalType(itemType) != memberType) {
+            ctx.AddError(TIssue(pos, TStringBuilder() << memberName << " type differs from the arg: " << *itemType << ", but " << *memberType << " expected"));
+            return false;
+        }
+        return true;
+    }
+
+    IGraphTransformer::TStatus BuildListJoinCoreKeyArgType(const TStructExprType* streamStructType, TExprNode::TPtr& keyTypeNode, const TTypeAnnotationNode*& keyArgType, TExprContext& ctx) {
+        auto keyType = keyTypeNode->GetTypeAnn();
+
+        if (keyType && keyType->GetKind() == ETypeAnnotationKind::Universal) {
+            keyArgType = nullptr;
+            return IGraphTransformer::TStatus::Ok;
+        }
+
+        const auto status = EnsureTypeRewrite(keyTypeNode, ctx);
+        if (status != IGraphTransformer::TStatus::Ok) {
+            return status;
+        }
+
+        // Refetch particular type after EnsureTypeRewrite.
+        keyType = keyTypeNode->GetTypeAnn();
+        const auto pos = keyTypeNode->Pos(ctx);
+        keyArgType = keyType->Cast<TTypeExprType>()->GetType();
+        if (keyArgType->GetKind() != ETypeAnnotationKind::Tuple) {
+            const auto itemName = TString::Join(YqlListJoinCoreKeyPrefix, "0");
+            if (!EnsureListJoinInputMember(pos, streamStructType, itemName, keyArgType, ctx)) {
+                return IGraphTransformer::TStatus::Error;
+            }
+            return IGraphTransformer::TStatus::Ok;
+        }
+
+        const auto keyArgTupleType = keyArgType->Cast<TTupleExprType>();
+        const auto& keyArgTupleItems = keyArgTupleType->GetItems();
+        for (size_t i = 0; i < keyArgTupleType->GetSize(); i++) {
+            const auto itemName = TString::Join(YqlListJoinCoreKeyPrefix, ToString(i));
+            if (!EnsureListJoinInputMember(pos, streamStructType, itemName, keyArgTupleItems[i], ctx)) {
+                return IGraphTransformer::TStatus::Error;
+            }
+        }
+        return IGraphTransformer::TStatus::Ok;
+    }
+
+    IGraphTransformer::TStatus BuildListJoinCoreListArgType(const TStructExprType* streamStructType, TExprNode::TPtr& inputTypeNode, const TStringBuf inputPrefix, const TTypeAnnotationNode*& premapArgType, TExprContext& ctx) {
         auto inputType = inputTypeNode->GetTypeAnn();
 
         if (inputType && inputType->GetKind() == ETypeAnnotationKind::Universal) {
-            inputPremapArgType = nullptr;
+            premapArgType = nullptr;
             return IGraphTransformer::TStatus::Ok;
         }
 
@@ -1563,31 +1615,19 @@ namespace NYql::NTypeAnnImpl {
 
         // Refetch particular type after EnsureTypeRewrite.
         inputType = inputTypeNode->GetTypeAnn();
-        const auto premapArgType = inputType->Cast<TTypeExprType>()->GetType();
+        premapArgType = inputType->Cast<TTypeExprType>()->GetType();
         if (!EnsureStructType(inputTypeNode->Pos(), *premapArgType, ctx)) {
             return IGraphTransformer::TStatus::Error;
         }
-        const auto premapArgStructType = premapArgType->Cast<TStructExprType>();
 
-        const auto& inputItems = streamStructType->GetItems();
+        const auto pos = inputTypeNode->Pos(ctx);
+        const auto premapArgStructType = premapArgType->Cast<TStructExprType>();
         for (const auto& item : premapArgStructType->GetItems()) {
             const auto itemName = TString::Join(inputPrefix, item->GetName());
-            const auto itemIdx = streamStructType->FindItem(itemName);
-            if (!itemIdx) {
-                ctx.AddError(TIssue(inputTypeNode->Pos(ctx),
-                                    TStringBuilder() << itemName << " member is missing in the input stream"));
-                return IGraphTransformer::TStatus::Error;
-            }
-            const auto itemType = inputItems[*itemIdx]->GetItemType();
-            if (itemType != item->GetItemType() &&
-                itemType != ctx.MakeType<TOptionalExprType>(item->GetItemType())) {
-                ctx.AddError(TIssue(inputTypeNode->Pos(ctx),
-                                    TStringBuilder() << itemName << " type differs from the premap arg member " << item->GetName() << ": " << *itemType << " is not " << *item->GetItemType()));
+            if (!EnsureListJoinInputMember(pos, streamStructType, itemName, item->GetItemType(), ctx)) {
                 return IGraphTransformer::TStatus::Error;
             }
         }
-
-        inputPremapArgType = premapArgType;
         return IGraphTransformer::TStatus::Ok;
     }
 
@@ -1625,9 +1665,9 @@ namespace NYql::NTypeAnnImpl {
         const TTypeAnnotationNode* keyArgType = nullptr;
         const TTypeAnnotationNode* leftPremapArgType = nullptr;
         const TTypeAnnotationNode* rightPremapArgType = nullptr;
-        const auto typeStatus = BuildListJoinCoreArgType(inputStructType, keyTypeNode, "_yql_ljc_key_", keyArgType, ctx.Expr)
-            .Combine(BuildListJoinCoreArgType(inputStructType, leftInputTypeNode, "_yql_ljc_left_input_", leftPremapArgType, ctx.Expr))
-            .Combine(BuildListJoinCoreArgType(inputStructType, rightInputTypeNode, "_yql_ljc_right_input_", rightPremapArgType, ctx.Expr));
+        const auto typeStatus = BuildListJoinCoreKeyArgType(inputStructType, keyTypeNode, keyArgType, ctx.Expr)
+            .Combine(BuildListJoinCoreListArgType(inputStructType, leftInputTypeNode, YqlListJoinCoreLeftInputPrefix, leftPremapArgType, ctx.Expr))
+            .Combine(BuildListJoinCoreListArgType(inputStructType, rightInputTypeNode, YqlListJoinCoreRightInputPrefix, rightPremapArgType, ctx.Expr));
 
         if (typeStatus != IGraphTransformer::TStatus::Ok) {
             return typeStatus;

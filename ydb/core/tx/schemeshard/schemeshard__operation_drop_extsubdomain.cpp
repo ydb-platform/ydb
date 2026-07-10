@@ -347,27 +347,7 @@ public:
         NIceDb::TNiceDb db(context.GetDB());
 
         auto relatedTx = context.SS->GetRelatedTransactions({path.Base()->PathId}, context.Ctx);
-
-        for (auto otherTxId: relatedTx) {
-            if (otherTxId == OperationId.GetTxId()) {
-                continue;
-            }
-
-            YDB_LOG_NOTICE_CTX(context.Ctx, "TDropExtSubdomain Propose dependence has found",
-                {"dependentTransaction", OperationId.GetTxId()},
-                {"parentTransaction", otherTxId},
-                {"schemeshard", ssId});
-
-            context.OnComplete.Dependence(otherTxId, OperationId.GetTxId());
-
-            Y_ABORT_UNLESS(context.SS->Operations.contains(otherTxId));
-            auto otherOperation = context.SS->Operations.at(otherTxId);
-            for (ui32 partId = 0; partId < otherOperation->Parts.size(); ++partId) {
-                if (auto part = otherOperation->Parts.at(partId)) {
-                    part->AbortUnsafe(OperationId.GetTxId(), context);
-                }
-            }
-        }
+        NForceDrop::AbortRelatedOperations(OperationId, relatedTx, context, "TDropExtSubdomain Propose dependence has found");
 
         context.SS->MarkAsDropping(path.Base(), OperationId.GetTxId(), context.Ctx);
 

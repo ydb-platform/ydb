@@ -33,6 +33,7 @@ SRCS(
     functions_executor_wrapper.h
     functions_executor_wrapper.cpp
     topic_service_ut.cpp
+    topic_deferred_publish_ut.cpp
     demo_tx.cpp
 
     partition_writer_cache_actor_ut.cpp
@@ -55,6 +56,8 @@ PEERDIR(
     ydb/public/sdk/cpp/src/client/persqueue_public
     ydb/public/sdk/cpp/src/client/table
     ydb/public/sdk/cpp/src/client/topic
+    ydb/public/sdk/cpp/src/client/coordination
+    ydb/public/sdk/cpp/src/client/rate_limiter
     ydb/public/sdk/cpp/src/client/proto
     ydb/services/persqueue_v1
 )

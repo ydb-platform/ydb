@@ -49,6 +49,8 @@ PEERDIR(
     yql/essentials/public/issue
 )
 
+GENERATE_ENUM_SERIALIZATION(kqp_script_executions_impl.h)
+
 YQL_LAST_ABI_VERSION()
 
 END()

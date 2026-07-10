@@ -125,7 +125,7 @@ public:
     }
 
     TGlobalContext Analyze(TCompletionInput input, TEnvironment env) override {
-        TParsedInput parsed = Parser_->Parse(std::move(input));
+        TParsedInput parsed = Parser_->Parse(input);
 
         INamedNodes::TPtr nodes = ResolveNamedNodes(parsed, env);
 
@@ -164,7 +164,7 @@ public:
 
     TGlobalContext Analyze(TCompletionInput input, TEnvironment env) override {
         const bool isAnsiLexer = IsAnsiQuery(TString(input.Text));
-        return GetSpecialized(isAnsiLexer).Analyze(std::move(input), std::move(env));
+        return GetSpecialized(isAnsiLexer).Analyze(input, std::move(env));
     }
 
 private:

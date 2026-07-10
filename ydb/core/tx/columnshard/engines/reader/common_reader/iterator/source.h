@@ -115,6 +115,7 @@ private:
     virtual ui64 DoGetEntityRecordsCount() const override;
 
     std::optional<bool> IsSourceInMemoryFlag;
+    bool InFlightReleasedFlag = false;
     TAtomic SourceFinishedSafeFlag = 0;
     TAtomic StageResultBuiltFlag = 0;
     virtual void DoOnSourceFetchingFinishedSafe(IDataReader& owner, const std::shared_ptr<IDataSource>& sourcePtr) = 0;
@@ -357,6 +358,15 @@ public:
 
     bool StartFetchingColumns(const std::shared_ptr<IDataSource>& sourcePtr, const TFetchingScriptCursor& step, const TColumnsSetIds& columns) {
         return DoStartFetchingColumns(sourcePtr, step, columns);
+    }
+
+    bool IsInFlightReleased() const {
+        return InFlightReleasedFlag;
+    }
+
+    void SetInFlightReleased() {
+        AFL_VERIFY(!InFlightReleasedFlag);
+        InFlightReleasedFlag = true;
     }
 
     void ResetSourceFinishedFlag();

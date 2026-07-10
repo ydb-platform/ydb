@@ -51,11 +51,6 @@ inline NActors::TActorId MakeKqpSchedulerServiceId(ui32 nodeId) {
     return NActors::TActorId(nodeId, TStringBuf(name, 12));
 }
 
-inline NActors::TActorId MakeKqpDescribeSchemaSecretServiceId(ui32 nodeId) {
-    const char name[12] = "kqp_dsc_sec";
-    return NActors::TActorId(nodeId, TStringBuf(name, 12));
-}
-
 inline NActors::TActorId MakeKqpQueryTextCacheServiceId(ui32 nodeId) {
     const char name[12] = "kqp_qtcache";
     return NActors::TActorId(nodeId, TStringBuf(name, 12));

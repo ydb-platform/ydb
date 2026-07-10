@@ -548,7 +548,7 @@ namespace {
         }
 
         if (!settings.VisitChanges && (output != input)) {
-            return IGraphTransformer::TStatus(IGraphTransformer::TStatus::Repeat, true);
+            return IGraphTransformer::TStatus(IGraphTransformer::TStatus::Repeat, /*hasRestart=*/true);
         }
 
         return IGraphTransformer::TStatus::Ok;
@@ -561,7 +561,7 @@ namespace {
         TExprContext& ctx, const TOptimizeExprSettings& settings) try
     {
         YQL_ENSURE(optimizer);
-        TOptimizationContext<TCallableOptimizerFast> optCtx(optimizer, nullptr, ctx, settings);
+        TOptimizationContext<TCallableOptimizerFast> optCtx(optimizer, /*replaces=*/nullptr, ctx, settings);
         bool changed = false;
         output = OptimizeNode(input, changed, optCtx, 0U);
 
@@ -569,7 +569,7 @@ namespace {
             return IGraphTransformer::TStatus::Error;
 
         if (changed)
-            return IGraphTransformer::TStatus(IGraphTransformer::TStatus::Repeat, true);
+            return IGraphTransformer::TStatus(IGraphTransformer::TStatus::Repeat, /*hasRestart=*/true);
 
         return IGraphTransformer::TStatus::Ok;
     } catch (const std::exception& e) {
@@ -581,13 +581,13 @@ namespace {
 IGraphTransformer::TStatus OptimizeExpr(const TExprNode::TPtr& input, TExprNode::TPtr& output, TCallableOptimizer optimizer,
     TExprContext& ctx, const TOptimizeExprSettings& settings)
 {
-    return OptimizeExprInternal(input, output, optimizer, nullptr, ctx, settings);
+    return OptimizeExprInternal(input, output, optimizer, /*replaces=*/nullptr, ctx, settings);
 }
 
 IGraphTransformer::TStatus OptimizeExprEx(const TExprNode::TPtr& input, TExprNode::TPtr& output, TCallableOptimizerEx optimizer,
     TExprContext& ctx, const TOptimizeExprSettings& settings)
 {
-    return OptimizeExprInternal(input, output, optimizer, nullptr, ctx, settings);
+    return OptimizeExprInternal(input, output, optimizer, /*replaces=*/nullptr, ctx, settings);
 }
 
 IGraphTransformer::TStatus OptimizeExpr(const TExprNode::TPtr& input, TExprNode::TPtr& output, const TCallableOptimizerFast& optimizer,
@@ -1005,11 +1005,11 @@ IGraphTransformer::TStatus ExpandApplyImpl(const TExprNode::TPtr& input, TExprNo
 }
 
 IGraphTransformer::TStatus ExpandApply(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
-    return ExpandApplyImpl(input, output, ctx, true);
+    return ExpandApplyImpl(input, output, ctx, /*expandCons=*/true);
 }
 
 IGraphTransformer::TStatus ExpandApplyWithoutCons(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
-    return ExpandApplyImpl(input, output, ctx, false);
+    return ExpandApplyImpl(input, output, ctx, /*expandCons=*/false);
 }
 
 IGraphTransformer::TStatus ExpandApplyNoRepeat(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {

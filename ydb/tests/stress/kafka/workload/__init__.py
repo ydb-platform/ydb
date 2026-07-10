@@ -76,7 +76,8 @@ class Workload(unittest.TestCase):
 
         print("Running workload topic run")
         processes = [
-            subprocess.Popen([self.cli_path, "-e", self.endpoint, "-d", self.database, "workload", "topic", "run", "write", "--topic", self.test_topic_path, "-s", "10", "--message-rate", "100"])
+            subprocess.Popen([self.cli_path, "-e", self.endpoint, "-d", self.database, "workload", "topic", "run", "write",
+                             "--topic", self.test_topic_path, "-s", "10", "--message-rate", "100"], start_new_session=True)
         ]
         print("NumWorkers: ", self.num_workers)
         print("Bootstrap:", self.bootstrap, "Endpoint:", self.endpoint, "Database:", self.database)
@@ -88,7 +89,8 @@ class Workload(unittest.TestCase):
             for j in range(self.num_workers):
                 processes.append(subprocess.Popen([java_path, "-jar", jar_file_path, self.bootstrap,
                                                    f"streams-store-{i * self.num_workers + j}", self.test_topic_path,
-                                                   targetTopicName, f"workload-consumer-{i}", use_transactions, use_idempotence]))
+                                                   targetTopicName, f"workload-consumer-{i}", use_transactions, use_idempotence],
+                                                  start_new_session=True))
         processes[0].wait()
         assert processes[0].returncode == 0
 
@@ -98,7 +100,13 @@ class Workload(unittest.TestCase):
 
         print("Killing processes")
         for i in range(1, len(processes)):
-            os.kill(processes[i].pid, signal.SIGKILL)
+            self._kill_process_tree(processes[i])
+
+        for i in range(1, len(processes)):
+            try:
+                processes[i].wait(timeout=30)
+            except subprocess.TimeoutExpired:
+                print(f"Process {processes[i].pid} did not terminate in time")
 
         topic_description = self.driver.topic_client.describe_topic(self.test_topic_path, include_stats=True)
         print(topic_description)
@@ -116,16 +124,31 @@ class Workload(unittest.TestCase):
                 totalMessCountTest += testCount
                 totalMessCountTarget += targetCount
 
-            print(f"target {self.target_topic_path}-{i}. totalMessCountTest = {totalMessCountTest},"
-                  "totalMessCountTarget = {totalMessCountTarget}")
+            print(f"target {self.target_topic_path}-{i}. totalMessCountTest = {totalMessCountTest}, "
+                  f"totalMessCountTarget = {totalMessCountTarget}")
             if i >= 1:
-                assert totalMessCountTest <= totalMessCountTarget, "Source message count is greater than the target {self.target_topic_path}-{i} topic's message count:" + \
-                       f"{totalMessCountTest} and {totalMessCountTarget} respectively."
+                assert totalMessCountTest <= totalMessCountTarget, f"Source message count is greater than the target {self.target_topic_path}-{i} topic's message count:" + \
+                    f"{totalMessCountTest} and {totalMessCountTarget} respectively."
             else:
                 assert totalMessCountTest == totalMessCountTarget, f"Source and target {self.target_topic_path}-{i} topics total messages count are not equal:" + \
-                       "{totalMessCountTest} and {totalMessCountTarget} respectively."
+                    f"{totalMessCountTest} and {totalMessCountTarget} respectively."
             print(f"Total num of messages: {totalMessCountTest}")
         return
+
+    def _kill_process_tree(self, process):
+        if process.poll() is not None:
+            return
+        try:
+            pgid = os.getpgid(process.pid)
+            os.killpg(pgid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+        except OSError as e:
+            print(f"Failed to kill process group for pid {process.pid}: {e}")
+            try:
+                os.kill(process.pid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
 
     def read_messages(self, topic: str, consumer: str):
         with self.driver.topic_client.reader(topic, consumer) as reader:

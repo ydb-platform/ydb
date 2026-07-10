@@ -1,0 +1,12 @@
+USE plato;
+
+$ordered = SELECT * FROM Input ORDER BY key;
+MATERIALIZE $ordered INTO $result;
+
+SELECT
+    *
+FROM
+    $result
+WHERE
+    key = "075"
+;

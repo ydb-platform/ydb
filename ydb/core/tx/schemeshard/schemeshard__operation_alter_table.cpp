@@ -101,7 +101,9 @@ TTableInfo::TAlterDataPtr ParseParams(const TPath& path, TTableInfo::TPtr table,
         && !copyAlter.HasTTLSettings()
         && !copyAlter.HasReplicationConfig()
         && !copyAlter.HasIncrementalBackupConfig()
-        && !copyAlter.HasDetailedMetricsSettings())
+        && !copyAlter.HasDetailedMetricsSettings()
+        && copyAlter.MultiColumnStatisticsSize() == 0
+        && copyAlter.DropMultiColumnStatisticsSize() == 0)
     {
         errStr = Sprintf("No changes specified");
         status = NKikimrScheme::StatusInvalidParameter;
@@ -254,6 +256,7 @@ TTableInfo::TAlterDataPtr ParseParams(const TPath& path, TTableInfo::TPtr table,
         .EnableTableDatetime64 = AppData()->FeatureFlags.GetEnableTableDatetime64(),
         .EnableParameterizedDecimal = AppData()->FeatureFlags.GetEnableParameterizedDecimal(),
         .EnableDetailedMetrics = AppData()->FeatureFlags.GetEnableDataShardDetailedMetrics(),
+        .EnableColumnStatistics = AppData()->FeatureFlags.GetEnableColumnStatistics(),
     };
 
 

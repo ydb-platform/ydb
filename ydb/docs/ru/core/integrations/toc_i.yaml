@@ -20,10 +20,20 @@ items:
     mode: link
     path: ingestion/toc-ingestion.yaml
 - name: Миграции данных
+  href: data-migration/index.md
+  include:
+    mode: link
+    path: data-migration/toc-data-migration.yaml
+- name: Миграции схемы
   href: migration/index.md
   include:
     mode: link
     path: migration/toc-migration.yaml
+- name: Движки выполнения запросов
+  href: query-engines/index.md
+  include:
+    mode: link
+    path: query-engines/toc-query-engines.yaml
 - name: Объектно-реляционное отображение
   href: orm/index.md
   include:
@@ -34,5 +44,8 @@ items:
   include:
     mode: link
     path: vectorsearch/toc-vectorsearch.yaml
-- name: Конвертер SQL-диалектов в YQL
-  href: sql-dialect-converter.md
+- name: Конвертация SQL-диалектов
+  href: sql-translation/index.md
+  include:
+    mode: link
+    path: sql-translation/toc-sql-translation.yaml

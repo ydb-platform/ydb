@@ -62,7 +62,7 @@ struct TSchemeShard::TForcedCompaction::TTxCreate: public TRwTxBase {
                 .IsResolved()
                 .NotDeleted()
                 .NotUnderDeleting()
-                .IsTable()
+                .FailOnWrongType({NKikimrSchemeOp::EPathTypeTable, NKikimrSchemeOp::EPathTypeColumnTable})
                 .IsTheSameDomain(subdomainPath);
 
             if (!checks) {
@@ -82,6 +82,20 @@ struct TSchemeShard::TForcedCompaction::TTxCreate: public TRwTxBase {
             return Reply(std::move(response), Ydb::StatusIds::BAD_REQUEST, "max_shards_in_flight must be greater than 0");
         }
 
+        if (tablePath.Base()->IsColumnTable()) {
+            if (settings.cascade()) {
+                return Reply(std::move(response), Ydb::StatusIds::BAD_REQUEST, "Cascade compaction is not supported for column tables");
+            }
+            // Only standalone column tables are supported. Tables that belong to a column store share
+            // their shards, so forced compaction of a single such table is not supported (and enumerating
+            // its owned shards below would fail).
+            auto tableInfo = Self->ColumnTables.at(tablePath.Base()->PathId);
+            if (!tableInfo->IsStandalone()) {
+                return Reply(std::move(response), Ydb::StatusIds::BAD_REQUEST,
+                    "Forced compaction is not supported for tables in a column store");
+            }
+        }
+
         auto info = MakeIntrusive<TForcedCompactionInfo>();
         info->Id = id;
         info->State = TForcedCompactionInfo::EState::InProgress;
@@ -90,6 +104,7 @@ struct TSchemeShard::TForcedCompaction::TTxCreate: public TRwTxBase {
         info->Cascade = settings.cascade();
         info->MaxShardsInFlight = settings.max_shards_in_flight();
         info->StartTime = ctx.Now();
+
         if (request.HasUserSID()) {
             info->UserSID = request.GetUserSID();
         }
@@ -140,9 +155,17 @@ struct TSchemeShard::TForcedCompaction::TTxCreate: public TRwTxBase {
         TVector<std::pair<TShardIdx, TPathId>> shardsToCompact;
 
         for (const auto& tablePathId : info->TablesToCompact) {
-            auto tableInfo = Self->Tables.at(tablePathId);
-            for (const auto* shardInfo : tableInfo->GetPartitions()) {
-                shardsToCompact.emplace_back(shardInfo->ShardIdx, tablePathId);
+            auto path = Self->PathsById.at(tablePathId);
+            if (path->IsColumnTable()) {
+                auto tableInfo = Self->ColumnTables.at(tablePathId);
+                for (const auto& shardIdx : tableInfo->BuildOwnedColumnShardsVerified()) {
+                    shardsToCompact.emplace_back(shardIdx, tablePathId);
+                }
+            } else {
+                auto tableInfo = Self->Tables.at(tablePathId);
+                for (const auto* shardInfo : tableInfo->GetPartitions()) {
+                    shardsToCompact.emplace_back(shardInfo->ShardIdx, tablePathId);
+                }
             }
         }
 
@@ -156,6 +179,13 @@ struct TSchemeShard::TForcedCompaction::TTxCreate: public TRwTxBase {
         info->TotalShardCount = shardsToCompact.size();
 
         NIceDb::TNiceDb db(txc.DB);
+
+        if (!Self->TryFreeForcedCompactionSlot(db, ctx)) {
+            return Reply(std::move(response), Ydb::StatusIds::PRECONDITION_FAILED, TStringBuilder()
+                << "Number of stored forced compaction operations reached the limit of "
+                << Self->ForcedCompactionStoredOperationsLimit);
+        }
+
         Self->PersistForcedCompactionState(db, *info);
         Self->PersistForcedCompactionShards(db, *info, shardsToCompact);
 
@@ -163,6 +193,7 @@ struct TSchemeShard::TForcedCompaction::TTxCreate: public TRwTxBase {
         for (const auto& [shardIdx, pathId] : shardsToCompact) {
             Self->AddForcedCompactionShard(shardIdx, pathId, info);
         }
+
         Self->FromForcedCompactionInfo(*response->Record.MutableForcedCompaction(), *info);
 
         Reply(std::move(response));

@@ -194,6 +194,9 @@ public:
         if (it == SchemeShardLocalPathIds.end()) {
             return std::nullopt;
         }
+        if (it->second.DropVersion) {
+            return std::nullopt;
+        }
         return it->second.CopyVersion;
     }
 
@@ -516,6 +519,18 @@ public:
 
     const THashSet<ui32>& GetSchemaPresets() const {
         return SchemaPresetsIds;
+    }
+
+    // Tables belonging to a column store carry a non-standalone schema preset (id != 0), whereas
+    // standalone column tables use an inline schema (their only preset, if any, is the id-0
+    // placeholder registered on load). So a non-zero preset id means this tablet backs a column store.
+    bool IsStoreTablet() const {
+        for (const ui32 presetId : SchemaPresetsIds) {
+            if (presetId != 0) {
+                return true;
+            }
+        }
+        return false;
     }
 
     bool HasPrimaryIndex() const {

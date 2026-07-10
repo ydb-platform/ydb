@@ -5,9 +5,35 @@
 #include <util/generic/maybe.h>
 #include <util/generic/vector.h>
 #include <util/generic/string.h>
+#include <util/generic/yexception.h>
+
+#include <utility>
 
 namespace NKikimr {
 namespace NKqp {
+
+inline std::pair<TString, TString> SplitAliasedMemberName(const TString& name) {
+    if (name.StartsWith("_alias_")) {
+        TString alias;
+        size_t i = 7;
+        for (; i < name.size(); ++i) {
+            if (name[i] == '\\' && i + 1 < name.size()) {
+                alias += name[++i];
+                continue;
+            }
+            if (name[i] == '.') {
+                break;
+            }
+            alias += name[i];
+        }
+        Y_ENSURE(i < name.size(), "Invalid _alias_ prefix: no separator dot");
+        return {std::move(alias), name.substr(i + 1)};
+    }
+    if (auto idx = name.rfind('.'); idx != TString::npos) {
+        return {name.substr(0, idx), name.substr(idx + 1)};
+    }
+    return {TString(), name};
+}
 
 /**
  * Info Unit is a reference to a column in the plan
@@ -21,28 +47,7 @@ struct TInfoUnit {
     }
 
     TInfoUnit(const TString& name, bool subplanContext = false) : SubplanContext(subplanContext) {
-        if (name.StartsWith("_alias_")) {
-            TString alias;
-            size_t i = 7;
-            for (; i < name.size(); ++i) {
-                if (name[i] == '\\' && i + 1 < name.size()) {
-                    alias += name[++i];
-                    continue;
-                }
-                if (name[i] == '.') {
-                    break;
-                }
-                alias += name[i];
-            }
-            Alias = alias;
-            ColumnName = (i < name.size()) ? name.substr(i + 1) : TString();
-        } else if (auto idx = name.rfind('.'); idx != TString::npos) {
-            Alias = name.substr(0, idx);
-            ColumnName = name.substr(idx + 1);
-        } else {
-            Alias = "";
-            ColumnName = name;
-        }
+        std::tie(Alias, ColumnName) = SplitAliasedMemberName(name);
     }
     TInfoUnit() = default;
     ~TInfoUnit() = default;

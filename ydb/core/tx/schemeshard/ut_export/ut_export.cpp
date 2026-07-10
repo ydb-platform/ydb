@@ -19,11 +19,7 @@
 #include <ydb/core/util/aws.h>
 #include <ydb/core/wrappers/s3_wrapper.h>
 #include <ydb/core/wrappers/ut_helpers/s3_mock.h>
-<<<<<<< HEAD
-=======
-#include <ydb/library/aws_init/aws.h>
 #include <ydb/public/lib/value/value.h>
->>>>>>> 673263db5e4 (backup cancel on propose for cs (#45851))
 
 #include <library/cpp/testing/hook/hook.h>
 
@@ -1110,68 +1106,6 @@ namespace {
             return *TestEnv;
         }
 
-<<<<<<< HEAD
-=======
-        void ExportImportStandaloneColumnTableWithLocalBloomIndexes(bool enableLocalIndexAsSchemeObject) {
-            Env();
-            Runtime().GetAppData().FeatureFlags.SetEnableColumnTablesBackup(true);
-            Runtime().GetAppData().FeatureFlags.SetEnableLocalIndexAsSchemeObject(enableLocalIndexAsSchemeObject);
-
-            ui64 txId = 100;
-
-            TestCreateColumnTable(Runtime(), ++txId, "/MyRoot",
-                NLocalIndexes::OlapTableWithBloomAndNgramIndexes("OlapBloomTable"));
-            Env().TestWaitNotification(Runtime(), txId);
-
-            auto assertBloomIndexes = [this](const TString& path) {
-                const auto d = DescribePrivatePath(Runtime(), path, true, true);
-                UNIT_ASSERT_C(d.GetPathDescription().HasColumnTableDescription(), "expected column table at " << path);
-                const auto& schema = d.GetPathDescription().GetColumnTableDescription().GetSchema();
-                THashSet<TString> found;
-                for (const auto& ix : schema.GetIndexes()) {
-                    found.insert(ix.GetName());
-                }
-
-                UNIT_ASSERT_C(found.contains("idx_bloom"), "missing idx_bloom on " << path);
-                UNIT_ASSERT_C(found.contains("idx_ngram"), "missing idx_ngram on " << path);
-            };
-
-            assertBloomIndexes("/MyRoot/OlapBloomTable");
-
-            const ui64 exportTxId = ++txId;
-            TestExport(Runtime(), exportTxId, "/MyRoot", Sprintf(R"(
-            ExportToS3Settings {
-              endpoint: "localhost:%d"
-              scheme: HTTP
-              items {
-                source_path: "/MyRoot/OlapBloomTable"
-                destination_prefix: "OlapBloomExport"
-              }
-            }
-        )", S3Port()));
-            Env().TestWaitNotification(Runtime(), exportTxId);
-            TestGetExport(Runtime(), exportTxId, "/MyRoot", Ydb::StatusIds::SUCCESS);
-
-            const ui64 importId = ++txId;
-            TestImport(Runtime(), importId, "/MyRoot", Sprintf(R"(
-            ImportFromS3Settings {
-              endpoint: "localhost:%d"
-              scheme: HTTP
-              items {
-                source_prefix: "OlapBloomExport"
-                destination_path: "/MyRoot/OlapBloomImported"
-              }
-            }
-        )", S3Port()));
-            Env().TestWaitNotification(Runtime(), importId);
-            TestGetImport(Runtime(), importId, "/MyRoot", Ydb::StatusIds::SUCCESS);
-
-            assertBloomIndexes("/MyRoot/OlapBloomImported");
-
-            TestForgetExport(Runtime(), ++txId, "/MyRoot", exportTxId);
-            Env().TestWaitNotification(Runtime(), exportTxId);
-        }
-
         struct TColumnTableInfo {
             ui64 PathId = 0;
             ui64 ShardId = 0;
@@ -1354,7 +1288,6 @@ namespace {
             FinalizeColumnTableSlowS3Export(ctx);
         }
 
->>>>>>> 673263db5e4 (backup cancel on propose for cs (#45851))
     private:
         TPortManager PortManager;
         ui16 S3ServerPort = 0;

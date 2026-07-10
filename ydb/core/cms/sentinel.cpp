@@ -850,7 +850,7 @@ class TStateUpdater: public TUpdaterBase<TEvSentinel::TEvStateUpdated, TStateUpd
                 const auto safeState = SafePDiskState(info.GetState());
                 YDB_LOG_TRACE("SafePDiskState",
                     {"name", Name()},
-                    {"pdiskId", it->first},
+                    {"PDiskId", it->first},
                     {"original", (ui32)info.GetState()},
                     {"safeState", safeState});
 
@@ -1140,7 +1140,7 @@ class TSentinel: public TActorBootstrapped<TSentinel> {
             if (it == SentinelState->Nodes.end()) {
                 YDB_LOG_ERROR("Missing node info",
                     {"name", Name()},
-                    {"pdiskId", id});
+                    {"PDiskId", id});
                 info.IgnoreReason = NKikimrCms::TPDiskInfo::MISSING_NODE;
                 continue;
             }
@@ -1194,7 +1194,7 @@ class TSentinel: public TActorBootstrapped<TSentinel> {
 
             YDB_LOG_NOTICE("PDisk status changed",
                 {"name", Name()},
-                {"pdiskId", id},
+                {"PDiskId", id},
                 {"status", status},
                 {"requiredStatus", requiredStatus},
                 {"reason", reason},
@@ -1435,7 +1435,7 @@ class TSentinel: public TActorBootstrapped<TSentinel> {
 
             YDB_LOG_NOTICE("PDisk status has been changed",
                 {"name", Name()},
-                {"pdiskId", id});
+                {"PDiskId", id});
 
             (*Counters->PDisksChanged)++;
         };
@@ -1488,7 +1488,7 @@ class TSentinel: public TActorBootstrapped<TSentinel> {
 
                 YDB_LOG_CRIT("PDisk status has NOT been changed",
                     {"name", Name()},
-                    {"pdiskId", kv.first});
+                    {"PDiskId", kv.first});
 
                 (*Counters->PDisksNotChanged)++;
             }

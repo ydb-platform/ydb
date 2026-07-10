@@ -505,7 +505,7 @@ void TClusterInfo::UpdatePDiskState(const TPDiskID &id, const NKikimrWhiteboard:
 {
     if (!HasPDisk(id)) {
         YDB_LOG_ERROR("Cannot update state for unknown PDisk",
-            {"pdiskId", id});
+            {"PDiskId", id});
         return;
     }
 
@@ -563,7 +563,7 @@ void TClusterInfo::UpdateVDiskState(const TVDiskID &id, const NKikimrWhiteboard:
         }
 
         YDB_LOG_ERROR("Cannot update state for unknown VDisk",
-            {"VDiskID", id});
+            {"VDiskId", id});
         return;
     }
 
@@ -586,7 +586,7 @@ void TClusterInfo::AddBSGroup(const NKikimrBlobStorage::TBaseConfig::TGroup &inf
         if (!HasPDisk(pdiskId)) {
             YDB_LOG_ERROR("Group refers unknown pdisk",
                 {"groupId", bsgroup.GroupId},
-                {"pdiskId", pdiskId});
+                {"PDiskId", pdiskId});
             return;
         }
 
@@ -595,8 +595,8 @@ void TClusterInfo::AddBSGroup(const NKikimrBlobStorage::TBaseConfig::TGroup &inf
         if (!pdisk.VSlots.contains(vdisk.GetVSlotId())) {
             YDB_LOG_ERROR("Group refers unknown slot in disk",
                 {"groupId", bsgroup.GroupId},
-                {"vslotId", vdisk.GetVSlotId()},
-                {"pdiskId", pdiskId});
+                {"VSlotId", vdisk.GetVSlotId()},
+                {"PDiskId", pdiskId});
             return;
         }
 

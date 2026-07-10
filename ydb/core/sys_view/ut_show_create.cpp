@@ -2469,8 +2469,7 @@ Y_UNIT_TEST(TableSystemTableWithEmptyKeyColumnIds) {
     NQuery::TQueryClient queryClient(env.GetDriver());
     auto session = queryClient.GetSession().GetValueSync().GetSession();
 
-    // The issue specifically mentions .sys/tables as the problematic table
-    // We test this and a few other system tables to ensure robustness
+    // We test a few representative system tables to ensure SHOW CREATE TABLE is robust
     TVector<TString> systemTablesToTest = {
         "/Root/.sys/query_sessions",
         "/Root/.sys/partition_stats",

@@ -38,11 +38,8 @@ public:
 
 private:
     ui64 TxId = 0;
-<<<<<<< HEAD
-=======
     bool DoComplete = false;
     TActorId Subscriber;
->>>>>>> 5427ca9d9ef (fix TxProgress enqueue (#43594))
 };
 
 void TColumnShard::Handle(TEvDataShard::TEvCancelBackup::TPtr& ev, const TActorContext& ctx) {

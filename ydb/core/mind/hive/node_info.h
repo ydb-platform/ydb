@@ -216,29 +216,7 @@ public:
 
     bool BecomeConnected();
 
-    bool BecomeDisconnected() {
-        if (VolatileState != EVolatileState::Disconnected) {
-            TVector<TTabletInfo*> TabletsToRestart;
-            for (const auto& t : Tablets) {
-                for (const auto& j : t.second) {
-                    TabletsToRestart.push_back(j);
-                }
-            }
-            for (const auto& t : TabletsToRestart) {
-                t->BecomeStopped();
-            }
-            Y_ABORT_UNLESS(GetTabletsTotal() == 0, "%s", DumpTablets().data());
-            Local = TActorId();
-            ChangeVolatileState(EVolatileState::Disconnected);
-            for (TTabletInfo* tablet : TabletsToRestart) {
-                if (tablet->IsReadyToBoot()) {
-                    tablet->InitiateBoot();
-                }
-            }
-            return true;
-        }
-        return false;
-    }
+    bool BecomeDisconnected();
 
     bool BecomeDisconnecting() {
         if (VolatileState == EVolatileState::Connected) {

@@ -60,6 +60,35 @@ void TNodeInfo::ChangeVolatileState(EVolatileState state) {
     VolatileState = state;
 }
 
+bool TNodeInfo::BecomeDisconnected() {
+    if (VolatileState != EVolatileState::Disconnected) {
+        TVector<TTabletInfo*> tabletsToRestart;
+        for (const auto& t : Tablets) {
+            for (const auto& j : t.second) {
+                tabletsToRestart.push_back(j);
+            }
+        }
+        for (const auto& t : tabletsToRestart) {
+            t->BecomeStopped();
+        }
+        Y_ABORT_UNLESS(GetTabletsTotal() == 0, "%s", DumpTablets().data());
+        Local = TActorId();
+        ChangeVolatileState(EVolatileState::Disconnected);
+        const bool lockedTabletsSendMetrics = Hive.CurrentConfig.GetLockedTabletsSendMetrics();
+        for (TTabletInfo* tablet : tabletsToRestart) {
+            if (lockedTabletsSendMetrics && tablet->IsLeader() && tablet->AsLeader().IsLockedToActor()) {
+                tablet->BecomeUnknown(this);
+                continue;
+            }
+            if (tablet->IsReadyToBoot()) {
+                tablet->InitiateBoot();
+            }
+        }
+        return true;
+    }
+    return false;
+}
+
 bool TNodeInfo::OnTabletChangeVolatileState(TTabletInfo* tablet, TTabletInfo::EVolatileState newState) {
     if (Freeze) {
         tablet->PreferredNodeId = Id;

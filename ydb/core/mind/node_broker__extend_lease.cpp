@@ -58,7 +58,7 @@ public:
             return Error(TStatus::WRONG_REQUEST, "Node ID is banned", ctx);
 
         auto &node = it->second;
-        if (node.Expire < Self->Dirty.Epoch.NextEnd) {
+        if (Self->Dirty.IsLeaseExtendable(node)) {
             Self->Dirty.ExtendLease(node);
             Self->Dirty.DbAddNode(node, txc);
             Self->Dirty.UpdateEpochVersion();
@@ -67,6 +67,7 @@ public:
         }
 
         Response->Record.SetExpire(node.Expire.GetValue());
+        Response->Record.SetExpireV2(node.ExpireV2.GetValue());
         Response->Record.MutableStatus()->SetCode(TStatus::OK);
         Self->Dirty.Epoch.Serialize(*Response->Record.MutableEpoch());
 

@@ -5,8 +5,6 @@
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
 
-#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
-
 namespace NKikimr::NSchemeShard {
 
 TTenantShredManager::TStarter::TStarter(TTenantShredManager* const manager)
@@ -21,7 +19,7 @@ NOperationQueue::EStartStatus TTenantShredManager::StartShredOperation(const TSh
     auto ctx = SchemeShard->ActorContext();
     auto it = SchemeShard->ShardInfos.find(shardIdx);
     if (it == SchemeShard->ShardInfos.end()) {
-        YDB_LOG_WARN_CTX(ctx, "[TenantShredManager] [Start] Failed to resolve shard info",
+        YDB_LOG_WARN_CTX(ctx, "[TenantShredManager] [Start] Failed to resolve shard info for",
             {"shred", shardIdx},
             {"schemeshard", SchemeShard->TabletID()});
         return NOperationQueue::EStartStatus::EOperationRemove;
@@ -274,7 +272,7 @@ void TTenantShredManager::HandleDisconnect(TTabletId tabletId, const TActorId& c
         it->second != clientId) {
         return;
     }
-    YDB_LOG_INFO_CTX(ctx, "[TenantShredManager] [Disconnect] Shred disconnect",
+    YDB_LOG_INFO_CTX(ctx, "[TenantShredManager] [Disconnect] Shred disconnect to",
         {"tablet", tabletId},
         {"schemeshard", SchemeShard->TabletID()});
     WaitingShardsCounter->Inc();
@@ -390,9 +388,10 @@ void TTenantShredManager::CleanupOldGenerationsOnRestore(NIceDb::TNiceDb& db, co
             // This should never occur because of the way the collection is initialized. Nevertheless, throwing
             // an assertion from non-core logic—which includes the obsolete record shredding mechanism—is risky,
             // so only a warning is output.
-            YDB_LOG_WARN_CTX(ctx, "[TenantShredManager] Restore: Invalid element in >= current shredding generation Element will be skipped. This should never occur",
-                {"collection", generation},
-                {"generation", Generation});
+            LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                "[TenantShredManager] Restore: Invalid element in collection: " << generation << 
+                " >= current shredding generation " << Generation << 
+                ". Element will be skipped. This should never occur.");
         } else {
             db.Table<Schema::TenantShredGenerations>().Key(generation).Delete();
         }
@@ -486,4 +485,158 @@ struct TSchemeShard::TTxCompleteShredShard : public TSchemeShard::TRwTxBase {
 
     void DoComplete(const TActorContext& ctx) override {
         if (Response) {
-            YDB_LOG_DEBUG_CTX(ctx, "")
+            YDB_LOG_DEBUG_CTX(ctx, "DoComplete",
+                {"gen", Self->TenantShredManager->GetGeneration()});
+            Self->PipeClientCache->Send(ctx, ui64(Self->ParentDomainId.OwnerId), Response.release());
+        }
+    }
+
+private:
+    bool IsSuccess(TEvDataShard::TEvVacuumResult::TPtr& ev) const {
+        const auto& record = ev->Get()->Record;
+        return record.GetStatus() == NKikimrTxDataShard::TEvVacuumResult::OK;
+    }
+
+    void HandleBadStatus(TEvDataShard::TEvVacuumResult::TPtr& ev, const TActorContext& ctx) const {
+        const auto& record = ev->Get()->Record;
+        YDB_LOG_DEBUG_CTX(ctx, "TTxCompleteShredShard: shred failed at with",
+            {"dataShard", record.GetTabletId()},
+            {"status", NKikimrTxDataShard::TEvVacuumResult::EStatus_Name(record.GetStatus())},
+            {"schemeshard", Self->TabletID()});
+        Self->TenantShredManager->RetryShred(TTabletId(record.GetTabletId()));
+    }
+
+    ui64 GetCompletedGeneration(TEvDataShard::TEvVacuumResult::TPtr& ev) const {
+        const auto& record = ev->Get()->Record;
+        return record.GetVacuumGeneration();
+    }
+
+    ui64 GetTabletId(TEvDataShard::TEvVacuumResult::TPtr& ev) const {
+        const auto& record = ev->Get()->Record;
+        return record.GetTabletId();
+    }
+
+    bool IsSuccess(TEvKeyValue::TEvVacuumResponse::TPtr& ev) {
+        const auto& record = ev->Get()->Record;
+        return record.status() == NKikimrKeyValue::VacuumResponse::STATUS_SUCCESS;
+    }
+
+    void HandleBadStatus(TEvKeyValue::TEvVacuumResponse::TPtr& ev, const TActorContext& ctx) const {
+        const auto& record = ev->Get()->Record;
+        YDB_LOG_DEBUG_CTX(ctx, "TTxCompleteShredShard: shred failed at with",
+            {"keyValue", record.tablet_id()},
+            {"status", NKikimrKeyValue::VacuumResponse::Status_Name(record.status())},
+            {"schemeshard", Self->TabletID()});
+        Self->TenantShredManager->RetryShred(TTabletId(record.tablet_id()));
+    }
+
+    ui64 GetCompletedGeneration(TEvKeyValue::TEvVacuumResponse::TPtr& ev) const {
+        const auto& record = ev->Get()->Record;
+        return record.actual_generation();
+    }
+
+    ui64 GetTabletId(TEvKeyValue::TEvVacuumResponse::TPtr& ev) const {
+        const auto& record = ev->Get()->Record;
+        return record.tablet_id();
+    }
+};
+
+template <typename TEvType>
+NTabletFlatExecutor::ITransaction* TSchemeShard::CreateTxCompleteShredShard(TEvType& ev) {
+    return new TTxCompleteShredShard(this, ev);
+}
+
+template NTabletFlatExecutor::ITransaction* TSchemeShard::CreateTxCompleteShredShard<TEvDataShard::TEvVacuumResult::TPtr>(TEvDataShard::TEvVacuumResult::TPtr& ev);
+template NTabletFlatExecutor::ITransaction* TSchemeShard::CreateTxCompleteShredShard<TEvKeyValue::TEvVacuumResponse::TPtr>(TEvKeyValue::TEvVacuumResponse::TPtr& ev);
+
+struct TSchemeShard::TTxAddNewShardToShred : public TSchemeShard::TRwTxBase {
+    TEvPrivate::TEvAddNewShardToShred::TPtr Ev;
+    std::unique_ptr<TEvSchemeShard::TEvTenantShredResponse> Response = nullptr;
+
+    TTxAddNewShardToShred(TSelf *self, TEvPrivate::TEvAddNewShardToShred::TPtr& ev)
+        : TRwTxBase(self)
+        , Ev(std::move(ev))
+    {}
+
+    TTxType GetTxType() const override { return TXTYPE_ADD_SHARDS_SHRED; }
+
+    void DoExecute(TTransactionContext& txc, const TActorContext& ctx) override {
+        YDB_LOG_DEBUG_CTX(ctx, "TTxAddEntryToShred Execute",
+            {"schemeshard", Self->TabletID()});
+
+        auto& shredManager = Self->TenantShredManager;
+        if (shredManager->GetStatus() != EShredStatus::IN_PROGRESS) {
+            return;
+        }
+        NIceDb::TNiceDb db(txc.DB);
+        if (!Ev->Get()->Shards.empty()) {
+            shredManager->StartShredForNewShards(db, Ev->Get()->Shards);
+        }
+        if (shredManager->GetStatus() == EShredStatus::COMPLETED) {
+            Response = std::make_unique<TEvSchemeShard::TEvTenantShredResponse>(Self->ParentDomainId, shredManager->GetGeneration(), NKikimrScheme::TEvTenantShredResponse::COMPLETED);
+        }
+    }
+
+    void DoComplete(const TActorContext& ctx) override {
+        if (Response) {
+            YDB_LOG_DEBUG_CTX(ctx, "TTxAddEntryToShred Complete at Send to root schemeshard",
+                {"schemeshard", Self->TabletID()},
+                {"gen", Self->TenantShredManager->GetGeneration()});
+            Self->PipeClientCache->Send(ctx, ui64(Self->ParentDomainId.OwnerId), Response.release());
+        }
+    }
+};
+
+NTabletFlatExecutor::ITransaction* TSchemeShard::CreateTxAddNewShardToShred(TEvPrivate::TEvAddNewShardToShred::TPtr& ev) {
+    return new TTxAddNewShardToShred(this, ev);
+}
+
+struct TSchemeShard::TTxCancelShredShards : public TSchemeShard::TRwTxBase {
+    const std::vector<TShardIdx> ShredShards;
+    std::unique_ptr<TEvSchemeShard::TEvTenantShredResponse> Response = nullptr;
+
+    TTxCancelShredShards(TSelf *self, const std::vector<TShardIdx>& shredShards)
+        : TRwTxBase(self)
+        , ShredShards(shredShards)
+    {}
+
+    TTxType GetTxType() const override { return TXTYPE_CANCEL_SHARDS_SHRED; }
+
+    void DoExecute(TTransactionContext& txc, const TActorContext& ctx) override {
+        YDB_LOG_DEBUG_CTX(ctx, "TTxCancelShredShards Execute",
+            {"schemeshard", Self->TabletID()});
+
+        auto& shredManager = Self->TenantShredManager;
+        if (shredManager->GetStatus() != EShredStatus::IN_PROGRESS) {
+            return;
+        }
+        NIceDb::TNiceDb db(txc.DB);
+        for (const auto& shard : ShredShards) {
+            if (shredManager->StopWaitingShred(shard)) {
+                db.Table<Schema::WaitingShredShards>().Key(shard.GetOwnerId(), shard.GetLocalId()).Delete();
+            }
+        }
+        if (shredManager->GetStatus() == EShredStatus::COMPLETED) {
+            db.Table<Schema::TenantShredGenerations>().Key(shredManager->GetGeneration()).Update<Schema::TenantShredGenerations::Status>(shredManager->GetStatus());
+            Response = std::make_unique<TEvSchemeShard::TEvTenantShredResponse>(Self->ParentDomainId, shredManager->GetGeneration(), NKikimrScheme::TEvTenantShredResponse::COMPLETED);
+        }
+    }
+
+    void DoComplete(const TActorContext& ctx) override {
+        YDB_LOG_DEBUG_CTX(ctx, "TTxCancelShredShards Complete",
+            {"schemeshard", Self->TabletID()});
+        if (Response) {
+            YDB_LOG_DEBUG_CTX(ctx, "TTxCancelShredShards Complete at Send to root schemeshard",
+                {"schemeshard", Self->TabletID()},
+                {"gen", Self->TenantShredManager->GetGeneration()});
+            Self->PipeClientCache->Send(ctx, ui64(Self->ParentDomainId.OwnerId), Response.release());
+        }
+    }
+};
+
+NTabletFlatExecutor::ITransaction* TSchemeShard::CreateTxCancelShredShards(const std::vector<TShardIdx>& oldShards) {
+    return new TTxCancelShredShards(this, oldShards);
+}
+
+
+} // NKikimr::NSchemeShard

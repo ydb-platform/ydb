@@ -89,9 +89,9 @@ static TString LogMessage(const TString& ev, TOperationContext& context, bool ig
 #define DefaultHandleReply(NS, TEvType, ...) \
     bool ISubOperationState::HandleReply(::NKikimr::NS::TEvType ## __HandlePtr& ev, TOperationContext& context) { \
         const auto msg = LogMessage(DebugReply(ev), context, false); \
-        YDB_LOG_CRIT_CTX(context.Ctx, "",
-            {"#_num_0", "HandleReply " #NS},
-            {"#_#TEvType", #TEvType},
+        YDB_LOG_CRIT_CTX(context.Ctx, "", \
+            {"#_num_0", "HandleReply " #NS}, \
+            {"#_#TEvType", #TEvType}, \
             {"msg", msg}); \
         Y_FAIL_S(msg); \
     } \
@@ -100,17 +100,17 @@ static TString LogMessage(const TString& ev, TOperationContext& context, bool ig
         const bool ignore = MsgToIgnore.contains(NS::TEvType::EventType); \
         const auto msg = LogMessage(DebugReply(ev), context, ignore); \
         if (ignore) { \
-            YDB_LOG_INFO_CTX(context.Ctx, "",
-                {"#_num_0", "HandleReply " #NS},
-                {"#_#TEvType", #TEvType},
-                {"msg", msg},
+            YDB_LOG_INFO_CTX(context.Ctx, "", \
+                {"#_num_0", "HandleReply " #NS}, \
+                {"#_#TEvType", #TEvType}, \
+                {"msg", msg}, \
                 {"debug", DebugHint()}); \
             return false; \
         } \
-        YDB_LOG_CRIT_CTX(context.Ctx, "",
-            {"#_num_0", "HandleReply " #NS},
-            {"#_#TEvType", #TEvType},
-            {"msg", msg},
+        YDB_LOG_CRIT_CTX(context.Ctx, "", \
+            {"#_num_0", "HandleReply " #NS}, \
+            {"#_#TEvType", #TEvType}, \
+            {"msg", msg}, \
             {"debug", DebugHint()}); \
         Y_FAIL_S(msg); \
     } \

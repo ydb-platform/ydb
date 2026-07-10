@@ -1,15 +1,8 @@
 #include "factory.h"
 #include "bearer_credentials_provider.h"
 #include "token_accessor_client_factory.h"
-#include <ydb/core/base/appdata.h>
-#include <ydb/core/protos/auth.pb.h>
-#include <ydb/core/protos/replication.pb.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/driver/driver.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/credentials/credentials.h>
-#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/iam/iam.h>
-#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/iam_private/iam.h>
-#include <yql/essentials/providers/common/structured_token/yql_structured_token.h>
-#include <yql/essentials/providers/common/structured_token/yql_token_builder.h>
 #include <util/string/cast.h>
 
 namespace NYql {
@@ -41,18 +34,25 @@ public:
         }
     }
 
-    std::shared_ptr<NYdb::ICredentialsProviderFactory> Create(const TString& serviceAccountId, const TString& serviceAccountIdSignature) override {
-        Y_ENSURE(serviceAccountId);
-        Y_ENSURE(serviceAccountIdSignature);
+    std::shared_ptr<NYdb::ICredentialsProviderFactory> Create(const NYql::TStructuredTokenParser& parser) {
+        if (parser.HasServiceAccountIdAuth()) {
+            TString serviceAccountId;
+            TString serviceAccountIdSignature;
+            parser.GetServiceAccountIdAuth(serviceAccountId, serviceAccountIdSignature);
 
-        std::shared_ptr<NYdbGrpc::TServiceConnection<TokenAccessorService>> connection;
-        if (Connections.empty()) {
-            connection = Client->CreateGRpcServiceConnection<TokenAccessorService>(GrpcClientConfig);
-        } else {
-            connection = Connections[NextConnectionIndex++ % Connections.size()];
+            Y_ENSURE(serviceAccountId);
+            Y_ENSURE(serviceAccountIdSignature);
+
+            std::shared_ptr<NYdbGrpc::TServiceConnection<TokenAccessorService>> connection;
+            if (Connections.empty()) {
+                connection = Client->CreateGRpcServiceConnection<TokenAccessorService>(GrpcClientConfig);
+            } else {
+                connection = Connections[NextConnectionIndex++ % Connections.size()];
+            }
+
+            return CreateTokenAccessorCredentialsProviderFactory(Client, std::move(connection), serviceAccountId, serviceAccountIdSignature, RefreshPeriod, RequestTimeout);
         }
-
-        return CreateTokenAccessorCredentialsProviderFactory(Client, std::move(connection), serviceAccountId, serviceAccountIdSignature, RefreshPeriod, RequestTimeout);
+        return nullptr;
     }
 
 private:
@@ -88,50 +88,27 @@ std::shared_ptr<NYdb::ICredentialsProviderFactory> CreateCredentialsProviderFact
     }
 
     NYql::TStructuredTokenParser parser = NYql::CreateStructuredTokenParser(structuredTokenJson);
+
     if (parser.HasIAMToken()) {
         return WrapWithBearerIfNeeded(NYdb::CreateOAuthCredentialsProviderFactory(parser.GetIAMToken()), addBearerToToken); // OK for any static token (OAuth, IAM).
     }
 
-    if (parser.HasIamAuth()) {
-        NYdb::TIamServiceParams iamParams;
-        if (!NKikimr::AppData()->FeatureFlags.GetEnableExternalDataSourceAuthMethodIam()) {
-            throw yexception() << "AUTH_METHOD=IAM is disabled. Please contact your system administrator to enable it";
+    if (factory) {
+        if (auto result = factory->Create(parser)) {
+            return WrapWithBearerIfNeeded(result, addBearerToToken);
         }
-        const auto& serviceControl = NKikimr::AppData()->ReplicationConfig.GetIamServiceControl();
-
-        TString serviceAccountId;
-        TString resourceId;
-        parser.GetIamAuth(serviceAccountId, resourceId);
-
-        NYdb::TIamHost vmMetadataParams;
-        if (NKikimr::AppData()->AuthConfig.HasLocalMetadataService()) {
-            vmMetadataParams.Host = NKikimr::AppData()->AuthConfig.GetLocalMetadataService().GetHost();
-            vmMetadataParams.Port = NKikimr::AppData()->AuthConfig.GetLocalMetadataService().GetPort();
-        }
-        iamParams.SystemServiceAccountCredentials = NYdb::CreateIamCredentialsProviderFactory(vmMetadataParams);
-        iamParams.Endpoint = serviceControl.GetEndpoint();
-        iamParams.EnableSsl = serviceControl.GetEnableSsl();
-        iamParams.ServiceId = serviceControl.GetServiceId();
-        iamParams.MicroserviceId = serviceControl.GetMicroserviceId();
-        iamParams.ResourceType = serviceControl.GetResourceType();
-        iamParams.ResourceId = resourceId;
-        iamParams.TargetServiceAccountId = serviceAccountId;
-
-        return CreateIamServiceCredentialsProviderFactory(iamParams);
-    }
-    if (parser.HasTransientToken()) {
-        return NYdb::CreateOAuthCredentialsProviderFactory(parser.GetTransientToken()); // Expected serialized NACLib::TUserToken with authorized user SID and list of group SIDs.
     }
 
     if (parser.HasServiceAccountIdAuth()) {
-        TString id;
-        TString signature;
-        parser.GetServiceAccountIdAuth(id, signature);
+        ythrow yexception() << "Secured credentials factory for service account auth was not provided or configured";
+    }
 
-        if (!factory) {
-            ythrow yexception() << "You must provide credentials factory instance to transform service account credentials into IAM-token.";
-        }
-        return WrapWithBearerIfNeeded(factory->Create(id, signature), addBearerToToken);
+    if (parser.HasIamAuth()) {
+        ythrow yexception() << "Secured credentials factory for cloud auth was not provided or configured";
+    }
+
+    if (parser.HasTransientToken()) {
+        return NYdb::CreateOAuthCredentialsProviderFactory(parser.GetTransientToken()); // Expected serialized NACLib::TUserToken with authorized user SID and list of group SIDs.
     }
 
     if (parser.HasBasicAuth()) {

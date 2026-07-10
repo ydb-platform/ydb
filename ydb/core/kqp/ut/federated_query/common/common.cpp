@@ -1,6 +1,7 @@
 #include "common.h"
 
 #include <ydb/core/kqp/rm_service/kqp_rm_service.h>
+#include <ydb/core/kqp/federated_query/kqp_federated_query_mock.h>
 #include <ydb/library/yql/providers/pq/gateway/dummy/yql_pq_dummy_gateway_factory.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/credentials/credentials.h>
 
@@ -136,7 +137,7 @@ std::shared_ptr<TKikimrRunner> MakeKikimrRunner(
         NYql::NDq::CreateReadActorFactoryConfig(s3Config),
         nullptr,
         NYql::TPqGatewayConfig{},
-        options.PqGateway ? NYql::CreatePqFileGatewayFactory(options.PqGateway) : NKqp::MakePqGatewayFactory(driver),
+        options.PqGateway ? NYql::CreatePqFileGatewayFactory(options.PqGateway) : nullptr,
         nullptr,
         driver);
 
@@ -215,8 +216,11 @@ public:
     {
     }
 
-    std::shared_ptr<NYdb::ICredentialsProviderFactory> Create(const TString&, const TString&) override {
-        return std::make_shared<TStaticCredentialsProviderFactory>(YqlToken_);
+    std::shared_ptr<NYdb::ICredentialsProviderFactory> Create(const NYql::TStructuredTokenParser& parser) override {
+        if (parser.HasServiceAccountIdAuth()) {
+            return std::make_shared<TStaticCredentialsProviderFactory>(YqlToken_);
+        }
+        return nullptr;
     }
 
 private:

@@ -26,10 +26,16 @@ namespace NYql::NTestCreds {
         typedef std::shared_ptr<ISecuredServiceAccountCredentialsFactory> TPtr;
 
     public:
-        std::shared_ptr<NYdb::ICredentialsProviderFactory> Create(const TString& serviceAccountId, const TString& serviceAccountIdSignature) {
-            Y_ABORT_UNLESS(serviceAccountId == "testsaid");
-            Y_ABORT_UNLESS(serviceAccountIdSignature == "fake_signature");
-            return std::make_shared<TCredentialsProviderFactory>();
+        std::shared_ptr<NYdb::ICredentialsProviderFactory> Create(const NYql::TStructuredTokenParser& parser) override {
+            if (parser.HasServiceAccountIdAuth()) {
+                TString serviceAccountId;
+                TString serviceAccountIdSignature;
+                parser.GetServiceAccountIdAuth(serviceAccountId, serviceAccountIdSignature);
+                Y_ABORT_UNLESS(serviceAccountId == "testsaid");
+                Y_ABORT_UNLESS(serviceAccountIdSignature == "fake_signature");
+                return std::make_shared<TCredentialsProviderFactory>();
+            }
+            return nullptr;
         }
     };
 

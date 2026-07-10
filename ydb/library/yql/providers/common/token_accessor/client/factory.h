@@ -1,6 +1,8 @@
 #pragma once
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/credentials/credentials.h>
+#include <yql/essentials/providers/common/structured_token/yql_structured_token.h>
+#include <yql/essentials/providers/common/structured_token/yql_token_builder.h>
 #include <util/datetime/base.h>
 
 namespace NYql {
@@ -11,7 +13,7 @@ public:
 
 public:
     virtual ~ISecuredServiceAccountCredentialsFactory() {}
-    virtual std::shared_ptr<NYdb::ICredentialsProviderFactory> Create(const TString& serviceAccountId, const TString& serviceAccountIdSignature) = 0;
+    virtual std::shared_ptr<NYdb::ICredentialsProviderFactory> Create(const NYql::TStructuredTokenParser& parser) = 0;
 };
 
 ISecuredServiceAccountCredentialsFactory::TPtr CreateSecuredServiceAccountCredentialsOverTokenAccessorFactory(

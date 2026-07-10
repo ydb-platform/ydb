@@ -22,6 +22,8 @@ PEERDIR(
     ydb/public/sdk/cpp/adapters/executor
     ydb/public/sdk/cpp/adapters/issue
     ydb/public/sdk/cpp/src/client/extensions/discovery_mutator
+    ydb/public/sdk/cpp/src/client/iam
+    ydb/public/sdk/cpp/src/client/iam_private
     yql/essentials/core/dq_integration/transform
     yql/essentials/public/issue
     yt/yql/providers/yt/gateway/native

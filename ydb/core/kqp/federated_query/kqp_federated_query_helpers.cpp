@@ -12,6 +12,7 @@
 #include <ydb/core/protos/config.pb.h>
 #include <ydb/core/protos/feature_flags.pb.h>
 #include <ydb/core/protos/kqp_physical.pb.h>
+#include <ydb/core/protos/replication.pb.h>
 #include <ydb/core/protos/table_service_config.pb.h>
 #include <ydb/library/actors/http/http_proxy.h>
 #include <ydb/library/yql/providers/common/db_id_async_resolver/database_type.h>
@@ -22,6 +23,8 @@
 #include <ydb/public/sdk/cpp/adapters/executor/executor.h>
 #include <ydb/public/sdk/cpp/adapters/issue/issue.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/extensions/discovery_mutator/discovery_mutator.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/iam/iam.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/iam_private/iam.h>
 
 #include <yql/essentials/public/issue/yql_issue_utils.h>
 
@@ -60,7 +63,7 @@ namespace {
             LOG_NOTICE_S(*NActors::TActivationContext::ActorSystem(), NKikimrServices::KQP_GATEWAY, "Skipped describe for path '" << path << "' in external YDB database '" << database << "' with endpoint '" << endpoint << "'");
             return NThreading::MakeFuture<TGetSchemeEntryResult>(TGetSchemeEntryResult{.EntryType = NYdb::NScheme::ESchemeEntryType::Table});
         }
-        std::shared_ptr<NYdb::ICredentialsProviderFactory> credentialsProviderFactory = NYql::CreateCredentialsProviderFactoryForStructuredToken(nullptr, structuredTokenJson, false);
+        std::shared_ptr<NYdb::ICredentialsProviderFactory> credentialsProviderFactory = NYql::CreateCredentialsProviderFactoryForStructuredToken(federatedQuerySetup->CredentialsFactory, structuredTokenJson, false);
         auto driver = federatedQuerySetup->Driver;
 
         NYdb::TCommonClientSettings opts;
@@ -94,6 +97,57 @@ namespace {
                 return NThreading::MakeFuture<TGetSchemeEntryResult>(res);
             });
     }
+
+struct TSecuredTokenFactoryForIamAuth : NYql::ISecuredServiceAccountCredentialsFactory {
+    TSecuredTokenFactoryForIamAuth(const NKikimr::TAppData *appData, NYql::ISecuredServiceAccountCredentialsFactory::TPtr nextProvider = {})
+        : NextProvider(std::move(nextProvider))
+        , AppData(appData)
+    {
+    }
+
+    std::shared_ptr<NYdb::ICredentialsProviderFactory> Create(const NYql::TStructuredTokenParser& parser) override {
+        if (parser.HasIamAuth()) {
+            NYdb::TIamServiceParams iamParams;
+            if (!AppData->FeatureFlags.GetEnableExternalDataSourceAuthMethodIam()) {
+                throw yexception() << "AUTH_METHOD=IAM is disabled. Please contact your system administrator to enable it";
+            }
+            const auto& serviceControl = AppData->ReplicationConfig.GetIamServiceControl();
+
+            TString serviceAccountId;
+            TString resourceId;
+            parser.GetIamAuth(serviceAccountId, resourceId);
+
+            NYdb::TIamHost vmMetadataParams;
+            if (AppData->AuthConfig.HasLocalMetadataService()) {
+                vmMetadataParams.Host = AppData->AuthConfig.GetLocalMetadataService().GetHost();
+                vmMetadataParams.Port = AppData->AuthConfig.GetLocalMetadataService().GetPort();
+            }
+            iamParams.SystemServiceAccountCredentials = NYdb::CreateIamCredentialsProviderFactory(vmMetadataParams);
+
+            iamParams.Endpoint = serviceControl.GetEndpoint();
+            iamParams.EnableSsl = serviceControl.GetEnableSsl();
+            iamParams.ServiceId = serviceControl.GetServiceId();
+            iamParams.MicroserviceId = serviceControl.GetMicroserviceId();
+            iamParams.ResourceType = serviceControl.GetResourceType();
+            iamParams.ResourceId = resourceId;
+            iamParams.TargetServiceAccountId = serviceAccountId;
+
+            return CreateIamServiceCredentialsProviderFactory(iamParams);
+        }
+        if (NextProvider) {
+            return NextProvider->Create(parser);
+        }
+        return nullptr;
+    }
+private:
+    NYql::ISecuredServiceAccountCredentialsFactory::TPtr NextProvider;
+    const NKikimr::TAppData* AppData;
+};
+
+}
+
+NYql::ISecuredServiceAccountCredentialsFactory::TPtr CreateSecuredTokenFactoryForIamAuth(const NKikimr::TAppData *appData, NYql::ISecuredServiceAccountCredentialsFactory::TPtr nextProvider) {
+    return std::make_shared<TSecuredTokenFactoryForIamAuth>(appData, std::move(nextProvider));
 
 }  // anonymous namespace
 
@@ -201,13 +255,13 @@ namespace {
         return settings;
     }
 
-    NYql::IPqGatewayFactory::TPtr MakePqGatewayFactory(const std::shared_ptr<NYdb::TDriver>& driver, const std::optional<TLocalTopicClientSettings>& localTopicClientSettings) {
+    NYql::IPqGatewayFactory::TPtr MakePqGatewayFactory(const std::shared_ptr<NYdb::TDriver>& driver, NYql::ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory, const std::optional<TLocalTopicClientSettings>& localTopicClientSettings) {
         auto settings = MakeCommonTopicClientSettings(1, 2);
 
         return CreatePqNativeGatewayFactory(NYql::TPqGatewayServices(
             *driver,
             nullptr,
-            nullptr,
+            credentialsFactory,
             std::make_shared<NYql::TPqGatewayConfig>(),
             nullptr,
             nullptr,
@@ -293,6 +347,8 @@ namespace {
                 tokenAccessorConfig.GetConnectionPoolSize());
         }
 
+        CredentialsFactory = CreateSecuredTokenFactoryForIamAuth(appData, std::move(CredentialsFactory));
+
         // Initialize Connector client
         if (queryServiceConfig.HasGeneric()) {
             GenericGatewaysConfig = queryServiceConfig.GetGeneric();
@@ -343,7 +399,7 @@ namespace {
             S3ReadActorFactoryConfig,
             DqTaskTransformFactory,
             PqGatewayConfig,
-            MakePqGatewayFactory(Driver, LocalTopicClientSettings),
+            MakePqGatewayFactory(Driver, CredentialsFactory, LocalTopicClientSettings),
             ActorSystemPtr,
             ScriptExecutionSettings,
         };

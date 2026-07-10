@@ -10,6 +10,7 @@
 #include <ydb/core/base/feature_flags_service.h>
 #include <ydb/core/driver_lib/run/auto_config_initializer.h>
 #include <ydb/core/driver_lib/run/config_helpers.h>
+#include <ydb/core/kqp/federated_query/kqp_federated_query_mock.h>
 #include <ydb/core/viewer/viewer.h>
 #include <ydb/public/lib/base/msgbus.h>
 #include <ydb/core/grpc_services/db_metadata_cache.h>
@@ -1422,10 +1423,6 @@ namespace Tests {
 
                 auto uniqueDriver = NKqp::MakeYdbDriver(actorSystemPtr, queryServiceConfig.GetStreamingQueries().GetTopicSdkSettings());
                 FederatedQuerySetupDriver_ = NKqp::MakeSharedYdbDriverWithStop(std::move(uniqueDriver));
-                auto pqGatewayFactory = NKqp::MakePqGatewayFactory(FederatedQuerySetupDriver_, NKqp::TLocalTopicClientSettings{
-                    .ActorSystem = Runtime->GetActorSystem(nodeIdx),
-                    .ChannelBufferSize = rmConfig.GetChannelBufferSize(),
-                });
 
                 federatedQuerySetupFactory = std::make_shared<NKikimr::NKqp::TKqpFederatedQuerySetupFactoryMock>(
                     NKqp::MakeHttpGateway(queryServiceConfig.GetHttpGateway(), Runtime->GetAppData(nodeIdx).Counters),
@@ -1441,7 +1438,7 @@ namespace Tests {
                     NYql::NDq::CreateReadActorFactoryConfig(queryServiceConfig.GetS3()),
                     Settings->DqTaskTransformFactory,
                     NYql::TPqGatewayConfig{},
-                    Settings->PqGateway ? NYql::CreatePqFileGatewayFactory(Settings->PqGateway) : pqGatewayFactory,
+                    Settings->PqGateway ? NYql::CreatePqFileGatewayFactory(Settings->PqGateway) : nullptr,
                     actorSystemPtr,
                     FederatedQuerySetupDriver_);
 

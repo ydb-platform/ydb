@@ -52,8 +52,11 @@ public:
         : YqlToken_(yqlToken)
     {}
 
-    std::shared_ptr<NYdb::ICredentialsProviderFactory> Create(const TString&, const TString&) override {
-        return std::make_shared<TStaticCredentialsProviderFactory>(YqlToken_);
+    std::shared_ptr<NYdb::ICredentialsProviderFactory> Create(const NYql::TStructuredTokenParser& parser) override {
+        if (parser.HasServiceAccountIdAuth()) {
+            return std::make_shared<TStaticCredentialsProviderFactory>(YqlToken_);
+        }
+        return nullptr;
     }
 
 private:

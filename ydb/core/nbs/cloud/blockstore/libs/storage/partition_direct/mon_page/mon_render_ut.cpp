@@ -100,6 +100,8 @@ Y_UNIT_TEST_SUITE(TMonRenderTest)
         UNIT_ASSERT_STRING_CONTAINS(html, "1 Online");
         UNIT_ASSERT_STRING_CONTAINS(html, "1 Sufferer");
         UNIT_ASSERT_STRING_CONTAINS(html, "Consecutive success");
+        // The add-host button lives on the detail page only.
+        UNIT_ASSERT(!html.Contains("action=addhost"));
     }
 
     Y_UNIT_TEST(DbgDetailShowsHostsTable)
@@ -117,6 +119,20 @@ Y_UNIT_TEST_SUITE(TMonRenderTest)
             html,
             "WriteToPBuffer");   // operation column
         UNIT_ASSERT_STRING_CONTAINS(html, "back to DBGs");
+        // The add-host form: POST with parameters both in the URL (read by
+        // the tablet) and as hidden fields (read by the mon proxy router).
+        UNIT_ASSERT_STRING_CONTAINS(html, "<form method='post'");
+        UNIT_ASSERT_STRING_CONTAINS(html, "page=dbg&dbg=1&action=addhost");
+        UNIT_ASSERT_STRING_CONTAINS(
+            html,
+            "<input type='hidden' name='TabletID' value='42'/>");
+        UNIT_ASSERT_STRING_CONTAINS(
+            html,
+            "<input type='hidden' name='dbg' value='1'/>");
+        UNIT_ASSERT_STRING_CONTAINS(
+            html,
+            "<input type='hidden' name='action' value='addhost'/>");
+        UNIT_ASSERT_STRING_CONTAINS(html, "Add host");
     }
 
     Y_UNIT_TEST(DbgDetailNotFound)

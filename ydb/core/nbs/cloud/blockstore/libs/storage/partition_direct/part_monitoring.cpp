@@ -4,11 +4,14 @@
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/mon_page/mon_render.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/part_database.h>
 
+#include <ydb/library/actors/core/log.h>
 #include <ydb/library/actors/core/mon.h>
+#include <ydb/library/services/services.pb.h>
 
 #include <library/cpp/cgiparam/cgiparam.h>
 
 #include <util/generic/algorithm.h>
+#include <util/string/builder.h>
 #include <util/string/cast.h>
 
 #include <numeric>
@@ -110,11 +113,48 @@ void TPartitionActor::HandleHttpInfo(
         return;
     }
 
+    const std::optional<size_t> selectedDbg = ParseSelectedDbg(cgi);
+
+    // The "Add host" button. POST only: link prefetching must not add hosts.
+    //
+    // The index is user input from the URL, but HandleAddHostToDBG treats an
+    // out-of-range index as a bug and aborts - so bounds-check it here. All
+    // other checks live there. The reply bounces back to the same DBG page.
+    if (page == EMonPage::Dbg && selectedDbg &&
+        cgi.Get("action") == "addhost" &&
+        ev->Get()->GetMethod() == HTTP_METHOD_POST)
+    {
+        const bool dbgExists =
+            *selectedDbg < FastPathService->GetDirectBlockGroups().size();
+        if (dbgExists) {
+            LOG_INFO(
+                ctx,
+                NKikimrServices::NBS_PARTITION,
+                "%s Mon page requested AddHost dbgId=%lu",
+                LogTitle.GetWithTime().c_str(),
+                *selectedDbg);
+
+            FastPathService->RequestAddHost(*selectedDbg);
+        }
+
+        TStringBuilder reply;
+        if (dbgExists) {
+            reply << "<p>Add host requested for DBG #" << *selectedDbg
+                  << ".</p>";
+        } else {
+            reply << "<p>DBG #" << *selectedDbg << " not found.</p>";
+        }
+        // Bounce straight back to the same DBG page.
+        reply << "<meta http-equiv='refresh' content='0; ?TabletID="
+              << TabletID() << "&page=dbg&dbg=" << *selectedDbg << "'/>";
+        ctx.Send(ev->Sender, new NMon::TEvRemoteHttpInfoRes(reply));
+        return;
+    }
+
     // DBG page: gather snapshots, then render + reply in the callback. Safe
     // off-thread - captures are taken here and RenderMonPage is pure.
     auto* actorSystem = TActivationContext::ActorSystem();
     const TActorId requester = ev->Sender;
-    const std::optional<size_t> selectedDbg = ParseSelectedDbg(cgi);
 
     FastPathService->GatherMonSnapshots(selectedDbg)
         .Subscribe(

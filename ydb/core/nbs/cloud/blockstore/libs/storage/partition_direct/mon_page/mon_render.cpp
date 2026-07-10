@@ -260,6 +260,25 @@ void RenderDbgDetail(
 {
     str << "<div style='margin-bottom:0.5em;'><a href='?TabletID="
         << tabletInfo.TabletId << "&page=dbg'>&larr; back to DBGs</a></div>";
+    // POST, not a link: link prefetching must not add hosts.
+    //
+    // The same parameters go into both the action URL and the hidden fields
+    // because the request has two readers, each looking at one place only:
+    // the mon proxy picks the target tablet from the POST body, while the
+    // tablet's Cgi() reads the URL query.
+    str << "<form method='post' action='?TabletID=" << tabletInfo.TabletId
+        << "&page=dbg&dbg=" << dbg.Index
+        << "&action=addhost' style='margin-bottom:0.5em;'>"
+           "<input type='hidden' name='TabletID' value='"
+        << tabletInfo.TabletId
+        << "'/>"
+           "<input type='hidden' name='page' value='dbg'/>"
+           "<input type='hidden' name='dbg' value='"
+        << dbg.Index
+        << "'/>"
+           "<input type='hidden' name='action' value='addhost'/>"
+           "<button type='submit' class='btn btn-default'>Add host</button>"
+           "</form>";
     HTML (str) {
         TAG (TH3) {
             str << "DBG #" << dbg.Index;

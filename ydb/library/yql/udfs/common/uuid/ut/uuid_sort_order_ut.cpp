@@ -69,6 +69,41 @@ TUuidBytes GenerateV8WithFixedRandom(ui64 prefix, ui64 epochSeconds) {
     return MakeV8Bytes(prefix, epochSeconds, true);
 }
 
+TUuidBytes BuildV7ViaParseUuidToArray(ui64 timestampMs, ui32 seed) {
+    SetRandomSeed(seed);
+    std::array<ui8, NKikimr::NUuid::UUID_LEN> rfc{};
+    FillRandomBytes(rfc.data(), rfc.size());
+
+    rfc[0] = static_cast<ui8>((timestampMs >> 40) & 0xff);
+    rfc[1] = static_cast<ui8>((timestampMs >> 32) & 0xff);
+    rfc[2] = static_cast<ui8>((timestampMs >> 24) & 0xff);
+    rfc[3] = static_cast<ui8>((timestampMs >> 16) & 0xff);
+    rfc[4] = static_cast<ui8>((timestampMs >> 8) & 0xff);
+    rfc[5] = static_cast<ui8>(timestampMs & 0xff);
+    rfc[6] = static_cast<ui8>((rfc[6] & 0x0f) | 0x70);
+    rfc[8] = static_cast<ui8>((rfc[8] & 0x3f) | 0x80);
+
+    std::array<ui8, NKikimr::NUuid::UUID_LEN> ydb{};
+    RfcBytesToYdbInternal(rfc.data(), ydb.data());
+    return ydb;
+}
+
+TUuidBytes BuildV8ViaParseUuidToArray(ui64 prefix, ui64 epochSeconds, ui32 seed) {
+    SetRandomSeed(seed);
+    std::array<ui8, NKikimr::NUuid::UUID_LEN> rfc{};
+    FillRandomBytes(rfc.data(), rfc.size());
+    rfc[6] = static_cast<ui8>((rfc[6] & 0x0f) | 0x80);
+    rfc[8] = static_cast<ui8>((rfc[8] & 0x3f) | 0x80);
+
+    ui64 msb = ReadBe64(rfc.data());
+    msb = UpdateMsb(msb, prefix, epochSeconds, true);
+    WriteBe64(msb, rfc.data());
+
+    std::array<ui8, NKikimr::NUuid::UUID_LEN> ydb{};
+    RfcBytesToYdbInternal(rfc.data(), ydb.data());
+    return ydb;
+}
+
 } // namespace
 
 Y_UNIT_TEST_SUITE(TUuidSortOrder) {
@@ -92,6 +127,45 @@ Y_UNIT_TEST_SUITE(TUuidSortOrder) {
         SetRandomSeed(88);
         const auto v8WithoutPrefix = MakeV8Bytes(0, epochSeconds, true);
         UNIT_ASSERT(CompareUuidBytes(v8WithSmallPrefix, v8WithoutPrefix) != 0);
+    }
+
+    Y_UNIT_TEST(V7MatchesParseUuidToArrayInternalLayout) {
+        const ui64 timestampMs = 1'700'000'123'456ULL;
+        SetRandomSeed(31415);
+        const auto generated = MakeV7Bytes(timestampMs);
+        const auto viaParse = BuildV7ViaParseUuidToArray(timestampMs, 31415);
+        UNIT_ASSERT_VALUES_EQUAL(generated, viaParse);
+    }
+
+    Y_UNIT_TEST(V8MatchesParseUuidToArrayInternalLayout) {
+        const ui64 epochSeconds = 1'700'000'000ULL;
+        SetRandomSeed(27182);
+        const auto generated = MakeV8Bytes(kTestPrefix, epochSeconds, true);
+        const auto viaParse = BuildV8ViaParseUuidToArray(kTestPrefix, epochSeconds, 27182);
+        UNIT_ASSERT_VALUES_EQUAL(generated, viaParse);
+    }
+
+    Y_UNIT_TEST(V7MixedEndianSortOrderMatchesParseUuidToArrayAtBoundary) {
+        // At this timestamp boundary RFC chronological order and YDB memcmp order diverge.
+        // Generators must follow ParseUuidToArray (mixed-endian), not RFC byte order.
+        const ui64 earlierTimestampMs = 0x00FFFFFFULL;
+        const ui64 laterTimestampMs = 0x01000000ULL;
+
+        SetRandomSeed(16180);
+        const auto earlierGenerated = MakeV7Bytes(earlierTimestampMs);
+        SetRandomSeed(16180);
+        const auto laterGenerated = MakeV7Bytes(laterTimestampMs);
+
+        SetRandomSeed(16180);
+        const auto earlierViaParse = BuildV7ViaParseUuidToArray(earlierTimestampMs, 16180);
+        SetRandomSeed(16180);
+        const auto laterViaParse = BuildV7ViaParseUuidToArray(laterTimestampMs, 16180);
+
+        UNIT_ASSERT_VALUES_EQUAL(earlierGenerated, earlierViaParse);
+        UNIT_ASSERT_VALUES_EQUAL(laterGenerated, laterViaParse);
+        UNIT_ASSERT_VALUES_EQUAL(
+            CompareUuidBytes(earlierGenerated, laterGenerated),
+            CompareUuidBytes(earlierViaParse, laterViaParse));
     }
 
     Y_UNIT_TEST(V8LsbMatchesRfcBytesToYdbInternal) {

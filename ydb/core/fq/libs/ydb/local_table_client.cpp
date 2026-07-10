@@ -70,7 +70,7 @@ public:
             settings.MaxRetries_,
             settings.MaxTimeout_
         ))
-        , Operation(operation) {
+        , Operation(std::move(operation)) {
     }
 
     ~TRetryOperationActor() override {

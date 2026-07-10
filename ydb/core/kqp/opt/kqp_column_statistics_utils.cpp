@@ -73,7 +73,9 @@ void AddStatRequest(TActorSystem* actorSystem, TVector<NThreading::TFuture<TColu
 
         for (auto&& stat : response.StatResponses) {
             auto meta = tableMetaByPathId[stat.Req.PathId];
-            const ui32 columnTag = *stat.Req.ColumnTags.AsSingle();
+            const auto singleTag = stat.Req.ColumnTags.AsSingle();
+            Y_ENSURE(singleTag, "Expected single-column stat response");
+            const ui32 columnTag = *singleTag;
             auto columnName = meta.ColumnNameByTag[columnTag];
             auto& columnStatistics = columnStatisticsByTableName[meta.TableName].Data[columnName];
             columnStatistics.Type = meta.ColumnTypeByTag[columnTag];

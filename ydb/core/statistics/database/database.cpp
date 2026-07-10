@@ -21,6 +21,50 @@ TString SerializeColumnTags(const std::vector<ui32>& columnTags) {
     return JoinSeq(",", columnTags);
 }
 
+using TEvReadRowsRequest = NGRpcService::TGrpcRequestNoOperationCall<Ydb::Table::ReadRowsRequest, Ydb::Table::ReadRowsResponse>;
+
+void DispatchReadRowsRequest(
+        Ydb::Table::ReadRowsRequest&& readRowsRequest, const TString& database,
+        const TActorId& replyToActor, ui64 queryId) {
+    auto actorSystem = TlsActivationContext->ActorSystem();
+    auto rpcFuture = NRpcService::DoLocalRpc<TEvReadRowsRequest>(
+        std::move(readRowsRequest), database, Nothing(), TActivationContext::ActorSystem(), true
+    );
+    rpcFuture.Subscribe([replyTo = replyToActor, queryId, actorSystem](const NThreading::TFuture<Ydb::Table::ReadRowsResponse>& future) mutable {
+        const auto& response = future.GetValueSync();
+        auto query_response = std::make_unique<TEvStatistics::TEvLoadStatisticsQueryResponse>();
+
+        if (response.status() == Ydb::StatusIds::SUCCESS) {
+            NYdb::TResultSetParser parser(response.result_set());
+            const auto rowsCount = parser.RowsCount();
+            Y_ABORT_UNLESS(rowsCount < 2);
+
+            if (rowsCount == 0) {
+                YDB_LOG_WARN("[ReadRowsResponse]",
+                    {"queryId", queryId},
+                    {"rowsCount", 0});
+            }
+
+            query_response->Success = rowsCount > 0;
+
+            while(parser.TryNextRow()) {
+                auto& col = parser.ColumnParser("data");
+                // may be not optional from versions before fix of bug https://github.com/ydb-platform/ydb/issues/15701
+                query_response->Data = col.GetKind() == NYdb::TTypeParser::ETypeKind::Optional
+                    ? col.GetOptionalString()
+                    : col.GetString();
+            }
+        } else {
+            YDB_LOG_ERROR("[ReadRowsResponse]",
+                {"queryId", queryId},
+                {"issues", NYql::IssuesFromMessageAsString(response.issues())});
+            query_response->Success = false;
+        }
+
+        actorSystem->Send(replyTo, query_response.release(), 0, queryId);
+    });
+}
+
 } // anonymous namespace
 
 class TStatisticsTableCreator : public NTableCreator::TMultiTableCreator {
@@ -288,45 +332,7 @@ void DispatchLoadStatisticsQuery(
     *protoKeys->mutable_type() = NYdb::TProtoAccessor::GetProto(keys.GetType());
     *protoKeys->mutable_value() = NYdb::TProtoAccessor::GetProto(keys);
 
-    using TEvReadRowsRequest = NGRpcService::TGrpcRequestNoOperationCall<Ydb::Table::ReadRowsRequest, Ydb::Table::ReadRowsResponse>;
-
-    auto actorSystem = TlsActivationContext->ActorSystem();
-    auto rpcFuture = NRpcService::DoLocalRpc<TEvReadRowsRequest>(
-        std::move(readRowsRequest), database, Nothing(), TActivationContext::ActorSystem(), true
-    );
-    rpcFuture.Subscribe([replyTo = replyToActor, queryId, actorSystem](const NThreading::TFuture<Ydb::Table::ReadRowsResponse>& future) mutable {
-        const auto& response = future.GetValueSync();
-        auto query_response = std::make_unique<TEvStatistics::TEvLoadStatisticsQueryResponse>();
-
-        if (response.status() == Ydb::StatusIds::SUCCESS) {
-            NYdb::TResultSetParser parser(response.result_set());
-            const auto rowsCount = parser.RowsCount();
-            Y_ABORT_UNLESS(rowsCount < 2);
-
-            if (rowsCount == 0) {
-                YDB_LOG_WARN("[ReadRowsResponse]",
-                    {"queryId", queryId},
-                    {"rowsCount", 0});
-            }
-
-            query_response->Success = rowsCount > 0;
-
-            while(parser.TryNextRow()) {
-                auto& col = parser.ColumnParser("data");
-                // may be not optional from versions before fix of bug https://github.com/ydb-platform/ydb/issues/15701
-                query_response->Data = col.GetKind() == NYdb::TTypeParser::ETypeKind::Optional
-                    ? col.GetOptionalString()
-                    : col.GetString();
-                }
-        } else {
-            YDB_LOG_ERROR("[ReadRowsResponse]",
-                {"queryId", queryId},
-                {"issues", NYql::IssuesFromMessageAsString(response.issues())});
-            query_response->Success = false;
-        }
-
-        actorSystem->Send(replyTo, query_response.release(), 0, queryId);
-    });
+    DispatchReadRowsRequest(std::move(readRowsRequest), database, replyToActor, queryId);
 }
 
 
@@ -474,44 +480,7 @@ void DispatchLoadMultiColumnStatisticsQuery(
     *protoKeys->mutable_type() = NYdb::TProtoAccessor::GetProto(keys.GetType());
     *protoKeys->mutable_value() = NYdb::TProtoAccessor::GetProto(keys);
 
-    using TEvReadRowsRequest = NGRpcService::TGrpcRequestNoOperationCall<Ydb::Table::ReadRowsRequest, Ydb::Table::ReadRowsResponse>;
-
-    auto actorSystem = TlsActivationContext->ActorSystem();
-    auto rpcFuture = NRpcService::DoLocalRpc<TEvReadRowsRequest>(
-        std::move(readRowsRequest), database, Nothing(), TActivationContext::ActorSystem(), true
-    );
-    rpcFuture.Subscribe([replyTo = replyToActor, queryId, actorSystem](const NThreading::TFuture<Ydb::Table::ReadRowsResponse>& future) mutable {
-        const auto& response = future.GetValueSync();
-        auto query_response = std::make_unique<TEvStatistics::TEvLoadStatisticsQueryResponse>();
-
-        if (response.status() == Ydb::StatusIds::SUCCESS) {
-            NYdb::TResultSetParser parser(response.result_set());
-            const auto rowsCount = parser.RowsCount();
-            Y_ABORT_UNLESS(rowsCount < 2);
-
-            if (rowsCount == 0) {
-                YDB_LOG_WARN("[ReadRowsResponse]",
-                    {"queryId", queryId},
-                    {"rowsCount", 0});
-            }
-
-            query_response->Success = rowsCount > 0;
-
-            while(parser.TryNextRow()) {
-                auto& col = parser.ColumnParser("data");
-                query_response->Data = col.GetKind() == NYdb::TTypeParser::ETypeKind::Optional
-                    ? col.GetOptionalString()
-                    : col.GetString();
-                }
-        } else {
-            YDB_LOG_ERROR("[ReadRowsResponse]",
-                {"queryId", queryId},
-                {"issues", NYql::IssuesFromMessageAsString(response.issues())});
-            query_response->Success = false;
-        }
-
-        actorSystem->Send(replyTo, query_response.release(), 0, queryId);
-    });
+    DispatchReadRowsRequest(std::move(readRowsRequest), database, replyToActor, queryId);
 }
 
 

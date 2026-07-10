@@ -60,6 +60,9 @@ class Workload:
         self.successful_inserts = 0
         self.attempted_inserts = 0
 
+        # Start the solomon emulator subprocess while this process is still single-threaded
+        self.start_solomon_emulator()
+
         self.driver = ydb.Driver(ydb.DriverConfig(endpoint, database))
         self.driver.wait(timeout=60)
         self.pool = InstrumentedQuerySessionPool(self.driver)
@@ -212,7 +215,6 @@ class Workload:
             )
 
     def loop(self):
-        self.start_solomon_emulator()
         try:
             self.create_external_data_source()
             try:

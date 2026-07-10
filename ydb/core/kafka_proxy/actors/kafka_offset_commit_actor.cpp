@@ -150,7 +150,7 @@ void TKafkaOffsetCommitActor::SendGenerationCheckRequest(const TActorContext& ct
 
 void TKafkaOffsetCommitActor::Handle(NKikimr::NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const TActorContext& ctx) {
     const auto& record = ev->Get()->Record;
-    if (TryRequestMetadataTablesCreation(record.GetYdbStatus(), Context->ResourceDatabasePath, ctx)) {
+    if (TryRequestConsumerMetadataTablesCreation(record.GetYdbStatus(), Context->ResourceDatabasePath, ctx)) {
         Error = COORDINATOR_NOT_AVAILABLE;
         SendFailedForAllPartitions(Error, ctx);
         return;

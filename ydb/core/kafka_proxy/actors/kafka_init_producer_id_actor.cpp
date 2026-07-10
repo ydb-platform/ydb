@@ -1,5 +1,6 @@
 #include "kafka_init_producer_id_actor.h"
 #include "kafka_init_producer_id_actor_sql.h"
+#include "kafka_metadata_service.h"
 #include <ydb/core/kafka_proxy/kafka_transactional_producers_initializers.h>
 #include <ydb/core/kafka_proxy/kafka_transactions_coordinator.h>
 #include <ydb/core/kafka_proxy/kqp_helper.h>
@@ -122,6 +123,12 @@ namespace NKafka {
 
         if (kafkaErr != EKafkaErrors::NONE_ERROR) {
             auto kqpQueryError = TStringBuilder() <<" Kqp error. Status# " << status << ", ";
+
+            if (TryRequestProducerMetadataTablesCreation(status, Context->ResourceDatabasePath, ctx)) {
+                SendResponseFail(COORDINATOR_NOT_AVAILABLE, kqpQueryError);
+                Die(ctx);
+                return;
+            }
 
             NYql::TIssues issues;
             NYql::IssuesFromMessage(record.GetResponse().GetQueryIssues(), issues);

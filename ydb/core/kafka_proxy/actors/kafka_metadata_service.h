@@ -15,9 +15,14 @@ class TKafkaMetadataService: public NActors::TActorBootstrapped<TKafkaMetadataSe
     using TBase = NActors::TActorBootstrapped<TKafkaMetadataService>;
 
 public:
-    TKafkaMetadataService(const NActors::TActorId& requester, const TString& databasePath)
-        : Requester(requester)
-        , DatabasePath(databasePath) {}
+    enum class ETables {
+        ConsumerGroupsAndMembers,
+        TransactionalProducers,
+    };
+
+    TKafkaMetadataService(const TString& databasePath, ETables tables)
+        : DatabasePath(databasePath)
+        , TablesType(tables) {}
 
     void Bootstrap(const NActors::TActorContext& ctx);
 
@@ -76,6 +81,7 @@ private:
 
     void InitializeConsumerMembersTable();
     void InitializeConsumerGroupsTable();
+    void InitializeTransactionalProducersTable();
     void SendCreateTableRequest(Ydb::Table::CreateTableRequest&& request, const TString& tableName);
     void SendEnableAutopartitioningRequest(const TString& tableName);
     void SendAlterTableRequest(Ydb::Table::AlterTableRequest&& request, const TString& tableName);
@@ -87,13 +93,13 @@ private:
     void Handle(TEvPrivate::TEvAclModified::TPtr& ev, const TActorContext& ctx);
     void ReplyIfRequired(const TActorContext& ctx);
 
-    static constexpr ui32 TABLES_TO_CREATE = 2;
-
-    const NActors::TActorId Requester;
     const TString DatabasePath;
+    const ETables TablesType;
+    ui32 TablesToCreate = 0;
     ui32 ProcessedRequests = 0;
 };
 
-bool TryRequestMetadataTablesCreation(Ydb::StatusIds::StatusCode status, const TString& databasePath, const NActors::TActorContext& ctx);
+bool TryRequestConsumerMetadataTablesCreation(Ydb::StatusIds::StatusCode status, const TString& databasePath, const NActors::TActorContext& ctx);
+bool TryRequestProducerMetadataTablesCreation(Ydb::StatusIds::StatusCode status, const TString& databasePath, const NActors::TActorContext& ctx);
 
 } // NKafka

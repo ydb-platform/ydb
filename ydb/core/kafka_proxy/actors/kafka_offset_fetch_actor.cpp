@@ -384,7 +384,7 @@ void NKafka::TKafkaOffsetFetchActor::Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr
     std::vector<std::pair<std::optional<TString>, TConsumerProtocolAssignment>> assignments;
     KAFKA_LOG_D("Received KQP response");
 
-    if (ev && TryRequestMetadataTablesCreation(ev->Get()->Record.GetYdbStatus(), Context->ResourceDatabasePath, ctx)) {
+    if (ev && TryRequestConsumerMetadataTablesCreation(ev->Get()->Record.GetYdbStatus(), Context->ResourceDatabasePath, ctx)) {
         auto response = GetOffsetFetchResponse();
         Send(Context->ConnectionId, new TEvKafka::TEvResponse(CorrelationId, response, EKafkaErrors::COORDINATOR_NOT_AVAILABLE));
         Die(ctx);

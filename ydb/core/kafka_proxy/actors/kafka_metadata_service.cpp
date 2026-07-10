@@ -1,6 +1,7 @@
 #include "kafka_metadata_service.h"
 
 #include <ydb/core/kafka_proxy/actors/kafka_balancer_actor.h>
+#include <ydb/core/kafka_proxy/kafka_constants.h>
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/grpc_services/base/base.h>
@@ -15,8 +16,17 @@ using namespace NActors;
 
 void TKafkaMetadataService::Bootstrap(const NActors::TActorContext&) {
     Become(&TKafkaMetadataService::StateWork);
-    InitializeConsumerMembersTable();
-    InitializeConsumerGroupsTable();
+    switch (TablesType) {
+        case ETables::ConsumerGroupsAndMembers:
+            TablesToCreate = 2;
+            InitializeConsumerMembersTable();
+            InitializeConsumerGroupsTable();
+            break;
+        case ETables::TransactionalProducers:
+            TablesToCreate = 1;
+            InitializeTransactionalProducersTable();
+            break;
+    }
 }
 
 TString TKafkaMetadataService::GetTablePath(const TString& tableName) const {
@@ -176,6 +186,55 @@ void TKafkaMetadataService::InitializeConsumerGroupsTable() {
     SendCreateTableRequest(std::move(request), "kafka_consumer_groups");
 }
 
+void TKafkaMetadataService::InitializeTransactionalProducersTable() {
+    const TString tablePath = GetTablePath("kafka_transactional_producers");
+    KAFKA_LOG_D("Creating table " << tablePath);
+    Ydb::Table::CreateTableRequest request;
+    request.set_session_id("");
+    request.set_path(tablePath);
+    request.add_primary_key("database");
+    request.add_primary_key("transactional_id");
+    request.add_primary_key("producer_id");
+    {
+        auto& column = *request.add_columns();
+        column.set_name("database");
+        column.mutable_type()->set_type_id(Ydb::Type::UTF8);
+    }
+    {
+        auto& column = *request.add_columns();
+        column.set_name("transactional_id");
+        column.mutable_type()->set_type_id(Ydb::Type::UTF8);
+    }
+    {
+        auto& column = *request.add_columns();
+        column.set_name("producer_id");
+        // we need to use signed int, cause Kafka protocol uses signed int and we can't overflow it on client
+        column.mutable_type()->set_type_id(Ydb::Type::INT64);
+        column.mutable_from_sequence()->set_name("producer_id");
+        column.mutable_from_sequence()->set_min_value(1);
+    }
+    {
+        auto& column = *request.add_columns();
+        column.set_name("producer_epoch");
+        // we need to use signed int, cause Kafka protocol uses signed int and we can't overflow it on client
+        column.mutable_type()->set_type_id(Ydb::Type::INT16);
+    }
+    // updated_at column is only used for ttl purposes. No other business logic relys on it
+    {
+        auto& column = *request.add_columns();
+        column.set_name("updated_at");
+        column.mutable_type()->set_type_id(Ydb::Type::DATETIME);
+    }
+    {
+        auto* ttlSettings = request.mutable_ttl_settings();
+        auto* columnTtl = ttlSettings->mutable_date_type_column();
+        columnTtl->set_column_name("updated_at");
+        columnTtl->set_expire_after_seconds(NKafka::TRANSACTIONAL_ID_EXPIRATION_MS);
+    }
+
+    SendCreateTableRequest(std::move(request), "kafka_transactional_producers");
+}
+
 void TKafkaMetadataService::SendCreateTableRequest(Ydb::Table::CreateTableRequest&& request, const TString& tableName) {
     using TCreateTableRpc =
         NKikimr::NGRpcService::TGrpcRequestOperationCall<Ydb::Table::CreateTableRequest, Ydb::Table::CreateTableResponse>;
@@ -278,7 +337,6 @@ void TKafkaMetadataService::Handle(TEvPrivate::TEvTableCreated::TPtr& ev, const 
     if (status != Ydb::StatusIds::SUCCESS && status != Ydb::StatusIds::ALREADY_EXISTS) {
         LOG_ERROR_S(ctx, NKikimrServices::KAFKA_PROXY,
             "Failed to create kafka metadata table '" << msg->TableName << "': " << msg->Error);
-        // что тут делать?
         ++ProcessedRequests;
         ReplyIfRequired(ctx);
         return;
@@ -317,7 +375,6 @@ void TKafkaMetadataService::Handle(TEvPrivate::TEvAclModified::TPtr& ev, const T
     if (status != Ydb::StatusIds::SUCCESS) {
         LOG_ERROR_S(ctx, NKikimrServices::KAFKA_PROXY,
             "Failed to set read-only ACL for kafka metadata table '" << msg->TableName << "': " << msg->Error);
-        // что делать?
         ++ProcessedRequests;
         ReplyIfRequired(ctx);
         return;
@@ -331,19 +388,29 @@ void TKafkaMetadataService::Handle(TEvPrivate::TEvAclModified::TPtr& ev, const T
 }
 
 void TKafkaMetadataService::ReplyIfRequired(const TActorContext& ctx) {
-    if (ProcessedRequests == TABLES_TO_CREATE) {
+    if (ProcessedRequests == TablesToCreate) {
         KAFKA_LOG_I("All metadata tables are created for database " << DatabasePath);
         Die(ctx);
     }
 }
 
-bool TryRequestMetadataTablesCreation(Ydb::StatusIds::StatusCode status, const TString& databasePath, const TActorContext& ctx) {
+static bool TryRequestMetadataTablesCreation(Ydb::StatusIds::StatusCode status, const TString& databasePath,
+                                             TKafkaMetadataService::ETables tables, const TActorContext& ctx) {
     if (!NKikimr::AppData()->FeatureFlags.GetEnableServerlessTransactions() || status != Ydb::StatusIds::SCHEME_ERROR) {
         return false;
     }
 
-    KAFKA_LOG_D("Kafka metadata tables are missing for database '" << databasePath << "'. Requesting their creation and asking the client to retry.");
-    ctx.Register(new TKafkaMetadataService(ctx.SelfID, databasePath));
+    LOG_DEBUG_S(ctx, NKikimrServices::KAFKA_PROXY, TStringBuilder() << "Kafka metadata tables are missing for database '" << databasePath
+            << "'. Requesting their creation and asking the client to retry.");
+    ctx.Register(new TKafkaMetadataService(databasePath, tables));
     return true;
+}
+
+bool TryRequestConsumerMetadataTablesCreation(Ydb::StatusIds::StatusCode status, const TString& databasePath, const TActorContext& ctx) {
+    return TryRequestMetadataTablesCreation(status, databasePath, TKafkaMetadataService::ETables::ConsumerGroupsAndMembers, ctx);
+}
+
+bool TryRequestProducerMetadataTablesCreation(Ydb::StatusIds::StatusCode status, const TString& databasePath, const TActorContext& ctx) {
+    return TryRequestMetadataTablesCreation(status, databasePath, TKafkaMetadataService::ETables::TransactionalProducers, ctx);
 }
 } // namespace NKafka

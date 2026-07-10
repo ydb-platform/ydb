@@ -118,7 +118,11 @@ namespace NKafka {
 
     void TTransactionActor::Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const TActorContext& ctx) {
         KAFKA_LOG_D("Received query response from KQP for " << GetAsStr(LastSentToKqpRequest) << " request");
-        if (TryRequestMetadataTablesCreation(ev->Get()->Record.GetYdbStatus(), ResourceDatabasePath, ctx)) {
+        KAFKA_LOG_D("TTransactionActor ResourceDatabasePath=" << ResourceDatabasePath);
+        const auto ydbStatus = ev->Get()->Record.GetYdbStatus();
+        bool requestedTableCreation = TryRequestProducerMetadataTablesCreation(ydbStatus, ResourceDatabasePath, ctx)
+                || TryRequestConsumerMetadataTablesCreation(ydbStatus, ResourceDatabasePath, ctx);
+        if (requestedTableCreation) {
             SendFailResponse<TEndTxnResponseData>(EndTxnRequestPtr, EKafkaErrors::COORDINATOR_NOT_AVAILABLE,
                 "Kafka metadata tables are not initialized yet. Please retry.");
             Die(ctx);

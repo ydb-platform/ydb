@@ -429,7 +429,13 @@ void TKafkaSaslAuthActor::HandleNavigate(TEvTxProxySchemeCache::TEvNavigateKeySe
             }
         }
 
-        ResourseDatabasePath = NKikimr::JoinPath(navigate->ResultSet.front().Path);
+        if (!NKikimr::AppData()->FeatureFlags.GetEnableServerlessTransactions() && IsServerless) {
+            GetPathByPathId(navigate->ResultSet.front().DomainInfo->GetResourcesDomainKey());
+            Become(&TKafkaSaslAuthActor::StateResolveSharedDatabase);
+            return;
+        } else {
+            ResourseDatabasePath = NKikimr::JoinPath(navigate->ResultSet.front().Path);
+        }
     } else if (CurrentStateFunc() == &TThis::StateResolveSharedDatabase) {
         ResourseDatabasePath = NKikimr::JoinPath(navigate->ResultSet.front().Path);
     }

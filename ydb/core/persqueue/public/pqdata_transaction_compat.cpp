@@ -70,6 +70,19 @@ void ClearLegacyPartitionOpFields(NKikimrPQ::TPartitionOperation& op)
     op.ClearSkipConflictCheck();
 }
 
+bool IsLegacyReadOperation(const NKikimrPQ::TPartitionOperation& operation)
+{
+    return operation.HasCommitOffsetsBegin()
+        || (operation.GetKafkaTransaction() && operation.HasCommitOffsetsEnd());
+}
+
+bool IsLegacyKafkaWriteOperation(const NKikimrPQ::TPartitionOperation& operation)
+{
+    // Legacy Kafka write carries only KafkaTransaction=true on the operation;
+    // producer id lives on tx-level WriteId.
+    return operation.GetKafkaTransaction() && !IsLegacyReadOperation(operation);
+}
+
 void DowngradeTopicReadToLegacy(
     const NKikimrPQ::TPartitionOperation::TReadOp::TTopicApi& topicRead,
     NKikimrPQ::TPartitionOperation& op)
@@ -273,18 +286,17 @@ void UpgradeFromLegacy(NKikimrPQ::TPartitionOperation& op)
         return;
     }
 
-    if (op.GetKafkaTransaction() && op.HasKafkaProducerInstanceId()) {
+    if (IsLegacyReadOperation(op)) {
+        if (op.GetKafkaTransaction() && op.HasCommitOffsetsEnd()) {
+            UpgradeKafkaReadFromLegacy(op);
+        } else {
+            UpgradeTopicReadFromLegacy(op);
+        }
+        return;
+    }
+
+    if (IsLegacyKafkaWriteOperation(op) || op.HasKafkaProducerInstanceId()) {
         UpgradeKafkaWriteFromLegacy(op);
-        return;
-    }
-
-    if (op.GetKafkaTransaction() && op.HasConsumer()) {
-        UpgradeKafkaReadFromLegacy(op);
-        return;
-    }
-
-    if (op.HasConsumer()) {
-        UpgradeTopicReadFromLegacy(op);
         return;
     }
 

@@ -42,7 +42,6 @@
 using namespace NYql;
 using namespace NKikimr::NMiniKQL;
 using namespace NNodes;
-using NUdf::EDataSlot;
 
 namespace NMiniKQL = NKikimr::NMiniKQL;
 

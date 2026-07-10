@@ -28,8 +28,6 @@
 
 namespace NSQLTranslationV1 {
 
-using NALPDefaultAntlr4::SQLv1Antlr4Lexer;
-
 using namespace NSQLv1Generated;
 
 void FillTargetList(TTranslation& ctx, const TRule_set_target_list& node, TVector<TString>& targetList) {

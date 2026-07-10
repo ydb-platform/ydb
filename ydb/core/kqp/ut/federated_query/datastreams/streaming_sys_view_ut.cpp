@@ -249,7 +249,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesSysView) {
             .CheckPlan = true,
         }, {
             .Name = "B",
-            .Status = "CREATED",
+            .Status = "FAILED",
             .Text = texts[1],
         }});
     }

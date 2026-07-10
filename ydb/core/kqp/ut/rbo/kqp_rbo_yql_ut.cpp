@@ -220,7 +220,7 @@ const NJson::TJsonValue* FindConnectionNode(const NJson::TJsonValue& node, const
         if (planNodeType != map.end() && nodeType != map.end()
             && planNodeType->second.IsString() && nodeType->second.IsString()
             && planNodeType->second.GetStringSafe() == "Connection"
-            && nodeType->second.GetStringSafe().StartsWith(connectionName))
+            && nodeType->second.GetStringSafe() == connectionName)
         {
             return &node;
         }
@@ -611,6 +611,21 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         UNIT_ASSERT_C(!GetStringField(*joinOp, "JoinAlgo").empty(), plan);
         const auto condition = GetStringField(*joinOp, "Condition");
         UNIT_ASSERT_C(condition.Contains("t1.a") && condition.Contains("t2.b") && condition.Contains(" = "), plan);
+
+        const auto* hashShuffle = FindConnectionNode(simplifiedPlan, "HashShuffle");
+        UNIT_ASSERT_C(hashShuffle, plan);
+        UNIT_ASSERT_VALUES_EQUAL_C(GetStringField(*hashShuffle, "Node Type"), "HashShuffle", plan);
+        UNIT_ASSERT_C(!GetStringField(*hashShuffle, "HashFunc").empty(), plan);
+        const auto& hashShuffleMap = hashShuffle->GetMapSafe();
+        UNIT_ASSERT_C(hashShuffleMap.contains("KeyColumns") && hashShuffleMap.at("KeyColumns").IsArray(), plan);
+        UNIT_ASSERT_C(!hashShuffleMap.at("KeyColumns").GetArraySafe().empty(), plan);
+
+        NJson::TJsonValue planJson;
+        UNIT_ASSERT_C(NJson::ReadJsonTree(plan, &planJson, true), plan);
+        const auto* executionHashShuffle = FindConnectionNode(planJson.GetMapSafe().at("Plan"), "HashShuffle");
+        UNIT_ASSERT_C(executionHashShuffle, plan);
+        UNIT_ASSERT_C(executionHashShuffle->GetMapSafe().contains("KeyColumns"), plan);
+        UNIT_ASSERT_C(executionHashShuffle->GetMapSafe().contains("HashFunc"), plan);
     }
 
     Y_UNIT_TEST(ExplainJoin) {
@@ -666,10 +681,11 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
 
         const auto* mergeConnection = FindConnectionNode(simplifiedSortPlan, "Merge");
         UNIT_ASSERT_C(mergeConnection, sortPlan);
-        UNIT_ASSERT_C(GetStringField(*mergeConnection, "Node Type").StartsWith("Merge"), sortPlan);
+        UNIT_ASSERT_VALUES_EQUAL_C(GetStringField(*mergeConnection, "Node Type"), "Merge", sortPlan);
         const auto mergeSortBy = GetStringField(*mergeConnection, "SortBy");
         UNIT_ASSERT_C(mergeSortBy.Contains("a desc nulls first"), sortPlan);
         UNIT_ASSERT_C(mergeSortBy.Contains("b asc nulls first"), sortPlan);
+        UNIT_ASSERT_C(mergeConnection->GetMapSafe().contains("SortColumns"), sortPlan);
     }
 
     Y_UNIT_TEST(ExplainReadPushdown) {
@@ -7647,7 +7663,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
 
         const auto& planMap = planNode.GetMapSafe();
         if (auto nodeType = planMap.find("Node Type");
-                nodeType != planMap.end() && nodeType->second.GetStringSafe().StartsWith("HashShuffle")) {
+                nodeType != planMap.end() && nodeType->second.GetStringSafe() == "HashShuffle") {
             hashFuncs.push_back(planMap.at("HashFunc").GetStringSafe());
         }
 
@@ -7674,7 +7690,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
 
         const auto& planMap = planNode.GetMapSafe();
         if (auto nodeType = planMap.find("Node Type");
-                nodeType != planMap.end() && nodeType->second.GetStringSafe().StartsWith("HashShuffle")) {
+                nodeType != planMap.end() && nodeType->second.GetStringSafe() == "HashShuffle") {
             TVector<TString> keyColumns;
             for (const auto& key : planMap.at("KeyColumns").GetArraySafe()) {
                 keyColumns.push_back(key.GetStringSafe());
@@ -7727,7 +7743,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
 
         const auto& planMap = planNode.GetMapSafe();
         if (auto nodeType = planMap.find("Node Type"); nodeType != planMap.end()) {
-            return nodeType->second.GetStringSafe().StartsWith("HashShuffle");
+            return nodeType->second.GetStringSafe() == "HashShuffle";
         }
 
         return false;

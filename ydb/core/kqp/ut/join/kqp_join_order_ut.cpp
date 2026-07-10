@@ -183,7 +183,7 @@ void CollectHashShuffleDescriptions(const NJson::TJsonValue& planNode, TVector<T
 
     const auto& planMap = planNode.GetMapSafe();
     if (auto nodeType = planMap.find("Node Type");
-            nodeType != planMap.end() && nodeType->second.GetStringSafe().StartsWith("HashShuffle")) {
+            nodeType != planMap.end() && nodeType->second.GetStringSafe() == "HashShuffle") {
         if (auto keyColumns = planMap.find("KeyColumns"); keyColumns != planMap.end()) {
             TVector<TString> keys;
             for (const auto& key : keyColumns->second.GetArraySafe()) {

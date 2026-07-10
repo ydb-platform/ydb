@@ -1,6 +1,7 @@
 #pragma once
 
 #include <ydb/core/persqueue/common/partition_id.h>
+#include <ydb/core/persqueue/public/pqdata_transaction_compat.h>
 
 #include <ydb/core/tablet/tablet_counters.h>
 #include <ydb/library/actors/core/actorsystem_fwd.h>
@@ -27,13 +28,6 @@ void ReplyPersQueueError(
 );
 
 inline
-bool IsWriteTxOperation(const NKikimrPQ::TPartitionOperation& operation)
-{
-    bool isRead = operation.HasCommitOffsetsBegin() || (operation.GetKafkaTransaction() && operation.HasCommitOffsetsEnd());
-    return !isRead;
-}
-
-inline
 bool IsDeferredPublicationTxOperation(const NKikimrPQ::TPartitionOperation& operation)
 {
     return operation.HasWrite() && operation.GetWrite().HasDeferredPublication();
@@ -46,13 +40,15 @@ bool AllExistingWritesSkipConflictCheck(const C& ops)
     size_t flagsCount = 0;
 
     for (const auto& op : ops) {
-        if (!IsWriteTxOperation(op)) {
+        NKikimrPQ::TPartitionOperation operation = op;
+        EnsureCanonical(operation);
+        if (!IsWriteTxOperation(operation)) {
             continue;
         }
 
         ++writeOpsCount;
 
-        if (op.GetSkipConflictCheck()) {
+        if (GetSkipConflictCheck(operation)) {
             ++flagsCount;
         }
     }

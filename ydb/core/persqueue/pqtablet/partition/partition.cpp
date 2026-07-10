@@ -11,6 +11,7 @@
 #include <ydb/core/base/counters.h>
 #include <ydb/core/base/path.h>
 #include <ydb/core/persqueue/pqtablet/common/event_helpers.h>
+#include <ydb/core/persqueue/public/pqdata_transaction_compat.h>
 #include <ydb/core/persqueue/pqtablet/common/logging.h>
 #include <ydb/core/persqueue/pqtablet/common/tracing_support.h>
 #include <ydb/core/persqueue/pqtablet/partition/autopartitioning_manager.h>
@@ -1535,9 +1536,10 @@ void TPartition::Handle(TEvPQ::TEvUpdateWriteTimestamp::TPtr& ev, const TActorCo
 
 void TPartition::Handle(TEvPersQueue::TEvProposeTransaction::TPtr& ev, const TActorContext& ctx)
 {
-    const NKikimrPQ::TEvProposeTransaction& event = ev->Get()->GetRecord();
+    NKikimrPQ::TEvProposeTransaction& event = *ev->Get()->MutableRecord();
     PQ_ENSURE(event.GetTxBodyCase() == NKikimrPQ::TEvProposeTransaction::kData);
     PQ_ENSURE(event.HasData());
+    EnsureCanonical(*event.MutableData());
     const NKikimrPQ::TDataTransaction& txBody = event.GetData();
 
     if (!txBody.GetImmediate()) {
@@ -3974,14 +3976,14 @@ TPartition::EProcessResult TPartition::PreProcessImmediateTx(TTransaction& t,
     PQ_ENSURE(tx.HasData());
     TVector<TString> consumers;
     for (const auto& operation : tx.GetData().GetOperations()) {
-        if (!operation.HasCommitOffsetsBegin() || !operation.HasCommitOffsetsEnd() || !operation.HasConsumer()) {
+        if (!HasTopicReadCommit(operation) || GetReadConsumer(operation).empty()) {
             continue; //Write operation - handled separately via WriteInfo
         }
 
-        PQ_ENSURE(operation.GetCommitOffsetsBegin() <= (ui64)Max<i64>())("Unexpected begin offset", operation.GetCommitOffsetsBegin());
-        PQ_ENSURE(operation.GetCommitOffsetsEnd() <= (ui64)Max<i64>())("Unexpected end offset", operation.GetCommitOffsetsEnd());
+        PQ_ENSURE(GetReadCommitOffsetsBegin(operation) <= (ui64)Max<i64>())("Unexpected begin offset", GetReadCommitOffsetsBegin(operation));
+        PQ_ENSURE(GetReadCommitOffsetsEnd(operation) <= (ui64)Max<i64>())("Unexpected end offset", GetReadCommitOffsetsEnd(operation));
 
-        const TString& user = operation.GetConsumer();
+        const TString& user = GetReadConsumer(operation);
         if (TxAffectedConsumers.contains(user)) {
             return EProcessResult::Blocked;
         }
@@ -3992,7 +3994,7 @@ TPartition::EProcessResult TPartition::PreProcessImmediateTx(TTransaction& t,
                                  "the consumer has been deleted");
             return EProcessResult::ContinueDrop;
         }
-        if (operation.GetCommitOffsetsBegin() > operation.GetCommitOffsetsEnd()) {
+        if (GetReadCommitOffsetsBegin(operation) > GetReadCommitOffsetsEnd(operation)) {
             ScheduleReplyPropose(tx,
                                  NKikimrPQ::TEvProposeTransactionResult::BAD_REQUEST,
                                  NKikimrPQ::TError::BAD_REQUEST,
@@ -4031,18 +4033,18 @@ void TPartition::ExecImmediateTx(TTransaction& t)
         return;
     }
     for (const auto& operation : record.GetData().GetOperations()) {
-        if (operation.GetOnlyCheckCommitedToFinish()) {
+        if (GetReadOnlyCheckCommitedToFinish(operation)) {
             continue;
         }
 
-        if (!operation.HasCommitOffsetsBegin() || !operation.HasCommitOffsetsEnd() || !operation.HasConsumer()) {
+        if (!HasTopicReadCommit(operation) || GetReadConsumer(operation).empty()) {
             continue; //Write operation - handled separately via WriteInfo
         }
 
-        PQ_ENSURE(operation.GetCommitOffsetsBegin() <= (ui64)Max<i64>())("Unexpected begin offset", operation.GetCommitOffsetsBegin());
-        PQ_ENSURE(operation.GetCommitOffsetsEnd() <= (ui64)Max<i64>())("Unexpected end offset", operation.GetCommitOffsetsEnd());
+        PQ_ENSURE(GetReadCommitOffsetsBegin(operation) <= (ui64)Max<i64>())("Unexpected begin offset", GetReadCommitOffsetsBegin(operation));
+        PQ_ENSURE(GetReadCommitOffsetsEnd(operation) <= (ui64)Max<i64>())("Unexpected end offset", GetReadCommitOffsetsEnd(operation));
 
-        const TString& user = operation.GetConsumer();
+        const TString& user = GetReadConsumer(operation);
         if (!PendingUsersInfo.contains(user) && AffectedUsers.contains(user)) {
             ScheduleReplyPropose(record,
                                  NKikimrPQ::TEvProposeTransactionResult::ABORTED,
@@ -4052,7 +4054,7 @@ void TPartition::ExecImmediateTx(TTransaction& t)
         }
         TUserInfoBase& pendingUserInfo = GetOrCreatePendingUser(user);
 
-        if (!operation.GetForceCommit() && operation.GetCommitOffsetsBegin() > operation.GetCommitOffsetsEnd()) {
+        if (!GetReadForceCommit(operation) && GetReadCommitOffsetsBegin(operation) > GetReadCommitOffsetsEnd(operation)) {
             ScheduleReplyPropose(record,
                                  NKikimrPQ::TEvProposeTransactionResult::BAD_REQUEST,
                                  NKikimrPQ::TError::BAD_REQUEST,
@@ -4060,7 +4062,7 @@ void TPartition::ExecImmediateTx(TTransaction& t)
             return;
         }
 
-        if (!operation.GetForceCommit() && pendingUserInfo.Offset != (i64)operation.GetCommitOffsetsBegin()) {
+        if (!GetReadForceCommit(operation) && pendingUserInfo.Offset != (i64)GetReadCommitOffsetsBegin(operation)) {
             ScheduleReplyPropose(record,
                                  NKikimrPQ::TEvProposeTransactionResult::ABORTED,
                                  NKikimrPQ::TError::BAD_REQUEST,
@@ -4068,7 +4070,7 @@ void TPartition::ExecImmediateTx(TTransaction& t)
             return;
         }
 
-        if (!operation.GetForceCommit() && operation.GetCommitOffsetsEnd() > GetEndOffset()) {
+        if (!GetReadForceCommit(operation) && GetReadCommitOffsetsEnd(operation) > GetEndOffset()) {
             ScheduleReplyPropose(record,
                                  NKikimrPQ::TEvProposeTransactionResult::BAD_REQUEST,
                                  NKikimrPQ::TError::BAD_REQUEST,
@@ -4076,8 +4078,8 @@ void TPartition::ExecImmediateTx(TTransaction& t)
             return;
         }
 
-        if (!operation.GetReadSessionId().empty() && operation.GetReadSessionId() != pendingUserInfo.Session) {
-            if (IsActive() || operation.GetCommitOffsetsEnd() < GetEndOffset() || pendingUserInfo.Offset != i64(GetEndOffset())) {
+        if (!GetReadSessionId(operation).empty() && GetReadSessionId(operation) != pendingUserInfo.Session) {
+            if (IsActive() || GetReadCommitOffsetsEnd(operation) < GetEndOffset() || pendingUserInfo.Offset != i64(GetEndOffset())) {
                 ScheduleReplyPropose(record,
                             NKikimrPQ::TEvProposeTransactionResult::BAD_REQUEST,
                             NKikimrPQ::TError::BAD_REQUEST,
@@ -4086,11 +4088,11 @@ void TPartition::ExecImmediateTx(TTransaction& t)
             }
         }
 
-        if ((i64)operation.GetCommitOffsetsEnd() < pendingUserInfo.Offset && !operation.GetReadSessionId().empty()) {
+        if ((i64)GetReadCommitOffsetsEnd(operation) < pendingUserInfo.Offset && !GetReadSessionId(operation).empty()) {
             continue; // this is stale request, answer ok for it
         }
 
-        pendingUserInfo.Offset = operation.GetCommitOffsetsEnd();
+        pendingUserInfo.Offset = GetReadCommitOffsetsEnd(operation);
     }
     CommitWriteOperations(t);
 

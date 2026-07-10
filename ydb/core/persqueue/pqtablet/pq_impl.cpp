@@ -33,6 +33,7 @@
 #include <ydb/core/sys_view/service/sysview_service.h>
 #include <ydb/core/jaeger_tracing/sampling_throttling_configurator.h>
 #include <ydb/library/persqueue/topic_parser/counters.h>
+#include <ydb/library/yverify_stream/yverify_stream.h>
 #include <library/cpp/json/json_writer.h>
 
 #include <util/generic/strbuf.h>
@@ -732,7 +733,7 @@ void TPersQueue::InitTxWrites(const NKikimrPQ::TTabletTxInfo& info,
 
         // this branch will be executed only if EnableKafkaTransactions feature flag is enabled, cause
         // sending transactional requests through Kafka API is restricted by feature flag here: ydb/core/kafka_proxy/kafka_connection.cpp
-        if (txWrite.GetKafkaTransaction() && txWrite.HasCreatedAt()) {
+        if (writeId.IsKafkaApiTransaction() && txWrite.HasCreatedAt()) {
             writeInfo.KafkaTransaction = true;
             writeInfo.CreatedAt = TInstant::MilliSeconds(txWrite.GetCreatedAt());
         }
@@ -3330,7 +3331,7 @@ bool TPersQueue::CheckTxWriteOperation(const NKikimrPQ::TPartitionOperation& ope
                                        const TWriteId& writeId) const
 {
     TPartitionId partitionId;
-    if (operation.GetKafkaTransaction()) {
+    if (IsKafkaWriteOperation(operation)) {
         auto txWriteInfoIt = TxWrites.find(writeId);
         if (txWriteInfoIt == TxWrites.end()) {
             return false;
@@ -3344,7 +3345,7 @@ bool TPersQueue::CheckTxWriteOperation(const NKikimrPQ::TPartitionOperation& ope
     } else {
         partitionId = TPartitionId{operation.GetPartitionId(),
                                  writeId,
-                                 operation.GetSupportivePartition()};
+                                 GetSupportivePartition(operation)};
     }
     PQ_LOG_TX_D("PartitionId " << partitionId << " for WriteId " << writeId);
     return Partitions.contains(partitionId);
@@ -3379,7 +3380,7 @@ void TPersQueue::HandleDataTransaction(TAutoPtr<TEvPersQueue::TEvProposeTransact
     NKikimrPQ::TEvProposeTransaction& event = *ev->MutableRecord();
     PQ_ENSURE(event.GetTxBodyCase() == NKikimrPQ::TEvProposeTransaction::kData);
     PQ_ENSURE(event.HasData());
-    const NKikimrPQ::TDataTransaction& txBody = event.GetData();
+    NKikimrPQ::TDataTransaction& txBody = *event.MutableData();
 
     if (TabletState != NKikimrPQ::ENormal) {
         PQ_LOG_TX_W("TxId " << event.GetTxId() << " invalid PQ tablet state (" << NKikimrPQ::ETabletState_Name(TabletState) << ")");
@@ -3400,6 +3401,8 @@ void TPersQueue::HandleDataTransaction(TAutoPtr<TEvPersQueue::TEvProposeTransact
                                     ctx);
         return;
     }
+
+    EnsureCanonical(txBody);
 
     if (txBody.HasWriteId() && GetWriteId(txBody).IsDeferredPublicationApiTransaction()) {
         PQ_LOG_TX_W("TxId " << event.GetTxId() << " deferred publication is not supported");
@@ -3725,7 +3728,6 @@ bool TPersQueue::CanProcessTxWrites() const
 void TPersQueue::SubscribeWriteId(const TWriteId& writeId,
                                   const TActorContext& ctx)
 {
-    PQ_ENSURE(writeId.IsTopicApiTransaction());
     PQ_LOG_TX_D("send TEvSubscribeLock for WriteId " << writeId);
     ctx.Send(NLongTxService::MakeLongTxServiceID(writeId.GetNodeId()),
              new NLongTxService::TEvLongTxService::TEvSubscribeLock(writeId.GetKeyId(), writeId.GetNodeId()));
@@ -3734,7 +3736,6 @@ void TPersQueue::SubscribeWriteId(const TWriteId& writeId,
 void TPersQueue::UnsubscribeWriteId(const TWriteId& writeId,
                                     const TActorContext& ctx)
 {
-    PQ_ENSURE(writeId.IsTopicApiTransaction());
     PQ_LOG_TX_D("send TEvUnsubscribeLock for WriteId " << writeId);
     ctx.Send(NLongTxService::MakeLongTxServiceID(writeId.GetNodeId()),
              new NLongTxService::TEvLongTxService::TEvUnsubscribeLock(writeId.GetKeyId(), writeId.GetNodeId()));
@@ -4115,9 +4116,14 @@ void TPersQueue::SavePlanStep(NKikimrPQ::TTabletTxInfo& info)
 
 void TPersQueue::SaveTxWrites(NKikimrPQ::TTabletTxInfo& info)
 {
-    auto setKafkaTxnTimeout = [](const TTxWriteInfo& txWriteInfo, NKikimrPQ::TTabletTxInfo::TTxWriteInfo& infoToPersist) {
-        if (txWriteInfo.KafkaTransaction) {
+    auto persistTxWriteMeta = [](const TWriteId& writeId, const TTxWriteInfo& txWriteInfo,
+                                  NKikimrPQ::TTabletTxInfo::TTxWriteInfo& infoToPersist) {
+        // TTxWriteInfo.KafkaTransaction is not read by current code (type comes from WriteId).
+        // Persist it for rolling-upgrade compatibility with older PQ tablet binaries.
+        if (writeId.IsKafkaApiTransaction()) {
             infoToPersist.SetKafkaTransaction(true);
+        }
+        if (txWriteInfo.KafkaTransaction) {
             infoToPersist.SetCreatedAt(txWriteInfo.CreatedAt.MilliSeconds());
         }
     };
@@ -4126,12 +4132,12 @@ void TPersQueue::SaveTxWrites(NKikimrPQ::TTabletTxInfo& info)
         if (write.Partitions.empty()) {
             auto* txWrite = info.MutableTxWrites()->Add();
             SetWriteId(*txWrite, writeId);
-            setKafkaTxnTimeout(write, *txWrite);
+            persistTxWriteMeta(writeId, write, *txWrite);
         } else {
             for (auto [partitionId, shadowPartitionId] : write.Partitions) {
                 auto* txWrite = info.MutableTxWrites()->Add();
                 SetWriteId(*txWrite, writeId);
-                setKafkaTxnTimeout(write, *txWrite);
+                persistTxWriteMeta(writeId, write, *txWrite);
                 txWrite->SetOriginalPartitionId(partitionId);
                 txWrite->SetInternalPartitionId(shadowPartitionId.InternalPartitionId);
             }
@@ -4253,17 +4259,19 @@ void TPersQueue::SendEvTxCalcPredicateToPartitions(const TActorContext& ctx,
             event = std::make_unique<TEvPQ::TEvTxCalcPredicate>(tx.Step, tx.TxId);
         }
 
-        if (operation.HasCommitOffsetsBegin()) {
-            event->AddOperation(operation.GetConsumer(),
-                                operation.GetCommitOffsetsBegin(),
-                                operation.GetCommitOffsetsEnd(),
-                                operation.HasForceCommit() ? operation.GetForceCommit() : false,
-                                operation.HasKillReadSession() ? operation.GetKillReadSession() : false,
-                                operation.HasOnlyCheckCommitedToFinish() ? operation.GetOnlyCheckCommitedToFinish() : false,
-                                operation.HasReadSessionId() ? operation.GetReadSessionId() : "");
+        if (HasTopicReadCommit(operation)) {
+            event->AddOperation(GetReadConsumer(operation),
+                                GetReadCommitOffsetsBegin(operation),
+                                GetReadCommitOffsetsEnd(operation),
+                                GetReadForceCommit(operation),
+                                GetReadKillReadSession(operation),
+                                GetReadOnlyCheckCommitedToFinish(operation),
+                                GetReadSessionId(operation));
         }
-        if (operation.GetKafkaTransaction() && operation.HasCommitOffsetsEnd()) {
-            event->AddKafkaOffsetCommitOperation(operation.GetConsumer(), operation.GetCommitOffsetsEnd());
+        if (HasKafkaReadCommit(operation)) {
+            Y_VALIDATE(operation.GetRead().GetKafka().HasCommitOffsetsEnd(),
+                "kafka read commit operation without CommitOffsetsEnd");
+            event->AddKafkaOffsetCommitOperation(GetReadConsumer(operation), GetReadCommitOffsetsEnd(operation));
         }
     }
 

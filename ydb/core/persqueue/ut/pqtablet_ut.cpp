@@ -251,6 +251,10 @@ protected:
     bool FoundPQWriteState = false;
     bool FoundPQWriteTxs = false;
 
+    bool WriteTxRequestInterceptActive_ = false;
+    TTestActorRuntimeBase::TEventFilter PrevWriteTxRequestFilter_;
+    TAutoPtr<IEventHandle> CapturedWriteTxRequest_;
+
     void SendGetOwnershipRequest(const TGetOwnershipRequestParams& params);
     // returns ownerCookie
     TString WaitGetOwnershipResponse(const TGetOwnershipResponseMatcher& matcher);
@@ -287,6 +291,13 @@ protected:
     TVector<TString> GetSupportivePartitionsKeysFromKV();
     NKikimrPQ::TTabletTxInfo WaitForExactTxWritesCount(ui32 expectedCount);
     NKikimrPQ::TTabletTxInfo GetTxWritesFromKV();
+
+    void BeginInterceptWriteTxRequest();
+    void WaitForCapturedWriteTxRequest();
+    NKikimrPQ::TTabletTxInfo GetCapturedTxWritesFromWriteTxRequestAndFlush();
+    void EndInterceptWriteTxRequest();
+
+    void InstallWriteTxRequestInterceptFilter();
 
     void SendAppSendRsRequest(const TAppSendReadSetParams& params);
     void WaitForAppSendRsResponse(const TAppSendReadSetMatcher& matcher);
@@ -1230,6 +1241,106 @@ void TPQTabletFixture::WaitForExecStep(ui64 step)
     UNIT_FAIL("expected execution step " << step);
 }
 
+namespace {
+
+constexpr ui32 WRITE_TX_COOKIE = 5; // TPersQueue::WRITE_TX_COOKIE
+constexpr const char* TX_INFO_KEY = "_txinfo";
+
+NKikimrPQ::TTabletTxInfo ParseTxWritesFromWriteTxRequest(const NKikimrClient::TKeyValueRequest& request)
+{
+    for (const auto& cmd : request.GetCmdWrite()) {
+        if (cmd.GetKey() == TX_INFO_KEY) {
+            NKikimrPQ::TTabletTxInfo info;
+            UNIT_ASSERT(info.ParseFromString(cmd.GetValue()));
+            return info;
+        }
+    }
+    UNIT_FAIL("WRITE_TX request has no _txinfo");
+    return {};
+}
+
+THashSet<i64> CollectKafkaProducerIds(const NKikimrPQ::TTabletTxInfo& info)
+{
+    THashSet<i64> producerIds;
+    for (size_t i = 0; i < info.TxWritesSize(); ++i) {
+        const auto& writeId = info.GetTxWrites(i).GetWriteId();
+        if (writeId.GetKafkaTransaction()) {
+            producerIds.insert(writeId.GetKafkaProducerInstanceId().GetId());
+        }
+    }
+    return producerIds;
+}
+
+} // namespace
+
+void TPQTabletFixture::InstallWriteTxRequestInterceptFilter()
+{
+    auto filter = [this](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& event) -> bool {
+        if (auto* msg = event->CastAsLocal<TEvKeyValue::TEvRequest>()) {
+            if (msg->Record.HasCookie() && msg->Record.GetCookie() == WRITE_TX_COOKIE) {
+                CapturedWriteTxRequest_ = event;
+                return true;
+            }
+        }
+        return false;
+    };
+    PrevWriteTxRequestFilter_ = Ctx->Runtime->SetEventFilter(filter);
+}
+
+void TPQTabletFixture::BeginInterceptWriteTxRequest()
+{
+    UNIT_ASSERT(!WriteTxRequestInterceptActive_);
+    CapturedWriteTxRequest_.Reset();
+    InstallWriteTxRequestInterceptFilter();
+    WriteTxRequestInterceptActive_ = true;
+}
+
+void TPQTabletFixture::WaitForCapturedWriteTxRequest()
+{
+    UNIT_ASSERT(WriteTxRequestInterceptActive_);
+    if (CapturedWriteTxRequest_) {
+        return;
+    }
+
+    TDispatchOptions options;
+    options.CustomFinalCondition = [this]() {
+        return CapturedWriteTxRequest_.Get() != nullptr;
+    };
+    UNIT_ASSERT(Ctx->Runtime->DispatchEvents(options));
+    UNIT_ASSERT(CapturedWriteTxRequest_);
+}
+
+NKikimrPQ::TTabletTxInfo TPQTabletFixture::GetCapturedTxWritesFromWriteTxRequestAndFlush()
+{
+    WaitForCapturedWriteTxRequest();
+
+    const auto& request = CapturedWriteTxRequest_->Get<TEvKeyValue::TEvRequest>()->Record;
+    const NKikimrPQ::TTabletTxInfo info = ParseTxWritesFromWriteTxRequest(request);
+
+    Ctx->Runtime->SetEventFilter(PrevWriteTxRequestFilter_);
+    TAutoPtr<IEventHandle> requestToSend;
+    requestToSend.Swap(CapturedWriteTxRequest_);
+
+    SendSaveTxState(requestToSend);
+
+    StartPQWriteTxsObserver();
+    WaitForPQWriteTxs();
+
+    InstallWriteTxRequestInterceptFilter();
+
+    return info;
+}
+
+void TPQTabletFixture::EndInterceptWriteTxRequest()
+{
+    if (!WriteTxRequestInterceptActive_) {
+        return;
+    }
+    Ctx->Runtime->SetEventFilter(PrevWriteTxRequestFilter_);
+    WriteTxRequestInterceptActive_ = false;
+    CapturedWriteTxRequest_.Reset();
+}
+
 void TPQTabletFixture::InterceptSaveTxState(TAutoPtr<IEventHandle>& ev)
 {
     bool found = false;
@@ -1237,7 +1348,7 @@ void TPQTabletFixture::InterceptSaveTxState(TAutoPtr<IEventHandle>& ev)
     TTestActorRuntimeBase::TEventFilter prev;
     auto filter = [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& event) -> bool {
         if (auto* msg = event->CastAsLocal<TEvKeyValue::TEvRequest>()) {
-            if (msg->Record.HasCookie() && (msg->Record.GetCookie() == 5)) { // WRITE_TX_COOKIE
+            if (msg->Record.HasCookie() && (msg->Record.GetCookie() == WRITE_TX_COOKIE)) {
                 ev = event;
                 found = true;
                 return true;
@@ -1424,7 +1535,6 @@ NKikimrPQ::TTabletTxInfo TPQTabletFixture::GetTxWritesFromKV() {
         return {};
     }
 }
-
 
 void TPQTabletFixture::SendAppSendRsRequest(const TAppSendReadSetParams& params) {
     auto makeEv = [this, &params]() {
@@ -2629,6 +2739,47 @@ Y_UNIT_TEST_F(In_Kafka_Txn_Only_Supportive_Partitions_That_Exceeded_Timeout_Shou
     auto txInfo = GetTxWritesFromKV();
     UNIT_ASSERT_EQUAL(txInfo.TxWritesSize(), 1);
     UNIT_ASSERT_VALUES_EQUAL(txInfo.GetTxWrites(0).GetWriteId().GetKafkaProducerInstanceId().GetId(), producerInstanceId2.Id);
+}
+
+Y_UNIT_TEST_F(Kafka_Multi_Transaction_TxWrites_Stores_Distinct_Producer_Ids_In_Memory, TPQTabletFixture)
+{
+    const NKafka::TProducerInstanceId producerInstanceId1 = {1, 0};
+    const NKafka::TProducerInstanceId producerInstanceId2 = {2, 0};
+    PQTabletPrepare({.partitions=1}, {}, *Ctx);
+
+    BeginInterceptWriteTxRequest();
+    SendGetOwnershipRequest({.Partition=0,
+                             .WriteId=TWriteId{producerInstanceId1},
+                             .NeedSupportivePartition=true,
+                             .Owner=DEFAULT_OWNER,
+                             .Cookie=4});
+    const auto flushedAfterFirst = GetCapturedTxWritesFromWriteTxRequestAndFlush();
+    WaitGetOwnershipResponse({.Cookie=4, .Status=NMsgBusProxy::MSTATUS_OK});
+    EndInterceptWriteTxRequest();
+
+    const auto producerIdsAfterFirst = CollectKafkaProducerIds(flushedAfterFirst);
+    UNIT_ASSERT_VALUES_EQUAL(producerIdsAfterFirst.size(), 1u);
+    UNIT_ASSERT(producerIdsAfterFirst.contains(producerInstanceId1.Id));
+
+    BeginInterceptWriteTxRequest();
+    SendGetOwnershipRequest({.Partition=0,
+                             .WriteId=TWriteId{producerInstanceId2},
+                             .NeedSupportivePartition=true,
+                             .Owner=DEFAULT_OWNER,
+                             .Cookie=4});
+    const auto flushedAfterSecond = GetCapturedTxWritesFromWriteTxRequestAndFlush();
+    WaitGetOwnershipResponse({.Cookie=4, .Status=NMsgBusProxy::MSTATUS_OK});
+    EndInterceptWriteTxRequest();
+
+    const auto producerIdsAfterSecond = CollectKafkaProducerIds(flushedAfterSecond);
+    UNIT_ASSERT_VALUES_EQUAL(producerIdsAfterSecond.size(), 2u);
+    UNIT_ASSERT(producerIdsAfterSecond.contains(producerInstanceId1.Id));
+    UNIT_ASSERT(producerIdsAfterSecond.contains(producerInstanceId2.Id));
+
+    const auto txInfo = WaitForExactTxWritesCount(2);
+    const auto persistedProducerIds = CollectKafkaProducerIds(txInfo);
+    UNIT_ASSERT(persistedProducerIds.contains(producerInstanceId1.Id));
+    UNIT_ASSERT(persistedProducerIds.contains(producerInstanceId2.Id));
 }
 
 Y_UNIT_TEST_F(Kafka_Transaction_Incoming_Before_Previous_TEvDeletePartitionDone_Came_Should_Be_Processed_After_Previous_Complete_Erasure, TPQTabletFixture) {

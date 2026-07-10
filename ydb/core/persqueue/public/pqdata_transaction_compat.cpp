@@ -296,4 +296,156 @@ void EnsureCanonical(NKikimrPQ::TPartitionOperation& op)
     UpgradeFromLegacy(op);
 }
 
+namespace {
+
+void EnsureCanonicalOperations(google::protobuf::RepeatedPtrField<NKikimrPQ::TPartitionOperation>& operations)
+{
+    for (NKikimrPQ::TPartitionOperation& operation : operations) {
+        EnsureCanonical(operation);
+    }
+}
+
+void DowngradeOperations(google::protobuf::RepeatedPtrField<NKikimrPQ::TPartitionOperation>& operations)
+{
+    for (NKikimrPQ::TPartitionOperation& operation : operations) {
+        DowngradeToLegacy(operation);
+    }
+}
+
+} // namespace
+
+void EnsureCanonical(NKikimrPQ::TDataTransaction& tx)
+{
+    EnsureCanonicalOperations(*tx.MutableOperations());
+    if (tx.HasWriteId()) {
+        EnsureCanonical(*tx.MutableWriteId());
+    }
+}
+
+void DowngradeToLegacy(NKikimrPQ::TDataTransaction& tx)
+{
+    DowngradeOperations(*tx.MutableOperations());
+    if (tx.HasWriteId()) {
+        DowngradeToLegacy(*tx.MutableWriteId());
+    }
+}
+
+bool IsReadTxOperation(const NKikimrPQ::TPartitionOperation& operation)
+{
+    return operation.Op_case() == NKikimrPQ::TPartitionOperation::kRead;
+}
+
+bool IsWriteTxOperation(const NKikimrPQ::TPartitionOperation& operation)
+{
+    return operation.Op_case() == NKikimrPQ::TPartitionOperation::kWrite;
+}
+
+bool IsKafkaWriteOperation(const NKikimrPQ::TPartitionOperation& operation)
+{
+    return IsWriteTxOperation(operation)
+        && operation.GetWrite().Api_case() == NKikimrPQ::TPartitionOperation::TWriteOp::kKafka;
+}
+
+bool HasTopicReadCommit(const NKikimrPQ::TPartitionOperation& operation)
+{
+    return IsReadTxOperation(operation)
+        && operation.GetRead().Api_case() == NKikimrPQ::TPartitionOperation::TReadOp::kTopic
+        && operation.GetRead().GetTopic().HasCommitOffsetsBegin();
+}
+
+bool HasKafkaReadCommit(const NKikimrPQ::TPartitionOperation& operation)
+{
+    return IsReadTxOperation(operation)
+        && operation.GetRead().Api_case() == NKikimrPQ::TPartitionOperation::TReadOp::kKafka;
+}
+
+bool GetSkipConflictCheck(const NKikimrPQ::TPartitionOperation& operation)
+{
+    return IsWriteTxOperation(operation) && operation.GetWrite().GetSkipConflictCheck();
+}
+
+ui32 GetSupportivePartition(const NKikimrPQ::TPartitionOperation& operation)
+{
+    if (IsWriteTxOperation(operation)
+        && operation.GetWrite().Api_case() == NKikimrPQ::TPartitionOperation::TWriteOp::kTopic) {
+        return operation.GetWrite().GetTopic().GetSupportivePartition();
+    }
+    return 0;
+}
+
+TString GetReadConsumer(const NKikimrPQ::TPartitionOperation& operation)
+{
+    if (!IsReadTxOperation(operation)) {
+        return {};
+    }
+    switch (operation.GetRead().Api_case()) {
+        case NKikimrPQ::TPartitionOperation::TReadOp::kTopic:
+            return operation.GetRead().GetTopic().GetConsumer();
+        case NKikimrPQ::TPartitionOperation::TReadOp::kKafka:
+            return operation.GetRead().GetKafka().GetConsumer();
+        default:
+            return {};
+    }
+}
+
+ui64 GetReadCommitOffsetsBegin(const NKikimrPQ::TPartitionOperation& operation)
+{
+    if (IsReadTxOperation(operation)
+        && operation.GetRead().Api_case() == NKikimrPQ::TPartitionOperation::TReadOp::kTopic) {
+        return operation.GetRead().GetTopic().GetCommitOffsetsBegin();
+    }
+    return 0;
+}
+
+ui64 GetReadCommitOffsetsEnd(const NKikimrPQ::TPartitionOperation& operation)
+{
+    if (!IsReadTxOperation(operation)) {
+        return 0;
+    }
+    switch (operation.GetRead().Api_case()) {
+        case NKikimrPQ::TPartitionOperation::TReadOp::kTopic:
+            return operation.GetRead().GetTopic().GetCommitOffsetsEnd();
+        case NKikimrPQ::TPartitionOperation::TReadOp::kKafka:
+            return operation.GetRead().GetKafka().GetCommitOffsetsEnd();
+        default:
+            return 0;
+    }
+}
+
+bool GetReadForceCommit(const NKikimrPQ::TPartitionOperation& operation)
+{
+    if (IsReadTxOperation(operation)
+        && operation.GetRead().Api_case() == NKikimrPQ::TPartitionOperation::TReadOp::kTopic) {
+        return operation.GetRead().GetTopic().GetForceCommit();
+    }
+    return false;
+}
+
+bool GetReadKillReadSession(const NKikimrPQ::TPartitionOperation& operation)
+{
+    if (IsReadTxOperation(operation)
+        && operation.GetRead().Api_case() == NKikimrPQ::TPartitionOperation::TReadOp::kTopic) {
+        return operation.GetRead().GetTopic().GetKillReadSession();
+    }
+    return false;
+}
+
+bool GetReadOnlyCheckCommitedToFinish(const NKikimrPQ::TPartitionOperation& operation)
+{
+    if (IsReadTxOperation(operation)
+        && operation.GetRead().Api_case() == NKikimrPQ::TPartitionOperation::TReadOp::kTopic) {
+        return operation.GetRead().GetTopic().GetOnlyCheckCommitedToFinish();
+    }
+    return false;
+}
+
+TString GetReadSessionId(const NKikimrPQ::TPartitionOperation& operation)
+{
+    if (IsReadTxOperation(operation)
+        && operation.GetRead().Api_case() == NKikimrPQ::TPartitionOperation::TReadOp::kTopic) {
+        return operation.GetRead().GetTopic().GetReadSessionId();
+    }
+    return {};
+}
+
 } // namespace NKikimr::NPQ

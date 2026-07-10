@@ -172,9 +172,14 @@ void TS3Buffer::ColumnsOrder(const TVector<ui32>& tags) {
 }
 
 bool TS3Buffer::Collect(const NTable::IScan::TRow& row) {
-    auto collectBuffer = DataFormat->Collect(row);
-    if (!collectBuffer) {
+    ErrorString.clear();
+
+    const size_t beforeSize = Buffer.Size();
+    TBufferOutput out(Buffer);
+
+    if (!DataFormat->Collect(row, out)) {
         ErrorString = DataFormat->GetError();
+        Buffer.Resize(beforeSize);
         return false;
     }
 
@@ -183,8 +188,15 @@ bool TS3Buffer::Collect(const NTable::IScan::TRow& row) {
         BytesRead += cell.Size();
     }
 
-    if (collectBuffer->Size() > 0) {
-        if (!Append(collectBuffer->Data(), collectBuffer->Size())) {
+    if (Buffer.Size() > beforeSize) {
+        TStringBuf chunk(Buffer.Data(), Buffer.Size());
+        chunk = chunk.Tail(beforeSize);
+
+        if (Checksum) {
+            Checksum->AddData(chunk);
+        }
+        if (Compression && !Compression->AddData(chunk)) {
+            ErrorString = Compression->GetError();
             return false;
         }
     }

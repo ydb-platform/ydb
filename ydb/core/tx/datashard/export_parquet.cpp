@@ -169,19 +169,21 @@ bool ColumnsOrder(const TVector<ui32>& tags) override {
     return true;
 }
 
-TMaybe<TBuffer> Collect(const NTable::IScan::TRow& row) override {
+bool Collect(const NTable::IScan::TRow& row, IOutputStream& out) override {
+    Y_UNUSED(out);
+
     if (!ErrorString.empty()) {
-        return Nothing();
+        return false;
     }
 
     BatchBuilder->AddRow(*row);
     if (BatchBuilder->Rows() >= RowGroupSize) {
         if (!FlushRowGroup(false)) {
-            return Nothing();
+            return false;
         }
     }
 
-    return TBuffer();
+    return true;
 }
 
 TMaybe<TBuffer> Flush(bool last) override {

@@ -24,7 +24,6 @@ public:
 
 TDataFormatYdbDump(TYdbDumpExportSettings&& settings)
     : Columns(std::move(settings.Columns))
-    , RowOut(RowBuffer)
 {
 }
 
@@ -44,8 +43,7 @@ bool ColumnsOrder(const TVector<ui32>& tags) override {
     return true;
 }
 
-TMaybe<TBuffer> Collect(const NTable::IScan::TRow& row) override {
-    RowBuffer.Clear();
+bool Collect(const NTable::IScan::TRow& row, IOutputStream& out) override {
     ErrorString.clear();
 
     bool needsComma = false;
@@ -56,77 +54,77 @@ TMaybe<TBuffer> Collect(const NTable::IScan::TRow& row) override {
         const auto& cell = (*row)[it->second];
 
         if (needsComma) {
-            RowOut << ",";
+            out << ",";
         } else {
             needsComma = true;
         }
 
         if (cell.IsNull()) {
-            RowOut << "null";
+            out << "null";
             continue;
         }
 
         bool serialized = true;
         switch (column.Type.GetTypeId()) {
         case NScheme::NTypeIds::Int32:
-            serialized = cell.ToStream<i32>(RowOut, ErrorString);
+            serialized = cell.ToStream<i32>(out, ErrorString);
             break;
         case NScheme::NTypeIds::Uint32:
-            serialized = cell.ToStream<ui32>(RowOut, ErrorString);
+            serialized = cell.ToStream<ui32>(out, ErrorString);
             break;
         case NScheme::NTypeIds::Int64:
-            serialized = cell.ToStream<i64>(RowOut, ErrorString);
+            serialized = cell.ToStream<i64>(out, ErrorString);
             break;
         case NScheme::NTypeIds::Uint64:
-            serialized = cell.ToStream<ui64>(RowOut, ErrorString);
+            serialized = cell.ToStream<ui64>(out, ErrorString);
             break;
         case NScheme::NTypeIds::Uint8:
         //case NScheme::NTypeIds::Byte:
-            RowOut << static_cast<ui32>(cell.AsValue<ui8>());
+            out << static_cast<ui32>(cell.AsValue<ui8>());
             break;
         case NScheme::NTypeIds::Int8:
-            RowOut << static_cast<i32>(cell.AsValue<i8>());
+            out << static_cast<i32>(cell.AsValue<i8>());
             break;
         case NScheme::NTypeIds::Int16:
-            serialized = cell.ToStream<i16>(RowOut, ErrorString);
+            serialized = cell.ToStream<i16>(out, ErrorString);
             break;
         case NScheme::NTypeIds::Uint16:
-            serialized = cell.ToStream<ui16>(RowOut, ErrorString);
+            serialized = cell.ToStream<ui16>(out, ErrorString);
             break;
         case NScheme::NTypeIds::Bool:
-            serialized = cell.ToStream<bool>(RowOut, ErrorString);
+            serialized = cell.ToStream<bool>(out, ErrorString);
             break;
         case NScheme::NTypeIds::Double:
-            serialized = cell.ToStream<double>(RowOut, ErrorString);
+            serialized = cell.ToStream<double>(out, ErrorString);
             break;
         case NScheme::NTypeIds::Float:
-            serialized = cell.ToStream<float>(RowOut, ErrorString);
+            serialized = cell.ToStream<float>(out, ErrorString);
             break;
         case NScheme::NTypeIds::Date:
-            RowOut << TInstant::Days(cell.AsValue<ui16>());
+            out << TInstant::Days(cell.AsValue<ui16>());
             break;
         case NScheme::NTypeIds::Datetime:
-            RowOut << TInstant::Seconds(cell.AsValue<ui32>());
+            out << TInstant::Seconds(cell.AsValue<ui32>());
             break;
         case NScheme::NTypeIds::Timestamp:
-            RowOut << TInstant::MicroSeconds(cell.AsValue<ui64>());
+            out << TInstant::MicroSeconds(cell.AsValue<ui64>());
             break;
         case NScheme::NTypeIds::Interval:
-            serialized = cell.ToStream<i64>(RowOut, ErrorString);
+            serialized = cell.ToStream<i64>(out, ErrorString);
             break;
         case NScheme::NTypeIds::Date32:
-            serialized = cell.ToStream<i32>(RowOut, ErrorString);
+            serialized = cell.ToStream<i32>(out, ErrorString);
             break;
         case NScheme::NTypeIds::Datetime64:
         case NScheme::NTypeIds::Timestamp64:
         case NScheme::NTypeIds::Interval64:
-            serialized = cell.ToStream<i64>(RowOut, ErrorString);
+            serialized = cell.ToStream<i64>(out, ErrorString);
             break;
         case NScheme::NTypeIds::Decimal:
-            serialized = DecimalToStream(cell.AsValue<std::pair<ui64, i64>>(), RowOut, ErrorString, column.Type);
+            serialized = DecimalToStream(cell.AsValue<std::pair<ui64, i64>>(), out, ErrorString, column.Type);
             break;
         case NScheme::NTypeIds::DyNumber:
-            serialized = DyNumberToStream(cell.AsBuf(), RowOut, ErrorString);
+            serialized = DyNumberToStream(cell.AsBuf(), out, ErrorString);
             break;
         case NScheme::NTypeIds::String:
         case NScheme::NTypeIds::String4k:
@@ -134,37 +132,38 @@ TMaybe<TBuffer> Collect(const NTable::IScan::TRow& row) override {
         case NScheme::NTypeIds::Utf8:
         case NScheme::NTypeIds::Json:
         case NScheme::NTypeIds::Yson:
-            RowOut << '"' << CGIEscapeRet(cell.AsBuf()) << '"';
+            out << '"' << CGIEscapeRet(cell.AsBuf()) << '"';
             break;
         case NScheme::NTypeIds::JsonDocument:
-            RowOut << '"' << CGIEscapeRet(NBinaryJson::SerializeToJson(cell.AsBuf())) << '"';
+            out << '"' << CGIEscapeRet(NBinaryJson::SerializeToJson(cell.AsBuf())) << '"';
             break;
         case NScheme::NTypeIds::Pg:
-            serialized = PgToStream(cell.AsBuf(), column.Type, RowOut, ErrorString);
+            serialized = PgToStream(cell.AsBuf(), column.Type, out, ErrorString);
             break;
         case NScheme::NTypeIds::Uuid:
-            serialized = UuidToStream(cell.AsValue<std::pair<ui64, ui64>>(), RowOut, ErrorString);
+            serialized = UuidToStream(cell.AsValue<std::pair<ui64, ui64>>(), out, ErrorString);
             break;
         default:
             Y_ENSURE(false, "Unsupported type");
         }
 
         if (!serialized) {
-            return Nothing();
+            return false;
         }
     }
 
-    RowOut << "\n";
+    out << "\n";
 
-    return RowBuffer;
+    return true;
 }
 
 void Clear() override {
-    RowBuffer = TBuffer();
+    Indices.clear();
+    ErrorString.clear();
 }
 
 size_t GetReadyOutputBytes() const override {
-    // Rows are serialized and returned directly from Collect, nothing is buffered here.
+    // Rows are serialized directly into the Collect out stream.
     return 0;
 }
 
@@ -183,8 +182,6 @@ private:
 
     TTagToIndex Indices;
     TString ErrorString;
-    TBuffer RowBuffer;
-    TBufferOutput RowOut;
 };
 
 

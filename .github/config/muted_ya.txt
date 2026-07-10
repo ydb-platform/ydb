@@ -34,6 +34,7 @@ ydb/core/tx/schemeshard/ut_set_column_constraint_reboots unittest.[*/*] chunk
 ydb/library/actors/core/ut TestThreadContextQueueTimestamps.CurrentQueueTimestamps
 ydb/public/sdk/cpp/src/client/topic/ut/with_direct_read_ut Describe.DescribePartitionPermissions
 ydb/public/sdk/cpp/tests/integration/sessions YdbSdkSessions.CloseSessionWithSessionPoolFromDtors
+ydb/public/sdk/cpp/tests/integration/topic/with_direct_read gtest.[*/*] chunk
 ydb/services/cms/ut TGRpcCmsTest.RemoveWithAnotherTokenTest
 ydb/services/datastreams/ut DataStreams.TestGetRecords1MBMessagesOneByOneByTS
 ydb/services/deprecated/persqueue_v0/ut TDeprecatedPQGrpcDeadTest.ProcessGlobalGrpcDeadDoesNotStopLiveDeprecatedPQWriteSession
@@ -60,6 +61,7 @@ ydb/tests/fq/streaming test_udfs.py.TestUdfsUsage.test_precompute_recovery[False
 ydb/tests/fq/streaming test_udfs.py.TestUdfsUsage.test_precompute_recovery[True]
 ydb/tests/functional/blobstorage test_node_warden_cache.py.TestNodeWardenCacheFile.test_cache_file_lifecycle_and_restart
 ydb/tests/functional/dstool test_canonical_requests.py.Test.test_group_add
+ydb/tests/functional/nbs test_nbs.py.TestNbs.test_nbs_disk_creation
 ydb/tests/functional/nbs test_nbs.py.TestNbs.test_nbs_multiple_disks_creation
 ydb/tests/functional/query_cache/warmup test_warmup.py.TestCompileCacheViewPeerWarnings.test_peer_scan_warnings_increment_on_dead_peer
 ydb/tests/functional/query_cache/warmup test_warmup.py.TestWarmupRestart.test_warmup_basic

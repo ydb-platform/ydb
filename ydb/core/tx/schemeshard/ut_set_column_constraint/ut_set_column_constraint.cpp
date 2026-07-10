@@ -1087,8 +1087,8 @@ Y_UNIT_TEST_SUITE(SetNotNullTest) {
             Ydb::Table::SetNotNullState::STATE_PREPARING,
             Ydb::Table::SetNotNullState::STATE_PREPARING,
             Ydb::Table::SetNotNullState::STATE_VALIDATING,
-            Ydb::Table::SetNotNullState::STATE_APPLYING,
-            Ydb::Table::SetNotNullState::STATE_APPLYING,
+            (isShouldBeFailed ? Ydb::Table::SetNotNullState::STATE_CANCELLED : Ydb::Table::SetNotNullState::STATE_APPLYING),
+            (isShouldBeFailed ? Ydb::Table::SetNotNullState::STATE_CANCELLED : Ydb::Table::SetNotNullState::STATE_APPLYING),
             (isShouldBeFailed ? Ydb::Table::SetNotNullState::STATE_CANCELLED : Ydb::Table::SetNotNullState::STATE_DONE)
         };
 

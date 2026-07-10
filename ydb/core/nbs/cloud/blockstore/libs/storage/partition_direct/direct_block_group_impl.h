@@ -136,7 +136,7 @@ public:
 
     bool IsDDiskSessionBroken(size_t hostIndex) const;
     bool IsBlockedGenerationDetected() const;
-    
+
     NThreading::TFuture<TDbgSnapshot> BuildMonSnapshot() override;
 
     // IHostStateController implementation

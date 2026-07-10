@@ -18,6 +18,10 @@ static constexpr ui32 TimestampFieldLowBit = 33;
 static constexpr ui32 MaskPos = PrefixBits - 1;
 
 // Precomputed for the default 10-bit prefix (maskPos = 9), matching UuidKeyGen.java.
+//
+// YDB stores and compares UUID values as 16 raw bytes in Microsoft GUID mixed-endian
+// layout (see ParseUuidToArray). Generators must produce that internal format; sort
+// order is defined by memcmp on these bytes, not by RFC big-endian field order.
 static constexpr ui64 V8PrefixMask = 0xFFC0000000000000ULL;
 static constexpr ui64 V8TimestampMask = 0x003FFFFFFF000000ULL;
 
@@ -147,12 +151,6 @@ inline std::array<ui8, NKikimr::NUuid::UUID_LEN> MakeV8Bytes(ui64 prefix, ui64 e
     WriteBe64(msb, ydb.data());
     WriteBe64(lsb, ydb.data() + 8);
     return ydb;
-}
-
-inline ui64 NewPrefixValue() {
-    std::array<ui8, 8> data{};
-    FillRandomBytes(data.data(), data.size());
-    return ReadBe64(data.data());
 }
 
 } // namespace NYql::NUuidKeyGen

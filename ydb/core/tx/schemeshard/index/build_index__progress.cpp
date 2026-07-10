@@ -3113,10 +3113,13 @@ public:
 
     void OnUnhandledException(TTransactionContext& txc, const TActorContext& ctx, TIndexBuildInfo* buildInfo, const std::exception& exc) override {
         if (!buildInfo) {
+            TStringBuilder buildIdStr;
+            if (BuildId != InvalidIndexBuildId) {
+                buildIdStr << BuildId;
+            }
             YDB_LOG_NOTICE("TTxBuildProgress: OnUnhandledException: BuildIndexId not found",
                 {"logPrefix", LogPrefix},
-                {"#_num_0", (BuildId == InvalidIndexBuildId ? TString("") : TStringBuilder()},
-                {"id", BuildId)});
+                {"id", buildIdStr});
             return;
         }
 
@@ -3309,10 +3312,13 @@ public:
 
     void OnUnhandledException(TTransactionContext& txc, const TActorContext& ctx, TIndexBuildInfo* buildInfo, const std::exception& exc) override {
         if (!buildInfo) {
+            TStringBuilder buildIdStr;
+            if (BuildId != InvalidIndexBuildId) {
+                buildIdStr << BuildId;
+            }
             YDB_LOG_ERROR("TTxReply OnUnhandledException BuildIndexId not found",
                 {"logPrefix", LogPrefix},
-                {"#_num_0", (BuildId == InvalidIndexBuildId ? TString("") : TStringBuilder()},
-                {"id", BuildId)});
+                {"id", buildIdStr});
             return;
         }
 

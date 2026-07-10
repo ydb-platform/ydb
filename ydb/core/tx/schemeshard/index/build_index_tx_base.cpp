@@ -534,15 +534,27 @@ bool TSchemeShard::TIndexBuilder::TTxBase::OnUnhandledExceptionSafe(TTransaction
             ? buildInfoPtr->get()
             : nullptr;
 
+        TStringBuilder buildIdStr;
+        if (BuildId == InvalidIndexBuildId) {
+            buildIdStr << "<no id>";
+        } else {
+            buildIdStr << BuildId;
+        }
+
+        TStringBuilder buildInfoStr;
+        if (buildInfo) {
+            buildInfoStr << *buildInfo;
+        } else {
+            buildIdStr << "<no build info>";
+        }
+
         YDB_LOG_ERROR("Unhandled exception",
             {"logPrefix", LogPrefix},
-            {"id", (BuildId == InvalidIndexBuildId ? TString("<no id>") : TStringBuilder()},
-            {"#_BuildId)", BuildId)},
+            {"buildId", buildIdStr},
             {"#_TypeName(originalExc)", TypeName(originalExc)},
             {"#_originalExc.what", originalExc.what()},
             {"#_TBackTrace::FromCurrentException().PrintToString", TBackTrace::FromCurrentException().PrintToString()},
-            {"TIndexBuildInfo", (buildInfo ? TStringBuilder()},
-            {"#_num_0", (*buildInfo) : TString("<no build info>"))});
+            {"buildInfo", buildInfoStr});
 
         OnUnhandledException(txc, ctx, buildInfo, originalExc);
 

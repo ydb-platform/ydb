@@ -398,7 +398,7 @@
                         "StructType";
                         [
                             [
-                                "v8_string_has_dashes";
+                                "v8_string_format";
                                 [
                                     "DataType";
                                     "Bool"
@@ -424,7 +424,7 @@
                         "StructType";
                         [
                             [
-                                "v8_prefix_string_has_dashes";
+                                "v8_prefix_string_format";
                                 [
                                     "DataType";
                                     "Bool"

@@ -36,12 +36,14 @@ SELECT
     AND Substring(CAST(Uuid::newV8() AS String), 13, 1) = '-'
     AND Substring(CAST(Uuid::newV8() AS String), 18, 1) = '-'
     AND Substring(CAST(Uuid::newV8() AS String), 23, 1) = '-'
-    AS v8_string_has_dashes;
+    AND Substring(CAST(Uuid::newV8() AS String), 14, 1) = '8'
+    AS v8_string_format;
 SELECT
     Substring(CAST(Uuid::newPrefixV8($p) AS String), 8, 1) = '-'
     AND Substring(CAST(Uuid::newPrefixV8($p) AS String), 13, 1) = '-'
     AND Substring(CAST(Uuid::newPrefixV8($p) AS String), 18, 1) = '-'
     AND Substring(CAST(Uuid::newPrefixV8($p) AS String), 23, 1) = '-'
-    AS v8_prefix_string_has_dashes;
+    AND Substring(CAST(Uuid::newPrefixV8($p) AS String), 14, 1) = '8'
+    AS v8_prefix_string_format;
 
 SELECT $p != 0ul OR $p == 0ul AS prefix_is_uint64;

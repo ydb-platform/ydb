@@ -254,19 +254,25 @@ Y_UNIT_TEST_SUITE(TUuidSortOrder) {
 
     Y_UNIT_TEST(V7StringFormatShowsVersionDigit) {
         SetRandomSeed(42);
-        const auto bytes = MakeV7Bytes(MilliSeconds());
+        const auto bytes = MakeV7Bytes(0, MilliSeconds(), false);
         AssertUuidStringFormat(UuidBytesToDisplayString(bytes), '7');
     }
 
     Y_UNIT_TEST(V7PrefixStringFormatShowsVersionDigit) {
         SetRandomSeed(42);
-        const auto bytes = MakeV7Bytes(ApplyV7Prefix(MilliSeconds(), kTestV7Prefix));
+        const auto bytes = MakeV7Bytes(kTestV7Prefix, MilliSeconds(), true);
         AssertUuidStringFormat(UuidBytesToDisplayString(bytes), '7');
     }
 
-    Y_UNIT_TEST(V8YqlCastStringHasCanonicalDashes) {
+    Y_UNIT_TEST(V8StringFormatShowsVersionDigit) {
+        SetRandomSeed(42);
+        const auto bytes = MakeV8Bytes(0, MilliSeconds() / 1000, false);
+        AssertUuidStringFormat(UuidBytesToDisplayString(bytes), '8');
+    }
+
+    Y_UNIT_TEST(V8PrefixStringFormatShowsVersionDigit) {
         SetRandomSeed(42);
         const auto bytes = MakeV8Bytes(kTestV8Prefix, MilliSeconds() / 1000, true);
-        AssertUuidStringHasCanonicalDashes(UuidBytesToDisplayString(bytes));
+        AssertUuidStringFormat(UuidBytesToDisplayString(bytes), '8');
     }
 }

@@ -43,7 +43,7 @@ message TRequestedConstructor {
             optional double DictionaryUniqueFraction = 6 [default = 0];
             // Store a separated sub-column whose present values are all scalars of one type in the corresponding
             // native Arrow array instead of per-value BinaryJson blobs. `false` (default) - always BinaryJson.
-            optional bool EnableNativeScalarColumns = 7 [default = false];
+            optional bool EnableNativeColumns = 7 [default = false];
         }
         optional TSettings Settings = 1;
     }
@@ -76,7 +76,7 @@ message TConstructor {
             optional double OthersAllowedFraction = 4 [default = 0.05];
             optional TDataExtractor DataExtractor = 5;
             optional double DictionaryUniqueFraction = 6 [default = 0];
-            optional bool EnableNativeScalarColumns = 7 [default = false];
+            optional bool EnableNativeColumns = 7 [default = false];
         }
         optional TSettings Settings = 1;
     }

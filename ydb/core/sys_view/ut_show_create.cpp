@@ -7,6 +7,7 @@
 
 #include <ydb/public/lib/ydb_cli/dump/util/query_utils.h>
 
+#include <util/string/cast.h>
 #include <util/string/subst.h>
 
 namespace NKikimr {
@@ -1964,7 +1965,7 @@ Y_UNIT_TEST(TablePartitionPolicyIndexTable) {
     );
 }
 
-Y_UNIT_TEST(TableColumnAlterColumn) {
+void CheckAlterColumnShowCreate(double dictionaryUniqueFraction, bool enableNativeColumns) {
     TTestEnv env(1, 4, {.StoragePools = 3, .ShowCreateTable = true, .AlterObjectEnabled = true, .EnableSparsedColumns = true, .EnableOlapCompression = true, .EnableCsDictionaryEncoding = true});
 
     env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_EXECUTER, NActors::NLog::PRI_DEBUG);
@@ -1974,8 +1975,10 @@ Y_UNIT_TEST(TableColumnAlterColumn) {
 
     TShowCreateChecker checker(env);
 
-    checker.CheckShowCreateTable(
-        R"(
+    const TString fractionStr = ToString(dictionaryUniqueFraction);
+    const TString nativeColumnsStr = enableNativeColumns ? "true" : "false";
+
+    const TString query = Sprintf(R"(
             CREATE TABLE `/Root/test_show_create` (
                 Col1 Uint64 NOT NULL,
                 Col2 JsonDocument,
@@ -1986,15 +1989,16 @@ Y_UNIT_TEST(TableColumnAlterColumn) {
             )
             PARTITION BY HASH(Col1)
             WITH (STORE = COLUMN, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 2);
-            ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=Col2, `FORCE_SIMD_PARSING`=`true`, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`SUB_COLUMNS`, `OTHERS_ALLOWED_FRACTION`=`0.5`, `DICTIONARY_UNIQUE_FRACTION`=`0.5`, `ENABLE_NATIVE_SCALAR_COLUMNS`=`true`);
+            ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=Col2, `FORCE_SIMD_PARSING`=`true`, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`SUB_COLUMNS`, `OTHERS_ALLOWED_FRACTION`=`0.5`, `DICTIONARY_UNIQUE_FRACTION`=`%s`, `ENABLE_NATIVE_COLUMNS`=`%s`);
             ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=Col3, `DEFAULT_VALUE`=`5`);
             ALTER TABLE `/Root/test_show_create` ALTER COLUMN Col2 SET COMPRESSION (algorithm=zstd, level=4);
             ALTER TABLE `/Root/test_show_create` ALTER COLUMN Col3 SET ENCODING (DICT);
             ALTER TABLE `/Root/test_show_create` ALTER COLUMN Col4 SET ENCODING ();
             ALTER TABLE `/Root/test_show_create` ALTER COLUMN Col4 SET COMPRESSION ();
             ALTER TABLE `/Root/test_show_create` ALTER COLUMN Col5 SET ENCODING (OFF);
-        )", "test_show_create",
-        R"(
+        )", fractionStr.c_str(), nativeColumnsStr.c_str());
+
+    const TString expected = Sprintf(R"(
             CREATE TABLE `test_show_create` (
                 `Col1` Uint64 NOT NULL,
                 `Col2` JsonDocument COMPRESSION (algorithm = zstd, level = 4),
@@ -2009,11 +2013,20 @@ Y_UNIT_TEST(TableColumnAlterColumn) {
                 AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 2
             );
 
-            ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION = ALTER_COLUMN, NAME = Col2, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME` = `SUB_COLUMNS`, `SPARSED_DETECTOR_KFF` = `20`, `COLUMNS_LIMIT` = `1024`, `MEM_LIMIT_CHUNK` = `52428800`, `OTHERS_ALLOWED_FRACTION` = `0.5`, `DICTIONARY_UNIQUE_FRACTION` = `0.5`, `ENABLE_NATIVE_SCALAR_COLUMNS` = `true`, `DATA_EXTRACTOR_CLASS_NAME` = `JSON_SCANNER`, `SCAN_FIRST_LEVEL_ONLY` = `false`, `FORCE_SIMD_PARSING` = `true`);
+            ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION = ALTER_COLUMN, NAME = Col2, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME` = `SUB_COLUMNS`, `SPARSED_DETECTOR_KFF` = `20`, `COLUMNS_LIMIT` = `1024`, `MEM_LIMIT_CHUNK` = `52428800`, `OTHERS_ALLOWED_FRACTION` = `0.5`, `DICTIONARY_UNIQUE_FRACTION` = `%s`, `ENABLE_NATIVE_COLUMNS` = `%s`, `DATA_EXTRACTOR_CLASS_NAME` = `JSON_SCANNER`, `SCAN_FIRST_LEVEL_ONLY` = `false`, `FORCE_SIMD_PARSING` = `true`);
 
             ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION = ALTER_COLUMN, NAME = Col3, `DEFAULT_VALUE` = `5`);
-        )"
-    );
+        )", fractionStr.c_str(), nativeColumnsStr.c_str());
+
+    checker.CheckShowCreateTable(query.c_str(), "test_show_create", expected);
+}
+
+Y_UNIT_TEST(TableColumnAlterColumn) {
+    CheckAlterColumnShowCreate(0.5, true);
+}
+
+Y_UNIT_TEST(TableColumnAlterColumnExplicitlyUnsetValues) {
+    CheckAlterColumnShowCreate(0, false);
 }
 
 Y_UNIT_TEST(TableColumnUpsertOptions) {

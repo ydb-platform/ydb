@@ -35,7 +35,8 @@ EValueType ValueTypeForItem(const NBinaryJson::TBinaryJson& blob) {
         case NBinaryJson::EEntryType::BoolFalse:
         case NBinaryJson::EEntryType::BoolTrue:
             return EValueType::Bool;
-        default:
+        case NBinaryJson::EEntryType::Container:
+        case NBinaryJson::EEntryType::Null:
             return EValueType::BinaryJson;
     }
 }
@@ -51,9 +52,6 @@ std::shared_ptr<arrow::DataType> GetArrowTypeForValueType(const EValueType value
             return arrow::float64();
         case EValueType::Bool:
             return arrow::boolean();
-        default:
-            AFL_VERIFY(false)("unhandled value_type", (ui32)valueType);
-            return arrow::binary();
     }
 }
 
@@ -117,9 +115,6 @@ NJson::TJsonValue ArrayElementToJsonValue(const arrow::Array& array, const i64 i
             AFL_VERIFY(NJson::ReadJsonTree(text, &result));
             return result;
         }
-        default:
-            AFL_VERIFY(false)("unhandled value_type", (ui32)valueType);
-            return NJson::TJsonValue();
     }
 }
 
@@ -133,9 +128,6 @@ NBinaryJson::TBinaryJson ArrayElementToBinaryJson(const arrow::Array& array, con
         case EValueType::Double:
         case EValueType::Bool:
             return ToBinaryJson(ArrayElementToJsonValue(array, index, valueType));
-        default:
-            AFL_VERIFY(false)("unhandled value_type", (ui32)valueType);
-            return NBinaryJson::TBinaryJson();
     }
 }
 

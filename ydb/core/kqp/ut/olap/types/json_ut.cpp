@@ -1601,7 +1601,7 @@ TString NativeTableSetup() {
         ------
         SCHEMA:
         ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=Col2, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`SUB_COLUMNS`,
-                    `OTHERS_ALLOWED_FRACTION`=`0`, `ENABLE_NATIVE_SCALAR_COLUMNS`=`true`)
+                    `OTHERS_ALLOWED_FRACTION`=`0`, `ENABLE_NATIVE_COLUMNS`=`true`)
         ------)";
     return script;
 }

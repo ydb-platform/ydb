@@ -20,7 +20,7 @@ private:
     YDB_ACCESSOR(ui32, ChunkMemoryLimit, 50 * 1024 * 1024);
     YDB_READONLY(double, OthersAllowedFraction, 0.05);
     YDB_ACCESSOR(double, DictionaryUniqueFraction, 0);
-    YDB_ACCESSOR(bool, EnableNativeScalarColumns, false);
+    YDB_ACCESSOR(bool, EnableNativeColumns, false);
     YDB_ACCESSOR_DEF(TDataAdapterContainer, DataExtractor);
 
 public:
@@ -78,7 +78,7 @@ public:
         result.InsertValue("memory_limit", ChunkMemoryLimit);
         result.InsertValue("others_allowed_fraction", OthersAllowedFraction);
         result.InsertValue("dictionary_unique_fraction", DictionaryUniqueFraction);
-        result.InsertValue("enable_native_scalar_columns", EnableNativeScalarColumns);
+        result.InsertValue("enable_native_columns", EnableNativeColumns);
         result.InsertValue("data_extractor", DataExtractor->DebugJson());
         return result;
     }
@@ -132,7 +132,7 @@ public:
         result.SetChunkMemoryLimit(ChunkMemoryLimit);
         result.SetOthersAllowedFraction(OthersAllowedFraction);
         result.SetDictionaryUniqueFraction(DictionaryUniqueFraction);
-        result.SetEnableNativeScalarColumns(EnableNativeScalarColumns);
+        result.SetEnableNativeColumns(EnableNativeColumns);
         DataExtractor.SerializeToProto(*result.MutableDataExtractor());
     }
 
@@ -143,7 +143,7 @@ public:
         ChunkMemoryLimit = proto.GetChunkMemoryLimit();
         OthersAllowedFraction = proto.GetOthersAllowedFraction();
         DictionaryUniqueFraction = proto.GetDictionaryUniqueFraction();
-        EnableNativeScalarColumns = proto.GetEnableNativeScalarColumns();
+        EnableNativeColumns = proto.GetEnableNativeColumns();
         if (!proto.HasDataExtractor()) {
             AFL_VERIFY(DataExtractor.Initialize(TJsonScanExtractor::GetClassNameStatic()));
         } else if (!DataExtractor.DeserializeFromProto(proto.GetDataExtractor())) {

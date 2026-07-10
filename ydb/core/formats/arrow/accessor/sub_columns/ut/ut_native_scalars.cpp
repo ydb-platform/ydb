@@ -22,7 +22,7 @@ Y_UNIT_TEST_SUITE(SubColumnsNativeScalars) {
 
     NSubColumns::TSettings NativeSettings(const double dictFraction) {
         NSubColumns::TSettings s(4, 1024, 0, 0, TDataAdapterContainer::GetDefault(), dictFraction);
-        s.SetEnableNativeScalarColumns(true);
+        s.SetEnableNativeColumns(true);
         return s;
     }
 

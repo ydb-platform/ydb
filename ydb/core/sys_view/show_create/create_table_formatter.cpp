@@ -1745,18 +1745,18 @@ void TCreateTableFormatter::FormatAlterColumn(const TString& fullPath, const NKi
                         EscapeValue(settings.GetOthersAllowedFraction(), paramsStr);
                         del = ", ";
                     }
-                    if (settings.HasDictionaryUniqueFraction() && settings.GetDictionaryUniqueFraction()) {
+                    if (settings.HasDictionaryUniqueFraction()) {
                         paramsStr << del;
                         EscapeName("DICTIONARY_UNIQUE_FRACTION", paramsStr);
                         paramsStr << "=";
                         EscapeValue(settings.GetDictionaryUniqueFraction(), paramsStr);
                         del = ", ";
                     }
-                    if (settings.HasEnableNativeScalarColumns() && settings.GetEnableNativeScalarColumns()) {
+                    if (settings.HasEnableNativeColumns()) {
                         paramsStr << del;
-                        EscapeName("ENABLE_NATIVE_SCALAR_COLUMNS", paramsStr);
+                        EscapeName("ENABLE_NATIVE_COLUMNS", paramsStr);
                         paramsStr << "=";
-                        EscapeValue(settings.GetEnableNativeScalarColumns(), paramsStr);
+                        EscapeValue(settings.GetEnableNativeColumns(), paramsStr);
                         del = ", ";
                     }
                     if (settings.HasDataExtractor()) {
@@ -1974,7 +1974,7 @@ void TCreateTableFormatter::FormatUpsertIndex(const TString& tablePath, const TS
             if (!minMaxIndex.HasColumnId()) {
                 ythrow TFormatFail(Ydb::StatusIds::INTERNAL_ERROR, TStringBuilder() << columnIdFieldName <<" must be filled in " << minMaxIndex.GetTypeName() << " proto");
             }
-            auto columnNameIt = columns.find(minMaxIndex.GetColumnId()); 
+            auto columnNameIt = columns.find(minMaxIndex.GetColumnId());
             if (columnNameIt == columns.end()) {
                 ythrow TFormatFail(Ydb::StatusIds::INTERNAL_ERROR, TStringBuilder() << "column id(" << minMaxIndex.GetDescriptor()->FindFieldByNumber(TMinMaxIndex::kColumnIdFieldNumber)->full_name() << ") is not present in table description ");
             }

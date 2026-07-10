@@ -461,19 +461,19 @@ Y_UNIT_TEST_SUITE(KqpPrefixedVectorIndexes) {
         }
     }
 
-    Y_UNIT_TEST_OCTO(OrderByCosineLevel1, Nullable, UseSimilarity, EnableVectorSearchActor) {
+    Y_UNIT_TEST_OCTET(OrderByCosineLevel1, Nullable, UseSimilarity, EnableVectorSearchActor) {
         DoTestOrderByCosine(1, (Nullable ? F_NULLABLE : 0) | (UseSimilarity ? F_SIMILARITY : 0), EnableVectorSearchActor);
     }
 
-    Y_UNIT_TEST_OCTO(OrderByCosineLevel1WithOverlap, Nullable, Covered, EnableVectorSearchActor) {
+    Y_UNIT_TEST_OCTET(OrderByCosineLevel1WithOverlap, Nullable, Covered, EnableVectorSearchActor) {
         DoTestOrderByCosine(1, F_OVERLAP | (Nullable ? F_NULLABLE : 0) | (Covered ? F_COVERING : 0), EnableVectorSearchActor);
     }
 
-    Y_UNIT_TEST_OCTO(OrderByCosineLevel2, Nullable, UseSimilarity, EnableVectorSearchActor) {
+    Y_UNIT_TEST_OCTET(OrderByCosineLevel2, Nullable, UseSimilarity, EnableVectorSearchActor) {
         DoTestOrderByCosine(2, (Nullable ? F_NULLABLE : 0) | (UseSimilarity ? F_SIMILARITY : 0), EnableVectorSearchActor);
     }
 
-    Y_UNIT_TEST_OCTO(OrderByCosineLevel2WithOverlap, Nullable, Covered, EnableVectorSearchActor) {
+    Y_UNIT_TEST_OCTET(OrderByCosineLevel2WithOverlap, Nullable, Covered, EnableVectorSearchActor) {
         DoTestOrderByCosine(2, F_OVERLAP | (Nullable ? F_NULLABLE : 0) | (Covered ? F_COVERING : 0), EnableVectorSearchActor);
     }
 
@@ -521,7 +521,7 @@ Y_UNIT_TEST_SUITE(KqpPrefixedVectorIndexes) {
         DoPositiveQueriesPrefixedVectorIndexOrderByCosine(session, 0);
     }
 
-    Y_UNIT_TEST_OCTO(CosineDistanceWithPkSuffix, Nullable, Covered, EnableVectorSearchActor) {
+    Y_UNIT_TEST_OCTET(CosineDistanceWithPkSuffix, Nullable, Covered, EnableVectorSearchActor) {
         DoTestOrderByCosine(2, F_SUFFIX_PK | (Nullable ? F_NULLABLE : 0) | (Covered ? F_COVERING : 0), EnableVectorSearchActor);
     }
 

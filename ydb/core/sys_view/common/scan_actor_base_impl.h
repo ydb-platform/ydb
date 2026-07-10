@@ -44,7 +44,7 @@ public:
             {"actor", TBase::SelfId()},
             {"owner", OwnerActorId},
             {"id", ScanId},
-            {"info", SysViewInfo});
+            {"info", SysViewInfo.ShortDebugString()});
 
         auto sysViewServiceId = MakeSysViewServiceID(TBase::SelfId().NodeId());
         TBase::Send(sysViewServiceId, new TEvSysView::TEvGetScanLimiter());
@@ -82,7 +82,7 @@ protected:
             {"actor", TBase::SelfId()},
             {"owner", OwnerActorId},
             {"id", ScanId},
-            {"info", SysViewInfo},
+            {"info", SysViewInfo.ShortDebugString()},
             {"code", NYql::NDqProto::StatusIds::StatusCode_Name(ev->Get()->Record.GetStatusCode())},
             {"error", ev->Get()->GetIssues().ToOneLineString()});
 
@@ -98,7 +98,7 @@ protected:
             {"actor", TBase::SelfId()},
             {"owner", OwnerActorId},
             {"id", ScanId},
-            {"info", SysViewInfo},
+            {"info", SysViewInfo.ShortDebugString()},
             {"issues", issues.ToOneLineString()});
 
         auto error = MakeHolder<NKqp::TEvKqpCompute::TEvScanError>();
@@ -123,7 +123,7 @@ protected:
             {"actor", TBase::SelfId()},
             {"owner", OwnerActorId},
             {"id", ScanId},
-            {"info", SysViewInfo});
+            {"info", SysViewInfo.ShortDebugString()});
 
         if (AllowedByLimiter) {
             ScanLimiter->Dec();

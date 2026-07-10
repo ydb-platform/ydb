@@ -364,7 +364,7 @@ private:
 
             YDB_LOG_DEBUG("Send request",
                 {"toNodeId", nodeId},
-                {"request", req->Record});
+                {"request", req->Record.ShortDebugString()});
 
             Send(kqpProxyId, req.release(), IEventHandle::FlagTrackDelivery, nodeId);
             PendingRequest = true;

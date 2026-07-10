@@ -518,7 +518,7 @@ protected:
         const auto& description = entry.StreamingQueryInfo->Description;
         YDB_LOG_TRACE("[StreamingQueries] [SysView] Found streaming query",
             {"logPrefix", LogPrefix()},
-            {"description", description});
+            {"description", description.ShortDebugString()});
 
         Infos[path].FromProto(description.GetProperties());
         return true;
@@ -783,7 +783,7 @@ public:
             YDB_LOG_TRACE("[StreamingQueries] [SysView] Described resource",
                 {"logPrefix", LogPrefix()},
                 {"query", query.Path},
-                {"state", query.State},
+                {"state", query.State.ShortDebugString()},
                 {"text", info.QueryText},
                 {"run", info.Run},
                 {"pool", info.ResourcePool});

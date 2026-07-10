@@ -222,7 +222,7 @@ private:
 
             YDB_LOG_DEBUG("Send request to node,",
                 {"nodeId", nodeId},
-                {"request", req->Record});
+                {"request", req->Record.ShortDebugString()});
 
             Send(kqpProxyId, req.release(), 0, nodeId);
             PendingRequest = true;

@@ -147,7 +147,7 @@ void TSysViewProcessor::Handle(TEvSysView::TEvSendTopPartitions::TPtr& ev) {
     auto partitionIntervalEnd = IntervalEnd + TotalInterval;
 
     YDB_LOG_TRACE("TEvSysView::TEvSendTopPartitions: record",
-        {"record", record});
+        {"record", record.ShortDebugString()});
 
     if (timeUs < IntervalEnd.MicroSeconds() || timeUs >= partitionIntervalEnd.MicroSeconds()) {
         YDB_LOG_WARN("TEvSendTopPartitions, time mismath: partition interval event",

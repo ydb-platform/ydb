@@ -155,7 +155,7 @@ private:
             {"shardIdxFirst", shardIdx.first},
             {"shardIdxSecond", shardIdx.second},
             {"followerId", followerId},
-            {"newStats", newStats});
+            {"newStats", newStats.ShortDebugString()});
 
         auto& tables = DomainTables[domainKey];
         auto tableFound = tables.Stats.find(pathId);

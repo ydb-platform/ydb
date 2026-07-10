@@ -328,7 +328,7 @@ private:
 
     TExecDataQuerySettings GetExecDataQuerySettings(ui64 multiplier = 1);
 
-    static NYdb::NRetry::TRetryOperationSettings GetRetryOperationSettings();
+    NYdb::NRetry::TRetryOperationSettings GetRetryOperationSettings();
 
     TFuture<TStatus> SelectRowState(
         const TContextPtr& context);
@@ -709,8 +709,8 @@ TExecDataQuerySettings TStateStorage::GetExecDataQuerySettings(ui64 multiplier) 
 
 NYdb::NRetry::TRetryOperationSettings TStateStorage::GetRetryOperationSettings() {
     return NYdb::NRetry::TRetryOperationSettings()
-        .MaxRetries(30)
-        .MaxTimeout(TDuration::Seconds(30));
+        .MaxRetries(StorageConfig.GetMaxRetries())
+        .MaxTimeout(StorageConfig.GetMaxRetryTimeout());
 }
 
 TFuture<TIssues> TStateStorage::DeleteGraph(const TString& graphId) {

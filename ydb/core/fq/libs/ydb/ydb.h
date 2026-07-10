@@ -48,6 +48,8 @@ private:
     YDB_ACCESSOR(TDuration, ClientTimeout, TDuration::Max());
     YDB_ACCESSOR_DEF(TDuration, OperationTimeout);
     YDB_ACCESSOR_DEF(TDuration, CancelAfter);
+    YDB_ACCESSOR(ui64, MaxRetries, 20);
+    YDB_ACCESSOR(TDuration, MaxRetryTimeout, TDuration::Seconds(600));
 };
 
 struct TYdbConnection : public TThrRefBase {

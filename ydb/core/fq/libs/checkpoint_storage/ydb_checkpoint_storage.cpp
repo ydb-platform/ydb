@@ -655,7 +655,7 @@ public:
     TFuture<ICheckpointStorage::TGetTotalCheckpointsStateSizeResult> GetTotalCheckpointsStateSize(const TString& graphId) override;
     TExecDataQuerySettings DefaultExecDataQuerySettings();
 
-    static NYdb::NRetry::TRetryOperationSettings GetRetryOperationSettings();
+    NYdb::NRetry::TRetryOperationSettings GetRetryOperationSettings();
 
 private:
     TFuture<TCreateCheckpointResult> CreateCheckpointImpl(const TCoordinatorId& coordinator, const TCheckpointContextPtr& context);
@@ -1168,8 +1168,8 @@ TFuture<ICheckpointStorage::TGetTotalCheckpointsStateSizeResult> TCheckpointStor
 
 NYdb::NRetry::TRetryOperationSettings TCheckpointStorage::GetRetryOperationSettings() {
     return NYdb::NRetry::TRetryOperationSettings()
-        .MaxRetries(30)
-        .MaxTimeout(TDuration::Seconds(30));
+        .MaxRetries(Config.GetMaxRetries())
+        .MaxTimeout(Config.GetMaxRetryTimeout());
 }
 
 TExecDataQuerySettings TCheckpointStorage::DefaultExecDataQuerySettings() {

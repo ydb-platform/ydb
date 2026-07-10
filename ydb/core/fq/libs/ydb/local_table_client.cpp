@@ -66,7 +66,7 @@ public:
             Retryable,
             TDuration::MilliSeconds(100),
             TDuration::MilliSeconds(200),
-            settings.MaxTimeout_,
+            TDuration::Seconds(10),
             settings.MaxRetries_,
             settings.MaxTimeout_
         ))
@@ -117,7 +117,7 @@ private:
     void StartOperation() {
         Session = TableClient->GetSession();
         if (!Session) {
-            auto overloadedStatus = NYdb::TStatus(NYdb::EStatus::OVERLOADED, NYdb::NIssue::TIssues{NYdb::NIssue::TIssue{"no session available"}});
+            auto overloadedStatus = NYdb::TStatus(NYdb::EStatus::OVERLOADED, NYdb::NIssue::TIssues{NYdb::NIssue::TIssue{"Active sessions limit exceeded"}});
             ScheduleRetry(overloadedStatus);
             return;
         }

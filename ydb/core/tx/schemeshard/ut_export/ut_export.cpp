@@ -25,9 +25,9 @@
 
 #include <library/cpp/testing/hook/hook.h>
 
+#include <ydb/library/testlib/parquet_helpers/parquet_helpers.h>
+
 #include <arrow/api.h>
-#include <arrow/io/memory.h>
-#include <parquet/arrow/reader.h>
 
 #include <util/string/builder.h>
 #include <util/string/cast.h>
@@ -260,26 +260,6 @@ namespace {
             permissions
         );
         fieldChecker(proto);
-    }
-
-    // Parses Parquet file content (as stored in S3) into a single-chunk arrow::Table.
-    std::shared_ptr<arrow::Table> ReadParquet(const TString& data) {
-        auto input = std::make_shared<arrow::io::BufferReader>(
-            reinterpret_cast<const uint8_t*>(data.data()), static_cast<int64_t>(data.size()));
-
-        parquet::arrow::FileReaderBuilder builder;
-        UNIT_ASSERT_C(builder.Open(input).ok(), "Failed to open Parquet file");
-
-        std::unique_ptr<parquet::arrow::FileReader> reader;
-        UNIT_ASSERT_C(builder.Build(&reader).ok(), "Failed to build Parquet reader");
-
-        std::shared_ptr<arrow::Table> table;
-        const auto status = reader->ReadTable(&table);
-        UNIT_ASSERT_C(status.ok(), status.message());
-
-        auto combined = table->CombineChunks();
-        UNIT_ASSERT_C(combined.ok(), combined.status().message());
-        return combined.ValueOrDie();
     }
 
     class TExportFixture : public NUnitTest::TBaseFixture {
@@ -4984,7 +4964,7 @@ CREATE EXTERNAL TABLE IF NOT EXISTS `ExternalTable` (
         const auto* data = S3Mock().GetData().FindPtr("/data_00.parquet");
         UNIT_ASSERT(data);
 
-        const auto table = ReadParquet(*data);
+        const auto table = NTestUtils::ReadParquet(*data);
         UNIT_ASSERT_VALUES_EQUAL_C(table->num_rows(), 2, "Buffer corruption detected");
         UNIT_ASSERT_VALUES_EQUAL(table->num_columns(), 2);
 
@@ -5040,7 +5020,7 @@ CREATE EXTERNAL TABLE IF NOT EXISTS `ExternalTable` (
         const auto* data = S3Mock().GetData().FindPtr("/data_00.parquet");
         UNIT_ASSERT(data);
 
-        const auto table = ReadParquet(*data);
+        const auto table = NTestUtils::ReadParquet(*data);
         UNIT_ASSERT_VALUES_EQUAL_C(table->num_rows(), 2, "Compressed buffer corruption detected");
         UNIT_ASSERT_VALUES_EQUAL(table->num_columns(), 2);
 

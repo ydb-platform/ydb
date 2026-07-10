@@ -3,6 +3,7 @@ UNITTEST_FOR(ydb/core/tx/datashard)
 PEERDIR(
     contrib/libs/apache/arrow
     ydb/core/testlib/default
+    ydb/library/testlib/parquet_helpers
 )
 
 YQL_LAST_ABI_VERSION()

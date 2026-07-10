@@ -6,10 +6,9 @@
 #include <util/folder/tempdir.h>
 
 #include <ydb/library/testlib/helpers.h>
+#include <ydb/library/testlib/parquet_helpers/parquet_helpers.h>
 
 #include <arrow/api.h>
-#include <arrow/io/memory.h>
-#include <parquet/arrow/reader.h>
 
 #include <fmt/format.h>
 
@@ -572,21 +571,7 @@ void ExportParquetWholeDatabaseImpl(TBackupTestFixture &f, bool isOlap) {
         UNIT_ASSERT_C(dataIt != s3Data.end(), "data_00.parquet not found");
 
         auto value = dataIt->second;
-        auto input = std::make_shared<arrow::io::BufferReader>(
-            (const uint8_t *)(value.data()), int64_t(value.size()));
-
-        parquet::arrow::FileReaderBuilder reader_builder;
-        arrow::Status status;
-        status = reader_builder.Open(input);
-        UNIT_ASSERT_C(status.ok(), status.message());
-
-        std::unique_ptr<parquet::arrow::FileReader> arrow_reader;
-        status = reader_builder.Build(&arrow_reader);
-        UNIT_ASSERT_C(status.ok(), status.message());
-
-        std::shared_ptr<arrow::Table> table;
-        status = arrow_reader->ReadTable(&table);
-        UNIT_ASSERT_C(status.ok(), status.message());
+        const auto table = NTestUtils::ReadParquet(value);
         UNIT_ASSERT_EQUAL(3, table->num_rows());
 
         auto schema = arrow::schema({
@@ -596,7 +581,7 @@ void ExportParquetWholeDatabaseImpl(TBackupTestFixture &f, bool isOlap) {
         });
 
         auto kBuilder = arrow::Int64Builder();
-        status = kBuilder.AppendValues({1, 2, 3});
+        arrow::Status status = kBuilder.AppendValues({1, 2, 3});
         UNIT_ASSERT_C(status.ok(), status.message());
 
         std::vector<std::string> values = {"rhl8q6u2", "yah6v01e", "3i91khlz"};
@@ -678,21 +663,7 @@ void ExportParquetTableWithCompressionImpl(TBackupTestFixture &f, bool isOlap) {
         UNIT_ASSERT_LE_C(dataIt->second.size(), expectedMaxDataSize, fmt::format("data_00.parquet is too big: {}, max {}", dataIt->second.size(), expectedMaxDataSize));
 
         auto value = dataIt->second;
-        auto input = std::make_shared<arrow::io::BufferReader>(
-            (const uint8_t *)(value.data()), int64_t(value.size()));
-
-        parquet::arrow::FileReaderBuilder reader_builder;
-        arrow::Status status;
-        status = reader_builder.Open(input);
-        UNIT_ASSERT_C(status.ok(), status.message());
-
-        std::unique_ptr<parquet::arrow::FileReader> arrow_reader;
-        status = reader_builder.Build(&arrow_reader);
-        UNIT_ASSERT_C(status.ok(), status.message());
-
-        std::shared_ptr<arrow::Table> table;
-        status = arrow_reader->ReadTable(&table);
-        UNIT_ASSERT_C(status.ok(), status.message());
+        const auto table = NTestUtils::ReadParquet(value);
         UNIT_ASSERT_EQUAL(numRows, table->num_rows());
     }
 }

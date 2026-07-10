@@ -37,6 +37,7 @@ PEERDIR(
     ydb/public/sdk/cpp/src/client/topic
     ydb/public/sdk/cpp/src/client/value
     ydb/library/backup
+    ydb/library/testlib/parquet_helpers
 )
 
 YQL_LAST_ABI_VERSION()

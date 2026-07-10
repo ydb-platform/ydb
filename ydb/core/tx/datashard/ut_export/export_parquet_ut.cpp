@@ -15,9 +15,9 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 
+#include <ydb/library/testlib/parquet_helpers/parquet_helpers.h>
+
 #include <arrow/api.h>
-#include <arrow/io/memory.h>
-#include <parquet/arrow/reader.h>
 
 #ifndef KIKIMR_DISABLE_S3_OPS
 
@@ -45,26 +45,6 @@ namespace {
             break;
         }
         }
-    }
-
-    // Parses Parquet file content into a single-chunk arrow::Table.
-    std::shared_ptr<arrow::Table> ReadParquet(const TString& data) {
-        auto input = std::make_shared<arrow::io::BufferReader>(
-            reinterpret_cast<const uint8_t*>(data.data()), static_cast<int64_t>(data.size()));
-
-        parquet::arrow::FileReaderBuilder builder;
-        UNIT_ASSERT_C(builder.Open(input).ok(), "Failed to open Parquet file");
-
-        std::unique_ptr<parquet::arrow::FileReader> reader;
-        UNIT_ASSERT_C(builder.Build(&reader).ok(), "Failed to build Parquet reader");
-
-        std::shared_ptr<arrow::Table> table;
-        const auto status = reader->ReadTable(&table);
-        UNIT_ASSERT_C(status.ok(), status.message());
-
-        auto combined = table->CombineChunks();
-        UNIT_ASSERT_C(combined.ok(), combined.status().message());
-        return combined.ValueOrDie();
     }
 
     // Runs a callback inside an actor (so AppData() is available) and replies when done.
@@ -150,7 +130,7 @@ Y_UNIT_TEST_SUITE(ExportParquetTest) {
         const TString data = ExportRowsToParquet(settings, rows, /* rowGroupSize */ 2);
         UNIT_ASSERT(!data.empty());
 
-        const auto table = ReadParquet(data);
+        const auto table = NTestUtils::ReadParquet(data);
         UNIT_ASSERT_VALUES_EQUAL(table->num_rows(), 3);
         UNIT_ASSERT_VALUES_EQUAL(table->num_columns(), 2);
 
@@ -183,7 +163,7 @@ Y_UNIT_TEST_SUITE(ExportParquetTest) {
         const TString data = ExportRowsToParquet(settings, rows, /* rowGroupSize */ 1);
         UNIT_ASSERT(!data.empty());
 
-        const auto table = ReadParquet(data);
+        const auto table = NTestUtils::ReadParquet(data);
         UNIT_ASSERT_VALUES_EQUAL(table->num_rows(), 50);
         UNIT_ASSERT_VALUES_EQUAL(table->num_columns(), 2);
 

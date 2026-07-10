@@ -130,12 +130,11 @@ public:
     bool GetUseFollowers() const {
         if (Request.IsolationLevel != NKqpProto::ISOLATION_LEVEL_READ_STALE
                 || !ReadOnlyTx
-                || GetSnapshot().IsValid()
-                || ForceAcquireSnapshot()) {
+                || GetSnapshot().IsValid()) {
             return false;
         }
-        AFL_ENSURE(!HasOlapTable);
 
+        AFL_ENSURE(!HasOlapTable);
         return IsSingleShardRead();
     }
 

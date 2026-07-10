@@ -1,0 +1,7 @@
+use plato;
+
+-- Materialize full table, then select only some columns.
+-- Without prune_unused_columns, all columns must be preserved in the materialized table.
+MATERIALIZE Input ON plato WITH prune_unused_columns INTO $result;
+SELECT key FROM $result WHERE key > "010";
+SELECT subkey FROM $result;

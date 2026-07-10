@@ -768,7 +768,7 @@ void RegisterYtFileMkqlCompilers(NCommon::TMkqlCallableCompilerBase& compiler) {
 
             const auto arg = ytMap.Mapper().Args().Arg(0).Raw();
             values = arg->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Flow ?
-                ctx.ProgramBuilder.ToFlow(values) : ctx.ProgramBuilder.Iterator(values, {});
+                ctx.ProgramBuilder.ToFlow(values, {}) : ctx.ProgramBuilder.Iterator(values, {});
 
             values = ApplyPathFilters(values, itemType, ytMap.Input().Ref(), ctx);
 
@@ -782,7 +782,7 @@ void RegisterYtFileMkqlCompilers(NCommon::TMkqlCallableCompilerBase& compiler) {
             if (IsWideBlockType(lambdaInputType)) {
                 values = ctx.ProgramBuilder.ToFlow(
                     ctx.ProgramBuilder.WideToBlocks(
-                        ctx.ProgramBuilder.FromFlow(values)));
+                        ctx.ProgramBuilder.FromFlow(values)), {});
             }
 
             NCommon::TMkqlBuildContext innerCtx(ctx, {{arg, values}}, ytMap.Mapper().Ref().UniqueId());
@@ -791,7 +791,7 @@ void RegisterYtFileMkqlCompilers(NCommon::TMkqlCallableCompilerBase& compiler) {
             if (IsWideBlockType(lambdaOutputType)) {
                 values = ctx.ProgramBuilder.ToFlow(
                     ctx.ProgramBuilder.WideFromBlocks(
-                        ctx.ProgramBuilder.FromFlow(values)));
+                        ctx.ProgramBuilder.FromFlow(values)), {});
             }
 
             if (ETypeAnnotationKind::Multi == lambdaOutputType.GetKind())
@@ -937,7 +937,7 @@ void RegisterYtFileMkqlCompilers(NCommon::TMkqlCallableCompilerBase& compiler) {
             values = TRuntimeNode(callableBuilder.Build(), false);
 
             values = arg->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Flow ?
-                ctx.ProgramBuilder.ToFlow(values) : ctx.ProgramBuilder.Iterator(values, {});
+                ctx.ProgramBuilder.ToFlow(values, {}) : ctx.ProgramBuilder.Iterator(values, {});
 
             if (ETypeAnnotationKind::Multi == GetSeqItemType(*ytReduce.Reducer().Args().Arg(0).Ref().GetTypeAnn()).GetKind())
                 values = ExpandFlow(values, ctx);
@@ -982,7 +982,7 @@ void RegisterYtFileMkqlCompilers(NCommon::TMkqlCallableCompilerBase& compiler) {
                 const auto& mapper = ytMapReduce.Mapper().Cast<TCoLambda>();
                 const auto arg = mapper.Args().Arg(0).Raw();
                 values = arg->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Flow ?
-                    ctx.ProgramBuilder.ToFlow(values) : ctx.ProgramBuilder.Iterator(values, {});
+                    ctx.ProgramBuilder.ToFlow(values, {}) : ctx.ProgramBuilder.Iterator(values, {});
 
                 auto& lambdaInputType = GetSeqItemType(*ytMapReduce.Mapper().Cast<TCoLambda>().Args().Arg(0).Ref().GetTypeAnn());
                 if (lambdaInputType.GetKind() == ETypeAnnotationKind::Multi) {
@@ -992,7 +992,7 @@ void RegisterYtFileMkqlCompilers(NCommon::TMkqlCallableCompilerBase& compiler) {
                 if (IsWideBlockType(lambdaInputType)) {
                     values = ctx.ProgramBuilder.ToFlow(
                         ctx.ProgramBuilder.WideToBlocks(
-                            ctx.ProgramBuilder.FromFlow(values)));
+                            ctx.ProgramBuilder.FromFlow(values)), {});
                 }
 
                 NCommon::TMkqlBuildContext innerCtx(ctx, {{arg, values}}, ytMapReduce.Mapper().Ref().UniqueId());
@@ -1126,7 +1126,7 @@ void RegisterYtFileMkqlCompilers(NCommon::TMkqlCallableCompilerBase& compiler) {
             values = TRuntimeNode(callableBuilder.Build(), false);
 
             values = arg->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Flow ?
-                ctx.ProgramBuilder.ToFlow(values) : ctx.ProgramBuilder.Iterator(values, {});
+                ctx.ProgramBuilder.ToFlow(values, {}) : ctx.ProgramBuilder.Iterator(values, {});
 
             if (ETypeAnnotationKind::Multi == GetSeqItemType(*arg->GetTypeAnn()).GetKind())
                 values = ExpandFlow(values, ctx);
@@ -1220,7 +1220,7 @@ void RegisterDqYtFileMkqlCompilers(NCommon::TMkqlCallableCompilerBase& compiler)
                     ytRead.Input().Ref(), Nothing(), ctx, false, THashSet<TString>{"num", "index"}, forceKeyColumns);
                 values = ApplyPathFilters(values, outputType, ytRead.Input().Ref(), ctx);
 
-                return ExpandFlow(ctx.ProgramBuilder.ToFlow(values), ctx);
+                return ExpandFlow(ctx.ProgramBuilder.ToFlow(values, {}), ctx);
             }
 
             return TRuntimeNode();
@@ -1239,7 +1239,7 @@ void RegisterDqYtFileMkqlCompilers(NCommon::TMkqlCallableCompilerBase& compiler)
                     ytRead.Input().Ref(), Nothing(), ctx, false, THashSet<TString>{"num", "index"}, forceKeyColumns);
                 values = ApplyPathFilters(values, outputType, ytRead.Input().Ref(), ctx);
 
-                return ctx.ProgramBuilder.WideToBlocks(ctx.ProgramBuilder.FromFlow(ExpandFlow(ctx.ProgramBuilder.ToFlow(values), ctx)));
+                return ctx.ProgramBuilder.WideToBlocks(ctx.ProgramBuilder.FromFlow(ExpandFlow(ctx.ProgramBuilder.ToFlow(values, {}), ctx)));
             }
 
             return TRuntimeNode();

@@ -119,7 +119,7 @@ TUserDataTable GetYqlModuleResolverImpl(
     IModuleResolver::TPtr& moduleResolver,
     const TVector<NUserData::TUserData>& userData,
     const THashMap<TString, TString>& clusterMapping,
-    const THashSet<TString>& sqlFlags,
+    const NSQLTranslation::TExtendedSqlFlags& sqlFlags,
     bool optimizeLibraries,
     THolder<TExprContext> ownedCtx,
     TModuleResolver::TModuleChecker moduleChecker)
@@ -160,7 +160,7 @@ TUserDataTable GetYqlModuleResolver(
     IModuleResolver::TPtr& moduleResolver,
     const TVector<NUserData::TUserData>& userData,
     const THashMap<TString, TString>& clusterMapping,
-    const THashSet<TString>& sqlFlags,
+    const NSQLTranslation::TExtendedSqlFlags& sqlFlags,
     bool optimizeLibraries,
     TModuleResolver::TModuleChecker moduleChecker) {
     return GetYqlModuleResolverImpl(&ctx, moduleResolver, userData, clusterMapping, sqlFlags, optimizeLibraries, nullptr, moduleChecker);

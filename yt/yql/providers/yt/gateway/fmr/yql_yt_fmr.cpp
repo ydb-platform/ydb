@@ -697,9 +697,7 @@ public:
 
     // Builds a callback that, given a TYtTableBaseInfo parsed from the AST, registers the
     // corresponding FMR-only table for upload to YT. Shared by Run and ResOrPull fallback paths.
-    template <typename TOptions>
     auto MakeAstFmrTableProcessor(
-        const TOptions& options,
         const TString& sessionId,
         const TString& defaultCluster,
         const TString& tmpFolder,
@@ -707,7 +705,7 @@ public:
         THashSet<TString>& seen,
         TStringBuf logPrefix)
     {
-        return [this, &options, sessionId, defaultCluster, tmpFolder, &outputTablesByCluster, &seen, logPrefix]
+        return [this, sessionId, defaultCluster, tmpFolder, &outputTablesByCluster, &seen, logPrefix]
                (TYtTableBaseInfo::TPtr tableInfo) {
             if (tableInfo->Cluster.empty()) {
                 tableInfo->Cluster = defaultCluster;
@@ -727,7 +725,7 @@ public:
             if (!savedOutputSpec.IsUndefined()) {
                 outputTableInfo.Spec = savedOutputSpec;
             } else if (tableInfo->RowSpec) {
-                outputTableInfo.Spec = FillAttrSpecNode(*tableInfo->RowSpec, options, tableInfo->Cluster);
+                outputTableInfo.Spec = FillAttrSpecNode(*tableInfo->RowSpec);
             }
             outputTableInfo.AttrSpec = NYT::TNode::CreateMap();
             TString columnGroupSpec = GetColumnGroupSpec(fmrTableId, sessionId);
@@ -792,9 +790,8 @@ public:
             addFmrTable(inputInfo.Cluster, inputInfo.Name, inputInfo.Spec, columnGroupSpec);
         }
 
-        auto runOptionsCopy = TRunOptions(options);
         ScanOperationForYtTableContent(node,
-            MakeAstFmrTableProcessor(runOptionsCopy, sessionId, cluster, tmpFolder,
+            MakeAstFmrTableProcessor(sessionId, cluster, tmpFolder,
                 outputTablesByCluster, seen, "UploadFmrInputs"));
 
         if (!outputTablesByCluster.empty()) {
@@ -1041,7 +1038,7 @@ public:
                     TFmrTableRef inputTable = GetFmrTableRef(inputFmrId, sessionId);
                     SetTableSortingSpec(fmrOutputTableId, inputTable.SortColumns, inputTable.SortOrder, sessionId);
 
-                    auto deferredSpec = FillAttrSpecNode(inputTablesRowSpec[0], TPublishOptions(options), cluster);
+                    auto deferredSpec = FillAttrSpecNode(inputTablesRowSpec[0]);
                     MarkForDeferredUpload(inputFmrId, deferredSpec, sessionId);
                     MarkForDeferredUpload(fmrOutputTableId, deferredSpec, sessionId);
 
@@ -1085,7 +1082,7 @@ public:
                 future = ExecMerge(inputTablesInfo, outputTable, cluster, sessionId, config);
             }
 
-            auto deferredSpec = FillAttrSpecNode(inputTablesRowSpec[0], TPublishOptions(options), cluster);
+            auto deferredSpec = FillAttrSpecNode(inputTablesRowSpec[0]);
             return future.Apply([this, self = TIntrusivePtr<TFmrYtGateway>(this), sessionId, fmrOutputTableId, pos = nodePos, deferredSpec = std::move(deferredSpec)] (const auto& f) {
                 Y_UNUSED(self);
                 TFmrOperationResult anonTablesMergeResult = f.GetValue();
@@ -1130,7 +1127,7 @@ public:
                 continue;
             }
             outputTableInfo.Path = outputPath;
-            outputTableInfo.Spec = FillAttrSpecNode(inputTablesRowSpec[i], TPublishOptions(options), outputCluster);
+            outputTableInfo.Spec = FillAttrSpecNode(inputTablesRowSpec[i]);
             outputTablesByCluster[outputCluster].emplace_back(outputTableInfo);
         }
 
@@ -1468,7 +1465,6 @@ public:
                 auto ysonFormat = NCommon::GetYsonFormat(options.FillSettings());
 
                 // Build input spec for YT {col=val} → YQL result format conversion (synchronous, before async callback)
-                const auto nativeTypeCompat = config->NativeYtTypeCompatibility.Get(cluster).GetOrElse(NTCF_LEGACY);
                 TVector<TString> tableNames;
                 for (const auto& tbl : fmrOnlyTables) {
                     TInputInfo tableInfoEntry;
@@ -1481,12 +1477,12 @@ public:
                         return GetTransformedPath(sessionId, ti->Name, tmpFolder) == tbl.TablePath;
                     });
                     if (it != inputTableInfos.end() && (*it)->RowSpec) {
-                        tableInfoEntry.Spec = FillAttrSpecNode(*(*it)->RowSpec, TResOrPullOptions(options), tbl.Cluster);
+                        tableInfoEntry.Spec = FillAttrSpecNode(*(*it)->RowSpec);
                     }
                     execCtx->InputTables_.emplace_back(std::move(tableInfoEntry));
                     tableNames.push_back(TString());
                 }
-                TString inputSpec = execCtx->GetInputSpec(false, nativeTypeCompat, false);
+                TString inputSpec = execCtx->GetInputSpec(false, false);
                 const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry = execCtx->FunctionRegistry_;
 
                 auto fmrJobFuture = GetUploadResourcesFuture(sessionId, config, {}, {}, execCtx->Options_.PublicId());
@@ -1585,7 +1581,7 @@ public:
                 }
                 TOutputInfo outputTableInfo;
                 outputTableInfo.Path = tbl.TablePath;
-                outputTableInfo.Spec = FillAttrSpecNode(*((*it)->RowSpec), TResOrPullOptions(options), tbl.Cluster);
+                outputTableInfo.Spec = FillAttrSpecNode(*((*it)->RowSpec));
                 outputTableInfo.AttrSpec = NYT::TNode::CreateMap();
                 outputFmrTablesByCluster[tbl.Cluster].emplace_back(outputTableInfo);
             }
@@ -1598,9 +1594,8 @@ public:
             TString tmpFolder = GetTablesTmpFolder(*config, cluster, Sessions_[sessionId]->UseSecureTmp_, Sessions_[sessionId]->OperationOptions_);
             THashSet<TString> seen;
 
-            auto resOptionsCopy = TResOrPullOptions(options);
             ScanYtTableContentTables(NNodes::TResult(node).Input().Ptr(),
-                MakeAstFmrTableProcessor(resOptionsCopy, sessionId, cluster, tmpFolder,
+                MakeAstFmrTableProcessor(sessionId, cluster, tmpFolder,
                     outputFmrTablesByCluster, seen, "ResOrPull(Result)"));
         }
         if (!outputFmrTablesByCluster.empty()) {
@@ -1700,7 +1695,7 @@ public:
                 TOutputInfo outputTableInfo;
                 outputTableInfo.Path = ref.Path;
                 if (ref.TableInfo->RowSpec) {
-                    outputTableInfo.Spec = FillAttrSpecNode(*ref.TableInfo->RowSpec, TCalcOptions(options), ref.Cluster);
+                    outputTableInfo.Spec = FillAttrSpecNode(*ref.TableInfo->RowSpec);
                 }
                 outputTableInfo.AttrSpec = NYT::TNode::CreateMap();
                 outputFmrTablesByCluster[ref.Cluster].emplace_back(outputTableInfo);
@@ -2388,11 +2383,9 @@ private:
         return sortOrders;
     }
 
-    template<class TOptions>
-    NYT::TNode FillAttrSpecNode(const TYqlRowSpecInfo yqlRowSpecInfo, TOptions&& options, const TString& cluster) {
+    NYT::TNode FillAttrSpecNode(const TYqlRowSpecInfo yqlRowSpecInfo) {
         NYT::TNode res = NYT::TNode::CreateMap();
-        const auto nativeTypeCompat = options.Config()->NativeYtTypeCompatibility.Get(cluster).GetOrElse(NTCF_LEGACY);
-        yqlRowSpecInfo.FillAttrNode(res[YqlRowSpecAttribute], nativeTypeCompat, false);
+        yqlRowSpecInfo.FillAttrNode(res[YqlRowSpecAttribute], false);
         return res;
     }
 
@@ -2707,8 +2700,8 @@ private:
         PrepareAttributes(attrs, outputTable, execCtx, outputCluster, true, {});
         attrs["optimize_for"] = "scan";
 
-        const auto nativeTypeCompat = config->NativeYtTypeCompatibility.Get(outputCluster).GetOrElse(NTCF_LEGACY);
-        attrs["schema"] = RowSpecToYTSchema(rowSpecForSchema, nativeTypeCompat, outputTable.ColumnGroups).ToNode();
+        const auto nativeYtTypeCompatibility = GetNativeYtTypeCompatibility(outputCluster, *config);
+        attrs["schema"] = RowSpecToYTSchema(rowSpecForSchema, nativeYtTypeCompatibility, outputTable.ColumnGroups).ToNode();
         YtJobService_->Create(TYtTableRef(outputCluster, outputPath, filePath), clusterConnection, attrs);
     }
 
@@ -3226,8 +3219,7 @@ private:
 
         // Fill has no input tables — skip SetMapJobParams (which calls GetInputSpec and crashes
         // on empty InputTables_). Only set the output spec and common job flags.
-        const auto nativeTypeCompat = execCtx->Options_.Config()->NativeYtTypeCompatibility.Get(execCtx->Cluster_).GetOrElse(NTCF_LEGACY);
-        fillJob->SetOutSpec(execCtx->GetOutSpec(true, nativeTypeCompat));
+        fillJob->SetOutSpec(execCtx->GetOutSpec(true));
         fillJob->SetUseSkiff(false, TMkqlIOSpecs::ESystemField(0));
         fillJob->SetOptLLVM(execCtx->Options_.OptLLVM());
         fillJob->SetUdfValidateMode(execCtx->Options_.UdfValidateMode());

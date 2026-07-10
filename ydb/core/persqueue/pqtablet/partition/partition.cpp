@@ -681,6 +681,10 @@ void TPartition::DestroyActor(const TActorContext& ctx)
         UsersInfoStorage->Clear(ctx);
     }
 
+    for (auto& [_, mlpConsumerInfo] : MLPConsumers) {
+        Send(mlpConsumerInfo.ActorId, new TEvents::TEvPoisonPill());
+    }
+
     if (ReadQuotaTrackerActor) {
         Send(ReadQuotaTrackerActor, new TEvents::TEvPoisonPill());
     }

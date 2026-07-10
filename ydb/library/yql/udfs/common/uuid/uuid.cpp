@@ -10,6 +10,8 @@ using namespace NYql::NUdf;
 
 namespace {
 
+constexpr ui32 MaxDepArgs = 32;
+
 TString BuildDepArgKindsPredicate(TStringBuf argName) {
     return TStringBuilder() << R"(
 {cmd=or;value=[
@@ -26,33 +28,104 @@ TString BuildDepArgKindsPredicate(TStringBuf argName) {
 )";
 }
 
+TString BuildAndDepArgKindsPredicate(ui32 depCount, ui32 firstArgIndex = 0) {
+    Y_ENSURE(depCount > 0);
+    TStringBuilder sb;
+    sb << "{cmd=and;value=[";
+    for (ui32 i = 0; i < depCount; ++i) {
+        if (i > 0) {
+            sb << ";";
+        }
+        sb << BuildDepArgKindsPredicate(TStringBuilder() << "T" << (firstArgIndex + i));
+    }
+    sb << "]}";
+    return sb;
+}
+
+TString BuildCallableTypeWithUniversalDeps(ui32 depCount, bool hasPrefix) {
+    TStringBuilder sb;
+    sb << "[CallableType;[];[];[";
+    if (hasPrefix) {
+        sb << "[[DataType;Uint64]";
+        for (ui32 i = 0; i < depCount; ++i) {
+            sb << ";[UniversalType]";
+        }
+        sb << ";[[DataType;Uuid]]]";
+    } else {
+        for (ui32 i = 0; i < depCount; ++i) {
+            sb << "[UniversalType]";
+            if (i + 1 < depCount) {
+                sb << ";";
+            }
+        }
+        if (depCount > 0) {
+            sb << ";";
+        }
+        sb << "[[DataType;Uuid]]]";
+    }
+    sb << "]]";
+    return sb;
+}
+
+void AppendNoPrefixPolyArgRule(TStringBuilder& sb, ui32 depCount) {
+    sb << "[";
+    if (depCount == 0) {
+        sb << "[]";
+    } else {
+        sb << BuildAndDepArgKindsPredicate(depCount);
+    }
+    sb << "; {type=" << BuildCallableTypeWithUniversalDeps(depCount, /*hasPrefix=*/false) << "}]";
+}
+
+void AppendPrefixPolyArgRule(TStringBuilder& sb, ui32 depCount) {
+    sb << "[";
+    if (depCount == 0) {
+        sb << "{cmd=type;arg=T0;value=[DataType;Uint64]}";
+    } else {
+        sb << "{cmd=and;value=[{cmd=type;arg=T0;value=[DataType;Uint64]}";
+        for (ui32 i = 0; i < depCount; ++i) {
+            sb << ";" << BuildDepArgKindsPredicate(TStringBuilder() << "T" << (i + 1));
+        }
+        sb << "]}";
+    }
+    sb << "; {type=" << BuildCallableTypeWithUniversalDeps(depCount, /*hasPrefix=*/true) << "}]";
+}
+
 TString BuildNoPrefixPolyArgs(TStringBuf errorMessage) {
     TStringBuilder sb;
-    sb << R"([[
-    [[]; {type=[CallableType;[];[];[[[DataType;Uuid]]]]}];)";
-    sb << R"(
-    [)" << BuildDepArgKindsPredicate("T0") << R"(; {type=[CallableType;[];[];[[[UniversalType];[[DataType;Uuid]]]]}];)";
-    sb << R"(
-    [{cmd=and;value=[)" << BuildDepArgKindsPredicate("T0") << ";"
-       << BuildDepArgKindsPredicate("T1") << R"(]}; {type=[CallableType;[];[];[[[UniversalType];[[UniversalType];[[DataType;Uuid]]]]}];)";
-    sb << R"(
-    [{cmd=error;message=")" << errorMessage << R"("}; {}]
-]])";
+    sb << "[[";
+    bool first = true;
+    for (ui32 depCount = MaxDepArgs; depCount > 0; --depCount) {
+        if (!first) {
+            sb << ";";
+        }
+        first = false;
+        AppendNoPrefixPolyArgRule(sb, depCount);
+    }
+    if (!first) {
+        sb << ";";
+    }
+    AppendNoPrefixPolyArgRule(sb, 0);
+    sb << "; [{cmd=error;message=\"" << errorMessage << "\"}; {}]]";
     return sb;
 }
 
 TString BuildPrefixPolyArgs(TStringBuf errorMessage) {
     TStringBuilder sb;
-    sb << R"([[
-    [{cmd=type;arg=T0;value=[DataType;Uint64]}; {type=[CallableType;[];[];[[[DataType;Uint64];[[DataType;Uuid]]]]}];)";
-    sb << R"(
-    [{cmd=and;value=[{cmd=type;arg=T0;value=[DataType;Uint64]}; )" << BuildDepArgKindsPredicate("T1") << R"(]}; {type=[CallableType;[];[];[[[DataType;Uint64];[[UniversalType];[[DataType;Uuid]]]]}];)";
-    sb << R"(
-    [{cmd=and;value=[{cmd=type;arg=T0;value=[DataType;Uint64]}; )" << BuildDepArgKindsPredicate("T1") << ";"
-       << BuildDepArgKindsPredicate("T2") << R"(]}; {type=[CallableType;[];[];[[[DataType;Uint64];[[UniversalType];[[UniversalType];[[DataType;Uuid]]]]}];)";
-    sb << R"(
-    [{cmd=error;message=")" << errorMessage << R"("}; {}]
-]])";
+    sb << "[[";
+    bool first = true;
+    for (ui32 depCount = MaxDepArgs; depCount > 0; --depCount) {
+        if (!first) {
+            sb << ";";
+        }
+        first = false;
+        AppendPrefixPolyArgRule(sb, depCount);
+    }
+    if (!first) {
+        sb << ";";
+    }
+    AppendPrefixPolyArgRule(sb, 0);
+    sb << "; [{cmd=error;message=\"" << errorMessage << "\"}; {}]]";
     return sb;
 }
 

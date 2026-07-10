@@ -395,6 +395,10 @@ message TSelfManagementConfig {
     optional bool AutomaticStateStorageManagement = 24; // the same for state storage
     optional bool AutomaticStateStorageBoardManagement = 25; // the same for state storage board
     optional bool AutomaticSchemeBoardManagement = 26; // the same for scheme board
+
+    // node ids onto which vdisks of static groups may be relocated during self-heal;
+    // empty list means no restriction
+    repeated uint32 StaticGroupSelfHealAllowedNodes = 27;
 }
 
 message TBlobStorageFormatConfig {
@@ -1256,6 +1260,7 @@ message TStreamingQueriesConfig {
     reserved 2;
     optional TExternalStorageConfig ExternalStorage = 3;
     optional TExternalTopicsSettings TopicSdkSettings = 4;
+    optional bool ForbidYqlSysColumnsAndSystemMetadata = 5 [default = true];
 }
 
 message TQueryServiceConfig {
@@ -1654,7 +1659,7 @@ message TImmediateControlsConfig {
             Description: "Allow cutting large TEvLocalSyncLogData messages into smaller chunks",
             MinValue: 0,
             MaxValue: 1,
-            DefaultValue: 0 }];
+            DefaultValue: 1 }];
         optional uint64 EnableSyncLogChunkCompressionHDD = 2 [(ControlOptions) = {
             Description: "Compress SyncLog chunks before writing to log, setting for HDD",
             MinValue: 0,
@@ -2353,6 +2358,40 @@ message TImmediateControlsConfig {
             DefaultValue: 1 }];
     }
     optional TQuoterControls QuoterControls = 21;
+
+    message TRetroTracingControls {
+        optional uint64 EnableStorageGeneration = 1 [(ControlOptions) = {
+            Description: "Enable generation of retro traces at the storage (DSProxy) level",
+            MinValue: 0,
+            MaxValue: 1,
+            DefaultValue: 0 }];
+        optional uint64 EnableStorageCollectionSlowRequests = 2 [(ControlOptions) = {
+            Description: "Enable collection of retro traces for slow DSProxy requests",
+            MinValue: 0,
+            MaxValue: 1,
+            DefaultValue: 0 }];
+        optional uint64 MaxBatchSize = 3 [(ControlOptions) = {
+            Description: "Maximum number of trace ids batched by the distributed retro collector before flush",
+            MinValue: 1,
+            MaxValue: 100000,
+            DefaultValue: 64 }];
+        optional uint64 BatchFlushIntervalMs = 4 [(ControlOptions) = {
+            Description: "Interval (ms) between batch flushes of the distributed retro collector",
+            MinValue: 1,
+            MaxValue: 3600000,
+            DefaultValue: 500 }];
+        optional uint64 DeduplicationTTLSec = 5 [(ControlOptions) = {
+            Description: "Time (sec) a recently observed trace id is remembered to deduplicate retro trace demands",
+            MinValue: 1,
+            MaxValue: 3600,
+            DefaultValue: 10 }];
+        optional uint64 RootBatchIntervalSec = 6 [(ControlOptions) = {
+            Description: "Interval (sec) between root-side (distconf) retro trace batch processing",
+            MinValue: 1,
+            MaxValue: 3600,
+            DefaultValue: 10 }];
+    }
+    optional TRetroTracingControls RetroTracingControls = 23;
 };
 
 message TMeteringConfig {
@@ -2545,7 +2584,7 @@ message THiveConfig {
     optional double MinPeriodBetweenBalance = 29 [default = 0.2]; // seconds
     optional uint64 MaxMovementsOnAutoBalancer = 30 [default = 1]; // tablets
     optional bool ContinueAutoBalancer = 31 [default = true];
-    optional double MinNodeUsageToBalance = 32 [default = 0.1];
+    optional double MinNodeUsageToBalance = 32 [default = 0.3];
     optional double MinPeriodBetweenReassign = 33 [default = 300.0]; // seconds
     optional double TabletRestartWatchPeriod = 34 [default = 3600.0]; // seconds, period used for statistics, not to be confused with TabletRestartsPeriod
     optional double NodeRestartWatchPeriod = 35 [default = 3600.0]; // seconds
@@ -2581,9 +2620,9 @@ message THiveConfig {
     reserved 66;
     optional double ObjectImbalanceToBalance = 67 [default = 0.02];
     optional EHiveChannelBalanceStrategy ChannelBalanceStrategy = 68 [default = HIVE_CHANNEL_BALANCE_STRATEGY_WEIGHTED_RANDOM];
-    optional uint64 MaxChannelHistorySize = 69 [default = 200];
+    optional uint64 MaxChannelHistorySize = 69 [default = 10];
     optional uint64 StorageInfoRefreshFrequency = 70 [default = 600000]; // send a query to BSC every x milliseconds
-    optional double MinStorageScatterToBalance = 71 [default = 999]; // storage balancer trigger threshold (disabled by default)
+    optional double MinStorageScatterToBalance = 71 [default = 0.5];
     optional double MinGroupUsageToBalance = 72 [default = 0.1];
     optional uint64 StorageBalancerInflight = 73 [default = 1];
     optional bool EnableDestroyOperations = 74 [default = false];
@@ -2603,7 +2642,7 @@ message THiveConfig {
     optional uint64 BalanceCountersRefreshFrequency = 88 [default = 15000]; // milliseconds
     optional bool LockedTabletsSendMetrics = 89 [default = false]; // if true then hive will process metrics from locked tablets
     optional uint64 MaxDeleteTabletInProgress = 90 [default = 100];
-    optional uint64 DataCenterChangeReactionPeriod = 91 [default = 1]; // seconds
+    optional uint64 DataCenterChangeReactionPeriod = 91 [default = 300]; // seconds
     repeated THiveTabletAllowedMetrics DefaultTabletAllowedMetrics = 92;
 }
 
@@ -2728,7 +2767,7 @@ message TColumnShardConfig {
     optional uint64 TieringStageMemoryLimit = 65 [default = 1000000000];
     optional uint64 CleanupPortionsStageMemoryLimit = 66 [default = 1000000000];
     optional bool EnableIntervalTreeForMetadataSelect = 67 [default = true];
-    optional bool EnableCursorV1 = 68 [default = false];
+    optional bool EnableCursorV1 = 68 [default = true];
     optional uint64 LimitSortedStartInFlight = 69 [default = 16];
 
     message TReadRetryPolicy {
@@ -2738,6 +2777,24 @@ message TColumnShardConfig {
     }
 
     optional TReadRetryPolicy ReadRetryPolicy = 70;
+    optional uint64 BulkUpsertShardWriteChunkLimitBytes = 71 [default = 50331648]; // 48 MiB
+    optional bool EnableBulkUpsertValidation = 72 [default = true];
+}
+
+// Cluster config for the database-wide small-blobs quota. Per-database limits are derived from
+// data_size_hard_quota; a 0 hard quota disables it. Kept at the top level (rather than under a specific
+// tablet's config) because the quota applies to any database tablet that stores small blobs.
+message TSmallBlobsQuotaConfig {
+    optional uint64 VolumeBytesPer10TiB = 1 [default = 1073741824]; // 1 GiB per 10 TiB
+    optional uint64 CountPer10TiB = 2 [default = 5000000];          // 5M per 10 TiB
+    optional double SoftRatio = 3 [default = 0.95];                 // soft = ratio * hard
+
+    // Base "small" threshold; scaled per-erasure dynamically (block-4-2 x4).
+    optional uint64 SmallBlobSizeThresholdBytes = 4 [default = 65536]; // 64 KiB
+
+    // Reported count per blob = BlobSubgroupSize() / coef (mirror-3-dc 9/3, block-4-2 8/2).
+    optional uint32 Mirror3dcStorageHardQuotaCoef = 5 [default = 3];
+    optional uint32 Block42StorageHardQuotaCoef = 6 [default = 2];
 }
 
 // TSchemeShardConfig has been moved to ydb/core/protos/schemeshard_config.proto
@@ -2823,6 +2880,16 @@ message TCompactionConfig {
 
         // maximum time of unpersisted batch of shards
         optional uint32 PersistBatchMaxTimeMs = 6 [default = 100];
+
+        // The maximum number of stored operations regardless of status.
+        // Creating an operation beyond this limit fails, unless AutoForgetOperations is enabled.
+        // 0 means unlimited.
+        optional uint32 StoredOperationsLimit = 7 [default = 1000];
+
+        // When the StoredOperationsLimit is reached, automatically forget the oldest finished
+        // (Done or Cancelled) operations to make room for a new one instead of failing the request.
+        // If there are still not enough finished operations to forget, the request fails.
+        optional bool AutoForgetOperations = 8 [default = true];
     }
 
     optional TBackgroundCompactionConfig BackgroundCompactionConfig = 1;
@@ -3311,6 +3378,7 @@ message TAppConfig {
     optional TTliConfig TliConfig = 120;
 
     optional TLongTxServiceConfig LongTxServiceConfig = 121;
+    optional TSmallBlobsQuotaConfig SmallBlobsQuotaConfig = 122;
 }
 
 message TYdbVersion {

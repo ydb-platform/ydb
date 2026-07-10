@@ -49,7 +49,7 @@ private:
 public:
     TLocalCache(TIntrusivePtr<NMonotonic::IMonotonicTimeProvider> clock, TLocalCacheConfig config)
         : Clock_(std::move(clock))
-        , Config_(std::move(config))
+        , Config_(config)
         , Origin_(/* maxSize = */ Config_.ByteCapacity)
     {
     }

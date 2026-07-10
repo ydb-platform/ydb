@@ -16,6 +16,8 @@
 #include <util/string/ascii.h>
 #include <util/string/vector.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::HTTP_PROXY
+
 
 namespace NKikimr::NHttpProxy {
 
@@ -121,8 +123,10 @@ namespace NKikimr::NHttpProxy {
 
     void THttpRequestContext::DoReply(THttpResponseData&& data) {
         auto ctx = TlsActivationContext->AsActorContext();
-        LOG_SP_INFO_S(ctx, NKikimrServices::HTTP_PROXY,
-            "reply with status: " << data.HttpCode << " message: " << data.Message);
+        YDB_LOG_INFO_CTX(ctx, "Reply with",
+            {"logPrefix", LogPrefix()},
+            {"status", data.HttpCode},
+            {"message", data.Message});
 
         NHttp::THttpOutgoingResponsePtr response = new NHttp::THttpOutgoingResponse(
             Request,

@@ -592,7 +592,7 @@ int TFacadeRunner::DoMain(int argc, const char** argv) {
     }
 
     auto funcRegistry = NKikimr::NMiniKQL::CreateFunctionRegistry(&NYql::NBacktrace::KikimrBackTrace,
-                                                                  NKikimr::NMiniKQL::CreateBuiltinRegistry(), true, RunOptions_.UdfsPaths)
+                                                                  NKikimr::NMiniKQL::CreateBuiltinRegistry(), /*allowUdfPatch=*/true, RunOptions_.UdfsPaths)
                             ->Clone();
     NKikimr::NMiniKQL::FillStaticModules(*funcRegistry);
     FuncRegistry_ = funcRegistry;
@@ -733,7 +733,7 @@ int TFacadeRunner::DoMain(int argc, const char** argv) {
         if (EQPlayerMode::Replay != RunOptions_.QPlayerMode) {
             THoldingFileStorage storage(FileStorage_);
             RunOptions_.PrintInfo(TStringBuilder() << TInstant::Now().ToStringLocalUpToSeconds() << " Udf scanning started for " << RunOptions_.UdfsPaths.size() << " udfs ...");
-            LoadRichMetadataToUdfIndex(*udfResolver, RunOptions_.UdfsPaths, false, TUdfIndex::EOverrideMode::RaiseError, *udfIndex, storage);
+            LoadRichMetadataToUdfIndex(*udfResolver, RunOptions_.UdfsPaths, /*isTrusted=*/false, TUdfIndex::EOverrideMode::RaiseError, *udfIndex, storage);
             RunOptions_.PrintInfo(TStringBuilder() << TInstant::Now().ToStringLocalUpToSeconds() << " UdfIndex done.");
         }
 
@@ -746,7 +746,7 @@ int TFacadeRunner::DoMain(int argc, const char** argv) {
     } else {
         udfResolver = FileStorage_ && RunOptions_.UdfResolverPath
                           ? NCommon::CreateOutProcUdfResolver(FuncRegistry_.Get(), FileStorage_, RunOptions_.UdfResolverPath, {}, {}, RunOptions_.UdfResolverFilterSyscalls, {})
-                          : NCommon::CreateSimpleUdfResolver(FuncRegistry_.Get(), FileStorage_, true);
+                          : NCommon::CreateSimpleUdfResolver(FuncRegistry_.Get(), FileStorage_, /*useFakeMD5=*/true);
         if (RunOptions_.UdfResolverLog) {
             udfResolver = NCommon::CreateUdfResolverDecoratorWithLogger(FuncRegistry_.Get(), udfResolver, RunOptions_.UdfResolverLog, RunOptions_.OperationId);
         }
@@ -947,7 +947,7 @@ int TFacadeRunner::DoRun(TProgramFactory& factory) {
     }
 
     if (RunOptions_.TraceOptStream) {
-        program->Print(RunOptions_.TraceOptStream, nullptr);
+        program->Print(RunOptions_.TraceOptStream, /*planOut=*/nullptr);
     }
     if (fail) {
         return -1;
@@ -955,7 +955,7 @@ int TFacadeRunner::DoRun(TProgramFactory& factory) {
 
     if (ERunMode::Compile == RunOptions_.Mode) {
         if (RunOptions_.ExprStream) {
-            auto baseAst = ConvertToAst(*program->ExprRoot(), program->ExprCtx(), NYql::TExprAnnotationFlags::None, true);
+            auto baseAst = ConvertToAst(*program->ExprRoot(), program->ExprCtx(), NYql::TExprAnnotationFlags::None, /*refAtoms=*/true);
             baseAst.Root->PrettyPrintTo(*RunOptions_.ExprStream, PRETTY_FLAGS);
         }
 
@@ -973,7 +973,7 @@ int TFacadeRunner::DoRun(TProgramFactory& factory) {
     TProgram::TStatus status = DoRunProgram(program);
 
     if (ERunMode::Peephole == RunOptions_.Mode && RunOptions_.ExprStream && program->ExprRoot()) {
-        auto ast = ConvertToAst(*program->ExprRoot(), program->ExprCtx(), RunOptions_.WithTypes ? TExprAnnotationFlags::Types : TExprAnnotationFlags::None, true);
+        auto ast = ConvertToAst(*program->ExprRoot(), program->ExprCtx(), RunOptions_.WithTypes ? TExprAnnotationFlags::Types : TExprAnnotationFlags::None, /*refAtoms=*/true);
         ui32 prettyFlags = TAstPrintFlags::ShortQuote;
         if (!RunOptions_.WithTypes) {
             prettyFlags |= TAstPrintFlags::PerLine;
@@ -992,7 +992,7 @@ int TFacadeRunner::DoRun(TProgramFactory& factory) {
     program->PrintErrorsTo(*RunOptions_.ErrStream);
     if (status == TProgram::TStatus::Error) {
         if (RunOptions_.TraceOptStream) {
-            program->Print(RunOptions_.TraceOptStream, nullptr);
+            program->Print(RunOptions_.TraceOptStream, /*planOut=*/nullptr);
         }
         return -1;
     }

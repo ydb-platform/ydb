@@ -7,7 +7,9 @@
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
 #include <yql/essentials/minikql/mkql_node_cast.h>
 #include <yql/essentials/minikql/comp_nodes/ut/mkql_program_builder_test_utils.h>
+#include <yql/essentials/public/udf/udf_type_printer.h>
 
+#include <tuple>
 #include <variant>
 
 namespace NKikimr::NMiniKQL {
@@ -28,10 +30,19 @@ public:
     constexpr static size_t SignleIteration = 1;
     constexpr static size_t ManyIterations = 1000;
 
-    explicit TBlockHelper()
+    explicit TBlockHelper(NYql::EDatumValidationMode validationMode = NYql::EDatumValidationMode::Expensive)
         : Setup_(GetNodeTestFactory())
         , Pb_(*Setup_.PgmBuilder)
     {
+        Setup_.RuntimeSettings->DatumValidation.Set(validationMode);
+    }
+
+    TProgramBuilder& ProgramBuilder() {
+        return Pb_;
+    }
+
+    void ValidateDatum(arrow::Datum datum, TMaybe<arrow::ValueDescr> expectedDescription, const TType* type) {
+        ::NKikimr::NMiniKQL::ValidateDatum(datum, expectedDescription, type, Setup_.RuntimeSettings->DatumValidation.Get());
     }
 
     template <typename T>
@@ -49,7 +60,7 @@ public:
     TRuntimeNode ConvertNodeFuzzied(const TVector<T>& nodes) {
         ui64 fuzzId = FuzzerHolder_.ReserveFuzzer();
         auto convertedNode = ConvertNodeWithSpecificFuzzer(nodes, fuzzId);
-        FuzzerHolder_.CreateFuzzers(TFuzzOptions::FuzzAll(), fuzzId, convertedNode.GetStaticType(), Pb_.GetTypeEnvironment());
+        FuzzerHolder_.CreateFuzzers(TFuzzOptions::FuzzAll(), fuzzId, convertedNode.GetStaticType(), Pb_.GetTypeEnvironment(), Setup_.RuntimeSettings->DatumValidation.Get());
         return convertedNode;
     }
 
@@ -109,6 +120,41 @@ public:
         return {std::move(graph), std::move(value)};
     }
 
+    template <typename TExpected, typename TOp, typename... TInputs>
+    void RunNodeOverWideStream(const TExpected& expected, const TOp& blockOp, const TInputs&... inputs) {
+        static_assert(sizeof...(TInputs) > 0, "At least one input is required");
+        constexpr size_t N = sizeof...(TInputs);
+        auto resolved = ResolveBlockOpInputs(inputs...);
+
+        auto fuzzed = BuildFuzzedWideStream(resolved.VectorLists);
+        auto applied = Pb_.WideMap(fuzzed, [&](TRuntimeNode::TList columns) -> TRuntimeNode::TList {
+            auto args = AssembleBlockOpArguments<N>(columns, resolved.ScalarNodes, resolved.ColumnIndex);
+            auto resultBlock = [&]<size_t... Is>(std::index_sequence<Is...>) {
+                return blockOp(Setup_, args[Is]...);
+            }(std::make_index_sequence<N>{});
+            return {resultBlock, columns.back()};
+        });
+        auto singleColumn = ReadSingleWideStreamColumn(applied);
+        auto value = Setup_.BuildGraph(singleColumn)->GetValue();
+
+        if constexpr (TIsVectorV<TExpected>) {
+            auto expectedType = NTest::ConvertToMinikqlType<TExpected>(Pb_);
+            UNIT_ASSERT_C(expectedType->IsSameType(*singleColumn.GetStaticType()),
+                          "Expected type mismatch " << TypeToString(expectedType)
+                                                    << " != "
+                                                    << TypeToString(singleColumn.GetStaticType()));
+            NYql::NUdf::AssertUnboxedValueElementEqual(value, expected);
+        } else {
+            auto expectedType = NTest::ConvertToMinikqlType<TVector<TExpected>>(Pb_);
+            UNIT_ASSERT_C(expectedType->IsSameType(*singleColumn.GetStaticType()),
+                          "Expected type mismatch " << TypeToString(expectedType)
+                                                    << " != "
+                                                    << TypeToString(singleColumn.GetStaticType()));
+            static_assert((!TIsVectorV<TInputs> && ...), "A scalar expected requires all-scalar inputs");
+            NYql::NUdf::AssertUnboxedValueElementEqual(value, TVector<TExpected>{expected});
+        }
+    }
+
     template <typename T>
     std::tuple<THolder<IComputationGraph>, NUdf::TUnboxedValue, TType*, TType*> GetArrowBlock(const T& value) {
         auto node = ConvertNodeFuzzied(value);
@@ -135,18 +181,15 @@ public:
 
             auto outDatum = ConvertDatumToArrowFormat(TArrowBlock::From(resultValue).GetDatum(), *arrow::default_memory_pool());
             auto expectedDatum = ConvertDatumToArrowFormat(TArrowBlock::From(expectedValue).GetDatum(), *arrow::default_memory_pool());
-
-            UNIT_ASSERT_EQUAL_C(outDatum, expectedDatum, "\nExpected : " << DatumToString(expectedDatum) << "\nBut got : " << DatumToString(outDatum));
+            CompareDatums(expectedDatum, outDatum);
         }
     }
 
     template <typename T, typename V>
     void TestKernelFuzzied(const TVector<T>& operand, const TVector<V>& expected, std::function<TRuntimeNode(TSetup<false>&, TRuntimeNode)> unaryOp, TMaybe<size_t> iterations = Nothing()) {
         MKQL_ENSURE(operand.size() == expected.size(), "Size mismatch.");
-        // Test fuzzied vectors.
         TestKernel(operand, expected, unaryOp, iterations);
         for (size_t i = 0; i < operand.size(); i++) {
-            // Test subsequent scalars.
             TestKernel(operand[i], expected[i], unaryOp, iterations);
         }
     }
@@ -161,19 +204,16 @@ public:
         if constexpr (TIsVectorV<T> && TIsVectorV<U>) {
             TestKernel(left, right, expected, binaryOp, iterations);
             for (size_t i = 0; i < left.size(); i++) {
-                // Test subsequent scalars.
                 TestKernel(left[i], right[i], expected[i], binaryOp, iterations);
             }
         } else if constexpr (TIsVectorV<T>) {
             TestKernel(left, right, expected, binaryOp, iterations);
             for (size_t i = 0; i < left.size(); i++) {
-                // Test subsequent scalars.
                 TestKernel(left[i], right, expected[i], binaryOp, iterations);
             }
         } else if constexpr (TIsVectorV<U>) {
             TestKernel(left, right, expected, binaryOp, iterations);
             for (size_t i = 0; i < right.size(); i++) {
-                // Test subsequent scalars.
                 TestKernel(left, right[i], expected[i], binaryOp, iterations);
             }
         } else {
@@ -192,17 +232,71 @@ public:
     }
 
 private:
+    template <size_t N>
+    struct TResolvedBlockOpInputs {
+        TVector<TRuntimeNode> VectorLists;
+        std::array<TRuntimeNode, N> ScalarNodes{};
+        std::array<int, N> ColumnIndex{};
+    };
+
+    template <typename... TInputs>
+    TResolvedBlockOpInputs<sizeof...(TInputs)> ResolveBlockOpInputs(const TInputs&... inputs) {
+        TResolvedBlockOpInputs<sizeof...(TInputs)> resolved;
+        int nextColumn = 0;
+        [&]<size_t... Is>(std::index_sequence<Is...>) {
+            ([&] {
+                if constexpr (TIsVectorV<TInputs>) {
+                    resolved.ColumnIndex[Is] = nextColumn++;
+                    resolved.VectorLists.push_back(NTest::ConvertValueToLiteralNode(Pb_, inputs));
+                } else {
+                    resolved.ColumnIndex[Is] = -1;
+                    resolved.ScalarNodes[Is] = ConvertNodeUnfuzzied(inputs);
+                }
+            }(), ...);
+        }(std::index_sequence_for<TInputs...>{});
+        return resolved;
+    }
+
+    template <size_t N>
+    static std::array<TRuntimeNode, N> AssembleBlockOpArguments(const TRuntimeNode::TList& columns,
+                                                                const std::array<TRuntimeNode, N>& scalarNodes,
+                                                                const std::array<int, N>& columnIndex) {
+        std::array<TRuntimeNode, N> args;
+        for (size_t i = 0; i < N; ++i) {
+            args[i] = columnIndex[i] >= 0 ? columns[static_cast<size_t>(columnIndex[i])] : scalarNodes[i];
+        }
+        return args;
+    }
+
     void ClearFuzzers() {
         FuzzerHolder_.ClearFuzzers();
     }
 
-    IComputationNode* WrapMaterializeBlockStream(TCallable& callable, const TComputationNodeFactoryContext& ctx);
+    IComputationNode* WrapFuzzStream(TCallable& callable, const TComputationNodeFactoryContext& ctx);
+
+    IComputationNode* WrapWideFuzzStream(TCallable& callable, const TComputationNodeFactoryContext& ctx);
 
     TComputationNodeFactory GetNodeTestFactory();
 
     TString DatumToString(arrow::Datum datum);
 
-    TRuntimeNode MaterializeBlockStream(TProgramBuilder& pgmBuilder, TRuntimeNode stream, ui64 fuzzId);
+    void CompareDatums(arrow::Datum expected, arrow::Datum got);
+
+    TString TypeToString(TType* type);
+
+    TRuntimeNode FuzzStream(TProgramBuilder& pgmBuilder, TRuntimeNode stream, ui64 fuzzId);
+
+    TRuntimeNode WideFuzzStream(TProgramBuilder& pgmBuilder, TRuntimeNode wideStream, const TVector<ui64>& fuzzIds);
+
+    TRuntimeNode MaterializeBlockStream(TProgramBuilder& pgmBuilder, TRuntimeNode stream);
+
+    TRuntimeNode BuildFuzzedWideStream(const TVector<TRuntimeNode>& vectorLists);
+
+    TRuntimeNode BuildScalarOnlyWideBlockStream();
+
+    TVector<ui64> MakeWideStreamColumnsFuzzers(TMultiType* multiType);
+
+    TRuntimeNode ReadSingleWideStreamColumn(TRuntimeNode wideBlocks);
 
     TSetup<false> Setup_;
     TProgramBuilder& Pb_;

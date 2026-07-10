@@ -7,6 +7,7 @@
 #include <ydb/core/tx/columnshard/operations/write.h>
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/struct_log/log_stack.h>
 
 #include <util/digest/numeric.h>
 #include <util/generic/string_hash.h>
@@ -90,8 +91,9 @@ public:
     void Bootstrap();
 
     STFUNC(StateWait) {
-        TLogContextGuard gLogging(
-            NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("tablet_id", TabletId)("parent", ParentActorId));
+        YDB_LOG_CREATE_CONTEXT_COMP(NKikimrServices::TX_COLUMNSHARD,
+            {"tabletId", TabletId},
+            {"parent", ParentActorId});
         switch (ev->GetTypeRewrite()) {
             cFunc(NActors::TEvents::TEvPoison::EventType, PassAway);
             hFunc(TEvAddInsertedDataToBuffer, Handle);

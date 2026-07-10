@@ -2,6 +2,8 @@
 
 #include <yt/yql/providers/yt/common/yql_configuration.h>
 #include <yt/yql/providers/yt/fmr/job/impl/yql_yt_reduce_reader.h>
+#include <yt/yql/providers/yt/fmr/utils/yson_block_iterator/impl/yql_yt_key_hash_block_iterator.h>
+#include <yt/yql/providers/yt/fmr/utils/yql_yt_sort_helper.h>
 #include <yt/yql/providers/yt/fmr/request_options/proto_helpers/yql_yt_request_proto_helpers.h>
 #include <yt/yql/providers/yt/fmr/tvm/impl/yql_yt_fmr_tvm_impl.h>
 #include <yt/yql/providers/yt/fmr/utils/yql_yt_parse_records.h>
@@ -14,7 +16,84 @@
 
 #include <util/thread/pool.h>
 
+#include <unordered_set>
+
 namespace NYql::NFmr {
+
+namespace {
+
+// ITableDataService that captures Put() blobs into an in-memory vector.
+// Used during the MapReduceMap mapper phase to avoid writing to the real TDS.
+class TQueueWriteTableDataService final: public ITableDataService {
+public:
+    explicit TQueueWriteTableDataService(TVector<TString>& blobs)
+        : Blobs_(blobs)
+    {
+    }
+
+    NThreading::TFuture<bool> Put(const TString& /*group*/, const TString& /*chunkId*/, const TString& value) override {
+        Blobs_.push_back(value);
+        return NThreading::MakeFuture(true);
+    }
+
+    NThreading::TFuture<TMaybe<TString>> Get(const TString& /*group*/, const TString& /*chunkId*/) const override {
+        ythrow yexception() << "TQueueWriteTableDataService: Get is not supported";
+    }
+
+    NThreading::TFuture<void> Delete(const TString& /*group*/, const TString& /*chunkId*/) override {
+        ythrow yexception() << "TQueueWriteTableDataService: Delete is not supported";
+    }
+
+    NThreading::TFuture<void> RegisterDeletion(const std::vector<TString>& /*groupsToDelete*/) override {
+        ythrow yexception() << "TQueueWriteTableDataService: RegisterDeletion is not supported";
+    }
+
+    NThreading::TFuture<void> Clear() override {
+        ythrow yexception() << "TQueueWriteTableDataService: Clear is not supported";
+    }
+
+private:
+    TVector<TString>& Blobs_;
+};
+
+// IBlockIterator over an in-memory blob vector produced by TQueueWriteTableDataService.
+// Each blob is a binary YSON list-fragment chunk written by TFmrTableDataServiceWriter.
+class TQueueBlobBlockIterator final: public IBlockIterator {
+public:
+    TQueueBlobBlockIterator(TVector<TString> blobs,
+                            std::vector<TString> keyColumns,
+                            std::vector<ESortOrder> sortOrders)
+        : Blobs_(std::move(blobs))
+        , KeyColumns_(std::move(keyColumns))
+        , SortOrders_(std::move(sortOrders))
+    {
+    }
+
+    bool NextBlock(TIndexedBlock& out) final {
+        if (Pos_ >= Blobs_.size()) {
+            return false;
+        }
+        // Move the blob out so the original buffer is freed before the hashed
+        // block is accumulated, avoiding x2 peak memory.
+        out.Data = std::move(Blobs_[Pos_++]);
+        TParserFragmentListIndex parser(out.Data, KeyColumns_);
+        parser.Parse();
+        out.Rows = parser.GetRows();
+        return true;
+    }
+
+    std::vector<ESortOrder> GetSortOrder() final {
+        return SortOrders_;
+    }
+
+private:
+    TVector<TString> Blobs_;
+    size_t Pos_ = 0;
+    std::vector<TString> KeyColumns_;
+    std::vector<ESortOrder> SortOrders_;
+};
+
+} // namespace
 
 TFmrUserJob::TFmrUserJob()
     : TYqlUserJobBase()
@@ -33,7 +112,9 @@ void TFmrUserJob::Save(IOutputStream& s) const {
         Settings_,
         TvmSettings_,
         VanillaInfo_,
-        ReduceOperationSpec_
+        ReduceOperationSpec_,
+        IsMapReduceReducer_,
+        IsMapReduceMap_
     );
 }
 
@@ -49,7 +130,9 @@ void TFmrUserJob::Load(IInputStream& s) {
         Settings_,
         TvmSettings_,
         VanillaInfo_,
-        ReduceOperationSpec_
+        ReduceOperationSpec_,
+        IsMapReduceReducer_,
+        IsMapReduceMap_
     );
 }
 
@@ -72,12 +155,71 @@ void TFmrUserJob::ChangeMkqlIOSpecIfNeeded() {
     MkqlIOSpecs->UseSkiff_ = false;
 }
 
-void TFmrUserJob::FillQueueFromSingleInputTable(ui64 curTableNum) {
+void TFmrUserJob::PostInitMkqlIOSpec() {
+    if (!IsMapReduceReducer_) {
+        return;
+    }
+    // Register _yql_key_hash as a skip field in all input decoders so the
+    // codec silently discards it when present (inserted by MapReduceMap for
+    // n-way merge routing, irrelevant to the reducer's schema).
+    const TString keyHashName(YqlKeyHashColumn);
+    NKikimr::NMiniKQL::TDataType* uint64Type =
+        NKikimr::NMiniKQL::TDataType::Create(NUdf::TDataType<ui64>::Id, *Env);
+    for (auto& [tableName, decoder] : MkqlIOSpecs->Decoders) {
+        decoder.Fields.emplace(
+            keyHashName,
+            TMkqlIOSpecs::TDecoderSpec::TDecodeField{
+                .Name = keyHashName,
+                .StructIndex = Max<ui32>(),
+                .Type = uint64Type,
+            }
+        );
+    }
+}
+
+std::vector<ui32> TFmrUserJob::GetTableIndicesForInput(const TTaskTableRef& tableRef) const {
+    std::vector<ui32> tableIndices;
+    if (auto* ytTableTaskRef = std::get_if<TYtTableTaskRef>(&tableRef)) {
+        if (ytTableTaskRef->TableIndices.empty()) {
+            // Callers that build a TYtTableTaskRef without setting TableIndices (e.g. tests
+            // constructing one directly) fall back to 0 for all paths; harmless since it's only
+            // ever wrong when several distinct original inputs are actually in play, and real
+            // production partitioning always fills TableIndices in lockstep with RichPaths.
+            tableIndices.assign(ytTableTaskRef->RichPaths.size(), 0);
+        } else {
+            YQL_ENSURE(ytTableTaskRef->TableIndices.size() == ytTableTaskRef->RichPaths.size());
+            tableIndices = ytTableTaskRef->TableIndices;
+        }
+    } else {
+        auto& fmrTableInputRef = std::get<TFmrTableInputRef>(tableRef);
+        tableIndices.emplace_back(fmrTableInputRef.TableIndex);
+    }
+    return tableIndices;
+}
+
+bool TFmrUserJob::NeedsTableIndexMarking() const {
+    std::unordered_set<ui32> tableIndices;
+    for (auto& inputTableRef: InputTables_.Inputs) {
+        for (auto tableIndex: GetTableIndicesForInput(inputTableRef)) {
+            tableIndices.insert(tableIndex);
+            if (tableIndices.size() > 1) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+void TFmrUserJob::FillQueueFromSingleInputTable(ui64 curTableNum, bool needsTableIndexMarking) {
     auto inputTableRef = InputTables_.Inputs[curTableNum];
-    auto queueTableWriter = MakeIntrusive<TFmrRawTableQueueWriter>(UnionInputTablesQueue_);
+    auto tableIndices = GetTableIndicesForInput(inputTableRef);
     auto inputTableReaders = GetTableInputStreams(YtJobService_, TableDataService_, inputTableRef, ClusterConnections_);
-    for (auto tableReader: inputTableReaders) {
-        ParseRecords(tableReader, queueTableWriter, 1, 1000000, CancelFlag_);
+    YQL_ENSURE(inputTableReaders.size() == tableIndices.size());
+    auto queueTableWriter = MakeIntrusive<TFmrRawTableQueueWriter>(
+        UnionInputTablesQueue_, tableIndices.empty() ? 0 : tableIndices[0], needsTableIndexMarking);
+    for (ui64 i = 0; i < inputTableReaders.size(); ++i) {
+        queueTableWriter->SetTableIndex(tableIndices[i]);
+        ParseRecords(inputTableReaders[i], queueTableWriter, 1, 1000000, CancelFlag_);
     }
     queueTableWriter->Flush();
     UnionInputTablesQueue_->NotifyInputFinished(curTableNum);
@@ -86,27 +228,32 @@ void TFmrUserJob::FillQueueFromSingleInputTable(ui64 curTableNum) {
 
 void TFmrUserJob::FillQueueFromInputTablesOrdered() {
     ui64 inputTablesNum = InputTables_.Inputs.size();
+    bool needsTableIndexMarking = NeedsTableIndexMarking();
     auto state = std::make_shared<TOrderedWriteState>();
     state->NextToEmit = 0;
     for (ui64 curTableNum = 0; curTableNum < inputTablesNum; ++curTableNum) {
-        ThreadPool_->SafeAddFunc([this, state, curTableNum]() mutable {
+        ThreadPool_->SafeAddFunc([this, state, curTableNum, needsTableIndexMarking]() mutable {
             try {
                 auto inputTableRef = InputTables_.Inputs[curTableNum];
+                auto tableIndices = GetTableIndicesForInput(inputTableRef);
                 auto inputTableReaders = GetTableInputStreams(
                     YtJobService_,
                     TableDataService_,
                     inputTableRef,
                     ClusterConnections_
                 );
+                YQL_ENSURE(inputTableReaders.size() == tableIndices.size());
                 TTableWriterSettings writerSettings;
                 auto taskWriter = MakeIntrusive<TFmrRawTableQueueWriterWithLock>(
                     UnionInputTablesQueue_,
                     curTableNum,
                     state,
+                    needsTableIndexMarking,
                     writerSettings
                 );
-                for (auto tableReader : inputTableReaders) {
-                    ParseRecords(tableReader, taskWriter, 1, 1000000, CancelFlag_);
+                for (ui64 i = 0; i < inputTableReaders.size(); ++i) {
+                    taskWriter->SetTableIndex(tableIndices[i]);
+                    ParseRecords(inputTableReaders[i], taskWriter, 1, 1000000, CancelFlag_);
                 }
                 taskWriter->Flush();
                 with_lock(state->Mutex) {
@@ -128,10 +275,11 @@ void TFmrUserJob::FillQueueFromInputTablesOrdered() {
 
 void TFmrUserJob::FillQueueFromInputTablesUnordered() {
     ui64 inputTablesNum = InputTables_.Inputs.size();
+    bool needsTableIndexMarking = NeedsTableIndexMarking();
     for (ui64 curTableNum = 0; curTableNum < inputTablesNum; ++curTableNum) {
-        ThreadPool_->SafeAddFunc([this, curTableNum]() mutable {
+        ThreadPool_->SafeAddFunc([this, curTableNum, needsTableIndexMarking]() mutable {
             try {
-                FillQueueFromSingleInputTable(curTableNum);
+                FillQueueFromSingleInputTable(curTableNum, needsTableIndexMarking);
             } catch (...) {
                 UnionInputTablesQueue_->SetException(CurrentExceptionMessage());
             }
@@ -178,7 +326,7 @@ void TFmrUserJob::FillQueueFromReduceInput() {
     });
 }
 
-void TFmrUserJob::InitializeFmrUserJob() {
+void TFmrUserJob::InitializeFmrUserJob(TVector<TString>* mapperBlobs) {
     if (!YtJobService_) {
         YQL_ENSURE(YtJobServiceType_ == "native" || YtJobServiceType_ == "file");
         YtJobService_ = YtJobServiceType_ == "native" ? MakeYtJobSerivce() : MakeFileYtJobService();
@@ -224,22 +372,34 @@ void TFmrUserJob::InitializeFmrUserJob() {
     }
 
     for (auto& fmrTable: OutputTables_) {
-        if (!fmrTable.SortingColumns.Columns.empty()) {
+        if (IsMapReduceMap_) {
+            // Capture mapper output in memory; hash+sort+write happens after Do() in DoFmrJob().
+            Y_ENSURE(mapperBlobs, "mapperBlobs must be provided when IsMapReduceMap_ is set");
+            auto queueTds = MakeIntrusive<TQueueWriteTableDataService>(*mapperBlobs);
+            TableDataServiceWriters_.emplace_back(MakeIntrusive<TFmrTableDataServiceWriter>(
+                fmrTable.TableId,
+                fmrTable.PartId,
+                queueTds,
+                fmrTable.SerializedColumnGroups,
+                Settings_.WriterSettings
+            ));
+        } else if (!fmrTable.SortingColumns.Columns.empty()) {
             TableDataServiceWriters_.emplace_back(MakeIntrusive<TFmrTableDataServiceSortedWriter>(
                 fmrTable.TableId,
                 fmrTable.PartId,
                 TableDataService_,
                 fmrTable.SerializedColumnGroups,
-                TFmrWriterSettings(),
+                Settings_.WriterSettings,
                 fmrTable.SortingColumns
-            )); // TODO - settings
+            ));
         } else {
             TableDataServiceWriters_.emplace_back(MakeIntrusive<TFmrTableDataServiceWriter>(
                 fmrTable.TableId,
                 fmrTable.PartId,
                 TableDataService_,
-                fmrTable.SerializedColumnGroups
-            )); // TODO - settings
+                fmrTable.SerializedColumnGroups,
+                Settings_.WriterSettings
+            ));
         }
     }
 }
@@ -263,7 +423,8 @@ TStatistics TFmrUserJob::GetStatistics(const TFmrUserJobOptions& options) {
 }
 
 TStatistics TFmrUserJob::DoFmrJob(const TFmrUserJobOptions& options) {
-    InitializeFmrUserJob();
+    TVector<TString> mapperBlobs;
+    InitializeFmrUserJob(IsMapReduceMap_ ? &mapperBlobs : nullptr);
     if (FmrJobType_ == EFmrJobType::OrderedMap) {
         FillQueueFromInputTablesOrdered();
     } else if (FmrJobType_ == EFmrJobType::Map) {
@@ -272,6 +433,48 @@ TStatistics TFmrUserJob::DoFmrJob(const TFmrUserJobOptions& options) {
         FillQueueFromReduceInput();
     }
     TYqlUserJobBase::Do();
+
+    if (IsMapReduceMap_) {
+        Y_ENSURE(OutputTables_.size() == 1, "MapReduceMap must have exactly one output table");
+        const auto& sortColumns = OutputTables_[0].SortingColumns;
+        Y_ENSURE(!sortColumns.Columns.empty() && sortColumns.Columns[0] == TString(YqlKeyHashColumn),
+                 "_yql_key_hash must be the first sort column in MapReduceMap");
+
+        std::vector<TString> reduceKeyColumns(sortColumns.Columns.begin() + 1, sortColumns.Columns.end());
+        std::vector<ESortOrder> reduceKeySortOrders(sortColumns.SortOrders.begin() + 1, sortColumns.SortOrders.end());
+
+        // Collect all hashed blocks from mapper blobs; blobs are moved out one by one
+        // so the original buffer is freed before the hashed block is accumulated.
+        std::vector<TIndexedBlock> allBlocks;
+        {
+            auto inner = MakeIntrusive<TQueueBlobBlockIterator>(std::move(mapperBlobs), reduceKeyColumns, reduceKeySortOrders);
+            IBlockIterator::TPtr hashIterator = MakeIntrusive<TKeyHashAddingBlockIterator>(
+                std::move(inner), sortColumns.Columns, sortColumns.SortOrders
+            );
+            TIndexedBlock block;
+            while (hashIterator->NextBlock(block)) {
+                allBlocks.push_back(std::move(block));
+            }
+        }
+
+        // Sort globally and write rows in order to the final sorted TDS partition.
+        TSortHelper sortHelper(allBlocks, sortColumns.SortOrders);
+        auto ordering = sortHelper.GetSortedRowOrdering();
+
+        auto sortedWriter = MakeIntrusive<TFmrTableDataServiceSortedWriter>(
+            OutputTables_[0].TableId, OutputTables_[0].PartId,
+            TableDataService_, OutputTables_[0].SerializedColumnGroups,
+            Settings_.WriterSettings, sortColumns
+        );
+        for (const auto& pos : ordering) {
+            TStringBuf rowBytes = allBlocks[pos.BlockIndex].GetRowBytes(pos.RowIndex);
+            sortedWriter->Write(rowBytes.data(), rowBytes.size());
+            sortedWriter->NotifyRowEnd();
+        }
+        sortedWriter->Flush();
+        return TStatistics({{OutputTables_[0], sortedWriter->GetStats()}});
+    }
+
     return GetStatistics(options);
 }
 

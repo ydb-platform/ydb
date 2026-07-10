@@ -65,7 +65,7 @@ void TSampler::SampleTraceContext(const std::string& user, const TTraceContextPt
         return state;
     });
 
-    std::optional<TString> endpoint;
+    std::optional<std::string> endpoint;
     auto itEndpoint = config->UserEndpoint.find(user);
     if (itEndpoint != config->UserEndpoint.end()) {
         traceContext->SetTargetEndpoint(itEndpoint->second);

@@ -55,10 +55,19 @@ class ClickHouseImpl(DefaultImpl):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        self._add_integration_tag()
         if self.context_opts.get("include_schemas") and not self.context_opts.get("version_table_schema") and self.connection is not None:
             current_database = self.connection.execute(text("SELECT currentDatabase()")).scalar()
             if current_database:
                 self.context_opts["version_table_schema"] = current_database
+
+    def _add_integration_tag(self) -> None:
+        if self.connection is None:
+            return
+        try:
+            self.connection.connection.driver_connection.client._add_integration_tag("alembic")
+        except Exception:
+            pass
 
     def version_table_impl(
         self,

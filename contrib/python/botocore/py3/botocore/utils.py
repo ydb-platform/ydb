@@ -109,8 +109,6 @@ S3_ACCELERATE_WHITELIST = ['dualstack']
 # id, we have to preserve compatibility. This maps the instances where either
 # is different than the transformed service id.
 EVENT_ALIASES = {
-    "a4b": "alexa-for-business",
-    "alexaforbusiness": "alexa-for-business",
     "api.mediatailor": "mediatailor",
     "api.pricing": "pricing",
     "api.sagemaker": "sagemaker",
@@ -130,7 +128,6 @@ EVENT_ALIASES = {
     "data.mediastore": "mediastore-data",
     "datapipeline": "data-pipeline",
     "devicefarm": "device-farm",
-    "devices.iot1click": "iot-1click-devices-service",
     "directconnect": "direct-connect",
     "discovery": "application-discovery-service",
     "dms": "database-migration-service",
@@ -150,8 +147,6 @@ EVENT_ALIASES = {
     "cloudwatch-events": "eventbridge",
     "iot-data": "iot-data-plane",
     "iot-jobs-data": "iot-jobs-data-plane",
-    "iot1click-devices": "iot-1click-devices-service",
-    "iot1click-projects": "iot-1click-projects",
     "kinesisanalytics": "kinesis-analytics",
     "kinesisvideo": "kinesis-video",
     "lex-models": "lex-model-building-service",
@@ -167,7 +162,6 @@ EVENT_ALIASES = {
     "monitoring": "cloudwatch",
     "mturk-requester": "mturk",
     "opsworks-cm": "opsworkscm",
-    "projects.iot1click": "iot-1click-projects",
     "resourcegroupstaggingapi": "resource-groups-tagging-api",
     "route53": "route-53",
     "route53domains": "route-53-domains",
@@ -433,7 +427,7 @@ class IMDSFetcher:
         else:
             chosen_base_url = METADATA_BASE_URL
 
-        logger.debug("IMDS ENDPOINT: %s" % chosen_base_url)
+        logger.debug(f"IMDS ENDPOINT: {chosen_base_url}")
         if not is_valid_uri(chosen_base_url):
             raise InvalidIMDSEndpointError(endpoint=chosen_base_url)
 
@@ -998,7 +992,7 @@ def parse_timestamp(value):
                 exc_info=e,
             )
     raise RuntimeError(
-        'Unable to calculate correct timezone offset for "%s"' % value
+        f'Unable to calculate correct timezone offset for "{value}"'
     )
 
 
@@ -1481,7 +1475,7 @@ def lru_cache_weakref(*cache_args, **cache_kwargs):
     functools implementation which offers ``max_size`` and ``typed`` properties.
 
     lru_cache is a global cache even when used on a method. The cache's
-    reference to ``self`` will prevent garbace collection of the object. This
+    reference to ``self`` will prevent garbage collection of the object. This
     wrapper around functools.lru_cache replaces the reference to ``self`` with
     a weak reference to not interfere with garbage collection.
     """
@@ -1493,6 +1487,9 @@ def lru_cache_weakref(*cache_args, **cache_kwargs):
 
         @functools.wraps(func)
         def inner(self, *args, **kwargs):
+            for kwarg_key, kwarg_value in kwargs.items():
+                if isinstance(kwarg_value, list):
+                    kwargs[kwarg_key] = tuple(kwarg_value)
             return func_with_weakref(weakref.ref(self), *args, **kwargs)
 
         inner.cache_info = func_with_weakref.cache_info
@@ -1778,6 +1775,10 @@ class S3RegionRedirectorv2:
             0
         ].status_code in (301, 302, 307)
         is_permanent_redirect = error_code == 'PermanentRedirect'
+        is_opt_in_region_redirect = (
+            error_code == 'IllegalLocationConstraintException'
+            and operation.name != 'CreateBucket'
+        )
         if not any(
             [
                 is_special_head_object,
@@ -1785,6 +1786,7 @@ class S3RegionRedirectorv2:
                 is_permanent_redirect,
                 is_special_head_bucket,
                 is_redirect_status,
+                is_opt_in_region_redirect,
             ]
         ):
             return
@@ -1795,17 +1797,16 @@ class S3RegionRedirectorv2:
 
         if new_region is None:
             logger.debug(
-                "S3 client configured for region %s but the bucket %s is not "
-                "in that region and the proper region could not be "
-                "automatically determined." % (client_region, bucket)
+                f"S3 client configured for region {client_region} but the "
+                f"bucket {bucket} is not in that region and the proper region "
+                "could not be automatically determined."
             )
             return
 
         logger.debug(
-            "S3 client configured for region %s but the bucket %s is in region"
-            " %s; Please configure the proper region to avoid multiple "
-            "unnecessary redirects and signing attempts."
-            % (client_region, bucket, new_region)
+            f"S3 client configured for region {client_region} but the bucket {bucket} "
+            f"is in region {new_region}; Please configure the proper region to "
+            f"avoid multiple unnecessary redirects and signing attempts."
         )
         # Adding the new region to _cache will make construct_endpoint() to
         # use the new region as value for the AWS::Region builtin parameter.
@@ -1994,17 +1995,16 @@ class S3RegionRedirector:
 
         if new_region is None:
             logger.debug(
-                "S3 client configured for region %s but the bucket %s is not "
+                f"S3 client configured for region {client_region} but the bucket {bucket} is not "
                 "in that region and the proper region could not be "
-                "automatically determined." % (client_region, bucket)
+                "automatically determined."
             )
             return
 
         logger.debug(
-            "S3 client configured for region %s but the bucket %s is in region"
-            " %s; Please configure the proper region to avoid multiple "
+            f"S3 client configured for region {client_region} but the bucket {bucket} is in region"
+            f" {new_region}; Please configure the proper region to avoid multiple "
             "unnecessary redirects and signing attempts."
-            % (client_region, bucket, new_region)
         )
         endpoint = self._endpoint_resolver.resolve('s3', new_region)
         endpoint = endpoint['endpoint_url']
@@ -2089,8 +2089,8 @@ class ArnParser:
         arn_parts = arn.split(':', 5)
         if len(arn_parts) < 6:
             raise InvalidArnException(
-                'Provided ARN: %s must be of the format: '
-                'arn:partition:service:region:account:resource' % arn
+                f'Provided ARN: {arn} must be of the format: '
+                'arn:partition:service:region:account:resource'
             )
         return {
             'partition': arn_parts[1],
@@ -2273,8 +2273,8 @@ class S3EndpointSetter:
                 raise UnsupportedS3ConfigurationError(
                     msg=(
                         'Client is configured to use the FIPS psuedo region '
-                        'for "%s", but S3 Accelerate does not have any FIPS '
-                        'compatible endpoints.' % (self._region)
+                        f'for "{self._region}", but S3 Accelerate does not have any FIPS '
+                        'compatible endpoints.'
                     )
                 )
             switch_host_s3_accelerate(request=request, **kwargs)
@@ -2294,9 +2294,8 @@ class S3EndpointSetter:
         if 'outpost_name' in request.context['s3_accesspoint']:
             raise UnsupportedS3AccesspointConfigurationError(
                 msg=(
-                    'Client is configured to use the FIPS psuedo-region "%s", '
+                    f'Client is configured to use the FIPS psuedo-region "{self._region}", '
                     'but outpost ARNs do not support FIPS endpoints.'
-                    % (self._region)
                 )
             )
         # Transforming psuedo region to actual region
@@ -2308,11 +2307,10 @@ class S3EndpointSetter:
                 raise UnsupportedS3AccesspointConfigurationError(
                     msg=(
                         'Client is configured to use the FIPS psuedo-region '
-                        'for "%s", but the access-point ARN provided is for '
-                        'the "%s" region. For clients using a FIPS '
+                        f'for "{self._region}", but the access-point ARN provided is for '
+                        f'the "{accesspoint_region}" region. For clients using a FIPS '
                         'psuedo-region calls to access-point ARNs in another '
                         'region are not allowed.'
-                        % (self._region, accesspoint_region)
                     )
                 )
 
@@ -2323,8 +2321,8 @@ class S3EndpointSetter:
             raise UnsupportedS3AccesspointConfigurationError(
                 msg=(
                     'Client is configured to use the global psuedo-region '
-                    '"%s". When providing access-point ARNs a regional '
-                    'endpoint must be specified.' % self._region
+                    f'"{self._region}". When providing access-point ARNs a regional '
+                    'endpoint must be specified.'
                 )
             )
 
@@ -2340,10 +2338,9 @@ class S3EndpointSetter:
         if request_partition != self._partition:
             raise UnsupportedS3AccesspointConfigurationError(
                 msg=(
-                    'Client is configured for "%s" partition, but access-point'
-                    ' ARN provided is for "%s" partition. The client and '
+                    f'Client is configured for "{self._partition}" partition, but access-point'
+                    f' ARN provided is for "{request_partition}" partition. The client and '
                     ' access-point partition must be the same.'
-                    % (self._partition, request_partition)
                 )
             )
         s3_service = request.context['s3_accesspoint'].get('service')
@@ -2488,7 +2485,7 @@ class S3EndpointSetter:
 
     def _inject_fips_if_needed(self, component, request_context):
         if self._use_fips_endpoint:
-            return '%s-fips' % component
+            return f'{component}-fips'
         return component
 
     def _get_accesspoint_path(self, original_path, request_context):
@@ -2665,18 +2662,17 @@ class S3ControlEndpointSetter:
             if arn_region != self._region:
                 error_msg = (
                     'The use_arn_region configuration is disabled but '
-                    'received arn for "%s" when the client is configured '
-                    'to use "%s"'
-                ) % (arn_region, self._region)
+                    f'received arn for "{arn_region}" when the client is configured '
+                    f'to use "{self._region}"'
+                )
                 raise UnsupportedS3ControlConfigurationError(msg=error_msg)
         request_partion = request.context['arn_details']['partition']
         if request_partion != self._partition:
             raise UnsupportedS3ControlConfigurationError(
                 msg=(
-                    'Client is configured for "%s" partition, but arn '
-                    'provided is for "%s" partition. The client and '
+                    f'Client is configured for "{self._partition}" partition, but arn '
+                    f'provided is for "{request_partion}" partition. The client and '
                     'arn partition must be the same.'
-                    % (self._partition, request_partion)
                 )
             )
         if self._s3_config.get('use_accelerate_endpoint'):
@@ -2876,8 +2872,8 @@ class S3ControlArnParamHandler:
         if 'AccountId' in params and params['AccountId'] != account_id:
             error_msg = (
                 'Account ID in arn does not match the AccountId parameter '
-                'provided: "%s"'
-            ) % params['AccountId']
+                'provided: "{}"'
+            ).format(params['AccountId'])
             raise UnsupportedS3ControlArnError(
                 arn=arn_details['original'],
                 msg=error_msg,
@@ -3570,7 +3566,6 @@ SERVICE_NAME_ALIASES = {'runtime.sagemaker': 'sagemaker-runtime'}
 # values are the transformed service IDs (lower case and hyphenated).
 CLIENT_NAME_TO_HYPHENIZED_SERVICE_ID_OVERRIDES = {
     # Actual service name we use -> Allowed computed service name.
-    'alexaforbusiness': 'alexa-for-business',
     'apigateway': 'api-gateway',
     'application-autoscaling': 'application-auto-scaling',
     'appmesh': 'app-mesh',
@@ -3588,6 +3583,7 @@ CLIENT_NAME_TO_HYPHENIZED_SERVICE_ID_OVERRIDES = {
     'discovery': 'application-discovery-service',
     'dms': 'database-migration-service',
     'ds': 'directory-service',
+    'ds-data': 'directory-service-data',
     'dynamodbstreams': 'dynamodb-streams',
     'elasticbeanstalk': 'elastic-beanstalk',
     'elastictranscoder': 'elastic-transcoder',
@@ -3598,8 +3594,6 @@ CLIENT_NAME_TO_HYPHENIZED_SERVICE_ID_OVERRIDES = {
     'globalaccelerator': 'global-accelerator',
     'iot-data': 'iot-data-plane',
     'iot-jobs-data': 'iot-jobs-data-plane',
-    'iot1click-devices': 'iot-1click-devices-service',
-    'iot1click-projects': 'iot-1click-projects',
     'iotevents-data': 'iot-events-data',
     'iotevents': 'iot-events',
     'iotwireless': 'iot-wireless',

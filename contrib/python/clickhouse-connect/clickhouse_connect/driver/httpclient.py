@@ -19,12 +19,18 @@ from urllib3.response import HTTPResponse
 from clickhouse_connect import common
 from clickhouse_connect.datatypes import registry
 from clickhouse_connect.datatypes.base import ClickHouseType
-from clickhouse_connect.driver.binding import bind_query, quote_identifier
+from clickhouse_connect.driver.binding import bind_query, quote_identifier, use_form_encoding
 from clickhouse_connect.driver.client import Client
 from clickhouse_connect.driver.common import coerce_bool, coerce_int, dict_add, dict_copy
 from clickhouse_connect.driver.compression import available_compression
 from clickhouse_connect.driver.ctypes import RespBuffCls
-from clickhouse_connect.driver.exceptions import DatabaseError, OperationalError, ProgrammingError
+from clickhouse_connect.driver.exceptions import (
+    DatabaseError,
+    OperationalError,
+    ProgrammingError,
+    error_code_from_header,
+    error_name_from_body,
+)
 from clickhouse_connect.driver.external import ExternalData
 from clickhouse_connect.driver.httputil import (
     ResponseSource,
@@ -44,6 +50,7 @@ from clickhouse_connect.driver.transform import NativeTransform
 logger = logging.getLogger(__name__)
 columns_only_re = re.compile(r"LIMIT 0\s*$", re.IGNORECASE)
 ex_header = "X-ClickHouse-Exception-Code"
+auth_failed_ex_code = "516"  # ClickHouse AUTHENTICATION_FAILED
 ex_tag_header = "X-ClickHouse-Exception-Tag"
 
 _REMOTE_CLOSE_ERRORS = (ConnectionResetError, BrokenPipeError)
@@ -79,6 +86,7 @@ class HttpClient(Client):
         password: str,
         database: str,
         access_token: str | None = None,
+        token_provider: Callable[[], str] | None = None,
         compress: bool | str = True,
         query_limit: int = 0,
         query_retries: int = 2,
@@ -104,6 +112,7 @@ class HttpClient(Client):
         proxy_path: str = "",
         form_encode_query_params: bool = False,
         rename_response_column: str | None = None,
+        headers: dict[str, str] | None = None,
     ):
         """
         Create an HTTP ClickHouse Connect client
@@ -150,6 +159,9 @@ class HttpClient(Client):
             else:
                 self.http = default_pool_manager()
 
+        self._token_provider = token_provider
+        if token_provider:
+            access_token = token_provider()
         if access_token:
             self.headers["Authorization"] = f"Bearer {access_token}"
         elif (not client_cert or tls_mode in ("strict", "proxy")) and username:
@@ -157,6 +169,8 @@ class HttpClient(Client):
 
         self._reported_libs = set()
         self.headers["User-Agent"] = common.build_client_name(client_name)
+        if headers:
+            self.headers.update(headers)
         self._read_format = self._write_format = "Native"
         self._transform = NativeTransform()
 
@@ -260,10 +274,11 @@ class HttpClient(Client):
             context.block_info = True
         params.update(self._validate_settings(context.settings))
         context.rename_response_column = self._rename_response_column
+        use_form = use_form_encoding(context.final_query, context.bind_params, self.form_encode_query_params)
         if not context.is_insert and columns_only_re.search(context.uncommented_query):
             # Mirror normal query behavior for form encoding and external data
             fmt_json_query = f"{context.final_query}\n FORMAT JSON"
-            if self.form_encode_query_params:
+            if use_form:
                 fields = {"query": fmt_json_query}
                 fields.update(context.bind_params)
                 if context.external_data:  # Deal with form encoding + external data
@@ -303,7 +318,7 @@ class HttpClient(Client):
         final_query = self._prep_query(context)
         fields = {}
         # Setup additional query parameters and body
-        if self.form_encode_query_params:
+        if use_form:
             body = b""
             fields["query"] = final_query
             fields.update(context.bind_params)
@@ -490,14 +505,19 @@ class HttpClient(Client):
         """
         try:
             body = ""
+            full_body = ""
             try:
                 raw_body = get_response_data(response)
-                body = common.format_error(raw_body.decode(errors="backslashreplace")).strip()
+                full_body = raw_body.decode(errors="backslashreplace")
+                body = common.format_error(full_body).strip()
             except Exception:
                 logger.warning("Failed to read error response body", exc_info=True)
 
+            err_code = response.headers.get(ex_header)
+            code = error_code_from_header(err_code)
+            name = error_name_from_body(full_body) if self.show_clickhouse_errors else None
+
             if self.show_clickhouse_errors:
-                err_code = response.headers.get(ex_header)
                 if err_code:
                     err_str = f"Received ClickHouse exception, code: {err_code}"
                 else:
@@ -513,7 +533,8 @@ class HttpClient(Client):
         finally:
             response.close()
 
-        raise OperationalError(err_str) if retried else DatabaseError(err_str) from None
+        err_type = OperationalError if retried else DatabaseError
+        raise err_type(err_str, code=code, name=name) from None
 
     def _raw_request(
         self,
@@ -532,6 +553,7 @@ class HttpClient(Client):
             data = data.encode()
         headers = dict_copy(self.headers, headers)
         attempts = 0
+        auth_retried = False
         final_params = {}
         if server_wait:
             final_params["wait_end_of_query"] = "1"
@@ -606,6 +628,17 @@ class HttpClient(Client):
                 if attempts > retries:
                     self._error_handler(response, True)
                 logger.debug("Retrying requests with status code %d", response.status)
+            elif self._token_provider and not auth_retried and response.headers.get(ex_header) == auth_failed_ex_code:
+                body = kwargs.get("body")
+                if retry_body is None and not (body is None or isinstance(body, (bytes, bytearray, str))):
+                    self._error_handler(response)  # non-replayable body, surface the auth error instead of retrying
+                auth_retried = True
+                self.set_access_token(self._token_provider())
+                headers["Authorization"] = self.headers["Authorization"]
+                if retry_body is not None:
+                    kwargs["body"] = retry_body()
+                response.close()
+                logger.debug("Refreshing access token after authentication failure")
             elif error_handler:
                 error_handler(response)
             else:
@@ -667,11 +700,12 @@ class HttpClient(Client):
         if use_database and self.database:
             params["database"] = self.database
         fields = {}
+        use_form = use_form_encoding(final_query, bind_params, self.form_encode_query_params)
         # Setup query body
-        if external_data and not self.form_encode_query_params and isinstance(final_query, bytes):
+        if external_data and not use_form and isinstance(final_query, bytes):
             raise ProgrammingError("Binary query cannot be placed in URL when using External Data; enable form encoding.")
         # Setup additional query parameters and body
-        if self.form_encode_query_params:
+        if use_form:
             body = b""
             fields["query"] = final_query
             fields.update(bind_params)
@@ -739,7 +773,12 @@ class HttpClient(Client):
         See BaseClient doc_string for this method
         """
         try:
-            response = self.http.request("GET", f"{self.url}/ping", timeout=3, preload_content=True)
+            headers = dict_copy(self.headers)
+            kwargs = {"headers": headers, "timeout": 3, "preload_content": True}
+            if self.server_host_name:
+                kwargs["assert_same_host"] = False
+                headers["Host"] = self.server_host_name
+            response = self.http.request("GET", f"{self.url}/ping", **kwargs)
             return 200 <= response.status < 300
         except HTTPError:
             logger.debug("ping failed", exc_info=True)

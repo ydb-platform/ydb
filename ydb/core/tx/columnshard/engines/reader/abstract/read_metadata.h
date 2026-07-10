@@ -70,7 +70,8 @@ public:
             return;
         }
         RequestedLimit = value;
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("requested_limit_detected", RequestedLimit);
+        YDB_LOG_DEBUG_COMP(NKikimrServices::TX_COLUMNSHARD_SCAN, "",
+            {"requestedLimitDetected", RequestedLimit});
     }
 
     std::optional<ui64> GetRequestedLimitOptional() const {
@@ -142,9 +143,11 @@ public:
         if (ResultIndexSchema) {
             FilteredCountLimit = PKRangesFilter->GetFilteredCountLimit(ResultIndexSchema->GetIndexInfo().GetReplaceKey());
             if (FilteredCountLimit) {
-                AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("filter_limit_detected", FilteredCountLimit);
+                YDB_LOG_DEBUG_COMP(NKikimrServices::TX_COLUMNSHARD_SCAN, "",
+                    {"filterLimitDetected", FilteredCountLimit});
             } else {
-                AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("filter_limit_not_detected", PKRangesFilter->DebugString());
+                YDB_LOG_DEBUG_COMP(NKikimrServices::TX_COLUMNSHARD_SCAN, "",
+                    {"filterLimitNotDetected", PKRangesFilter->DebugString()});
             }
         }
     }

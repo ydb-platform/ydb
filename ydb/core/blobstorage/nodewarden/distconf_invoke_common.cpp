@@ -278,7 +278,7 @@ namespace NKikimr::NStorage {
         }
 
         if (!std::exchange(Self->RetroTraceBatchFlushScheduled, true)) {
-            TActivationContext::Schedule(Self->RetroTraceBatchInterval,
+            TActivationContext::Schedule(TDuration::Seconds(Self->RootRetroTraceBatchIntervalSec),
                     new IEventHandle(TEvPrivate::EvFlushRetroTraceBatch, 0, Self->SelfId(), {}, nullptr, 0));
         }
 

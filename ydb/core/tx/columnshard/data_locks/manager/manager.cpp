@@ -2,17 +2,23 @@
 
 #include <ydb/library/actors/core/log.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD
+
 namespace NKikimr::NOlap::NDataLocks {
 
 std::shared_ptr<TManager::TGuard> TManager::RegisterLock(const std::shared_ptr<ILock>& lock) {
     AFL_VERIFY(lock);
     AFL_VERIFY(ProcessLocks.emplace(lock->GetLockName(), lock).second)("process_id", lock->GetLockName());
-    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "lock")("process_id", lock->GetLockName());
+    YDB_LOG_DEBUG("",
+        {"event", "lock"},
+        {"processId", lock->GetLockName()});
     return std::make_shared<TGuard>(lock->GetLockName(), StopFlag);
 }
 
 void TManager::UnregisterLock(const TString& processId) {
-    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "unlock")("process_id", processId);
+    YDB_LOG_DEBUG("",
+        {"event", "unlock"},
+        {"processId", processId});
     AFL_VERIFY(ProcessLocks.erase(processId))("process_id", processId);
 }
 
@@ -48,7 +54,8 @@ void TManager::TGuard::Release(TManager& manager) {
 
 void TManager::TGuard::AbortLock() {
     if (!Released) {
-        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("message", "aborted data locks manager");
+        YDB_LOG_WARN("",
+            {"message", "aborted data locks manager"});
     }
     Released = true;
 }

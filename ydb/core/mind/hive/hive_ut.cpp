@@ -9500,6 +9500,11 @@ Y_UNIT_TEST_SUITE(THiveTest) {
             }
         }
         {
+            auto observer = runtime.AddObserver<TEvTablet::TEvMoveData>([group] (auto&& ev) {
+                const auto& groups = ev->Get()->Record.GetGroups();
+                UNIT_ASSERT_VALUES_EQUAL(groups.size(), 1);
+                UNIT_ASSERT_VALUES_EQUAL(groups[0], group);
+            });
             TDispatchOptions options;
             options.FinalEvents.emplace_back(TEvTablet::EvMoveData);
             runtime.DispatchEvents(options);

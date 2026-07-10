@@ -56,9 +56,7 @@ public:
         pipeConfig.RetryPolicy = {.RetryLimitCount = 13};
         pipeConfig.CheckAliveness = true;
         PipeClients[index] = {Register(NTabletPipe::CreateClient(SelfId(), tablet, pipeConfig)), tablet};
-        auto ev = std::make_unique<TEvTablet::TEvMoveData>();
-        ev->Record.MutableGroups()->Assign(Groups.begin(), Groups.end());
-        NTabletPipe::SendData(SelfId(), PipeClients[index].Client, ev.release());
+        NTabletPipe::SendData(SelfId(), PipeClients[index].Client, new TEvTablet::TEvMoveData(Groups));
         ++CompactsInFlight;
     }
 

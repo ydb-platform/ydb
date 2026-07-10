@@ -982,7 +982,13 @@ struct TEvTablet {
         EMode Mode;
     };
 
-    struct TEvMoveData : TEventPB<TEvMoveData, NKikimrTabletBase::TEvMoveData, EvMoveData> {};
+    struct TEvMoveData : TEventPB<TEvMoveData, NKikimrTabletBase::TEvMoveData, EvMoveData> {
+        TEvMoveData() = default;
+
+        TEvMoveData(const std::vector<ui32>& groups) {
+            Record.MutableGroups()->Assign(groups.begin(), groups.end());
+        }
+    };
 
     struct TEvMoveDataResponse : TEventPB<TEvMoveDataResponse, NKikimrTabletBase::TEvMoveDataResponse, EvMoveDataResponse> {
         TEvMoveDataResponse() = default;

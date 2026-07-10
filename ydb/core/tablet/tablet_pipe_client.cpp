@@ -782,7 +782,7 @@ namespace NTabletPipe {
         }
 
         void SendEvent(IEventHandle* ev, const TActorContext& ctx) {
-            YDB_LOG_DEBUG_CTX(ctx, "TClient ]::SendEvent",
+            YDB_LOG_DEBUG_CTX(ctx, "TClient send event",
                 {"tabletId", TabletId},
                 {"selfId", ctx.SelfID});
 

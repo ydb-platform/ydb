@@ -745,7 +745,7 @@ class TTabletResolver : public TActorBootstrapped<TTabletResolver> {
             return std::make_pair(winner.KnownLeader, winner.KnownLeaderTablet);
         }
 
-        YDB_LOG_INFO("No candidates for SelectForward,",
+        YDB_LOG_INFO("No candidates for SelectForward",
             {"node", selfNode},
             {"selfDC", dcName(selfDc)},
             {"leaderDC", dcName(leaderDc)},
@@ -900,7 +900,7 @@ class TTabletResolver : public TActorBootstrapped<TTabletResolver> {
             if (entry.State == TEntry::StNormal) {
                 auto* pMaxProblemEpoch = NodeProblems.FindPtr(entry.KnownLeader.NodeId());
                 if (pMaxProblemEpoch && entry.CacheEpoch <= *pMaxProblemEpoch) {
-                    YDB_LOG_DEBUG("Delayed invalidation of by nodeId",
+                    YDB_LOG_DEBUG("Delayed invalidation",
                         {"tabletId", tabletId},
                         {"leader", entry.KnownLeader});
                     entry.CurrentLeaderProblem = true;
@@ -912,7 +912,7 @@ class TTabletResolver : public TActorBootstrapped<TTabletResolver> {
             while (itSrc != entry.KnownFollowers.end()) {
                 auto* pMaxProblemEpoch = NodeProblems.FindPtr(itSrc->Follower.NodeId());
                 if (pMaxProblemEpoch && entry.CacheEpoch <= *pMaxProblemEpoch) {
-                    YDB_LOG_DEBUG("Delayed invalidation of by nodeId",
+                    YDB_LOG_DEBUG("Delayed invalidation",
                         {"tabletId", tabletId},
                         {"follower", itSrc->Follower});
                     ++itSrc;
@@ -1009,7 +1009,7 @@ class TTabletResolver : public TActorBootstrapped<TTabletResolver> {
             maxProblemEpoch = problemEpoch;
             LastNodeProblemsUpdateEpoch = ++LastCacheEpoch;
         } else {
-            YDB_LOG_DEBUG("Handle TEvNodeProblem <=",
+            YDB_LOG_DEBUG("Handle TEvNodeProblem problemEpoch<=maxProblemEpoch",
                 {"nodeId", nodeId},
                 {"problemEpoch", problemEpoch},
                 {"maxProblemEpoch", maxProblemEpoch});

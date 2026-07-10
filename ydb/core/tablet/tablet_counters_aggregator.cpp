@@ -1306,7 +1306,7 @@ TTabletCountersAggregatorActor::HandleWork(TEvTabletCounters::TEvTabletAddLabele
                 {"tablet", msg->TabletID});
             TabletMon->ApplyLabeledDbCounters(msg->LabeledCounters.Get()->GetDatabasePath().GetRef(), msg->TabletID, msg->LabeledCounters.Get(), ctx);
         } else {
-            YDB_LOG_ERROR_CTX(ctx, "Got labeledCounters from unknown Tablet",
+            YDB_LOG_ERROR_CTX(ctx, "Got labeledCounters from unknown tablet type",
                 {"type", msg->TabletType},
                 {"db", msg->LabeledCounters.Get()->GetDatabasePath()},
                 {"tablet", msg->TabletID});
@@ -1691,7 +1691,7 @@ public:
             ctx.Send(nameserviceId, new TEvInterconnect::TEvListNodes());
             TBase::Become(&TThis::StateRequestedBrowse);
             ctx.Schedule(TDuration::Seconds(AGGREGATOR_TIMEOUT_SECONDS), new TEvents::TEvWakeup());
-            YDB_LOG_INFO_CTX(ctx, "Aggregator new request V1 Initiator self worker",
+            YDB_LOG_INFO_CTX(ctx, "Aggregator new request V1 Initiator",
                 {"initiator", Initiator},
                 {"selfId", ctx.SelfID},
                 {"workerId", WorkerId});
@@ -1923,7 +1923,7 @@ public:
                 labeledCounter.SetName(g.second->GetCounterName(i));
             }
         }
-        YDB_LOG_INFO_CTX(ctx, "Aggregator request processed - got groups and counters Initiator",
+        YDB_LOG_INFO_CTX(ctx, "Aggregator request processed - got groups and counters initiator",
             {"numGroups", numGroups},
             {"numCounters", numCounters},
             {"selfId", ctx.SelfID},
@@ -1999,7 +1999,7 @@ public:
             ctx.Send(nameserviceId, new TEvInterconnect::TEvListNodes());
             TBase::Become(&TThis::StateRequestedBrowse);
             ctx.Schedule(TDuration::Seconds(AGGREGATOR_TIMEOUT_SECONDS), new TEvents::TEvWakeup());
-            YDB_LOG_INFO_CTX(ctx, "Aggregator new request V2 Initiator self worker",
+            YDB_LOG_INFO_CTX(ctx, "Aggregator new request V2 Initiator",
                 {"initiator", Initiator},
                 {"selfId", ctx.SelfID},
                 {"workerId", WorkerId});
@@ -2110,7 +2110,7 @@ public:
     }
 
     virtual void ReplyAndDie(const TActorContext& ctx) {
-        YDB_LOG_INFO_CTX(ctx, "Aggregator request processed Initiator",
+        YDB_LOG_INFO_CTX(ctx, "Aggregator request processed",
             {"selfId", ctx.SelfID},
             {"initiator", Initiator});
         ui64 cookie = NumWorkers ? WorkerId : 0;
@@ -2127,7 +2127,7 @@ public:
     {}
 
     void ReplyAndDie(const TActorContext& ctx) override {
-        YDB_LOG_INFO_CTX(ctx, "Aggregator request processed Initiator",
+        YDB_LOG_INFO_CTX(ctx, "Aggregator request processed",
             {"selfId", ctx.SelfID},
             {"initiator", Initiator});
         ui64 cookie = NumWorkers ? WorkerId : 0;

@@ -250,6 +250,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesSysView) {
         }, {
             .Name = "B",
             .Status = "FAILED",
+            .Issues = "Invalid override planner settings",
             .Text = texts[1],
         }});
     }

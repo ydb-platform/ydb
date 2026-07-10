@@ -2,6 +2,8 @@
 
 #include "base_test_fixture.h"
 
+#include <ydb/core/nbs/cloud/storage/core/libs/coroutine/executor_ut.h>
+
 #include <library/cpp/testing/unittest/registar.h>
 
 using namespace NKikimr;
@@ -16,12 +18,12 @@ namespace {
 // GetSafeBarrierForErase asserts it runs on the vchunk's executor thread, so
 // hop onto the executor and bring the value back.
 std::optional<ui64> GetSafeBarrierOnExecutor(
-    TBaseFixture& fixture,
+    const TExecutorPtr& executor,
     TVChunk& vchunk)
 {
     auto promise = NThreading::NewPromise<std::optional<ui64>>();
     auto future = promise.GetFuture();
-    fixture.DirectBlockGroup->GetExecutor()->ExecuteSimple(
+    executor->ExecuteSimple(
         [promise = std::move(promise), &vchunk]() mutable
         { promise.SetValue(vchunk.GetSafeBarrierForErase()); });
     return future.GetValue(TDuration::Seconds(10));
@@ -114,9 +116,9 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
         // Finish erase requests with success.
         SetEraseResult(TDBGEraseResponse{.Error = MakeError(S_OK)}, true);
 
-        // Should not get more scheduled tasks.
+        // Should get scheduled tasks.
         UNIT_ASSERT_VALUES_EQUAL(
-            false,
+            true,
             WaitScheduledTasks(1, TDuration::MilliSeconds(100)));
 
         auto onStop = vchunk->Stop();
@@ -145,7 +147,9 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
         vchunk->Start();
 
         // No write yet -> no safe barrier.
-        UNIT_ASSERT(!GetSafeBarrierOnExecutor(*this, *vchunk).has_value());
+        UNIT_ASSERT(
+            !GetSafeBarrierOnExecutor(DirectBlockGroup->GetExecutor(), *vchunk)
+                 .has_value());
 
         auto callContext = MakeIntrusive<TCallContext>(static_cast<ui64>(0));
         auto request =
@@ -166,7 +170,9 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
             WaitWriteRequests(3, TDuration::Seconds(10)));
         UNIT_ASSERT_VALUES_EQUAL(
             123,
-            *GetSafeBarrierOnExecutor(*this, *vchunk));
+            *GetSafeBarrierOnExecutor(
+                DirectBlockGroup->GetExecutor(),
+                *vchunk));
 
         // Acknowledging the PBuffer writes does not release the barrier: the
         // entry stays inflight until it is flushed and erased.
@@ -178,7 +184,9 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
             FormatError(result.Error));
         UNIT_ASSERT_VALUES_EQUAL(
             123,
-            *GetSafeBarrierOnExecutor(*this, *vchunk));
+            *GetSafeBarrierOnExecutor(
+                DirectBlockGroup->GetExecutor(),
+                *vchunk));
 
         vchunk->Stop().GetValue(TDuration::Seconds(10));
     }
@@ -212,7 +220,7 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
 
         // Config should stay the same since new config is not persisted yet.
         UNIT_ASSERT_VALUES_EQUAL(
-            "[100] "
+            "[0/100] "
             "PBuffer{Primary;Primary;Primary;HandOff;HandOff} "
             "DDisk{Primary;Primary;Primary;None;None} "
             "Enabled{+++++}",
@@ -237,7 +245,7 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
 
         // Config should be updated.
         UNIT_ASSERT_VALUES_EQUAL(
-            "[100] "
+            "[0/100] "
             "PBuffer{Primary;Primary;Primary;HandOff;HandOff} "
             "DDisk{Primary;Primary;Primary;None;None} "
             "Enabled{-++++}",
@@ -275,7 +283,7 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
 
         // Config should be updated.
         UNIT_ASSERT_VALUES_EQUAL(
-            "[100] "
+            "[0/100] "
             "PBuffer{Primary;Primary;Primary;HandOff;HandOff} "
             "DDisk{Primary;Primary;Primary;None;None} "
             "Enabled{+++++}",
@@ -289,6 +297,71 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
             "H3+{Disabled,0,0};"
             "H4+{Disabled,0,0};",
             AccessBlocksDirtyMap(*vchunk).DebugPrintDDiskState());
+
+        auto onStop = vchunk->Stop();
+        onStop.GetValue(TDuration::Seconds(10));
+    }
+
+    Y_UNIT_TEST_F(ShouldAppendHostAndGrowDirtyMap, TBaseFixture)
+    {
+        Init();
+
+        auto vchunk = std::make_shared<TVChunk>(
+            Runtime->GetActorSystem(0),
+            PartitionDirectService.get(),
+            VChunkConfig,
+            DirectBlockGroup,
+            3,
+            DefaultVChunkSize,
+            Counters);
+        vchunk->Start();
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            DirectBlockGroupHostCount,
+            AccessConfig(*vchunk).GetHostCount());
+
+        {
+            TPromise<void> ready = NewPromise();
+            auto wait = ready.GetFuture();
+            DirectBlockGroup->GetExecutor()->ExecuteSimple(
+                [&]()
+                {
+                    vchunk->OnHostAppended(DirectBlockGroupHostCount + 1);
+                    ready.SetValue();
+                });
+            wait.GetValue(TDuration::Seconds(10));
+        }
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            DirectBlockGroupHostCount,
+            AccessConfig(*vchunk).GetHostCount());
+
+        UNIT_ASSERT_STRING_CONTAINS(
+            AccessBlocksDirtyMap(*vchunk).DebugPrintDDiskState(),
+            "H5-{Disabled,0,0}");
+
+        {
+            UNIT_ASSERT_VALUES_EQUAL(1, ScheduledTasks.size());
+            auto task = RunScheduledTasks();
+            task.Wait(TDuration::Seconds(10));
+        }
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            DirectBlockGroupHostCount + 1,
+            AccessConfig(*vchunk).GetHostCount());
+        UNIT_ASSERT_STRING_CONTAINS(
+            AccessConfig(*vchunk).DebugPrint(),
+            "PBuffer{Primary;Primary;Primary;HandOff;HandOff;None}");
+        UNIT_ASSERT_STRING_CONTAINS(
+            AccessConfig(*vchunk).DebugPrint(),
+            "DDisk{Primary;Primary;Primary;None;None;None}");
+        UNIT_ASSERT_STRING_CONTAINS(
+            AccessConfig(*vchunk).DebugPrint(),
+            "Enabled{+++++-}");
+
+        UNIT_ASSERT_STRING_CONTAINS(
+            AccessBlocksDirtyMap(*vchunk).DebugPrintDDiskState(),
+            "H5-{Disabled,0,0}");
 
         auto onStop = vchunk->Stop();
         onStop.GetValue(TDuration::Seconds(10));
@@ -369,7 +442,7 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
 
         // Config should stay the same since new config is not persisted yet.
         UNIT_ASSERT_VALUES_EQUAL(
-            "[100] "
+            "[0/100] "
             "PBuffer{Primary;Primary;Primary;HandOff;HandOff} "
             "DDisk{Primary;Primary;Primary;None;None} "
             "Enabled{+++++}",
@@ -395,7 +468,7 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
 
         // Config should be updated.
         UNIT_ASSERT_VALUES_EQUAL(
-            "[100] "
+            "[0/100] "
             "PBuffer{HandOff;Primary;Primary;Primary;HandOff} "
             "DDisk{None;Primary;Primary;Primary;None} "
             "Enabled{-+++[0]+}",
@@ -434,7 +507,7 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
 
         // Config should be updated.
         UNIT_ASSERT_VALUES_EQUAL(
-            "[100] "
+            "[0/100] "
             "PBuffer{HandOff;Primary;Primary;Primary;HandOff} "
             "DDisk{None;Primary;Primary;Primary;None} "
             "Enabled{++++[0]+}",
@@ -468,7 +541,7 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
 
         // Config should be updated.
         UNIT_ASSERT_VALUES_EQUAL(
-            "[100] "
+            "[0/100] "
             "PBuffer{HandOff;Primary;Primary;Primary;HandOff} "
             "DDisk{None;Primary;Primary;Primary;None} "
             "Enabled{+++++}",
@@ -482,6 +555,184 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
             "H3*{Operational,32768,32768};"
             "H4+{Disabled,0,0};",
             AccessBlocksDirtyMap(*vchunk).DebugPrintDDiskState());
+
+        auto onStop = vchunk->Stop();
+        onStop.GetValue(TDuration::Seconds(10));
+    }
+
+    // ReadBlocksLocal / WriteBlocksLocal are blocked while DirtyMapReady
+    // is false and resume after UpdateDirtyMap fires on the executor thread.
+    Y_UNIT_TEST_F(ShouldBlockLocalIoUntilDirtyMapReady, TBaseFixture)
+    {
+        Init();
+
+        // Override the restore handler to keep DirtyMapReady == false: the
+        // future is never resolved, so the vchunk subscription callback never
+        // fires during the "before" phase of the test.
+        auto neverResolvePromise =
+            NThreading::NewPromise<TDBGRestoreResponse>();
+        DirectBlockGroup->RestoreDBGPBuffersHandler =
+            [neverResolvePromise](const auto& vChunkIndex) mutable
+        {
+            Y_UNUSED(vChunkIndex);
+            return neverResolvePromise.GetFuture();
+        };
+
+        const TBlockRange64 range = TBlockRange64::WithLength(0, 1);
+        ExpectedRange = range;
+        RangeData = GenerateRandomString(BlockSize * range.Size());
+
+        auto vchunk = std::make_shared<TVChunk>(
+            Runtime->GetActorSystem(0),
+            PartitionDirectService.get(),
+            VChunkConfig,
+            DirectBlockGroup,
+            3,   // syncRequestsBatchSize
+            DefaultVChunkSize,
+            Counters);
+        vchunk->Start();
+
+        // Drain executor: DoStart has subscribed to the restore future; since
+        // that future is pending, DirtyMapReady stays false.
+        DrainExecutor(DirectBlockGroup->GetExecutor());
+        UNIT_ASSERT_EQUAL(false, IsDirtyMapReady(*vchunk));
+
+        // Submit write - coroutine suspends on WaitFor(DirtyMapReadyFuture).
+        auto callContext = MakeIntrusive<TCallContext>(static_cast<ui64>(0));
+        auto writeRequest =
+            std::make_shared<TWriteBlocksLocalRequest>(TRequestHeaders{
+                .VolumeConfig = PartitionDirectService->GetVolumeConfig(),
+                .RequestId = 1,
+                .Range = range});
+        writeRequest->Sglist = MakeSgList();
+        auto writeFuture = vchunk->WriteBlocksLocal(
+            callContext,
+            writeRequest,
+            NWilson::TTraceId());
+
+        // Submit read - also suspends.
+        TString readBuffer(BlockSize * range.Size(), '\0');
+        auto readRequest =
+            std::make_shared<TReadBlocksLocalRequest>(TRequestHeaders{
+                .VolumeConfig = PartitionDirectService->GetVolumeConfig(),
+                .RequestId = 2,
+                .Range = range});
+        readRequest->Sglist = TGuardedSgList(
+            TSgList{TBlockDataRef{readBuffer.data(), readBuffer.size()}});
+        auto readFuture = vchunk->ReadBlocksLocal(
+            callContext,
+            readRequest,
+            NWilson::TTraceId());
+
+        // Drain: both coroutines are now suspended inside WaitFor
+        DrainExecutor(DirectBlockGroup->GetExecutor());
+        UNIT_ASSERT(!writeFuture.HasValue());
+        UNIT_ASSERT(!readFuture.HasValue());
+
+        // resolves DirtyMapReady promise and unblocks both suspended coroutines
+        RunOnExecutor(
+            DirectBlockGroup->GetExecutor(),
+            [&]() -> bool
+            {
+                InvokeUpdateDirtyMap(
+                    *vchunk,
+                    TDBGRestoreResponse{.Error = MakeError(S_OK)});
+                return true;
+            });
+
+        // Write resumed: wait for three PBuffer write requests and complete
+        // them.
+        UNIT_ASSERT_VALUES_EQUAL(
+            true,
+            WaitWriteRequests(3, TDuration::Seconds(10)));
+        SetWriteResult(TDBGWriteBlocksResponse{.Error = MakeError(S_OK)}, true);
+
+        const auto& writeResult = writeFuture.GetValue(TDuration::Seconds(10));
+        UNIT_ASSERT_VALUES_EQUAL_C(
+            S_OK,
+            writeResult.Error.GetCode(),
+            FormatError(writeResult.Error));
+
+        // Read resumed: wait for one DDisk read and complete it.
+        UNIT_ASSERT_VALUES_EQUAL(
+            true,
+            WaitReadRequests(1, TDuration::Seconds(10)));
+        SetReadResult(TDBGReadBlocksResponse{.Error = MakeError(S_OK)}, true);
+
+        const auto& readResult = readFuture.GetValue(TDuration::Seconds(10));
+        UNIT_ASSERT_VALUES_EQUAL_C(
+            S_OK,
+            readResult.Error.GetCode(),
+            FormatError(readResult.Error));
+
+        auto onStop = vchunk->Stop();
+        onStop.GetValue(TDuration::Seconds(10));
+    }
+
+    // A second UpdateDirtyMap call (resync path) must
+    // not try to SetValue on an already-resolved DirtyMapReady promise (which
+    // would raise an exception), and operations issued afterwards must complete
+    // immediately.
+    Y_UNIT_TEST_F(ShouldNotRecreateDirtyMapPromiseOnResync, TBaseFixture)
+    {
+        Init();
+
+        // Default handler returns an immediately-resolved future, so
+        // DirtyMapReady becomes true inside DoStart.
+
+        const TBlockRange64 range = TBlockRange64::WithLength(0, 1);
+        ExpectedRange = range;
+        RangeData = GenerateRandomString(BlockSize * range.Size());
+
+        auto vchunk = std::make_shared<TVChunk>(
+            Runtime->GetActorSystem(0),
+            PartitionDirectService.get(),
+            VChunkConfig,
+            DirectBlockGroup,
+            3,   // syncRequestsBatchSize
+            DefaultVChunkSize,
+            Counters);
+        vchunk->Start();
+
+        // Drain: the restore callback fires synchronously (future was already
+        // resolved) and sets DirtyMapReady = true
+        DrainExecutor(DirectBlockGroup->GetExecutor());
+        UNIT_ASSERT_EQUAL(true, IsDirtyMapReady(*vchunk));
+
+        // This must NOT call SetValue on the already-resolved one-shot promise
+        RunOnExecutor(
+            DirectBlockGroup->GetExecutor(),
+            [&]() -> bool
+            {
+                InvokeUpdateDirtyMap(
+                    *vchunk,
+                    TDBGRestoreResponse{.Error = MakeError(S_OK)});
+                return true;
+            });
+
+        // Operations issued after the second update must not block
+        auto callContext = MakeIntrusive<TCallContext>(static_cast<ui64>(0));
+        auto writeRequest =
+            std::make_shared<TWriteBlocksLocalRequest>(TRequestHeaders{
+                .VolumeConfig = PartitionDirectService->GetVolumeConfig(),
+                .RequestId = 1,
+                .Range = range});
+        writeRequest->Sglist = MakeSgList();
+        auto writeFuture = vchunk->WriteBlocksLocal(
+            callContext,
+            writeRequest,
+            NWilson::TTraceId());
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            true,
+            WaitWriteRequests(3, TDuration::Seconds(10)));
+        SetWriteResult(TDBGWriteBlocksResponse{.Error = MakeError(S_OK)}, true);
+
+        const auto& writeResult = writeFuture.GetValue(TDuration::Seconds(10));
+        UNIT_ASSERT_VALUES_EQUAL_C(
+            S_OK,
+            writeResult.Error.GetCode(),
+            FormatError(writeResult.Error));
 
         auto onStop = vchunk->Stop();
         onStop.GetValue(TDuration::Seconds(10));

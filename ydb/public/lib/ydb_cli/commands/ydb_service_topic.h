@@ -230,6 +230,7 @@ namespace NYdb::NConsoleClient {
 
     private:
         TString Consumer_ = "";
+        bool ReadWithoutConsumer_ = false;
         TVector<ui64> PartitionIds_;
         TMaybe<uint64_t> Offset_;
         TMaybe<uint32_t> Partition_;

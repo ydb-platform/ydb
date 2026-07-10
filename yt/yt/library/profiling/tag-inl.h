@@ -3,7 +3,6 @@
 // For the sake of sane code completion.
 #include "tag.h"
 #endif
-#undef TAG_INL_H_
 
 namespace NYT::NProfiling {
 

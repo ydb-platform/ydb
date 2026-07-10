@@ -9,6 +9,12 @@ namespace NKikimr::NMiniKQL {
 
 TComputationNodeFactory GetDqNodeFactory(TComputationNodeFactory customFactory) {
     return [customFactory](TCallable& callable, const TComputationNodeFactoryContext& ctx) -> IComputationNode* {
+        if (customFactory) {
+            if (auto res = customFactory(callable, ctx)) {
+                return res;
+            }
+        }
+
         if (callable.GetType()->GetName() == "ExternalNode"sv) {
             return new TExternalComputationNode(ctx.Mutables);
         }

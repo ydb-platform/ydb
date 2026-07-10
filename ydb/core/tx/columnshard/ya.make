@@ -108,4 +108,5 @@ RECURSE_FOR_TESTS(
     ut_schema
     backup
     data_accessor
+    export
 )

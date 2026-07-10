@@ -13,6 +13,25 @@
 
 namespace NKikimr::NConsole::NUT {
 
+template<typename Runtime, typename Event>
+size_t DrainEdgeEvents(Runtime& runtime, TDuration simTimeout = TDuration::MilliSeconds(100))
+{
+    size_t drainedTotal = 0;
+    TAutoPtr<IEventHandle> handle;
+    while (runtime.template GrabEdgeEventRethrow<Event>(handle, simTimeout)) {
+        drainedTotal++;
+    }
+    return drainedTotal;
+}
+
+template<typename... Events, typename Runtime>
+size_t DrainAllEvents(Runtime& runtime, TDuration simTimeout = TDuration::MilliSeconds(100))
+{
+    runtime.DispatchEvents(TDispatchOptions(), simTimeout);
+    size_t drainedTotal = (0 + ... + DrainEdgeEvents<Runtime, Events>(runtime, simTimeout));
+    return drainedTotal;
+}
+
 inline NKikimrConsole::TUsageScope MakeUsageScope(const TVector<ui32> &nodes)
 {
     NKikimrConsole::TUsageScope res;
@@ -455,6 +474,46 @@ inline void CheckReplaceDatabaseConfig(TTenantTestRuntime &runtime,
                                        bool allowUnknownFields = false)
 {
     CheckReplaceConfig(runtime, expectedCode, yaml, expectedErrorSubstring, allowUnknownFields, true);
+}
+
+inline void CheckForceReplaceConfig(TTenantTestRuntime &runtime,
+                                    Ydb::StatusIds::StatusCode expectedCode,
+                                    const TString &yaml,
+                                    const TString &expectedErrorSubstring = {},
+                                    bool allowAbsentDatabase = false)
+{
+    auto *event = new TEvConsole::TEvSetYamlConfigRequest;
+    event->Record.MutableRequest()->set_config(yaml);
+    if (allowAbsentDatabase) {
+        event->Record.MutableRequest()->set_allow_absent_database(true);
+    }
+    runtime.SendToConsole(event);
+
+    TAutoPtr<IEventHandle> handle;
+    auto [success, error] = runtime.GrabEdgeEventsRethrow<
+        TEvConsole::TEvSetYamlConfigResponse,
+        TEvConsole::TEvGenericError>(handle, TDuration::Seconds(1));
+
+    if (expectedCode == Ydb::StatusIds::SUCCESS) {
+        UNIT_ASSERT_C(success != nullptr,
+            "expected success but got error: " <<
+            (error ? error->Record.ShortDebugString() : TString("<no event>")));
+    } else {
+        UNIT_ASSERT_C(error != nullptr,
+            "expected error " << static_cast<int>(expectedCode) << " but got success");
+        UNIT_ASSERT_VALUES_EQUAL_C(error->Record.GetYdbStatus(), expectedCode, error->Record.ShortDebugString());
+        if (!expectedErrorSubstring.empty()) {
+            UNIT_ASSERT_STRING_CONTAINS(error->Record.ShortDebugString(), expectedErrorSubstring);
+        }
+    }
+}
+
+inline void CheckForceReplaceDatabaseConfig(TTenantTestRuntime &runtime,
+                                            Ydb::StatusIds::StatusCode expectedCode,
+                                            const TString &yaml,
+                                            const TString &expectedErrorSubstring = {})
+{
+    CheckForceReplaceConfig(runtime, expectedCode, yaml, expectedErrorSubstring, true);
 }
 
 } // namesapce NKikimr::NConsole::NUT

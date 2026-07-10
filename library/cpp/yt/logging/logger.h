@@ -2,6 +2,8 @@
 
 #include "public.h"
 
+#include <library/cpp/yt/misc/port.h>
+
 #include <library/cpp/yt/string/format.h>
 
 #include <library/cpp/yt/memory/ref.h>
@@ -225,21 +227,21 @@ public:
 
     void Write(TLogEvent&& event) const;
 
-    void AddRawTag(const std::string& tag);
+    void AddRawTag(TStringBuf tag);
     template <class... TArgs>
-    void AddTag(const char* format, TArgs&&... args);
+    void AddTag(TFormatString<TArgs...> format, TArgs&&... args);
 
     template <class TType>
     void AddStructuredTag(TStringBuf key, TType value);
 
     void AddStructuredValidator(TStructuredValidator validator);
 
-    TLogger WithRawTag(const std::string& tag) const &;
-    TLogger WithRawTag(const std::string& tag) &&;
+    TLogger WithRawTag(TStringBuf tag) const &;
+    TLogger WithRawTag(TStringBuf tag) &&;
     template <class... TArgs>
-    TLogger WithTag(const char* format, TArgs&&... args) const &;
+    TLogger WithTag(TFormatString<TArgs...> format, TArgs&&... args) const &;
     template <class... TArgs>
-    TLogger WithTag(const char* format, TArgs&&... args) &&;
+    TLogger WithTag(TFormatString<TArgs...> format, TArgs&&... args) &&;
 
     template <class TType>
     TLogger WithStructuredTag(TStringBuf key, TType value) const &;

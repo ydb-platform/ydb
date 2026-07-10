@@ -24,11 +24,18 @@ enum TInputChannelFormat {
 template <class TDerived, class IInputInterface>
 class TDqInputImpl : public IInputInterface {
 public:
-    TDqInputImpl(NKikimr::NMiniKQL::TType* inputType, ui64 maxBufferBytes)
+    TDqInputImpl(NKikimr::NMiniKQL::TType* inputType, ui64 maxBufferBytes, IMemoryQuotaManager::TPtr quotaManager)
         : InputType(inputType)
         , Width(inputType->IsMulti() ? static_cast<const NKikimr::NMiniKQL::TMultiType*>(inputType)->GetElementsCount() : TMaybe<ui32>{})
         , MaxBufferBytes(maxBufferBytes)
+        , QuotaManager(quotaManager)
     {
+    }
+
+    ~TDqInputImpl() override {
+        if (StoredBytes && QuotaManager) {
+            QuotaManager->FreeQuota(StoredBytes);
+        }
     }
 
     i64 GetFreeSpace() const override {
@@ -159,6 +166,9 @@ public:
         Y_ABORT_UNLESS(batch.Width() == GetWidth());
 
         ui64 rows = GetRowsCount(batch);
+        if (QuotaManager && !QuotaManager->AllocateQuota(space)) {
+            throw NKikimr::TMemoryLimitExceededException();
+        }
         StoredBytes += space;
         StoredRows += rows;
 
@@ -229,6 +239,9 @@ public:
 
         StoredBytes -= popBytes;
         StoredRows -= popRows;
+        if (QuotaManager) {
+            QuotaManager->FreeQuota(popBytes);
+        }
 
         if (popStats.CollectBasic()) {
             popStats.Bytes += popBytes;
@@ -316,6 +329,7 @@ protected:
     };
     std::deque<TBarrier> PendingBarriers;
     TBarrier BeforeBarrier;
+    IMemoryQuotaManager::TPtr QuotaManager;
 };
 
 } // namespace NYql::NDq

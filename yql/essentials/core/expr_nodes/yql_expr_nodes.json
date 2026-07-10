@@ -52,6 +52,20 @@
             "ListBase": "TCoIndex"
         },
         {
+            "Name": "TCoStatistics",
+            "Base": "TExprBase",
+            "Match": {"Type": "Tuple"},
+            "Children": [
+                {"Index": 0, "Name": "Name", "Type": "TCoAtom"},
+                {"Index": 1, "Name": "Columns", "Type": "TCoAtomList"},
+                {"Index": 2, "Name": "Types", "Type": "TCoAtomList"}
+            ]
+        },
+        {
+            "Name": "TCoStatisticsList",
+            "ListBase": "TCoStatistics"
+        },
+        {
             "Name": "TCoChangefeed",
             "Base": "TExprBase",
             "Match": {"Type": "Tuple"},
@@ -862,6 +876,17 @@
             "Children": [
                 {"Index": 0, "Name": "World", "Type": "TExprBase"},
                 {"Index": 1, "Name": "DataSource", "Type": "TCoDataSource"}
+            ]
+        },
+        {
+            "Name": "TCoMaterialize",
+            "Base": "TExprBase",
+            "Match": {"Type": "Callable", "Name": "Materialize!"},
+            "Children": [
+                {"Index": 0, "Name": "World", "Type": "TExprBase"},
+                {"Index": 1, "Name": "DataSink", "Type": "TCoDataSink"},
+                {"Index": 2, "Name": "Input", "Type": "TExprBase"},
+                {"Index": 3, "Name": "Settings", "Type": "TCoNameValueTupleList"}
             ]
         },
         {

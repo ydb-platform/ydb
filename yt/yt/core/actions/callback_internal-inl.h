@@ -3,7 +3,6 @@
 // For the sake of sane code completion.
 #include "callback_internal.h"
 #endif
-#undef CALLBACK_INTERNAL_INL_H_
 
 namespace NYT::NDetail {
 
@@ -68,4 +67,4 @@ inline TCallbackBase::TCallbackBase(TIntrusivePtr<TBindStateBase>&& bindState) n
 
 ////////////////////////////////////////////////////////////////////////////////
 
-}  // namespace NYT::NDetail
+} // namespace NYT::NDetail

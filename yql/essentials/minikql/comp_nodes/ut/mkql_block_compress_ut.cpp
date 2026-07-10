@@ -2,6 +2,8 @@
 
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
 #include <yql/essentials/minikql/computation/mkql_block_builder.h>
+#include <yql/essentials/minikql/comp_nodes/ut/mkql_program_builder_test_utils.h>
+#include <yql/essentials/minikql/udf_value_test_support/udf_value_comparator_utils.h>
 
 #include <util/random/random.h>
 
@@ -15,15 +17,8 @@ void DoNestedTuplesCompressTest() {
     TSetup<LLVM> setup;
     TProgramBuilder& pb = *setup.PgmBuilder;
 
-    const auto ui64Type = pb.NewDataType(NUdf::TDataType<ui64>::Id);
-    const auto boolType = pb.NewDataType(NUdf::TDataType<bool>::Id);
-    const auto utf8Type = pb.NewDataType(NUdf::EDataSlot::Utf8);
-
-    const auto innerTupleType = pb.NewTupleType({ui64Type, boolType, utf8Type});
-    const auto outerTupleType = pb.NewTupleType({ui64Type, innerTupleType, utf8Type});
-    const auto finalTupleType = pb.NewTupleType({ui64Type, outerTupleType, boolType});
-
-    const auto resultTupleType = pb.NewTupleType({ui64Type, outerTupleType});
+    const auto resultTupleType = NTest::ConvertToMinikqlType<
+        std::tuple<ui64, std::tuple<ui64, std::tuple<ui64, bool, NTest::TUtf8>, NTest::TUtf8>>>(pb);
 
     TRuntimeNode::TList items;
     static_assert(MaxBlockSizeInBytes % 4 == 0);
@@ -56,26 +51,16 @@ void DoNestedTuplesCompressTest() {
             }
         }
 
-        const auto innerTuple = pb.NewTuple(innerTupleType, {
-                                                                pb.NewDataLiteral<ui64>(i),
-                                                                pb.NewDataLiteral<bool>(i % 2),
-                                                                pb.NewDataLiteral<NUdf::EDataSlot::Utf8>((i % 2) ? str : std::string()),
-                                                            });
-        const auto outerTuple = pb.NewTuple(outerTupleType, {
-                                                                pb.NewDataLiteral<ui64>(i),
-                                                                innerTuple,
-                                                                pb.NewDataLiteral<NUdf::EDataSlot::Utf8>((i % 2) ? std::string() : str),
-                                                            });
-
-        const auto finalTuple = pb.NewTuple(finalTupleType, {
-                                                                pb.NewDataLiteral<ui64>(i),
-                                                                outerTuple,
-                                                                pb.NewDataLiteral(filterValue),
-                                                            });
+        const auto finalTuple = NTest::ConvertValueToLiteralNode(pb,
+                                                                 std::tuple<ui64, std::tuple<ui64, std::tuple<ui64, bool, NTest::TUtf8>, NTest::TUtf8>, bool>{
+                                                                     i,
+                                                                     {i, {i, bool(i % 2), NTest::TUtf8{TStringBuf((i % 2) ? str : std::string())}},
+                                                                      NTest::TUtf8{TStringBuf((i % 2) ? std::string() : str)}},
+                                                                     filterValue});
         items.push_back(finalTuple);
     }
 
-    const auto list = pb.NewList(finalTupleType, std::move(items));
+    const auto list = pb.NewList(items.front().GetStaticType(), std::move(items));
 
     auto node = pb.ToFlow(list);
     node = pb.ExpandMap(node, [&](TRuntimeNode item) -> TRuntimeNode::TList {
@@ -84,7 +69,7 @@ void DoNestedTuplesCompressTest() {
     node = pb.WideToBlocks(pb.FromFlow(node));
 
     node = pb.BlockExpandChunked(node);
-    node = pb.WideSkipBlocks(node, pb.template NewDataLiteral<ui64>(19));
+    node = pb.WideSkipBlocks(node, NTest::ConvertValueToLiteralNode(pb, ui64(19)));
     node = pb.BlockCompress(node, 2);
     node = pb.ToFlow(pb.WideFromBlocks(node));
 
@@ -136,13 +121,13 @@ void DoNestedTuplesCompressTest() {
         const auto& inner = outer.GetElement(1);
 
         auto outerStrVal = outer.GetElement(2);
-        std::string_view outerStr = outerStrVal.AsStringRef();
+        TStringBuf outerStr = outerStrVal.AsStringRef();
 
         ui64 innerNum = inner.GetElement(0).Get<ui64>();
         bool innerBool = inner.GetElement(1).Get<bool>();
         auto innerStrVal = inner.GetElement(2);
 
-        std::string_view innerStr = innerStrVal.AsStringRef();
+        TStringBuf innerStr = innerStrVal.AsStringRef();
 
         UNIT_ASSERT_VALUES_EQUAL(num, i);
         UNIT_ASSERT_VALUES_EQUAL(topNum, i);
@@ -168,19 +153,15 @@ Y_UNIT_TEST_LLVM(CompressBasic) {
     TSetup<LLVM> setup;
     TProgramBuilder& pb = *setup.PgmBuilder;
 
-    const auto ui64Type = pb.NewDataType(NUdf::TDataType<ui64>::Id);
-    const auto boolType = pb.NewDataType(NUdf::TDataType<bool>::Id);
-    const auto tupleType = pb.NewTupleType({boolType, ui64Type, boolType});
-
-    const auto data1 = pb.NewTuple(tupleType, {pb.NewDataLiteral(false), pb.NewDataLiteral<ui64>(1ULL), pb.NewDataLiteral(true)});
-    const auto data2 = pb.NewTuple(tupleType, {pb.NewDataLiteral(true), pb.NewDataLiteral<ui64>(2ULL), pb.NewDataLiteral(false)});
-    const auto data3 = pb.NewTuple(tupleType, {pb.NewDataLiteral(false), pb.NewDataLiteral<ui64>(3ULL), pb.NewDataLiteral(true)});
-    const auto data4 = pb.NewTuple(tupleType, {pb.NewDataLiteral(false), pb.NewDataLiteral<ui64>(4ULL), pb.NewDataLiteral(true)});
-    const auto data5 = pb.NewTuple(tupleType, {pb.NewDataLiteral(true), pb.NewDataLiteral<ui64>(5ULL), pb.NewDataLiteral(false)});
-    const auto data6 = pb.NewTuple(tupleType, {pb.NewDataLiteral(true), pb.NewDataLiteral<ui64>(6ULL), pb.NewDataLiteral(true)});
-    const auto data7 = pb.NewTuple(tupleType, {pb.NewDataLiteral(false), pb.NewDataLiteral<ui64>(7ULL), pb.NewDataLiteral(true)});
-
-    const auto list = pb.NewList(tupleType, {data1, data2, data3, data4, data5, data6, data7});
+    const auto list = NTest::ConvertValueToLiteralNode(pb,
+                                                       TVector<std::tuple<bool, ui64, bool>>{
+                                                           {false, ui64(1), true},
+                                                           {true, ui64(2), false},
+                                                           {false, ui64(3), true},
+                                                           {false, ui64(4), true},
+                                                           {true, ui64(5), false},
+                                                           {true, ui64(6), true},
+                                                           {false, ui64(7), true}});
     const auto flow = pb.ToFlow(list);
 
     const auto wideFlow = pb.ExpandMap(flow, [&](TRuntimeNode item) -> TRuntimeNode::TList {
@@ -197,24 +178,9 @@ Y_UNIT_TEST_LLVM(CompressBasic) {
 
     const auto graph = setup.BuildGraph(pgmReturn);
     const auto res = graph->GetValue();
-    const auto iterator = res.GetListIterator();
 
-    NUdf::TUnboxedValue item;
-    UNIT_ASSERT(iterator.Next(item));
-
-    UNIT_ASSERT_VALUES_EQUAL(item.GetElement(0).Get<ui64>(), 2);
-    UNIT_ASSERT_VALUES_EQUAL(item.GetElement(1).Get<bool>(), false);
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT_VALUES_EQUAL(item.GetElement(0).Get<ui64>(), 5);
-    UNIT_ASSERT_VALUES_EQUAL(item.GetElement(1).Get<bool>(), false);
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT_VALUES_EQUAL(item.GetElement(0).Get<ui64>(), 6);
-    UNIT_ASSERT_VALUES_EQUAL(item.GetElement(1).Get<bool>(), true);
-
-    UNIT_ASSERT(!iterator.Next(item));
-    UNIT_ASSERT(!iterator.Next(item));
+    AssertUnboxedValueElementEqual(res,
+                                   TVector<std::tuple<ui64, bool>>{{ui64(2), false}, {ui64(5), false}, {ui64(6), true}});
 }
 
 Y_UNIT_TEST_LLVM(CompressNestedTuples) {

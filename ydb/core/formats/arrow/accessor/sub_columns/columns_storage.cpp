@@ -1,6 +1,7 @@
 #include "columns_storage.h"
 
-#include <ydb/core/formats/arrow/arrow_filter.h>
+#include <ydb/core/formats/arrow/container/filterable/filterable.h>
+#include <ydb/core/formats/arrow/filter/filter.h>
 
 #include <yql/essentials/types/binary_json/read.h>
 
@@ -31,8 +32,7 @@ TColumnsData TColumnsData::ApplyFilter(const TColumnFilter& filter) const {
     if (!Stats.GetColumnsCount()) {
         return *this;
     }
-    auto records = Records;
-    filter.Apply(records);
+    auto records = NArrow::ApplyFilter(filter, Records);
     if (records->GetRecordsCount()) {
         TDictStats::TBuilder builder;
         ui32 idx = 0;
@@ -64,7 +64,10 @@ void TColumnsData::TIterator::InitArrays() {
         ChunkAddress = FullArrayAddress->GetArray()->GetChunk(ChunkAddress, localIndex);
         AFL_VERIFY(ChunkAddress->GetArray()->type()->id() == arrow::binary()->id());
         CurrentArrayData = static_cast<const arrow::BinaryArray*>(ChunkAddress->GetArray().get());
-        if (FullArrayAddress->GetArray()->GetType() == IChunkedArray::EType::Array) {
+        // Dictionary columns materialize (decode) to a dense binary array, so they are
+        // read exactly like a plain Array here.
+        if (FullArrayAddress->GetArray()->GetType() == IChunkedArray::EType::Array ||
+            FullArrayAddress->GetArray()->GetType() == IChunkedArray::EType::Dictionary) {
             if (CurrentArrayData->IsNull(localIndex)) {
                 Next();
             }

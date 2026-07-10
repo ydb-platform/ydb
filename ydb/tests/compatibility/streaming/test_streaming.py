@@ -21,14 +21,20 @@ class StreamingTestBase:
             logger.debug("skip test, only available since 25-4")
             pytest.skip("Only available since 25-4")
 
+        extra_feature_flags = [
+            "enable_external_data_sources",
+            "enable_streaming_queries"
+        ]
+
+        if min(self.versions) >= (26, 1) and min(self.versions) < (26, 2):
+            # Feature was explicitly enabled in 26-1, and enabled by default in 26-2
+            extra_feature_flags.append("enable_topics_sql_io_operations")
+
         os.environ["YDB_TEST_DEFAULT_CHECKPOINTING_PERIOD_MS"] = "200"
         os.environ["YDB_TEST_LEASE_DURATION_SEC"] = "15"
         yield from super().setup_cluster(
             disabled_feature_flags=["enable_drain_on_shutdown"],
-            extra_feature_flags=[
-                "enable_external_data_sources",
-                "enable_streaming_queries"
-            ],
+            extra_feature_flags=extra_feature_flags,
             additional_log_configs={
                 'KQP_COMPUTE': LogLevels.TRACE,
                 'STREAMS_CHECKPOINT_COORDINATOR': LogLevels.TRACE,
@@ -38,17 +44,45 @@ class StreamingTestBase:
                 'KQP_EXECUTER': LogLevels.DEBUG},
         )
 
-    def create_topics(self):
-        logger.debug("create_topics")
+    def create_objects(self, external: bool):
+        if not external and min(self.versions) < (26, 1):
+            logger.debug("skip local topics, only available since 26-1")
+            pytest.skip("Local topics only available since 26-1")
+
+        logger.debug("create_objects")
         self.input_topic = 'streaming_recipe/input_topic'
         self.output_topic = 'streaming_recipe/output_topic'
         self.consumer_name = 'consumer_name'
+        self.test_precompute_queries = min(self.versions) >= (26, 1)
         with ydb.QuerySessionPool(self.driver) as session_pool:
             query = f"""
                 CREATE TOPIC `{self.input_topic}`;
                 CREATE TOPIC `{self.output_topic}` (CONSUMER {self.consumer_name});
             """
             session_pool.execute_with_retries(query)
+
+            if self.test_precompute_queries:
+                create_query = """
+                    CREATE TABLE table_name (
+                        key Utf8,
+                        value Utf8,
+                        PRIMARY KEY (key)
+                    );
+                """
+                session_pool.execute_with_retries(create_query)
+
+                write_query = """
+                    UPSERT INTO table_name (key, value) VALUES ('key1', 'value1');
+                """
+                session_pool.execute_with_retries(write_query)
+
+        if external:
+            self.create_external_data_source()
+            self.input_object = f"`source_name`.`{self.input_topic}`"
+            self.output_object = f"`source_name`.`{self.output_topic}`"
+        else:
+            self.input_object = f"`{self.input_topic}`"
+            self.output_object = f"`{self.output_topic}`"
 
     def create_external_data_source(self):
         logger.debug("create_external_data_source")
@@ -68,9 +102,11 @@ class StreamingTestBase:
         with ydb.QuerySessionPool(self.driver) as session_pool:
             query = f"""
                 CREATE STREAMING QUERY `my_queries/query_name` AS DO BEGIN
+                {'$precompute_data = SELECT value FROM table_name LIMIT 1;' if self.test_precompute_queries else ''}
+
                 $input = (
                     SELECT * FROM
-                        source_name.`{self.input_topic}` WITH (
+                        {self.input_object} WITH (
                             FORMAT = 'json_each_row',
                             SCHEMA (time String NOT NULL, level String NOT NULL, host String NOT NULL)
                         )
@@ -85,11 +121,11 @@ class StreamingTestBase:
                         host
                 );
 
-                $json = (SELECT ToBytes(Unwrap(Yson::SerializeJson(Yson::From(TableRow()))))
+                $json = (SELECT ToBytes(Unwrap(Yson::SerializeJson(Yson::From(TableRow())))){' || Unwrap($precompute_data)' if self.test_precompute_queries else ''}
                     FROM $number_errors
                 );
 
-                INSERT INTO source_name.`{self.output_topic}`
+                INSERT INTO {self.output_object}
                 SELECT * FROM $json;
                 END DO;
 
@@ -101,21 +137,23 @@ class StreamingTestBase:
         with ydb.QuerySessionPool(self.driver) as session_pool:
             query = f"""
                 CREATE STREAMING QUERY `my_queries/query_name` AS DO BEGIN
+                {'$precompute_data = SELECT value FROM table_name LIMIT 1;' if self.test_precompute_queries else ''}
+
                 $input = (
                     SELECT
                         *
                     FROM
-                        source_name.`{self.input_topic}` WITH (
+                        {self.input_object} WITH (
                             FORMAT = 'json_each_row',
                             SCHEMA (time String NOT NULL, level String NOT NULL, host String NOT NULL)
                         )
                 );
 
-                $json = (SELECT ToBytes(Unwrap(Yson::SerializeJson(Yson::From(TableRow()))))
+                $json = (SELECT ToBytes(Unwrap(Yson::SerializeJson(Yson::From(TableRow())))){' || Unwrap($precompute_data)' if self.test_precompute_queries else ''}
                     FROM $input
                 );
 
-                INSERT INTO source_name.`{self.output_topic}`
+                INSERT INTO {self.output_object}
                 SELECT * FROM $json;
                 END DO;
 
@@ -140,6 +178,7 @@ class StreamingTestBase:
         assert sorted(read_data) == sorted(expected_output)
 
     def do_test_part1(self):
+        suffix = 'value1' if self.test_precompute_queries else ''
         input = [
             '{"time": "2025-01-01T00:00:00.000000Z", "level": "error", "host": "host-1"}',
             '{"time": "2025-01-01T00:04:00.000000Z", "level": "error", "host": "host-2"}',
@@ -147,18 +186,19 @@ class StreamingTestBase:
             '{"time": "2025-01-01T00:12:00.000000Z", "level": "error", "host": "host-2"}',
             '{"time": "2025-01-01T00:12:00.000000Z", "level": "error", "host": "host-1"}']
         expected_data = sorted([
-            '{"error_count":1,"host":"host-2","ts":"2025-01-01T00:00:00Z"}',
-            '{"error_count":2,"host":"host-1","ts":"2025-01-01T00:00:00Z"}'])
+            '{"error_count":1,"host":"host-2","ts":"2025-01-01T00:00:00Z"}' + suffix,
+            '{"error_count":2,"host":"host-1","ts":"2025-01-01T00:00:00Z"}' + suffix])
         self.do_write_read(input, expected_data)
 
     def do_test_part2(self):
+        suffix = 'value1' if self.test_precompute_queries else ''
         input = [
             '{"time": "2025-01-01T00:15:00.000000Z", "level": "error", "host": "host-2"}',
             '{"time": "2025-01-01T00:22:00.000000Z", "level": "error", "host": "host-1"}',
             '{"time": "2025-01-01T00:22:00.000000Z", "level": "error", "host": "host-2"}']
         expected_data = sorted([
-            '{"error_count":2,"host":"host-2","ts":"2025-01-01T00:10:00Z"}',
-            '{"error_count":1,"host":"host-1","ts":"2025-01-01T00:10:00Z"}'])
+            '{"error_count":2,"host":"host-2","ts":"2025-01-01T00:10:00Z"}' + suffix,
+            '{"error_count":1,"host":"host-1","ts":"2025-01-01T00:10:00Z"}' + suffix])
         self.do_write_read(input, expected_data)
 
 
@@ -168,9 +208,9 @@ class TestStreamingMixedCluster(StreamingTestBase, MixedClusterFixture):
         yield from self.setup_cluster()
 
     @link_test_case("#27924")
-    def test_mixed_cluster(self):
-        self.create_topics()
-        self.create_external_data_source()
+    @pytest.mark.parametrize("external", [True, False])
+    def test_mixed_cluster(self, external):
+        self.create_objects(external)
         self.create_streaming_query()
         self.do_test_part1()
         self.do_test_part2()
@@ -182,9 +222,9 @@ class TestStreamingRestartToAnotherVersion(StreamingTestBase, RestartToAnotherVe
         yield from self.setup_cluster()
 
     @link_test_case("#27924")
-    def test_restart_to_another_version(self):
-        self.create_topics()
-        self.create_external_data_source()
+    @pytest.mark.parametrize("external", [True, False])
+    def test_restart_to_another_version(self, external):
+        self.create_objects(external)
         self.create_streaming_query()
         self.do_test_part1()
         self.change_cluster_version()
@@ -197,16 +237,17 @@ class TestStreamingRollingUpgradeAndDowngrade(StreamingTestBase, RollingUpgradeA
         yield from self.setup_cluster()
 
     @link_test_case("#27924")
-    def test_rolling_upgrade(self):
-        self.create_topics()
-        self.create_external_data_source()
+    @pytest.mark.parametrize("external", [True, False])
+    def test_rolling_upgrade(self, external):
+        self.create_objects(external)
         self.create_simple_streaming_query()
+        suffix = 'value1' if self.test_precompute_queries else ''
 
         for i, _ in enumerate(self.roll()):  # every iteration is a step in rolling upgrade process
             #
             # 2. check written data is correct during rolling upgrade
             #
             input = [f'{{"time": "2025-01-01T00:15:00.000000Z", "level": "error", "host": "host-{i}"}}']
-            expected_data = [f'{{"host":"host-{i}","level":"error","time":"2025-01-01T00:15:00.000000Z"}}']
+            expected_data = [f'{{"host":"host-{i}","level":"error","time":"2025-01-01T00:15:00.000000Z"}}{suffix}']
             self.do_write_read(input, expected_data)
             time.sleep(0.5)

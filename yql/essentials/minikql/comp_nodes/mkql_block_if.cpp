@@ -131,10 +131,28 @@ private:
 template <bool ThenIsScalar, bool ElseIsScalar>
 class TIfBlockExec {
 public:
+    class TIfKernelState: public arrow::compute::KernelState {
+    public:
+        explicit TIfKernelState(TType* type)
+            : ThenReader_(MakeBlockReader(TTypeInfoHelper(), type))
+            , ElseReader_(MakeBlockReader(TTypeInfoHelper(), type))
+        {
+        }
+
+        IBlockReader& GetThenReader() {
+            return *ThenReader_;
+        }
+        IBlockReader& GetElseReader() {
+            return *ElseReader_;
+        }
+
+    private:
+        std::unique_ptr<IBlockReader> ThenReader_;
+        std::unique_ptr<IBlockReader> ElseReader_;
+    };
+
     explicit TIfBlockExec(TType* type)
-        : ThenReader(MakeBlockReader(TTypeInfoHelper(), type))
-        , ElseReader(MakeBlockReader(TTypeInfoHelper(), type))
-        , Type(type)
+        : Type(type)
     {
     }
 
@@ -143,10 +161,14 @@ public:
         arrow::Datum thenDatum = batch.values[1];
         arrow::Datum elseDatum = batch.values[2];
 
+        auto& state = static_cast<TIfKernelState&>(*ctx->state());
+        auto& thenReader = state.GetThenReader();
+        auto& elseReader = state.GetElseReader();
+
         TBlockItem thenItem;
         const arrow::ArrayData* thenArray = nullptr;
         if constexpr (ThenIsScalar) {
-            thenItem = ThenReader->GetScalarItem(*thenDatum.scalar());
+            thenItem = thenReader.GetScalarItem(*thenDatum.scalar());
         } else {
             MKQL_ENSURE(thenDatum.is_array(), "Expecting array");
             thenArray = thenDatum.array().get();
@@ -155,7 +177,7 @@ public:
         TBlockItem elseItem;
         const arrow::ArrayData* elseArray = nullptr;
         if constexpr (ElseIsScalar) {
-            elseItem = ElseReader->GetScalarItem(*elseDatum.scalar());
+            elseItem = elseReader.GetScalarItem(*elseDatum.scalar());
         } else {
             MKQL_ENSURE(elseDatum.is_array(), "Expecting array");
             elseArray = elseDatum.array().get();
@@ -169,10 +191,10 @@ public:
         const ui8* predValues = pred->GetValues<uint8_t>(1);
         for (size_t i = 0; i < len; ++i) {
             if constexpr (!ThenIsScalar) {
-                thenItem = ThenReader->GetItem(*thenArray, i);
+                thenItem = thenReader.GetItem(*thenArray, i);
             }
             if constexpr (!ElseIsScalar) {
-                elseItem = ElseReader->GetItem(*elseArray, i);
+                elseItem = elseReader.GetItem(*elseArray, i);
             }
 
             ui64 mask = -ui64(predValues[i]);
@@ -185,8 +207,6 @@ public:
     }
 
 private:
-    const std::unique_ptr<IBlockReader> ThenReader;
-    const std::unique_ptr<IBlockReader> ElseReader;
     TType* const Type;
 };
 
@@ -201,6 +221,10 @@ std::shared_ptr<arrow::compute::ScalarKernel> MakeBlockIfKernel(const TVector<TT
                                                                  });
 
     kernel->null_handling = arrow::compute::NullHandling::COMPUTED_NO_PREALLOCATE;
+    auto itemType = AS_TYPE(TBlockType, resultType)->GetItemType();
+    kernel->init = [itemType](arrow::compute::KernelContext*, const arrow::compute::KernelInitArgs&) {
+        return arrow::Result(std::make_unique<typename TExec::TIfKernelState>(itemType));
+    };
     return kernel;
 }
 

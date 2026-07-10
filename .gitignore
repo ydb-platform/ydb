@@ -117,3 +117,6 @@ path.bash.inc
 
 # Pyright config (local IDE settings)
 **/pyrightconfig.json
+
+# Local configuration for `ya`
+/local.ymake

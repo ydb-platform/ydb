@@ -855,10 +855,11 @@ void ProcessAggregations(TExprNode::TPtr lambdaToProcess, TString&& resultColNam
             auto body = lambda.Body().Ptr();
             if (IsExpression(body)) {
                 originalColName = TInfoUnit(resultColName);
-                expressionsMapPreAgg.push_back({resultColName, lambda.Ptr(), false});
+                expressionsMapPreAgg.emplace_back(resultColName, lambda.Ptr(), false);
             } else {
                 auto member = TCoMember(body);
                 originalColName = TInfoUnit(member.Name().StringValue());
+                expressionsMapPreAgg.emplace_back(originalColName.GetFullName(), lambda.Ptr(), false);
             }
         }
 

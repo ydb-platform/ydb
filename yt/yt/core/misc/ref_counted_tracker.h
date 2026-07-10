@@ -9,6 +9,11 @@
 
 #include <library/cpp/yt/memory/leaky_singleton.h>
 
+#include <library/cpp/yt/logging/public.h>
+
+#include <string>
+#include <vector>
+
 namespace NYT {
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -67,16 +72,8 @@ public:
         size_t objectSize,
         const TSourceLocation& location = TSourceLocation());
 
-    static void AllocateInstance(TRefCountedTypeCookie cookie);
-    static void FreeInstance(TRefCountedTypeCookie cookie);
-
-    static void AllocateTagInstance(TRefCountedTypeCookie cookie);
-    static void FreeTagInstance(TRefCountedTypeCookie cookie);
-
-    static void AllocateSpace(TRefCountedTypeCookie cookie, size_t size);
-    static void FreeSpace(TRefCountedTypeCookie cookie, size_t size);
-
     std::string GetDebugInfo(int sortByColumn = -1) const;
+    void LogDebugInfo(const NLogging::TLogger& logger, NLogging::ELogLevel level) const;
     TRefCountedTrackerStatistics GetStatistics() const;
 
     size_t GetObjectsAllocated(TRefCountedTypeKey typeKey) const;
@@ -88,6 +85,22 @@ public:
 
 private:
     DECLARE_LEAKY_SINGLETON_FRIEND()
+
+    // The hot counter entry points are private: the only caller is
+    // TRefCountedTrackerFacade, the pinned cross-library boundary. Keeping them
+    // unreachable from elsewhere is what lets them be inlined into that boundary
+    // while staying fiber-safe -- no other context can inline the TLS read and cache
+    // the thread pointer across a fiber migration.
+    friend class TRefCountedTrackerFacade;
+
+    static void AllocateInstance(TRefCountedTypeCookie cookie);
+    static void FreeInstance(TRefCountedTypeCookie cookie);
+
+    static void AllocateTagInstance(TRefCountedTypeCookie cookie);
+    static void FreeTagInstance(TRefCountedTypeCookie cookie);
+
+    static void AllocateSpace(TRefCountedTypeCookie cookie, size_t size);
+    static void FreeSpace(TRefCountedTypeCookie cookie, size_t size);
 
     struct TLocalSlotsHolder;
 

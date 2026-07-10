@@ -387,10 +387,10 @@ TFuture<void> TTransaction::Abort(const TTransactionAbortOptions& options)
     return DoAbort(&guard, options);
 }
 
-void TTransaction::FutureModifyRows(
+void TTransaction::ModifyRows(
     const TYPath& path,
     TNameTablePtr nameTable,
-    TSharedRange<NFuture::TRowModification> modifications,
+    TSharedRange<TRowModification> modifications,
     const TModifyRowsOptions& options)
 {
     ValidateTabletTransactionId(GetId());
@@ -398,10 +398,10 @@ void TTransaction::FutureModifyRows(
     for (const auto& modification : modifications) {
         // TODO(sandello): handle versioned rows
         Visit(modification,
-            [] (const NFuture::NRowModifications::TWriteRow&) { },
-            [] (const NFuture::NRowModifications::TDeleteRow&) { },
-            [] (const NFuture::NRowModifications::TWriteAndLockRow&) { },
-            [] (const NFuture::NRowModifications::TVersionedWriteRow&) {
+            [] (const NRowModifications::TWriteRow&) { },
+            [] (const NRowModifications::TDeleteRow&) { },
+            [] (const NRowModifications::TWriteAndLockRow&) { },
+            [] (const NRowModifications::TVersionedWriteRow&) {
                 YT_ABORT();
             });
     }
@@ -423,14 +423,19 @@ void TTransaction::FutureModifyRows(
     std::vector<TUnversionedRow> rows;
     rows.reserve(modifications.Size());
 
+    const auto& config = Connection_->GetConfig();
+
+    bool usedAnyLocks = false;
     bool usedStrongLocks = false;
     bool usedWideLocks = false;
     for (const auto& modification : modifications) {
-        if (!std::holds_alternative<NFuture::NRowModifications::TWriteAndLockRow>(modification)) {
+        if (!std::holds_alternative<NRowModifications::TWriteAndLockRow>(modification)) {
             continue;
         }
 
-        auto mask = std::get<NFuture::NRowModifications::TWriteAndLockRow>(modification).Locks;
+        usedAnyLocks = true;
+
+        auto mask = std::get<NRowModifications::TWriteAndLockRow>(modification).Locks;
         usedWideLocks |= mask.GetSize() > TLegacyLockMask::MaxCount;
         if (usedWideLocks) {
             break;
@@ -439,15 +444,15 @@ void TTransaction::FutureModifyRows(
         for (int index = 0; index < TLegacyLockMask::MaxCount; ++index) {
             usedWideLocks |= mask.Get(index) > MaxOldLockType;
             usedStrongLocks |= mask.Get(index) == ELockType::SharedStrong;
+
+            // Pure locks do not set usedStrongLocks by themselves. That causes row_legacy_read_locks to be used.
+            // And with row_legacy_read_locks used rpc proxy reconstructs exclusive locks using row values from attachments.
+            // With DoNotDropPureExclusiveLocks at least row_legacy_locks will be used.
+            if (config->DoNotDropPureExclusiveLocks) {
+                usedStrongLocks |= mask.Get(index) == ELockType::Exclusive;
+            }
         }
     }
-
-    const auto& config = Connection_->GetConfig();
-
-    // Pure locks do not set usedStrongLocks by themselves. That causes row_legacy_read_locks to be used.
-    // And with row_legacy_read_locks used rpc proxy reconstructs exclusive locks using row values from attachments.
-    // With DoNotDropPureExclusiveLocks at least row_legacy_locks will be used.
-    usedStrongLocks |= config->DoNotDropPureExclusiveLocks;
 
     if (usedStrongLocks) {
         req->Header().set_protocol_version_minor(YTRpcModifyRowsStrongLocksVersion);
@@ -458,13 +463,13 @@ void TTransaction::FutureModifyRows(
     }
 
     // NB: Should be called for every modification to keep index correspondence.
-    auto fillCorrespondingLock = [&req, usedWideLocks, usedStrongLocks] (const TLockMask& locks) {
+    auto fillCorrespondingLock = [&req, usedWideLocks, usedStrongLocks, usedAnyLocks] (const TLockMask& locks) {
         if (usedWideLocks) {
             ToProto(req->add_row_locks(), locks);
         } else if (usedStrongLocks) {
             YT_VERIFY(!locks.HasNewLocks());
             req->add_row_legacy_locks(locks.ToLegacyMask().GetBitmap());
-        } else {
+        } else if (usedAnyLocks) {
             TLegacyLockBitmap bitmap = 0;
             for (int index = 0; index < TLegacyLockMask::MaxCount; ++index) {
                 if (locks.Get(index) == ELockType::SharedWeak) {
@@ -477,22 +482,22 @@ void TTransaction::FutureModifyRows(
 
     for (const auto& modification : modifications) {
         Visit(modification,
-            [&req, &rows, &fillCorrespondingLock] (const NFuture::NRowModifications::TWriteRow& modification) {
+            [&req, &rows, &fillCorrespondingLock] (const NRowModifications::TWriteRow& modification) {
                 rows.emplace_back(modification.Row);
                 req->add_row_modification_types(NProto::ERowModificationType::RMT_WRITE);
                 fillCorrespondingLock(TLockMask{});
             },
-            [&req, &rows, &fillCorrespondingLock] (const NFuture::NRowModifications::TDeleteRow& modification) {
+            [&req, &rows, &fillCorrespondingLock] (const NRowModifications::TDeleteRow& modification) {
                 rows.emplace_back(modification.Key);
                 req->add_row_modification_types(NProto::ERowModificationType::RMT_DELETE);
                 fillCorrespondingLock(TLockMask{});
             },
-            [&req, &rows, &fillCorrespondingLock] (const NFuture::NRowModifications::TWriteAndLockRow& writeAndLockModification) {
+            [&req, &rows, &fillCorrespondingLock] (const NRowModifications::TWriteAndLockRow& writeAndLockModification) {
                 rows.emplace_back(writeAndLockModification.Row);
                 req->add_row_modification_types(NProto::ERowModificationType::RMT_MODIFY);
                 fillCorrespondingLock(writeAndLockModification.Locks);
             },
-            [] (const NFuture::NRowModifications::TVersionedWriteRow&) {
+            [] (const NRowModifications::TVersionedWriteRow&) {
                 // NB: Checked above.
                 YT_ABORT();
             });
@@ -500,7 +505,8 @@ void TTransaction::FutureModifyRows(
 
     YT_VERIFY(modifications.size() == static_cast<size_t>(req->row_legacy_read_locks_size()) ||
         modifications.size() == static_cast<size_t>(req->row_legacy_locks_size()) ||
-        modifications.size() == static_cast<size_t>(req->row_locks_size()));
+        modifications.size() == static_cast<size_t>(req->row_locks_size()) ||
+        (req->row_legacy_read_locks_size() == 0 && req->row_legacy_locks_size() == 0 && req->row_locks_size() == 0));
 
     req->Attachments() = SerializeRowset(
         nameTable,

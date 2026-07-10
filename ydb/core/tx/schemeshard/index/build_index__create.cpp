@@ -178,8 +178,16 @@ public:
                 tableInfo, tablePath.Base()->GetChildren(), Self->Indexes, indexDesc, explain);
             auto enableRowIdMode = [&]() {
                 indexDesc.MutableFulltextIndexDescription()->SetUseRowIdAsDocId(true);
-                std::get<NKikimrSchemeOp::TFulltextIndexDescription>(buildInfo->SpecializedIndexDescription)
-                    .SetUseRowIdAsDocId(true);
+                // Fulltext index builds always carry a TFulltextIndexDescription. JSON index builds
+                // historically carry std::monostate (no settings); attach a fulltext description here
+                // so the UseRowIdAsDocId flag is persisted and propagated like for fulltext.
+                if (auto* ft = std::get_if<NKikimrSchemeOp::TFulltextIndexDescription>(&buildInfo->SpecializedIndexDescription)) {
+                    ft->SetUseRowIdAsDocId(true);
+                } else {
+                    NKikimrSchemeOp::TFulltextIndexDescription ftd;
+                    ftd.SetUseRowIdAsDocId(true);
+                    buildInfo->SpecializedIndexDescription = std::move(ftd);
+                }
             };
             switch (classification.Plan) {
                 case NTableIndex::EFulltextRowIdPlan::Error:
@@ -194,7 +202,7 @@ public:
                     if (!Self->EnableAddUniqueIndex) {
                         return Reply(Ydb::StatusIds::PRECONDITION_FAILED, TStringBuilder()
                             << "Auto-provisioning '" << NTableIndex::NFulltext::RowIdColumn
-                            << "' for a fulltext index on a non-integer-PK table requires the unique-index feature");
+                            << "' for a fulltext/JSON index on a non-integer-PK table requires the unique-index feature");
                     }
                     buildInfo->FulltextNeedsRowIdColumn = classification.NeedColumn;
                     buildInfo->FulltextNeedsUniqueIndex = classification.NeedUniqueIndex;
@@ -286,6 +294,29 @@ public:
                 TStringBuilder()
                     << "maximum allowed build parallelism is " << Self->MaxBuildIndexShardsInFlight
                     << ", but requested " << settings.max_shards_in_flight());
+        }
+
+        if (Self->MaxStoredIndexBuilds > 0 &&
+            Self->IndexBuilds.size() >= Self->MaxStoredIndexBuilds) {
+            // Remove oldest items from IndexBuilds
+            std::vector<std::shared_ptr<TIndexBuildInfo>> toErase;
+            for (auto& [timestamp, id]: Self->IndexBuildsByTime) {
+                auto olderBuild = Self->IndexBuilds.at(id);
+                if (olderBuild->IsFinished()) {
+                    toErase.push_back(olderBuild);
+                    if (Self->IndexBuilds.size() - toErase.size() < Self->MaxStoredIndexBuilds) {
+                        break;
+                    }
+                }
+            }
+            for (auto& olderBuild: toErase) {
+                if (!Self->PersistBuildIndexForget(db, *olderBuild)) {
+                    return false;
+                }
+            }
+            for (auto& olderBuild: toErase) {
+                EraseBuildInfo(*olderBuild);
+            }
         }
 
         buildInfo->ScanSettings.CopyFrom(settings.GetScanSettings());

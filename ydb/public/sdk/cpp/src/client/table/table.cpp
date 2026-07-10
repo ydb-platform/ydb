@@ -13,6 +13,7 @@
 
 #include <ydb/public/api/grpc/ydb_table_v1.grpc.pb.h>
 #include <ydb/public/api/protos/ydb_table.pb.h>
+#include <ydb/public/api/protos/ydb_value.pb.h>
 #include <ydb/public/sdk/cpp/src/client/impl/stats/stats.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/value/value.h>
@@ -225,6 +226,24 @@ const TCompactionOperation::TMetadata& TCompactionOperation::Metadata() const {
     return Metadata_;
 }
 
+TAnalyzeOperation::TAnalyzeOperation(TStatus &&status, Ydb::Operations::Operation &&operation)
+    : TOperation(std::move(status), std::move(operation))
+{
+    Ydb::Table::AnalyzeMetadata metadata;
+    GetProto().metadata().UnpackTo(&metadata);
+    Metadata_.State = static_cast<EAnalyzeState>(metadata.state());
+    Metadata_.Progress = metadata.progress();
+    Metadata_.Paths.assign(metadata.paths().begin(), metadata.paths().end());
+    Metadata_.InProgressPaths.assign(metadata.in_progress_paths().begin(),
+                                     metadata.in_progress_paths().end());
+    Metadata_.DonePaths.assign(metadata.done_paths().begin(),
+                               metadata.done_paths().end());
+}
+
+const TAnalyzeOperation::TMetadata& TAnalyzeOperation::Metadata() const {
+    return Metadata_;
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 class TPartitioningSettings::TImpl {
@@ -371,6 +390,12 @@ class TTableDescription::TImpl {
             Indexes_.emplace_back(TProtoAccessor::FromProto(index));
         }
 
+        // statistics
+        MultiColumnStatistics_.reserve(proto.statistics_size());
+        for (const auto& statistics : proto.statistics()) {
+            MultiColumnStatistics_.emplace_back(TProtoAccessor::FromProto(statistics));
+        }
+
         if constexpr (std::is_same_v<TProto, Ydb::Table::DescribeTableResult>) {
             // changefeeds
             Changefeeds_.reserve(proto.changefeeds_size());
@@ -510,6 +535,10 @@ public:
         Indexes_.emplace_back(indexDescription);
     }
 
+    void AddMultiColumnStatistics(const TMultiColumnStatisticsDescription& statisticsDescription) {
+        MultiColumnStatistics_.emplace_back(statisticsDescription);
+    }
+
     void AddVectorKMeansTreeIndex(const std::string& indexName, EIndexType type, const std::vector<std::string>& indexColumns, const TKMeansTreeSettings& indexSettings) {
         Indexes_.emplace_back(TIndexDescription(indexName, type, indexColumns, {}, {}, indexSettings));
     }
@@ -609,6 +638,10 @@ public:
         return Indexes_;
     }
 
+    const std::vector<TMultiColumnStatisticsDescription>& GetMultiColumnStatisticsDescriptions() const {
+        return MultiColumnStatistics_;
+    }
+
     const std::vector<TChangefeedDescription>& GetChangefeedDescriptions() const {
         return Changefeeds_;
     }
@@ -704,6 +737,7 @@ private:
     std::vector<std::string> PrimaryKey_;
     std::vector<TTableColumn> Columns_;
     std::vector<TIndexDescription> Indexes_;
+    std::vector<TMultiColumnStatisticsDescription> MultiColumnStatistics_;
     std::vector<TChangefeedDescription> Changefeeds_;
     std::optional<TTtlSettings> TtlSettings_;
     std::string Owner_;
@@ -765,6 +799,10 @@ std::vector<TIndexDescription> TTableDescription::GetIndexDescriptions() const {
     return Impl_->GetIndexDescriptions();
 }
 
+std::vector<TMultiColumnStatisticsDescription> TTableDescription::GetMultiColumnStatisticsDescriptions() const {
+    return Impl_->GetMultiColumnStatisticsDescriptions();
+}
+
 std::vector<TChangefeedDescription> TTableDescription::GetChangefeedDescriptions() const {
     return Impl_->GetChangefeedDescriptions();
 }
@@ -815,6 +853,10 @@ void TTableDescription::AddSecondaryIndex(const std::string& indexName, EIndexTy
 
 void TTableDescription::AddSecondaryIndex(const TIndexDescription& indexDescription) {
     Impl_->AddSecondaryIndex(indexDescription);
+}
+
+void TTableDescription::AddMultiColumnStatistics(const TMultiColumnStatisticsDescription& statisticsDescription) {
+    Impl_->AddMultiColumnStatistics(statisticsDescription);
 }
 
 void TTableDescription::AddSyncSecondaryIndex(const std::string& indexName, const std::vector<std::string>& indexColumns) {
@@ -1015,6 +1057,10 @@ void TTableDescription::SerializeTo(Ydb::Table::CreateTableRequest& request) con
 
     for (const auto& index : Impl_->GetIndexDescriptions()) {
         index.SerializeTo(*request.add_indexes());
+    }
+
+    for (const auto& statistics : Impl_->GetMultiColumnStatisticsDescriptions()) {
+        statistics.SerializeTo(*request.add_statistics());
     }
 
     if (const auto& ttl = Impl_->GetTtlSettings()) {
@@ -1298,6 +1344,11 @@ TTableBuilder& TTableBuilder::SetPrimaryKeyColumn(const std::string& primaryKeyC
 
 TTableBuilder& TTableBuilder::AddSecondaryIndex(const TIndexDescription& indexDescription) {
     TableDescription_.AddSecondaryIndex(indexDescription);
+    return *this;
+}
+
+TTableBuilder& TTableBuilder::AddMultiColumnStatistics(const TMultiColumnStatisticsDescription& statisticsDescription) {
+    TableDescription_.AddMultiColumnStatistics(statisticsDescription);
     return *this;
 }
 
@@ -3369,6 +3420,82 @@ bool operator!=(const TIndexDescription& lhs, const TIndexDescription& rhs) {
 
 ////////////////////////////////////////////////////////////////////////////////
 
+TMultiColumnStatisticsDescription::TMultiColumnStatisticsDescription(
+        const std::string& name,
+        const std::vector<std::string>& columns,
+        const std::vector<EMultiColumnStatisticsType>& types)
+    : Name_(name)
+    , Columns_(columns)
+    , Types_(types)
+{}
+
+TMultiColumnStatisticsDescription::TMultiColumnStatisticsDescription(const Ydb::Table::TableMultiColumnStatistics& proto)
+    : TMultiColumnStatisticsDescription(FromProto(proto))
+{}
+
+TMultiColumnStatisticsDescription::TMultiColumnStatisticsDescription(const Ydb::Table::TableMultiColumnStatisticsDescription& proto)
+    : TMultiColumnStatisticsDescription(FromProto(proto))
+{}
+
+template <typename TProto>
+TMultiColumnStatisticsDescription TMultiColumnStatisticsDescription::FromProto(const TProto& proto) {
+    std::vector<std::string> columns(proto.columns().begin(), proto.columns().end());
+    std::vector<EMultiColumnStatisticsType> types;
+    types.reserve(proto.types_size());
+    for (const auto type : proto.types()) {
+        switch (type) {
+        case Ydb::Table::TableMultiColumnStatistics::COUNT_MIN_SKETCH:
+            types.push_back(EMultiColumnStatisticsType::CountMinSketch);
+            break;
+        default:
+            types.push_back(EMultiColumnStatisticsType::Unknown);
+            break;
+        }
+    }
+    return TMultiColumnStatisticsDescription(proto.name(), columns, types);
+}
+
+const std::string& TMultiColumnStatisticsDescription::GetName() const {
+    return Name_;
+}
+
+const std::vector<std::string>& TMultiColumnStatisticsDescription::GetColumns() const {
+    return Columns_;
+}
+
+const std::vector<EMultiColumnStatisticsType>& TMultiColumnStatisticsDescription::GetTypes() const {
+    return Types_;
+}
+
+void TMultiColumnStatisticsDescription::SerializeTo(Ydb::Table::TableMultiColumnStatistics& proto) const {
+    proto.set_name(TStringType{Name_});
+    for (const auto& column : Columns_) {
+        proto.add_columns(TStringType{column});
+    }
+    for (const auto type : Types_) {
+        switch (type) {
+        case EMultiColumnStatisticsType::CountMinSketch:
+            proto.add_types(Ydb::Table::TableMultiColumnStatistics::COUNT_MIN_SKETCH);
+            break;
+        case EMultiColumnStatisticsType::Unknown:
+            proto.add_types(Ydb::Table::TableMultiColumnStatistics::STATISTIC_TYPE_UNSPECIFIED);
+            break;
+        }
+    }
+}
+
+bool operator==(const TMultiColumnStatisticsDescription& lhs, const TMultiColumnStatisticsDescription& rhs) {
+    return lhs.GetName() == rhs.GetName()
+        && lhs.GetColumns() == rhs.GetColumns()
+        && lhs.GetTypes() == rhs.GetTypes();
+}
+
+bool operator!=(const TMultiColumnStatisticsDescription& lhs, const TMultiColumnStatisticsDescription& rhs) {
+    return !(lhs == rhs);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 TChangefeedDescription::TChangefeedDescription(const std::string& name, EChangefeedMode mode, EChangefeedFormat format)
     : Name_(name)
     , Mode_(mode)
@@ -4211,6 +4338,11 @@ TMetricsSettings::EMetricsLevel TMetricsSettings::GetMetricsLevel() const {
 
 TBulkUpsertResult::TBulkUpsertResult(TStatus&& status)
     : TStatus(std::move(status))
+{}
+
+TReadRowsResult::TReadRowsResult(TStatus&& status)
+    : TStatus(std::move(status))
+    , ResultSet(Ydb::ResultSet{})
 {}
 
 TReadRowsResult::TReadRowsResult(TStatus&& status, TResultSet&& resultSet)

@@ -144,7 +144,8 @@ struct TTranslationSettings {
     bool AllowTablesFunction = false;
 
     bool ValidateViewStatement = true;
-    bool MarkQueryTextAtomWithIgnoredContent = false;
+
+    TVector<TString> ExtraSystemColumnPrefixes;
 };
 
 struct TParsedSettings {

@@ -42,23 +42,16 @@ GLOBAL_SRCS(
 
     # Internal libraries
     tcmalloc/internal/affinity.cc
-    tcmalloc/internal/allocation_guard.cc
     tcmalloc/internal/cache_topology.cc
-    tcmalloc/internal/environment.cc
-    tcmalloc/internal/logging.cc
     tcmalloc/internal/memory_stats.cc
     tcmalloc/internal/memory_tag.cc
     tcmalloc/internal/mincore.cc
     tcmalloc/internal/numa.cc
-    tcmalloc/internal/page_size.cc
-    tcmalloc/internal/pageflags.cc
     tcmalloc/internal/percpu.cc
     tcmalloc/internal/percpu_rseq_unsupported.cc
     tcmalloc/internal/percpu_rseq_asm.S
     tcmalloc/internal/proc_maps.cc
-    tcmalloc/internal/residency.cc
     tcmalloc/internal/sysinfo.cc
-    tcmalloc/internal/util.cc
 )
 
 ADDINCL(
@@ -68,6 +61,7 @@ ADDINCL(
 PEERDIR(
     contrib/restricted/abseil-cpp
     contrib/libs/tcmalloc/malloc_extension
+    contrib/libs/tcmalloc/internal_utils
 )
 
 NO_UTIL()

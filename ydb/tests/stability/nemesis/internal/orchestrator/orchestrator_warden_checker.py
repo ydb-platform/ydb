@@ -34,6 +34,8 @@ logger.setLevel(logging.DEBUG)
 _AGENT_SAFETY_WAIT_MAX_SECONDS = 900
 _AGENT_SAFETY_POLL_INTERVAL = 2.0
 
+_ORCHESTRATOR_LOCAL_SAFETY_TIMEOUT_S = 600.0
+
 
 class OrchestratorWardenChecker:
     """Orchestrator-side warden checker for liveness and safety checks."""
@@ -176,15 +178,37 @@ class OrchestratorWardenChecker:
 
                 # Use unified SafetyCheckSpec pipeline for cluster safety
                 cluster_safety_specs = collect_orchestrator_cluster_safety_specs(cluster)
-                _slot_names, local_runs = build_safety_runs(cluster_safety_specs, log_prefix="")
+                slot_names, local_runs = build_safety_runs(cluster_safety_specs, log_prefix="")
 
-                async def _run_local_run(run: SafetyWardenRun) -> List[WardenCheckResult]:
-                    return await loop.run_in_executor(None, run)
+                async def _run_local_run(idx: int, run: SafetyWardenRun) -> List[WardenCheckResult]:
+                    try:
+                        return await asyncio.wait_for(
+                            loop.run_in_executor(None, run),
+                            timeout=_ORCHESTRATOR_LOCAL_SAFETY_TIMEOUT_S,
+                        )
+                    except asyncio.TimeoutError:
+                        slot = slot_names[idx] if idx < len(slot_names) else f"local_safety_{idx}"
+                        logger.error(
+                            "Orchestrator local safety check %s timed out after %.0fs",
+                            slot,
+                            _ORCHESTRATOR_LOCAL_SAFETY_TIMEOUT_S,
+                        )
+                        return [
+                            WardenCheckResult(
+                                name=slot,
+                                category="safety",
+                                violations=[],
+                                status="error",
+                                error_message=(
+                                    f"check timed out after {_ORCHESTRATOR_LOCAL_SAFETY_TIMEOUT_S:.0f}s"
+                                ),
+                            )
+                        ]
 
                 async def _all_local() -> List[List[WardenCheckResult]]:
                     if not local_runs:
                         return []
-                    return list(await asyncio.gather(*[_run_local_run(r) for r in local_runs]))
+                    return list(await asyncio.gather(*[_run_local_run(i, r) for i, r in enumerate(local_runs)]))
 
                 # Do not use asyncio.gather for (local, wait): PDisk can take sum(per-node timeouts)
                 # across the cluster while agent wait caps at _AGENT_SAFETY_WAIT_MAX_SECONDS. Until *both*

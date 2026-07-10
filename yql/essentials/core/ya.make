@@ -53,6 +53,8 @@ SRCS(
     yql_opt_window.h
     yql_opt_window_stream_transformers.cpp
     yql_opt_window_stream_transformers.h
+    yql_sql_combine_expander.cpp
+    yql_sql_combine_expander.h
     yql_statistics.cpp
     yql_type_annotation.cpp
     yql_type_annotation.h
@@ -96,6 +98,7 @@ PEERDIR(
     yql/essentials/core/url_lister/interface
     yql/essentials/core/url_preprocessing/interface
     yql/essentials/core/layers
+    yql/essentials/core/langver
     yql/essentials/minikql
     yql/essentials/minikql/jsonpath/parser
     yql/essentials/core/minsketch

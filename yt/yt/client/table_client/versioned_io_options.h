@@ -49,7 +49,7 @@ void FromProto(
     NTableClient::TVersionedWriteOptions* options,
     const NProto::TVersionedWriteOptions& protoOptions);
 
-std::optional<TString> GetTimestampColumnOriginalNameOrNull(TStringBuf name);
+std::optional<std::string> GetTimestampColumnOriginalNameOrNull(TStringBuf name);
 
 ////////////////////////////////////////////////////////////////////////////////
 

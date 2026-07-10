@@ -188,6 +188,17 @@ public:
         return SnapshotByVersion.rbegin()->second.GetSchema();
     }
 
+    // Exclusive upper bound (in snapshots) of the range in which `version` is the active schema:
+    // the snapshot at which the first schema strictly newer than `version` was introduced.
+    // Returns nullopt when `version` is the latest known schema (active with no upper bound).
+    std::optional<TSnapshot> GetNextSchemaSnapshot(const ui64 version) const {
+        auto it = SnapshotByVersion.upper_bound(version);
+        if (it == SnapshotByVersion.end()) {
+            return std::nullopt;
+        }
+        return it->second.GetSchema()->GetSnapshot();
+    }
+
     bool IsEmpty() const {
         return SnapshotByVersion.empty();
     }

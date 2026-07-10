@@ -80,14 +80,13 @@ class SqsFifoMessagingTest(KikimrSqsTestBase):
             self.queue_url, messages_count=1, matcher=ReadResponseMatcher().with_message_ids(message_ids[1:2])
         )
 
-        counters = self._get_sqs_counters()
         delete_counter_labels = {
             'subsystem': 'core',
             'user': self._username,
             'queue': self.queue_name,
             'sensor': 'DeleteMessage_Count',
         }
-        assert_that(self._get_counter_value(counters, delete_counter_labels, 0), equal_to(1))
+        self._wait_for_counter_value(delete_counter_labels, 1, default_value=0)
 
     @pytest.mark.parametrize(**TABLES_FORMAT_PARAMS)
     def test_write_and_read_to_different_groups(self, tables_format):
@@ -149,7 +148,7 @@ class SqsFifoMessagingTest(KikimrSqsTestBase):
         first_message_id = self._send_message_and_assert(
             queue_url, self._msg_body_template.format('0'), seq_no=1, group_id='group'
         )
-        time.sleep(5)
+        time.sleep(5 + self._visibility_timeout_unlock_grace_sec())
         self._send_message_and_assert(
             queue_url, self._msg_body_template.format('1'), seq_no=2, group_id='group'
         )
@@ -167,12 +166,12 @@ class SqsFifoMessagingTest(KikimrSqsTestBase):
             queue_url, message_count=pack_size, msg_body_template=self._msg_body_template, is_fifo=True,
             group_id='1',
         )
-        time.sleep(5)
+        time.sleep(5 + self._visibility_timeout_unlock_grace_sec())
         second_pack_ids = self._send_messages(
             queue_url, message_count=pack_size, msg_body_template=self._msg_body_template, is_fifo=True,
             group_id='2'
         )
-        time.sleep(5)
+        time.sleep(5 + self._visibility_timeout_unlock_grace_sec())
         self._read_messages_and_assert(
             queue_url, messages_count=10, visibility_timeout=1000,
             matcher=ReadResponseMatcher().with_message_ids(
@@ -200,7 +199,7 @@ class SqsFifoMessagingTest(KikimrSqsTestBase):
             self.queue_url, messages_count=5, matcher=ReadResponseMatcher().with_these_or_more_message_ids(second_pack_ids[:1]),
             visibility_timeout=10
         )
-        time.sleep(12)
+        self._sleep_for_visibility_timeout(10, extra=2)
         self._read_messages_and_assert(
             self.queue_url, messages_count=5, visibility_timeout=1000, matcher=ReadResponseMatcher().with_these_or_more_message_ids(
                 [self.message_ids[0], second_pack_ids[0]]
@@ -232,6 +231,9 @@ class SqsFifoMessagingTest(KikimrSqsTestBase):
             'sensor': 'DeleteMessage_Count',
         }
         assert_that(self._get_counter_value(counters, delete_counter_labels, 0), equal_to(1))
+
+        if self._is_topic_migration_stage():
+            return
 
         # break a queue and check failure
         self._break_queue(self._username, self.queue_name, True)
@@ -268,7 +270,7 @@ class SqsFifoMessagingTest(KikimrSqsTestBase):
                 )
                 message_ids[0] = message_ids[0][1:]
                 break
-        time.sleep(5)
+        self._sleep_for_visibility_timeout(5)
         matcher = ReadResponseMatcher().with_n_messages(10).with_message_ids(
             [i[0] for i in message_ids.values()]
         ).with_messages_data(
@@ -383,24 +385,28 @@ class SqsFifoMessagingTest(KikimrSqsTestBase):
             body_2 = 'body_1'
             body_3 = 'body_1'
 
+        dedup_counter_labels = {
+            'subsystem': 'core',
+            'user': self._username,
+            'queue': self.queue_name,
+            'sensor': 'SendMessage_DeduplicationCount',
+        }
+
         def get_deduplicated_messages():
             counters = self._get_sqs_counters()
-            labels = {
-                'subsystem': 'core',
-                'user': self._username,
-                'queue': self.queue_name,
-                'sensor': 'SendMessage_DeduplicationCount',
-            }
-            return self._get_counter_value(counters, labels, 0)
+            return self._get_counter_value(counters, dedup_counter_labels, 0)
+
+        def wait_for_deduplicated_messages(expected):
+            self._wait_for_counter_value(dedup_counter_labels, expected, default_value=0)
 
         self._sqs_api.send_message(queue_url, body_1, deduplication_id=deduplication_id, group_id='1')
 
         deduplicated = get_deduplicated_messages()
         self._sqs_api.send_message(queue_url, body_2, deduplication_id=deduplication_id, group_id='2')
-        assert_that(get_deduplicated_messages(), equal_to(deduplicated + 1))
+        wait_for_deduplicated_messages(deduplicated + 1)
 
         self._sqs_api.send_message(queue_url, body_3, deduplication_id=other_deduplication_id, group_id='3')
-        assert_that(get_deduplicated_messages(), equal_to(deduplicated + 1))
+        wait_for_deduplicated_messages(deduplicated + 1)
 
         self._read_messages_and_assert(queue_url, 10, visibility_timeout=1000, matcher=ReadResponseMatcher().with_n_messages(2), wait_timeout=3)
 

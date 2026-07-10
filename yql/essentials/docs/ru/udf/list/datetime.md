@@ -335,7 +335,7 @@ SELECT
 * `%H` - час 2 цифры;
 * `%M` - минуты 2 цифры;
 * `%S` - секунды 2 цифры или `XX.XXXXXX` в случае непустых микросекунд (и только если флаг `AlwaysWriteFractionalSeconds` не выставлен в `True`);
-* `%z` - +hhmm или -hhmm по умолчанию; +hh:mm или -hh:mm, если флаг `WriteOffsetWithColon` выставлен в `True`;
+* `%z` - +hhmm или -hhmm по умолчанию; +hh:mm или -hh:mm, если флаг `WriteOffsetWithColon` (добавлен в версии [2025.05](../../changelog/2025.05.md#datetime-module)) выставлен в `True`;
 * `%Z` - IANA имя таймзоны;
 * `%b` - короткое трехбуквенное английское название месяца (Jan);
 * `%B` - полное английское название месяца (January).

@@ -264,7 +264,9 @@ public:
                         YQL_ENSURE(tableName, "Unaccounted anonymous table: " << pathInfo->Table->Name);
                         pathInfo->Table->Name = tableName;
                     }
-
+                    if (pathInfo->Table->Meta && pathInfo->Table->Meta->Attrs.Value("optimize_for", "scan") != "scan") {
+                        pathInfo->Columns = nullptr;
+                    }
                     paths.push_back(pathInfo);
                     keys.emplace_back(TStringBuilder() << groupId << "/" << pathId);
                 }
@@ -698,8 +700,12 @@ public:
         YQL_ENSURE(ytState);
 
         if (auto maybeYtReadTable = TMaybeNode<TYtReadTable>(read)) {
-            TMaybeNode<TCoSecureParam> secParams;
             const auto cluster = maybeYtReadTable.Cast().DataSource().Cluster().StringValue();
+            if (!ytState->Configuration->_EnableDq.Get(cluster).GetOrElse(true)) {
+                AddErrorWrap(ctx, read->Pos(), TStringBuilder() << "disabled for cluster " << cluster);
+                return nullptr;
+            }
+            TMaybeNode<TCoSecureParam> secParams;
             if (ytState->ResolveClusterToken(cluster)) {
                 secParams = Build<TCoSecureParam>(ctx, read->Pos()).Name().Build(TString("cluster:default_").append(cluster)).Done();
             }
@@ -718,8 +724,14 @@ public:
 
         if (auto maybeWrite = TMaybeNode<TYtWriteTable>(write)) {
             if (ytState->Configuration->_EnableYtDqProcessWriteConstraints.Get().GetOrElse(DEFAULT_ENABLE_DQ_WRITE_CONSTRAINTS)) {
+                const auto cluster = maybeWrite.Cast().DataSink().Cluster().StringValue();
+                if (!ytState->Configuration->_EnableDq.Get(cluster).GetOrElse(true)) {
+                    AddErrorWrap(ctx, write->Pos(), TStringBuilder() << "disabled for cluster " << cluster);
+                    return nullptr;
+                }
                 const auto& content = maybeWrite.Cast().Content();
-                if (TYtMaterialize::Match(&SkipCallables(content.Ref(), {TCoSort::CallableName(), TCoTopSort::CallableName(), TCoAssumeSorted::CallableName(), TCoAssumeConstraints::CallableName()}))) {
+                const auto& clearContent = SkipCallables(content.Ref(), {TCoSort::CallableName(), TCoTopSort::CallableName(), TCoAssumeSorted::CallableName(), TCoAssumeConstraints::CallableName()});
+                if (TMaybeNode<TCoRight>(&clearContent).Input().Maybe<TYtMaterialize>()) {
                     return write;
                 }
                 TExprNode::TPtr newContent;
@@ -728,32 +740,50 @@ public:
                     // Duplicate AssumeSorted before YtMaterialize, because DQ cannot keep sort and so optimizes AssumeSorted as complete Sort
                     // Before: YtWrite -> AssumeSorted -> ...
                     // After: YtWrite -> AssumeConstraints -> YtMaterialize -> AssumeSorted -> ...
-                    newContent = Build<TYtMaterialize>(ctx, content.Pos())
-                        .World(materializeWorld)
-                        .DataSink(maybeWrite.Cast().DataSink())
-                        .Input(content)
-                        .Settings().Build()
+                    newContent = Build<TCoRight>(ctx, content.Pos())
+                        .Input<TYtMaterialize>()
+                            .World(materializeWorld)
+                            .DataSink(maybeWrite.Cast().DataSink())
+                            .Input(content)
+                            .Settings()
+                                .Add()
+                                    .Name().Value(ToString(EYtSettingType::Transparent), TNodeFlags::Default).Build()
+                                .Build()
+                            .Build()
+                        .Build()
                         .Done().Ptr();
                 } else if (content.Raw()->IsCallable({TCoSort::CallableName(), TCoTopSort::CallableName()}) && !content.Raw()->GetConstraint<TSortedConstraintNode>()) {
                     // For Sorts by non members lambdas do it on YT side because of aux columns
                     // Before: YtWrite -> Sort/TopSort -> ...
                     // After: YtWrite -> Sort/TopSort -> YtMaterialize -> ...
-                    auto materialize = Build<TYtMaterialize>(ctx, content.Pos())
-                        .World(materializeWorld)
-                        .DataSink(maybeWrite.Cast().DataSink())
-                        .Input(content.Cast<TCoInputBase>().Input())
-                        .Settings().Build()
-                        .Done();
-                    newContent = ctx.ChangeChild(content.Ref(), TCoInputBase::idx_Input, materialize.Ptr());
+                    TExprNode::TPtr materialize = Build<TCoRight>(ctx, content.Pos())
+                        .Input<TYtMaterialize>()
+                            .World(materializeWorld)
+                            .DataSink(maybeWrite.Cast().DataSink())
+                            .Input(content.Cast<TCoInputBase>().Input())
+                            .Settings()
+                                .Add()
+                                    .Name().Value(ToString(EYtSettingType::Transparent), TNodeFlags::Default).Build()
+                                .Build()
+                            .Build()
+                        .Build()
+                        .Done().Ptr();
+                    newContent = ctx.ChangeChild(content.Ref(), TCoInputBase::idx_Input, std::move(materialize));
                 } else {
                     // Materialize dq graph to yt table before YtWrite:
                     // Before: YtWrite -> Some callables ...
                     // After: YtWrite -> YtMaterialize -> Some callables ...
-                    newContent = Build<TYtMaterialize>(ctx, content.Pos())
-                        .World(materializeWorld)
-                        .DataSink(maybeWrite.Cast().DataSink())
-                        .Input(content)
-                        .Settings().Build()
+                    newContent = Build<TCoRight>(ctx, content.Pos())
+                        .Input<TYtMaterialize>()
+                            .World(materializeWorld)
+                            .DataSink(maybeWrite.Cast().DataSink())
+                            .Input(content)
+                            .Settings()
+                                .Add()
+                                    .Name().Value(ToString(EYtSettingType::Transparent), TNodeFlags::Default).Build()
+                                .Build()
+                            .Build()
+                        .Build()
                         .Done().Ptr();
                 }
                 auto constraintSet = content.Raw()->GetConstraintSet();

@@ -3,7 +3,6 @@
 // For the sake of sane code completion.
 #include "fls.h"
 #endif
-#undef FLS_INL_H_
 
 #include <library/cpp/yt/misc/tls.h>
 

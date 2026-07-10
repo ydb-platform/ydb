@@ -202,26 +202,38 @@ Y_UNIT_TEST_SUITE(TDqSourceWatermarkTrackerTest) {
     }
 
     Y_UNIT_TEST(IdleNextCheckAt) {
-#if 0 // TODO replace with something working
         auto tracker = InitTrackerWithIdleness();
 
-        {
-            const auto actual = tracker.GetNextIdlenessCheckAt(TInstant::Seconds(10));
-            UNIT_ASSERT_VALUES_EQUAL(TInstant::Seconds(15), actual);
-        }
-        for (auto i = 10; i < 15; ++i) {
-            const auto actual = tracker.GetNextIdlenessCheckAt(TInstant::Seconds(i));
-            UNIT_ASSERT_VALUES_EQUAL_C(TInstant::Seconds(15), actual, i);
-        }
-        {
-            const auto actual = tracker.GetNextIdlenessCheckAt(TInstant::Seconds(15));
-            UNIT_ASSERT_VALUES_EQUAL(TInstant::Seconds(20), actual);
-        }
-        {
-            const auto actual = tracker.GetNextIdlenessCheckAt(TInstant::Seconds(20));
-            UNIT_ASSERT_VALUES_EQUAL(TInstant::Seconds(25), actual);
-        }
-#endif
+        UNIT_ASSERT(tracker.RegisterPartition(0, TInstant::Seconds(10)));
+        UNIT_ASSERT(tracker.RegisterPartition(1, TInstant::Seconds(10)));
+        UNIT_ASSERT_VALUES_EQUAL(Nothing(), tracker.NotifyNewPartitionTime(0, TInstant::Seconds(7), TInstant::MilliSeconds(20'500)));
+
+        UNIT_ASSERT_VALUES_EQUAL(TInstant::Seconds(30), tracker.PrepareIdlenessCheck(TInstant::Seconds(10)));
+        UNIT_ASSERT_VALUES_EQUAL(Nothing(), tracker.PrepareIdlenessCheck(TInstant::Seconds(10)));
+
+        UNIT_ASSERT(!tracker.ProcessIdlenessCheck(TInstant::MilliSeconds(29'999)));
+        UNIT_ASSERT_VALUES_EQUAL(Nothing(), tracker.PrepareIdlenessCheck(TInstant::MilliSeconds(29'999)));
+
+        UNIT_ASSERT(tracker.ProcessIdlenessCheck(TInstant::Seconds(30)));
+        UNIT_ASSERT_VALUES_EQUAL(TInstant::Seconds(5), tracker.HandleIdleness(TInstant::Seconds(30)));
+
+        UNIT_ASSERT_VALUES_EQUAL(TInstant::Seconds(40), tracker.PrepareIdlenessCheck(TInstant::Seconds(30)));
+        UNIT_ASSERT_VALUES_EQUAL(Nothing(), tracker.PrepareIdlenessCheck(TInstant::Seconds(30)));
+    }
+
+    Y_UNIT_TEST(ActivityExtendsOnlyActivePartitionDeadline) {
+        auto tracker = InitTrackerWithIdleness();
+
+        UNIT_ASSERT(tracker.RegisterPartition(0, TInstant::Seconds(10)));
+        UNIT_ASSERT(tracker.RegisterPartition(1, TInstant::Seconds(10)));
+        UNIT_ASSERT_VALUES_EQUAL(
+            Nothing(),
+            tracker.NotifyNewPartitionTime(0, TInstant::Seconds(7), TInstant::MilliSeconds(20'500))
+        );
+
+        UNIT_ASSERT_VALUES_EQUAL(TInstant::Seconds(5), tracker.HandleIdleness(TInstant::Seconds(30)));
+        UNIT_ASSERT_VALUES_EQUAL(Nothing(), tracker.HandleIdleness(TInstant::MilliSeconds(34'999)));
+        UNIT_ASSERT_VALUES_EQUAL(Nothing(), tracker.HandleIdleness(TInstant::Seconds(35)));
     }
 }
 

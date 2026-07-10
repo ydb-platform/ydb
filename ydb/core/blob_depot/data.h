@@ -575,8 +575,12 @@ namespace NKikimr::NBlobDepot {
                 }
                 while (rowset.IsValid()) {
                     TKey key = TKey::FromBinaryKey(rowset.GetKey(), Data->Self->Config);
-                    STLOG(PRI_TRACE, BLOB_DEPOT, BDT46, "ScanRange.Load", (Id, Data->Self->GetLogId()), (Left, left),
-                        (Right, right), (Key, key));
+                    YDB_LOG_TRACE_COMP(BLOB_DEPOT, "ScanRange.Load",
+                        {"marker", "BDT46"},
+                        {"id", Data->Self->GetLogId()},
+                        {"left", left},
+                        {"right", right},
+                        {"key", key});
                     if (left < key && key < right) {
                         TValue* const value = Data->AddDataOnLoad(key, rowset.template GetValue<Schema::Data::Value>(),
                             rowset.template GetValueOrDefault<Schema::Data::UncertainWrite>());
@@ -608,8 +612,13 @@ namespace NKikimr::NBlobDepot {
 
         template<typename TCallback>
         bool ScanRange(TScanRange& range, NTabletFlatExecutor::TTransactionContext *txc, bool *progress, TCallback&& callback) {
-            STLOG(PRI_TRACE, BLOB_DEPOT, BDT76, "ScanRange", (Id, Self->GetLogId()), (Begin, range.Begin), (End, range.End),
-                (Flags, range.Flags), (MaxKeys, range.MaxKeys));
+            YDB_LOG_TRACE_COMP(BLOB_DEPOT, "ScanRange",
+                {"marker", "BDT76"},
+                {"id", Self->GetLogId()},
+                {"begin", range.Begin},
+                {"end", range.End},
+                {"flags", range.Flags},
+                {"maxKeys", range.MaxKeys});
 
             const bool reverse = range.Flags & EScanFlags::REVERSE;
             TLoadRangeFromDB loader{this, range, progress};
@@ -633,8 +642,14 @@ namespace NKikimr::NBlobDepot {
             const auto& from = reverse ? TKey::Min() : range.Begin;
             const auto& to = reverse ? range.End : TKey::Max();
             LoadedKeys.EnumInRange(from, to, reverse, [&](const TKey& left, const TKey& right, bool isRangeLoaded) {
-                STLOG(PRI_TRACE, BLOB_DEPOT, BDT83, "ScanRange.Step", (Id, Self->GetLogId()), (Left, left), (Right, right),
-                    (IsRangeLoaded, isRangeLoaded), (From, from), (To, to));
+                YDB_LOG_TRACE_COMP(BLOB_DEPOT, "ScanRange.Step",
+                    {"marker", "BDT83"},
+                    {"id", Self->GetLogId()},
+                    {"left", left},
+                    {"right", right},
+                    {"isRangeLoaded", isRangeLoaded},
+                    {"from", from},
+                    {"to", to});
                 if (!isRangeLoaded) {
                     // we have to load range (left, right), not including both ends
                     Y_ABORT_UNLESS(txc && progress);

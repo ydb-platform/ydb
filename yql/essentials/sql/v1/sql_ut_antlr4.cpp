@@ -4,6 +4,7 @@
 #include "lexer/lexer.h"
 
 #include <yql/essentials/providers/common/provider/yql_provider_names.h>
+#include <yql/essentials/core/langver/feature.gen.h>
 #include <yql/essentials/sql/sql.h>
 #include <yql/essentials/sql/v1/lexer/antlr4/lexer.h>
 #include <util/generic/map.h>
@@ -308,3 +309,373 @@ Y_UNIT_TEST(AlterColumnCompressionLevelNegative) {
 }
 
 } // Y_UNIT_TEST_SUITE(ColumnCompression)
+
+Y_UNIT_TEST_SUITE(MaterializeStatement) {
+
+Y_UNIT_TEST(TopLevelBasic) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = ::NYql::NFeature::Materialize.MinLangVer;
+
+    auto res = SqlToYqlWithSettings(R"sql(
+        USE plato;
+        MATERIALIZE Input INTO $result;
+        SELECT * FROM $result;
+    )sql", settings);
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TWordCountHive elementStat = {{"Materialize!"}};
+    auto prog = VerifyProgram(res, elementStat);
+    UNIT_ASSERT_VALUES_EQUAL_C(elementStat["Materialize!"], 1, prog);
+}
+
+Y_UNIT_TEST(TopLevelUnused) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = ::NYql::NFeature::Materialize.MinLangVer;
+
+    auto res = SqlToYqlWithSettings(R"sql(
+        USE plato;
+        MATERIALIZE Input INTO $result;
+    )sql", settings);
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TWordCountHive elementStat = {{"Materialize!"}};
+    auto prog = VerifyProgram(res, elementStat);
+    UNIT_ASSERT_VALUES_EQUAL_C(elementStat["Materialize!"], 0, prog);
+}
+
+Y_UNIT_TEST(TopLevelWithCluster) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = ::NYql::NFeature::Materialize.MinLangVer;
+
+    auto res = SqlToYqlWithSettings(R"sql(
+        MATERIALIZE plato.Input ON plato INTO $result;
+        SELECT * FROM $result;
+    )sql", settings);
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TWordCountHive elementStat = {{"Materialize!"}};
+    auto prog = VerifyProgram(res, elementStat);
+    UNIT_ASSERT_VALUES_EQUAL_C(elementStat["Materialize!"], 1, prog);
+}
+
+Y_UNIT_TEST(WithInnerSelectFromTable) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = ::NYql::NFeature::Materialize.MinLangVer;
+
+    auto res = SqlToYqlWithSettings(R"sql(
+        USE plato;
+        MATERIALIZE (SELECT * FROM Input) INTO $result;
+        SELECT * FROM $result;
+    )sql", settings);
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TWordCountHive elementStat = {{"Materialize!"}};
+    auto prog = VerifyProgram(res, elementStat);
+    UNIT_ASSERT_VALUES_EQUAL_C(elementStat["Materialize!"], 1, prog);
+}
+
+Y_UNIT_TEST(WithInnerSelectWithoutSource) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = ::NYql::NFeature::Materialize.MinLangVer;
+
+    auto res = SqlToYqlWithSettings(R"sql(
+        USE plato;
+        MATERIALIZE (SELECT 1 as a) INTO $result;
+        SELECT * FROM $result;
+    )sql", settings);
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TWordCountHive elementStat = {{"Materialize!"}};
+    auto prog = VerifyProgram(res, elementStat);
+    UNIT_ASSERT_VALUES_EQUAL_C(elementStat["Materialize!"], 1, prog);
+}
+
+Y_UNIT_TEST(WithInnerNamedExpr) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = ::NYql::NFeature::Materialize.MinLangVer;
+
+    auto res = SqlToYqlWithSettings(R"sql(
+        USE plato;
+        $a = SELECT 1 as a;
+        MATERIALIZE $a INTO $result;
+        SELECT * FROM $result;
+    )sql", settings);
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TWordCountHive elementStat = {{"Materialize!"}};
+    auto prog = VerifyProgram(res, elementStat);
+    UNIT_ASSERT_VALUES_EQUAL_C(elementStat["Materialize!"], 1, prog);
+}
+
+Y_UNIT_TEST(CompileAsSubquery) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = ::NYql::NFeature::Materialize.MinLangVer;
+    settings.Mode = NSQLTranslation::ESqlMode::SUBQUERY;
+
+    auto res = SqlToYqlWithSettings(R"sql(
+        USE plato;
+        MATERIALIZE Input INTO $result;
+        SELECT * FROM $result;
+    )sql", settings);
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+}
+
+Y_UNIT_TEST(CompileAsLimitedView) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = ::NYql::NFeature::Materialize.MinLangVer;
+    settings.Mode = NSQLTranslation::ESqlMode::LIMITED_VIEW;
+
+    auto res = SqlToYqlWithSettings(R"sql(
+        USE plato;
+        MATERIALIZE Input INTO $result;
+        SELECT * FROM $result;
+    )sql", settings);
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+}
+
+Y_UNIT_TEST(UseInSubquery) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = ::NYql::NFeature::Materialize.MinLangVer;
+
+    auto res = SqlToYqlWithSettings(R"sql(
+        USE plato;
+        DEFINE SUBQUERY $sub() AS
+            MATERIALIZE (SELECT 1 as a) INTO $tmp;
+            MATERIALIZE $tmp INTO $result;
+            SELECT * FROM $result;
+        END DEFINE;
+        SELECT * FROM $sub();
+    )sql", settings);
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TWordCountHive elementStat = {{"Materialize!"}};
+    auto prog = VerifyProgram(res, elementStat);
+    UNIT_ASSERT_VALUES_EQUAL_C(elementStat["Materialize!"], 2, prog);
+}
+
+Y_UNIT_TEST(UseInAction) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = ::NYql::NFeature::Materialize.MinLangVer;
+
+    auto res = SqlToYqlWithSettings(R"sql(
+        USE plato;
+        DEFINE ACTION $sub() AS
+            MATERIALIZE (SELECT 1 as a) INTO $tmp;
+            MATERIALIZE $tmp INTO $result;
+            SELECT * FROM $result;
+        END DEFINE;
+        DO $sub();
+    )sql", settings);
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TWordCountHive elementStat = {{"Materialize!"}};
+    auto prog = VerifyProgram(res, elementStat);
+    UNIT_ASSERT_VALUES_EQUAL_C(elementStat["Materialize!"], 2, prog);
+}
+
+Y_UNIT_TEST(MissingCluster) {
+    // No USE and no ON clause - should fail
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = ::NYql::NFeature::Materialize.MinLangVer;
+
+    auto res = SqlToYqlWithSettings(R"sql(
+        MATERIALIZE plato.Input INTO $result;
+    )sql", settings);
+    UNIT_ASSERT(!res.IsOk());
+    UNIT_ASSERT_STRING_CONTAINS(Err2Str(res), "USE statement is missing or cluster not specified in MATERIALIZE");
+}
+
+Y_UNIT_TEST(NotAllowedBeforeVer) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::MinLangVersion;
+
+    auto res = SqlToYqlWithSettings(R"sql(
+        USE plato;
+        MATERIALIZE Input INTO $result;
+        SELECT * FROM $result;
+    )sql", settings);
+    UNIT_ASSERT(!res.IsOk());
+    UNIT_ASSERT_STRING_CONTAINS(Err2Str(res), "MATERIALIZE is not available before language version");
+}
+
+Y_UNIT_TEST(PreserveSortInRefSelect) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = ::NYql::NFeature::Materialize.MinLangVer;
+
+    auto res = SqlToYqlWithSettings(R"sql(
+        USE plato;
+        $a = SELECT * FROM Input ORDER BY a;
+        MATERIALIZE $a INTO $b;
+        MATERIALIZE $b INTO $result;
+        SELECT * FROM $result;
+    )sql", settings);
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TWordCountHive elementStat = {{"Sort"}};
+    auto prog = VerifyProgram(res, elementStat);
+    UNIT_ASSERT_VALUES_EQUAL_C(elementStat["Sort"], 1, prog);
+}
+
+Y_UNIT_TEST(PreserveSortInSubSelect) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = ::NYql::NFeature::Materialize.MinLangVer;
+
+    auto res = SqlToYqlWithSettings(R"sql(
+        USE plato;
+        MATERIALIZE (SELECT * FROM Input ORDER BY a) INTO $result;
+        SELECT * FROM $result;
+    )sql", settings);
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TWordCountHive elementStat = {{"Sort"}};
+    auto prog = VerifyProgram(res, elementStat);
+    UNIT_ASSERT_VALUES_EQUAL_C(elementStat["Sort"], 1, prog);
+}
+
+Y_UNIT_TEST(PreserveSortInSubquery) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = ::NYql::NFeature::Materialize.MinLangVer;
+
+    auto res = SqlToYqlWithSettings(R"sql(
+        USE plato;
+        DEFINE SUBQUERY $sub() AS
+            SELECT * FROM Input ORDER BY key;
+        END DEFINE;
+        MATERIALIZE $sub() INTO $result;
+        SELECT * FROM $result;
+    )sql", settings);
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TWordCountHive elementStat = {{"Sort"}};
+    auto prog = VerifyProgram(res, elementStat);
+    UNIT_ASSERT_VALUES_EQUAL_C(elementStat["Sort"], 1, prog);
+}
+
+Y_UNIT_TEST(PreserveSortForTopLevelOnly1) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = ::NYql::NFeature::Materialize.MinLangVer;
+
+    auto res = SqlToYqlWithSettings(R"sql(
+        USE plato;
+        $a = SELECT * FROM Input ORDER BY key;
+        $b = SELECT * FROM $a ORDER BY key;
+        MATERIALIZE $b INTO $result;
+        SELECT * FROM $result;
+    )sql", settings);
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+    UNIT_ASSERT_STRING_CONTAINS(Err2Str(res), "ORDER BY without LIMIT in subquery will be ignored");
+
+    TWordCountHive elementStat = {{"Sort"}};
+    auto prog = VerifyProgram(res, elementStat);
+    UNIT_ASSERT_VALUES_EQUAL_C(elementStat["Sort"], 1, prog);
+}
+
+Y_UNIT_TEST(PreserveSortForTopLevelOnly2) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = ::NYql::NFeature::Materialize.MinLangVer;
+
+    auto res = SqlToYqlWithSettings(R"sql(
+        USE plato;
+        $a = SELECT * FROM Input ORDER BY key;
+        $b = SELECT * FROM $a;
+        MATERIALIZE $b INTO $result;
+        SELECT * FROM $result;
+    )sql", settings);
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+    UNIT_ASSERT_STRING_CONTAINS(Err2Str(res), "ORDER BY without LIMIT in subquery will be ignored");
+
+    TWordCountHive elementStat = {{"Sort"}};
+    auto prog = VerifyProgram(res, elementStat);
+    UNIT_ASSERT_VALUES_EQUAL_C(elementStat["Sort"], 0, prog);
+}
+
+} // Y_UNIT_TEST_SUITE(MaterializeStatement)
+
+Y_UNIT_TEST_SUITE(HybridRankFusionLambda) {
+
+// A custom fusion lambda cannot live inside the named-args struct (a lambda is not a struct-field value),
+// so the SQL builder lifts it out into trailing positional children of HybridRank: a "rank"/"score" marker
+// followed by the lambda (the marker comes first because it selects the lambda's argument type). RankLambda
+// fuses per-branch ranks, so the marker is "rank".
+Y_UNIT_TEST(RankLambdaIsLiftedWithRankMarker) {
+    auto res = SqlToYql(R"sql(
+        USE plato;
+        $t = "x";
+        SELECT key FROM Input
+        ORDER BY HybridRank(
+            FullTextScore(text, "cats"),
+            Knn::CosineDistance(embedding, $t),
+            ($ranks) -> { RETURN 1.0 / (60 + COALESCE($ranks[0], 100000)); } AS RankLambda)
+        LIMIT 4;
+    )sql");
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TWordCountHive elementStat = {{"HybridRank"}};
+    const auto prog = VerifyProgram(res, elementStat);
+    UNIT_ASSERT_VALUES_EQUAL_C(elementStat["HybridRank"], 1, prog);
+    // The named-args struct is left empty and the lambda becomes a positional child, preceded by its "rank"
+    // marker.
+    UNIT_ASSERT_STRING_CONTAINS(prog, "(AsStruct) '\"rank\" (lambda");
+}
+
+// ScoreLambda fuses the raw per-branch scores, so the marker is "score" (the type checker binds Double).
+Y_UNIT_TEST(ScoreLambdaIsLiftedWithScoreMarker) {
+    auto res = SqlToYql(R"sql(
+        USE plato;
+        $t = "x";
+        SELECT key FROM Input
+        ORDER BY HybridRank(
+            FullTextScore(text, "cats"),
+            Knn::CosineDistance(embedding, $t),
+            ($scores) -> { RETURN COALESCE($scores[0], 0.0); } AS ScoreLambda)
+        LIMIT 4;
+    )sql");
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TWordCountHive elementStat = {{"HybridRank"}};
+    const auto prog = VerifyProgram(res, elementStat);
+    UNIT_ASSERT_VALUES_EQUAL_C(elementStat["HybridRank"], 1, prog);
+    UNIT_ASSERT_STRING_CONTAINS(prog, "(AsStruct) '\"score\" (lambda");
+}
+
+// Only the fusion lambda is lifted; other named options stay as members of the (now non-empty) struct.
+Y_UNIT_TEST(FusionLambdaCoexistsWithNamedOptions) {
+    auto res = SqlToYql(R"sql(
+        USE plato;
+        $t = "x";
+        SELECT key FROM Input
+        ORDER BY HybridRank(
+            FullTextScore(text, "cats"),
+            Knn::CosineDistance(embedding, $t),
+            ("ft_idx", "vec_idx") AS Indexes,
+            ($ranks) -> { RETURN 1.0 / (60 + COALESCE($ranks[0], 100000)); } AS RankLambda)
+        LIMIT 4;
+    )sql");
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TWordCountHive elementStat = {{"HybridRank"}};
+    const auto prog = VerifyProgram(res, elementStat);
+    UNIT_ASSERT_VALUES_EQUAL_C(elementStat["HybridRank"], 1, prog);
+    // Only the lambda is lifted (marker + lambda follow the struct); the other option stays a struct member.
+    UNIT_ASSERT_STRING_CONTAINS(prog, "'\"rank\" (lambda");
+    UNIT_ASSERT_STRING_CONTAINS(prog, "Indexes");
+}
+
+// RankLambda and ScoreLambda are mutually exclusive; giving both is rejected by the SQL builder.
+Y_UNIT_TEST(RejectsBothFusionLambdas) {
+    auto res = SqlToYql(R"sql(
+        USE plato;
+        $t = "x";
+        SELECT key FROM Input
+        ORDER BY HybridRank(
+            FullTextScore(text, "cats"),
+            Knn::CosineDistance(embedding, $t),
+            ($ranks)  -> { RETURN 1.0; } AS RankLambda,
+            ($scores) -> { RETURN 2.0; } AS ScoreLambda)
+        LIMIT 4;
+    )sql");
+    UNIT_ASSERT(!res.IsOk());
+    UNIT_ASSERT_STRING_CONTAINS(Err2Str(res), "at most one of RankLambda or ScoreLambda");
+}
+
+} // Y_UNIT_TEST_SUITE(HybridRankFusionLambda)

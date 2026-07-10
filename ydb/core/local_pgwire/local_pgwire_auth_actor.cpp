@@ -1,4 +1,3 @@
-#include "log_impl.h"
 #include "local_pgwire.h"
 #include "local_pgwire_util.h"
 

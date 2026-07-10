@@ -1,0 +1,25 @@
+syntax = "proto3";
+option cc_enable_arenas = true;
+
+package Ydb.Topic.DeferredPublish.V1;
+
+option java_package = "com.yandex.ydb.topic.deferredpublish.v1";
+
+import "ydb/public/api/protos/ydb_topic_deferred_publish.proto";
+
+service TopicDeferredPublishService {
+    // Starts a deferred topic publication.
+    rpc BeginPublication(DeferredPublish.BeginPublicationRequest) returns (DeferredPublish.BeginPublicationResponse);
+
+    // Makes staged messages visible to readers.
+    rpc Publish(DeferredPublish.PublishRequest) returns (DeferredPublish.PublishResponse);
+
+    // Discards staged messages without publishing.
+    rpc CancelPublication(DeferredPublish.CancelPublicationRequest) returns (DeferredPublish.CancelPublicationResponse);
+
+    // Lists active publications.
+    rpc ListPublications(DeferredPublish.ListPublicationsRequest) returns (DeferredPublish.ListPublicationsResponse);
+
+    // Returns metadata and destinations for an active publication.
+    rpc DescribePublication(DeferredPublish.DescribePublicationRequest) returns (DeferredPublish.DescribePublicationResponse);
+}

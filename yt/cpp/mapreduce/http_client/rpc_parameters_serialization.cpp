@@ -981,6 +981,17 @@ TNode SerializeParamsForGetTablePartitions(
     return result;
 }
 
+TNode SerializeParamsForCheckClusterLiveness(const TCheckClusterLivenessOptions& options)
+{
+    TNode result;
+    result["check_cypress_root"] = options.CheckCypressRoot_;
+    result["check_secondary_master_cells"] = options.CheckSecondaryMasterCells_;
+    if (options.CheckTabletCellBundle_) {
+        result["check_tablet_cell_bundle"] = *options.CheckTabletCellBundle_;
+    }
+    return result;
+}
+
 TNode SerializeParamsForReadFile(
     const TTransactionId& transactionId,
     const TFileReaderOptions& options)

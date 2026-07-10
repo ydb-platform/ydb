@@ -23,8 +23,8 @@ public:
         EAccessControlObjectNamespace accessControlObjectNamespace,
         EAccessControlObject accessControlObject);
 
-    TString GetPath() const;
-    TString GetPrincipalPath() const;
+    NYPath::TYPath GetPath() const;
+    NYPath::TYPath GetPrincipalPath() const;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -58,11 +58,11 @@ inline const THashMap<EAccessControlObject, TAccessControlObjectDescriptor> Acce
 
 TAccessControlObjectDescriptor GetAccessControlObjectDescriptor(EAccessControlObject accessControlObjectName);
 
-TString GetAccessControlObjectNamespacePath(EAccessControlObjectNamespace accessControlObjectNamespace);
+NYPath::TYPath GetAccessControlObjectNamespacePath(EAccessControlObjectNamespace accessControlObjectNamespace);
 
-TString GetAccessControlObjectNamespaceName(EAccessControlObjectNamespace accessControlObjectNamespace);
+std::string GetAccessControlObjectNamespaceName(EAccessControlObjectNamespace accessControlObjectNamespace);
 
-TString GetAccessControlObjectName(EAccessControlObject accessControlObject);
+std::string GetAccessControlObjectName(EAccessControlObject accessControlObject);
 
 ////////////////////////////////////////////////////////////////////////////////
 

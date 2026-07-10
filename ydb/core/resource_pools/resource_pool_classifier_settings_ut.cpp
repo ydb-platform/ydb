@@ -37,6 +37,22 @@ Y_UNIT_TEST_SUITE(ResourcePoolClassifierTest) {
         UNIT_ASSERT_VALUES_EQUAL(settings.MemberName, "test@user");
     }
 
+    Y_UNIT_TEST(RegexPredicateParsing) {
+        TClassifierSettings settings;
+        auto propertiesMap = settings.GetPropertiesMap();
+
+        std::visit(TClassifierSettings::TParser{"ydb-ui|ydb-cli"}, propertiesMap["has_app_name"]);
+        UNIT_ASSERT(settings.HasAppName.has_value());
+        UNIT_ASSERT_VALUES_EQUAL(settings.HasAppName->Pattern, "ydb-ui|ydb-cli");
+    }
+
+    Y_UNIT_TEST(RegexPredicateInvalidPattern) {
+        TClassifierSettings settings;
+        auto propertiesMap = settings.GetPropertiesMap();
+
+        UNIT_ASSERT_EXCEPTION(std::visit(TClassifierSettings::TParser{"[invalid"}, propertiesMap["has_app_name"]), yexception);
+    }
+
     Y_UNIT_TEST(SettingsExtracting) {
         TClassifierSettings settings;
         settings.Rank = 123;
@@ -48,6 +64,26 @@ Y_UNIT_TEST_SUITE(ResourcePoolClassifierTest) {
         UNIT_ASSERT_VALUES_EQUAL(std::visit(extractor, propertiesMap["rank"]), "123");
         UNIT_ASSERT_VALUES_EQUAL(std::visit(extractor, propertiesMap["resource_pool"]), "test_pool");
         UNIT_ASSERT_VALUES_EQUAL(std::visit(extractor, propertiesMap["member_name"]), "test@user");
+    }
+
+    Y_UNIT_TEST(RegexPredicateExtracting) {
+        TClassifierSettings settings;
+        auto propertiesMap = settings.GetPropertiesMap();
+
+        // Parse then extract — must round-trip the original pattern
+        std::visit(TClassifierSettings::TParser{"ydb-.*"}, propertiesMap["has_app_name"]);
+
+        TClassifierSettings::TExtractor extractor;
+        UNIT_ASSERT_VALUES_EQUAL(std::visit(extractor, propertiesMap["has_app_name"]), "ydb-.*");
+    }
+
+    Y_UNIT_TEST(RegexPredicateExtractingEmpty) {
+        TClassifierSettings settings;
+        auto propertiesMap = settings.GetPropertiesMap();
+
+        // Not set — should extract as empty string
+        TClassifierSettings::TExtractor extractor;
+        UNIT_ASSERT_VALUES_EQUAL(std::visit(extractor, propertiesMap["has_app_name"]), "");
     }
 
     Y_UNIT_TEST(SettingsValidation) {

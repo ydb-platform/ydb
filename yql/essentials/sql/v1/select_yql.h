@@ -5,8 +5,15 @@
 namespace NSQLTranslationV1 {
 
 struct TYqlSourceAlias {
+    enum class EKind {
+        Subquery,
+        CTE,
+    };
+
+    TPosition Position;
     TString Name;
     TVector<TString> Columns;
+    EKind Kind = EKind::Subquery;
 };
 
 struct TYqlSource {
@@ -73,8 +80,8 @@ struct TWindow {
 
 struct TYqlTableRefArgs {
     TString Service;
-    TString Cluster;
-    TString Key;
+    TDeferredAtom Cluster;
+    TDeferredAtom Key;
     bool IsAnonymous = false;
 };
 
@@ -123,6 +130,8 @@ TNodePtr ToTableExpression(TNodePtr source);
 TYqlSelectArgs DestructYqlSelect(TNodePtr node);
 
 TNodePtr BuildYqlTableRef(TPosition position, TYqlTableRefArgs&& args);
+
+TNodePtr BuildYqlSelf(TPosition position);
 
 TNodePtr BuildYqlValues(TPosition position, TYqlValuesArgs&& args);
 

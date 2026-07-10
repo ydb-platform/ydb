@@ -180,6 +180,7 @@ public:
         virtual bool IsPerCluster() const = 0;
         virtual bool IsDeprecated() const = 0;
         virtual bool IgnoreInFullReplay() const = 0;
+        virtual bool HasSerializableValue() const = 0;
         virtual void Serialize(const std::function<void(const TString&, const TString&)>& callback) const = 0;
 
     protected:
@@ -266,6 +267,14 @@ public:
 
         bool IgnoreInFullReplay() const override {
             return IgnoreInFullReplay_;
+        }
+
+        bool HasSerializableValue() const override {
+            YQL_ENSURE(SettingType == EConfSettingType::Static, "Only serialization for static settings is supported now");
+            if constexpr (SettingType == EConfSettingType::Static) {
+                return Setting_.Get().Defined();
+            }
+            return false;
         }
 
         TSettingHandlerImpl& Lower(TType lower) {
@@ -358,9 +367,8 @@ public:
         void Serialize(const std::function<void(const TString&, const TString&)>& callback) const override {
             YQL_ENSURE(SettingType == EConfSettingType::Static, "Only serialization for static settings is supported now");
             if constexpr (SettingType == EConfSettingType::Static) {
-                if (auto value = Setting_.Get()) {
-                    callback(Name_, Serializer_(*value));
-                }
+                YQL_ENSURE(HasSerializableValue(), "Setting is not serializable");
+                callback(Name_, Serializer_(*Setting_.Get()));
             }
         }
 
@@ -509,10 +517,12 @@ public:
     static TErrorCallback GetErrorCallback(TPositionHandle pos, TExprContext& ctx);
     void Enumerate(std::function<void(std::string_view)> callback);
     void SerializeStaticSettings(const std::function<void(const TString&, const TString&)>& callback) const;
+    ui64 CountSerializableStaticSettings() const;
 
 protected:
     THashSet<TString> ValidClusters; // NOLINT(readability-identifier-naming)
-    THashMap<TString, TSettingHandler::TPtr> Handlers_;
+    // We use TMap instead of THashMap to keep the order of settings serialization.
+    TMap<TString, TSettingHandler::TPtr> Handlers_;
     TSet<TString> Names_;
 
     const TString ProviderName_;

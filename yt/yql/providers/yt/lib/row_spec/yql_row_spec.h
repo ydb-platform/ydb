@@ -42,7 +42,7 @@ struct TYqlRowSpecInfo: public TThrRefBase {
 
     static bool Validate(const TExprNode& node, TExprContext& ctx, const TStructExprType*& type, TMaybe<TColumnOrder>& columnOrder);
     bool Parse(const TString& rowSpecYson, TExprContext& ctx, const TPositionHandle& pos = {});
-    bool Parse(const THashMap<TString, TString>& attrs, TExprContext& ctx, const TPositionHandle& pos = {});
+    bool Parse(const THashMap<TString, TString>& attrs, bool parseExpressionColumns, TExprContext& ctx, const TPositionHandle& pos = {});
     bool Parse(const NYT::TNode& rowSpecAttr, TExprContext& ctx, const TPositionHandle& pos = {});
     void Parse(NNodes::TExprBase node, bool withTypes = true);
     bool Validate(TExprContext& ctx, TPositionHandle pos);
@@ -121,6 +121,8 @@ struct TYqlRowSpecInfo: public TThrRefBase {
     TTypeAnnotationNode::TListType SortedByTypes;
     TMap<TString, TString> DefaultValues;
     TVector<TString> ExplicitYson;
+    // column name -> expression
+    TMap<TString, TString> ExpressionColumns;
 
 private:
     void FillTypeTransform(NYT::TNode& attrs, TStringBuf typeNameAttr, const NCommon::TStructMemberMapper& mapper) const;

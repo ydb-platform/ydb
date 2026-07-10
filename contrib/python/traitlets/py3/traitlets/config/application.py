@@ -216,7 +216,7 @@ class Application(SingletonConfigurable):
 
     log_datefmt = Unicode(
         "%Y-%m-%d %H:%M:%S",
-        help="The date format used by logging formatters for `asctime`",
+        help="The date format used by logging formatters for `logging.Formatter` ``datefmt`` parameter",
     ).tag(config=True)
 
     log_format = Unicode(

@@ -101,4 +101,4 @@ TClosure TSchedulerThread::BeginExecuteImpl(bool dequeued, TEnqueuedAction* acti
 
 ////////////////////////////////////////////////////////////////////////////////
 
-} //namespace NYT::NConcurrency
+} // namespace NYT::NConcurrency

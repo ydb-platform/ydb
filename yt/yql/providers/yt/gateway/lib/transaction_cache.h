@@ -35,6 +35,7 @@ public:
         TString Cluster;
         TString Server;
         NYT::IClientPtr Client;
+        TString EffectiveUser;  // actual YT user for the used token
         NYT::ITransactionPtr Tx;
         NYT::ITransactionPtr ExternalTx;
         NYT::IClientBasePtr CacheTx;

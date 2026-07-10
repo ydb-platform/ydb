@@ -9,4 +9,4 @@
     * `use_filter_ngram` - [n-gram](https://en.wikipedia.org/wiki/N-gram) filter (`true` or `false`)
     * `use_filter_edge_ngram` - edge [n-gram](https://en.wikipedia.org/wiki/N-gram) filter (`true` or `false`)
     * `filter_ngram_min_length` - minimum n-gram length (positive integer)
-    * `filter_ngram_max_length` - maximum n-gram length (positive integer, \(\ge\) `filter_ngram_min_length`)
+    * `filter_ngram_max_length` - maximum n-gram length (positive integer)

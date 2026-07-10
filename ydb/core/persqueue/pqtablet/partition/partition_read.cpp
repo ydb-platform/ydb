@@ -1,5 +1,4 @@
 #include "partition_util.h"
-#include <ydb/core/persqueue/pqtablet/blob/message_format.h>
 #include "partition_compactification.h"
 #include "partition_common.h"
 
@@ -359,8 +358,8 @@ static void AddResultBlob(T* read, const TClientBlob& blob, ui64 offset) {
             cc->SetTotalSize(blob.PartData->TotalSize);
     }
 
-    cc->SetMessageCount(blob.MessageCount);
-    cc->SetMessageFormat(ToProtoMessageFormat(blob.MessageFormat));
+    cc->SetLogicalMessageCount(blob.LogicalMessageCount);
+    cc->SetIsBatch(blob.IsBatch);
 }
 
 template <typename T>
@@ -522,7 +521,7 @@ TMaybe<TReadAnswer> TReadInfo::AddBlobsFromBody(const TVector<NPQ::TRequestedBlo
 
                 if (res.IsLastPart()) {
                     PartNo = 0;
-                    Offset += res.MessageCount;
+                    Offset += res.LogicalMessageCount;
                     if (ReachedLastOffset()) {
                         needStop = true;
                         break;
@@ -643,22 +642,30 @@ TReadAnswer TReadInfo::FormAnswer(
             Offset = CachedOffset;
         }
 
+        ui64 cachedBlobOffset = CachedOffset;
         for (const auto& writeBlob : Cached) {
             VERIFY_RESULT_BLOB(writeBlob, 0u);
 
             readResult->SetBlobsCachedSize(readResult->GetBlobsCachedSize() + writeBlob.GetSerializedSize());
 
+            const ui64 resultOffset = writeBlob.IsLastPart()
+                && cachedBlobOffset <= Offset
+                && Offset < cachedBlobOffset + writeBlob.LogicalMessageCount
+                    ? cachedBlobOffset
+                    : Offset;
+
             if (userInfo) {
                 userInfo->AddTimestampToCache(
-                    Offset, writeBlob.WriteTimestamp, writeBlob.CreateTimestamp,
+                    resultOffset, writeBlob.WriteTimestamp, writeBlob.CreateTimestamp,
                     Destination != 0, ctx.Now()
                 );
             }
 
-            AddResultBlob(readResult, writeBlob, Offset);
+            AddResultBlob(readResult, writeBlob, resultOffset);
             if (writeBlob.IsLastPart()) {
                 PartNo = 0;
-                Offset += writeBlob.MessageCount;
+                Offset = resultOffset + writeBlob.LogicalMessageCount;
+                cachedBlobOffset += writeBlob.LogicalMessageCount;
             } else {
                 ++PartNo;
             }

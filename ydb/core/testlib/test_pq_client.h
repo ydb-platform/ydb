@@ -297,13 +297,15 @@ struct TRequestWritePQ {
     TString SourceId;
     ui64 SeqNo;
 
-    THolder<NMsgBusProxy::TBusPersQueue> GetRequest(const TString& data, const TString& cookie) const {
+    THolder<NMsgBusProxy::TBusPersQueue> GetRequest(const TString& data, const TString& cookie, TMaybe<i64> cmdWriteOffset = {}) const {
         THolder<NMsgBusProxy::TBusPersQueue> request(new NMsgBusProxy::TBusPersQueue);
         auto req = request->Record.MutablePartitionRequest();
         req->SetTopic(Topic);
         req->SetPartition(Partition);
         req->SetMessageNo(0);
         req->SetOwnerCookie(cookie);
+        if (cmdWriteOffset.Defined())
+            req->SetCmdWriteOffset(*cmdWriteOffset);
         auto write = req->AddCmdWrite();
         write->SetSourceId(SourceId);
         write->SetSeqNo(SeqNo);
@@ -1157,12 +1159,13 @@ public:
             const TRequestWritePQ& writeRequest, const TString& data,
             const TString& ticket = "",
             NMsgBusProxy::EResponseStatus expectedStatus = NMsgBusProxy::MSTATUS_OK,
-            NMsgBusProxy::EResponseStatus expectedOwnerStatus = NMsgBusProxy::MSTATUS_OK
+            NMsgBusProxy::EResponseStatus expectedOwnerStatus = NMsgBusProxy::MSTATUS_OK,
+            const TMaybe<i64> cmdWriteOffset = {}
     ) {
 
         TString cookie = GetOwnership({writeRequest.Topic, writeRequest.Partition}, expectedOwnerStatus);
 
-        THolder<NMsgBusProxy::TBusPersQueue> request = writeRequest.GetRequest(data, cookie);
+        THolder<NMsgBusProxy::TBusPersQueue> request = writeRequest.GetRequest(data, cookie, cmdWriteOffset);
         if (!ticket.empty())
             request.Get()->Record.SetTicket(ticket);
 

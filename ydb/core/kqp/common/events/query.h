@@ -18,8 +18,9 @@
 
 #include <memory>
 
-namespace NKikimr::NKqp {
-    struct IWmSessionUpdater;
+namespace NKikimr::NKqp::NWorkload {
+class ISessionUpdater;
+class IQueryClassifier;
 }
 
 namespace NKikimr::NKqp::NPrivateEvents {
@@ -266,6 +267,14 @@ public:
         return Record.GetRequest().GetClientAddress();
     }
 
+    TString GetApplicationName() const {
+        if (RequestCtx) {
+            return "";  // gRPC path carries app name via the session, not the query request
+        }
+
+        return Record.GetRequest().GetApplicationName();
+    }
+
     const ::google::protobuf::Map<TProtoStringType, ::Ydb::TypedValue>& GetYdbParameters() const {
         if (YdbParameters) {
             return *YdbParameters;
@@ -351,12 +360,20 @@ public:
         return UserRequestContext;
     }
 
-    void SetWmSessionUpdater(const std::shared_ptr<IWmSessionUpdater>& wmSessionUpdater) {
+    void SetWmSessionUpdater(const std::shared_ptr<NWorkload::ISessionUpdater>& wmSessionUpdater) {
         WmSessionUpdater = wmSessionUpdater;
     }
 
-    std::shared_ptr<IWmSessionUpdater> GetWmSessionUpdater() const {
+    std::shared_ptr<NWorkload::ISessionUpdater> GetWmSessionUpdater() const {
         return WmSessionUpdater;
+    }
+
+    void SetWmQueryClassifier(std::shared_ptr<NWorkload::IQueryClassifier> classifier) {
+        WmQueryClassifier = std::move(classifier);
+    }
+
+    std::shared_ptr<NWorkload::IQueryClassifier> GetWmQueryClassifier() const {
+        return WmQueryClassifier;
     }
 
     void SetProgressStatsPeriod(TDuration progressStatsPeriod) {
@@ -496,7 +513,8 @@ private:
     std::shared_ptr<const NKikimrKqp::TQueryPhysicalGraph> QueryPhysicalGraph;
     i64 Generation = 0;
     bool DisableDefaultTimeout = false;
-    std::shared_ptr<IWmSessionUpdater> WmSessionUpdater;
+    std::shared_ptr<NWorkload::ISessionUpdater> WmSessionUpdater;
+    std::shared_ptr<NWorkload::IQueryClassifier> WmQueryClassifier;
 };
 
 struct TEvDataQueryStreamPart: public TEventPB<TEvDataQueryStreamPart,

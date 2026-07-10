@@ -1,9 +1,10 @@
 #include <ydb/core/persqueue/pqtablet/batching/batch_cutter.h>
 #include <ydb/core/persqueue/public/write_meta/write_meta.h>
 #include <ydb/core/protos/grpc_pq_old.pb.h>
-#include <ydb/library/kafka/kafka_messages_int.h>
-#include <ydb/library/kafka/kafka_records.h>
+#include <ydb/public/sdk/cpp/src/library/kafka/kafka_messages_int.h>
+#include <ydb/public/sdk/cpp/src/library/kafka/kafka_records.h>
 #include <ydb/public/api/protos/draft/persqueue_common.pb.h>
+#include <ydb/public/api/protos/ydb_topic.pb.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 #include <library/cpp/streams/zstd/zstd.h>
@@ -17,6 +18,10 @@ namespace {
 
 using TReadResult = NKikimrClient::TCmdReadResult::TResult;
 
+NPersQueueCommon::ECodec KafkaBatchCodec() {
+    return static_cast<NPersQueueCommon::ECodec>(static_cast<int>(Ydb::Topic::CODEC_KAFKA_BATCH) - 1);
+}
+
 NKafka::TKafkaRecord MakeKafkaRecord(
     i64 timestampDelta,
     i64 offsetDelta,
@@ -27,6 +32,20 @@ NKafka::TKafkaRecord MakeKafkaRecord(
     record.TimestampDelta = timestampDelta;
     record.OffsetDelta = offsetDelta;
     record.SetKey(TString{key});
+    record.SetValue(TString{value});
+    record.Length = record.Size(2)
+        - NKafka::NPrivate::SizeOfVarint<NKafka::TKafkaRecord::LengthMeta::Type>(0);
+    return record;
+}
+
+NKafka::TKafkaRecord MakeKafkaRecordWithoutKey(
+    i64 timestampDelta,
+    i64 offsetDelta,
+    TStringBuf value)
+{
+    NKafka::TKafkaRecord record;
+    record.TimestampDelta = timestampDelta;
+    record.OffsetDelta = offsetDelta;
     record.SetValue(TString{value});
     record.Length = record.Size(2)
         - NKafka::NPrivate::SizeOfVarint<NKafka::TKafkaRecord::LengthMeta::Type>(0);
@@ -52,6 +71,24 @@ TString MakeKafkaBatchPayload(NKafka::ECompressionType compression = NKafka::ECo
     return NKafka::WriteKafkaRecordBatch(batch);
 }
 
+TString MakeKafkaBatchPayloadWithNullKey() {
+    NKafka::TKafkaRecordBatch batch;
+    batch.BaseOffset = 100;
+    batch.Magic = 2;
+    batch.LastOffsetDelta = 1;
+    batch.BaseTimestamp = 1000;
+    batch.MaxTimestamp = 1007;
+    batch.ProducerId = 42;
+    batch.ProducerEpoch = 3;
+    batch.BaseSequence = 10;
+    batch.Records.push_back(MakeKafkaRecordWithoutKey(5, 0, "value0"));
+    batch.Records.push_back(MakeKafkaRecord(7, 1, "k1", "value1"));
+    batch.BatchLength = batch.Size(2)
+        - sizeof(NKafka::TKafkaRecordBatch::BaseOffsetMeta::Type)
+        - sizeof(NKafka::TKafkaRecordBatch::BatchLengthMeta::Type);
+    return NKafka::WriteKafkaRecordBatch(batch);
+}
+
 TString SerializeDataChunk(NKikimrPQClient::TDataChunk chunk) {
     TString serialized;
     Y_ENSURE(chunk.SerializeToString(&serialized));
@@ -60,7 +97,7 @@ TString SerializeDataChunk(NKikimrPQClient::TDataChunk chunk) {
 
 TReadResult MakeKafkaBatchReadResult(
     TString payload,
-    NPersQueueCommon::ECodec codec = NPersQueueCommon::RAW,
+    NPersQueueCommon::ECodec codec = KafkaBatchCodec(),
     ui64 uncompressedSize = 0,
     NKikimrPQClient::TDataChunk::EChunkType chunkType = NKikimrPQClient::TDataChunk::REGULAR,
     ui64 seqNo = 100)
@@ -74,8 +111,8 @@ TReadResult MakeKafkaBatchReadResult(
     TReadResult readResult;
     readResult.SetOffset(10);
     readResult.SetSeqNo(seqNo);
-    readResult.SetMessageCount(2);
-    readResult.SetMessageFormat(NKikimrClient::KAFKA_BATCH);
+    readResult.SetLogicalMessageCount(2);
+    readResult.SetIsBatch(true);
     readResult.SetData(SerializeDataChunk(std::move(chunk)));
     readResult.SetWriteTimestampMS(777);
     if (uncompressedSize > 0) {
@@ -114,10 +151,8 @@ void AssertKafkaBatchCut(
     UNIT_ASSERT_VALUES_EQUAL(cut[1].GetOffset(), 11u);
     UNIT_ASSERT_VALUES_EQUAL(cut[0].GetSeqNo(), 10u);
     UNIT_ASSERT_VALUES_EQUAL(cut[1].GetSeqNo(), 11u);
-    UNIT_ASSERT_VALUES_EQUAL(cut[0].GetMessageCount(), 1u);
-    UNIT_ASSERT_VALUES_EQUAL(cut[1].GetMessageCount(), 1u);
-    UNIT_ASSERT_VALUES_EQUAL(static_cast<ui32>(cut[0].GetMessageFormat()), static_cast<ui32>(NKikimrClient::STANDARD));
-    UNIT_ASSERT_VALUES_EQUAL(static_cast<ui32>(cut[1].GetMessageFormat()), static_cast<ui32>(NKikimrClient::STANDARD));
+    UNIT_ASSERT_VALUES_EQUAL(cut[0].GetLogicalMessageCount(), 1u);
+    UNIT_ASSERT_VALUES_EQUAL(cut[1].GetLogicalMessageCount(), 1u);
     UNIT_ASSERT(!cut[0].HasUncompressedSize());
     UNIT_ASSERT(!cut[1].HasUncompressedSize());
 
@@ -143,48 +178,73 @@ void AssertKafkaBatchCut(
 Y_UNIT_TEST_SUITE(TBatchCutterTest) {
     Y_UNIT_TEST(CutUncompressedKafkaBatchInDataChunk) {
         const auto readResult = MakeKafkaBatchReadResult(MakeKafkaBatchPayload());
-        AssertKafkaBatchCut(TKafkaBatchCutter().Cut(readResult, 10));
+        AssertKafkaBatchCut(TKafkaBatchCutter().Cut(TBatchCutterData(readResult, NKikimr::GetDeserializedData(readResult.GetData())), 10));
     }
 
     Y_UNIT_TEST(CutGzipCompressedKafkaBatchInDataChunk) {
         const auto readResult = MakeKafkaBatchReadResult(
             MakeKafkaBatchPayload(NKafka::ECompressionType::GZIP));
-        AssertKafkaBatchCut(TKafkaBatchCutter().Cut(readResult, 10), NPersQueueCommon::GZIP);
+        AssertKafkaBatchCut(TKafkaBatchCutter().Cut(TBatchCutterData(readResult, NKikimr::GetDeserializedData(readResult.GetData())), 10), NPersQueueCommon::GZIP);
     }
 
     Y_UNIT_TEST(CutFailsOnNonRawDataChunkCodec) {
         const auto readResult = MakeKafkaBatchReadResult(MakeKafkaBatchPayload(), NPersQueueCommon::GZIP);
         UNIT_ASSERT_EXCEPTION(
-            TKafkaBatchCutter().Cut(readResult, 10),
+            TKafkaBatchCutter().Cut(TBatchCutterData(readResult, NKikimr::GetDeserializedData(readResult.GetData())), 10),
             yexception);
     }
 
     Y_UNIT_TEST(CutIgnoresOuterUncompressedSize) {
-        const auto readResult = MakeKafkaBatchReadResult(MakeKafkaBatchPayload(), NPersQueueCommon::RAW, 123);
-        AssertKafkaBatchCut(TKafkaBatchCutter().Cut(readResult, 10));
+        const auto readResult = MakeKafkaBatchReadResult(MakeKafkaBatchPayload(), KafkaBatchCodec(), 123);
+        AssertKafkaBatchCut(TKafkaBatchCutter().Cut(TBatchCutterData(readResult, NKikimr::GetDeserializedData(readResult.GetData())), 10));
     }
 
     Y_UNIT_TEST(CutSkipsRecordsBeforeReadStartOffset) {
         const auto readResult = MakeKafkaBatchReadResult(MakeKafkaBatchPayload());
-        const auto cut = TKafkaBatchCutter().Cut(readResult, 11);
+        const auto cut = TKafkaBatchCutter().Cut(TBatchCutterData(readResult, NKikimr::GetDeserializedData(readResult.GetData())), 11);
         UNIT_ASSERT_VALUES_EQUAL(cut.size(), 1u);
         UNIT_ASSERT_VALUES_EQUAL(cut[0].GetOffset(), 11u);
+    }
+
+    Y_UNIT_TEST(GetKeysReturnsKafkaRecordKeysWithLogicalOffsets) {
+        const auto readResult = MakeKafkaBatchReadResult(MakeKafkaBatchPayload());
+        const auto keys = TKafkaBatchCutter().GetKeys(TBatchCutterData(readResult, NKikimr::GetDeserializedData(readResult.GetData())), 10);
+
+        UNIT_ASSERT_VALUES_EQUAL(keys.size(), 2u);
+        UNIT_ASSERT_VALUES_EQUAL(keys.at("k0"), 10u);
+        UNIT_ASSERT_VALUES_EQUAL(keys.at("k1"), 11u);
+    }
+
+    Y_UNIT_TEST(GetKeysSkipsRecordsBeforeReadStartOffset) {
+        const auto readResult = MakeKafkaBatchReadResult(MakeKafkaBatchPayload());
+        const auto keys = TKafkaBatchCutter().GetKeys(TBatchCutterData(readResult, NKikimr::GetDeserializedData(readResult.GetData())), 11);
+
+        UNIT_ASSERT_VALUES_EQUAL(keys.size(), 1u);
+        UNIT_ASSERT(!keys.contains("k0"));
+        UNIT_ASSERT_VALUES_EQUAL(keys.at("k1"), 11u);
+    }
+
+    Y_UNIT_TEST(GetKeysSkipsRecordsWithoutKey) {
+        const auto readResult = MakeKafkaBatchReadResult(MakeKafkaBatchPayloadWithNullKey());
+        const auto keys = TKafkaBatchCutter().GetKeys(TBatchCutterData(readResult, NKikimr::GetDeserializedData(readResult.GetData())), 10);
+
+        UNIT_ASSERT_VALUES_EQUAL(keys.size(), 1u);
+        UNIT_ASSERT_VALUES_EQUAL(keys.at("k1"), 11u);
     }
 
     Y_UNIT_TEST(NonRegularChunkIsNotCut) {
         NKikimrPQClient::TDataChunk chunk;
         chunk.SetChunkType(NKikimrPQClient::TDataChunk::GROW);
-        chunk.SetCodec(NPersQueueCommon::RAW);
+        chunk.SetCodec(KafkaBatchCodec());
         chunk.SetData(MakeKafkaBatchPayload());
 
         TReadResult readResult;
-        readResult.SetMessageFormat(NKikimrClient::KAFKA_BATCH);
+        NKikimrPQClient::TDataChunk dataChunk = chunk;
         readResult.SetData(SerializeDataChunk(std::move(chunk)));
 
-        const auto cut = TKafkaBatchCutter().Cut(readResult, 10);
+        const auto cut = TKafkaBatchCutter().Cut(TBatchCutterData(readResult, std::move(dataChunk)), 10);
         UNIT_ASSERT_VALUES_EQUAL(cut.size(), 1u);
         UNIT_ASSERT_VALUES_EQUAL(cut[0].GetData(), readResult.GetData());
-        UNIT_ASSERT_VALUES_EQUAL(static_cast<ui32>(cut[0].GetMessageFormat()), static_cast<ui32>(NKikimrClient::KAFKA_BATCH));
     }
 }
 

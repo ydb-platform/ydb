@@ -765,6 +765,37 @@ void TestRestoreTableWithSerial(
     CompareResults(GetTableContent(session, table), originalContent);
 }
 
+void TestRestoreTableWithMultiColumnStatistics(
+    const char* table, TSession& session, TBackupFunction&& backup, TRestoreFunction&& restore
+) {
+    using namespace fmt::literals;
+    ExecuteDataDefinitionQuery(session, fmt::format(R"(
+            CREATE TABLE `{table}` (
+                key Uint32,
+                value Utf8,
+                PRIMARY KEY (key),
+                STATISTICS s1 ON (value) WITH (COUNT_MIN_SKETCH)
+            )
+        )",
+        "table"_a = table
+    ));
+    backup();
+    ExecuteDataDefinitionQuery(session, Sprintf(R"(
+            DROP TABLE `%s`;
+        )", table
+    ));
+    restore();
+    auto describe = session.DescribeTable(table).ExtractValueSync();
+    UNIT_ASSERT_VALUES_EQUAL_C(describe.GetStatus(), EStatus::SUCCESS, describe.GetIssues().ToString());
+    const auto statistics = describe.GetTableDescription().GetMultiColumnStatisticsDescriptions();
+    UNIT_ASSERT_VALUES_EQUAL(statistics.size(), 1);
+    UNIT_ASSERT_VALUES_EQUAL(statistics[0].GetName(), "s1");
+    UNIT_ASSERT_VALUES_EQUAL(statistics[0].GetColumns().size(), 1);
+    UNIT_ASSERT_VALUES_EQUAL(statistics[0].GetColumns()[0], "value");
+    UNIT_ASSERT_VALUES_EQUAL(statistics[0].GetTypes().size(), 1);
+    UNIT_ASSERT(statistics[0].GetTypes()[0] == EMultiColumnStatisticsType::CountMinSketch);
+}
+
 const char* ConvertIndexTypeToSQL(NKikimrSchemeOp::EIndexType indexType) {
     switch (indexType) {
         case NKikimrSchemeOp::EIndexTypeGlobal:
@@ -2693,7 +2724,6 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
 
     Y_UNIT_TEST(RestoreViewToDifferentDatabase) {
         TBasicKikimrWithGrpcAndRootSchema<TTenantsTestSettings> server;
-        server.GetRuntime()->GetAppData().FeatureFlags.SetEnableShowCreate(true);
 
         constexpr const char* alice = "/Root/tenants/alice";
         constexpr const char* bob = "/Root/tenants/bob";
@@ -2924,6 +2954,25 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
         constexpr const char* table = "/Root/table";
 
         TestRestoreTableWithSerial(
+            table,
+            session,
+            CreateBackupLambda(driver, pathToBackup),
+            CreateRestoreLambda(driver, pathToBackup)
+        );
+    }
+
+    void TestTableWithMultiColumnStatisticsBackupRestore() {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableFeatureFlags()->SetEnableColumnStatistics(true);
+        TKikimrWithGrpcAndRootSchema server{std::move(appConfig)};
+        auto driver = TDriver(TDriverConfig().SetEndpoint(Sprintf("localhost:%u", server.GetPort())).SetDatabase("/Root"));
+        TTableClient tableClient(driver);
+        auto session = tableClient.GetSession().ExtractValueSync().GetSession();
+        TTempDir tempDir;
+        const auto& pathToBackup = tempDir.Path();
+        constexpr const char* table = "/Root/table";
+
+        TestRestoreTableWithMultiColumnStatistics(
             table,
             session,
             CreateBackupLambda(driver, pathToBackup),
@@ -3286,7 +3335,6 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
 
     void TestSystemViewBackupRestore() {
         NKikimrConfig::TAppConfig config;
-        config.MutableFeatureFlags()->SetEnableShowCreate(true);
         TKikimrWithGrpcAndRootSchema server(config);
         auto driver = TDriver(TDriverConfig().SetEndpoint(Sprintf("localhost:%u", server.GetPort())).SetDatabase("/Root"));
         TSchemeClient schemeClient(driver);
@@ -3371,6 +3419,7 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
             case EPathTypeInvalid:
             case EPathTypeBackupCollection:
             case EPathTypeBlobDepot:
+            case EPathTypeTestShardSet:
                 break; // not applicable
             case EPathTypeRtmrVolume:
             case EPathTypeBlockStoreVolume:
@@ -3420,7 +3469,6 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
 
 
         NKikimrConfig::TAppConfig config;
-        config.MutableFeatureFlags()->SetEnableShowCreate(true);
         config.MutableQueryServiceConfig()->AddAvailableExternalDataSources("ObjectStorage");
         TKikimrWithGrpcAndRootSchema server(config);
 
@@ -3530,7 +3578,6 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
     Y_UNIT_TEST(TestReplaceRestoreOptionOnNonExistingSchemeObjects) {
         NKikimrConfig::TAppConfig config;
         config.MutableQueryServiceConfig()->AddAvailableExternalDataSources("ObjectStorage");
-        config.MutableFeatureFlags()->SetEnableShowCreate(true);
         TKikimrWithGrpcAndRootSchema server(config);
 
         server.GetRuntime()->GetAppData().FeatureFlags.SetEnableExternalDataSources(true);
@@ -3913,6 +3960,10 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
         }
     }
 
+    Y_UNIT_TEST(BackupRestoreTableWithMultiColumnStatistics) {
+        TestTableWithMultiColumnStatisticsBackupRestore();
+    }
+
 }
 
 Y_UNIT_TEST_SUITE(BackupRestoreS3) {
@@ -3948,7 +3999,7 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
                     appConfig.MutableFeatureFlags()->SetEnableFulltextIndex(true);
                     appConfig.MutableFeatureFlags()->SetEnableJsonIndex(true);
                     appConfig.MutableFeatureFlags()->SetEnableCsDictionaryEncoding(true);
-                    appConfig.MutableFeatureFlags()->SetEnableShowCreate(true);
+                    appConfig.MutableFeatureFlags()->SetEnableColumnStatistics(true);
                     appConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
                     return appConfig;
                 }())
@@ -4442,6 +4493,18 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
         );
     }
 
+    void TestTableWithMultiColumnStatisticsBackupRestore() {
+        TS3TestEnv testEnv;
+        constexpr const char* table = "/Root/table";
+
+        TestRestoreTableWithMultiColumnStatistics(
+            table,
+            testEnv.GetTableSession(),
+            CreateBackupLambda(testEnv.GetDriver(), testEnv.GetS3Port()),
+            CreateRestoreLambda(testEnv.GetDriver(), testEnv.GetS3Port(), { "table" })
+        );
+    }
+
     void TestViewBackupRestore() {
         TS3TestEnv testEnv;
         constexpr const char* view = "/Root/view";
@@ -4698,6 +4761,8 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
             case EPathTypeInvalid:
             case EPathTypeBackupCollection:
             case EPathTypeBlobDepot:
+            case EPathTypeTestShardSet:
+                break; // not applicable
             case EPathTypeRtmrVolume:
             case EPathTypeBlockStoreVolume:
             case EPathTypeSolomonVolume:
@@ -4862,5 +4927,9 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
         UNIT_ASSERT_VALUES_EQUAL(items[0].Dst, "Dest/Dir/Table");
         UNIT_ASSERT_VALUES_EQUAL(items[1].Src, "/Root/Table");
         UNIT_ASSERT_VALUES_EQUAL(items[1].Dst, "Dest/Table");
+    }
+
+    Y_UNIT_TEST(BackupRestoreTableWithMultiColumnStatistics) {
+        TestTableWithMultiColumnStatisticsBackupRestore();
     }
 }

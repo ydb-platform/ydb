@@ -209,6 +209,60 @@ Y_UNIT_TEST(TableHintsSelect) {
     UNIT_ASSERT_VALUES_EQUAL(stat["WatermarkGenerator"], 1);
 }
 
+Y_UNIT_TEST(SelectStarStripsConfiguredSystemColumnPrefixes) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.ExtraSystemColumnPrefixes = {"__ydb_row_id"};
+    auto res = SqlToYqlWithSettings("SELECT * FROM plato.Input;", settings);
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TWordCountHive stat = {"RemoveSystemMembers", "RemovePrefixMembers"};
+    VerifyProgram(res, stat);
+    UNIT_ASSERT_VALUES_EQUAL(stat["RemoveSystemMembers"], 1);
+    UNIT_ASSERT_VALUES_EQUAL(stat["RemovePrefixMembers"], 1);
+}
+
+Y_UNIT_TEST(SelectSystemColumnIsNotStrippedConfiguredSystemColumnPrefixes) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.ExtraSystemColumnPrefixes = {"__ydb_row_id"};
+    auto res = SqlToYqlWithSettings("SELECT __ydb_row_id FROM plato.Input;", settings);
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TWordCountHive stat = {"RemoveSystemMembers", "RemovePrefixMembers"};
+    VerifyProgram(res, stat);
+    UNIT_ASSERT_VALUES_EQUAL(stat["RemoveSystemMembers"], 0);
+    UNIT_ASSERT_VALUES_EQUAL(stat["RemovePrefixMembers"], 0);
+}
+
+Y_UNIT_TEST(SelectStarKeepsDefaultCleanupWithoutSystemColumnPrefixes) {
+    auto res = SqlToYql("SELECT * FROM plato.Input;");
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TWordCountHive stat = {"RemoveSystemMembers", "RemovePrefixMembers"};
+    VerifyProgram(res, stat);
+    UNIT_ASSERT_VALUES_EQUAL(stat["RemoveSystemMembers"], 1);
+    UNIT_ASSERT_VALUES_EQUAL(stat["RemovePrefixMembers"], 0);
+}
+
+Y_UNIT_TEST(QualifiedAsteriskStripsConfiguredSystemColumnPrefixes) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.ExtraSystemColumnPrefixes = {"__ydb_row_id"};
+    auto res = SqlToYqlWithSettings(
+        "PRAGMA DisableSimpleColumns;"
+        "SELECT interested_table.* FROM plato.Input AS interested_table;",
+        settings);
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+        if (word == "RemovePrefixMembers") {
+            UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("interested_table._yql_"));
+            UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("interested_table.__ydb_row_id"));
+        }
+    };
+    TWordCountHive stat = {{TString("RemovePrefixMembers"), 0}};
+    VerifyProgram(res, stat, verifyLine);
+    UNIT_ASSERT_VALUES_EQUAL(stat["RemovePrefixMembers"], 1);
+}
+
 Y_UNIT_TEST(TableHintsValues) {
     ExpectFailWithError(
         R"sql(
@@ -4240,6 +4294,135 @@ Y_UNIT_TEST(AlterTableDropIndexIsCorrect) {
     UNIT_ASSERT_C(result.IsOk(), result.Issues.ToString());
 }
 
+Y_UNIT_TEST(CreateTableWithStatisticsIsSupported) {
+    auto res = SqlToYql(R"sql(
+        USE ydb;
+        CREATE TABLE table (
+            k Uint64 NOT NULL,
+            a Uint64,
+            b Utf8,
+            PRIMARY KEY (k),
+            STATISTICS s ON (a, b) WITH (COUNT_MIN_SKETCH)
+        );
+    )sql");
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+        if (word == "Write") {
+            UNIT_ASSERT_STRING_CONTAINS(line, "statisticsName");
+            UNIT_ASSERT_STRING_CONTAINS(line, "statisticsColumns");
+            UNIT_ASSERT_STRING_CONTAINS(line, "statisticsTypes");
+            UNIT_ASSERT_STRING_CONTAINS(line, "COUNT_MIN_SKETCH");
+        }
+    };
+    TWordCountHive elementStat = {"Write"};
+    VerifyProgram(res, elementStat, verifyLine);
+    UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
+}
+
+Y_UNIT_TEST(CreateTableWithStatisticsOnUnknownColumnFails) {
+    ExpectFailWithError(R"sql(
+        USE ydb;
+        CREATE TABLE table (
+            k Uint64 NOT NULL,
+            a Uint64,
+            PRIMARY KEY (k),
+            STATISTICS s ON (missing) WITH (COUNT_MIN_SKETCH)
+        );
+    )sql", "<main>:7:30: Error: Undefined column: missing\n");
+}
+
+Y_UNIT_TEST(CreateTableWithStatisticsWithoutWithIsSupported) {
+    auto res = SqlToYql(R"sql(
+        USE ydb;
+        CREATE TABLE table (
+            k Uint64 NOT NULL,
+            a Uint64,
+            b Utf8,
+            PRIMARY KEY (k),
+            STATISTICS s ON (a, b)
+        );
+    )sql");
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+}
+
+Y_UNIT_TEST(CreateTableWithStatisticsEmptyWithFails) {
+    // Empty WITH () is rejected by the grammar: the statistic type list must be non-empty.
+    ExpectFailWithFuzzyError(R"sql(
+        USE ydb;
+        CREATE TABLE table (
+            k Uint64 NOT NULL,
+            a Uint64,
+            PRIMARY KEY (k),
+            STATISTICS s ON (a) WITH ()
+        );
+    )sql", "<main>:7:38: Error: mismatched input");
+}
+
+Y_UNIT_TEST(AlterTableAddStatisticsIsSupported) {
+    auto res = SqlToYql(R"sql(
+        USE ydb;
+        ALTER TABLE table
+            ADD STATISTICS s1 ON (a, b) WITH (COUNT_MIN_SKETCH),
+            ADD STATISTICS s2 ON (a) WITH (COUNT_MIN_SKETCH);
+    )sql");
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+        if (word == "Write") {
+            UNIT_ASSERT_STRING_CONTAINS(line, "addStatistics");
+        }
+    };
+    TWordCountHive elementStat = {"Write"};
+    VerifyProgram(res, elementStat, verifyLine);
+}
+
+Y_UNIT_TEST(AlterTableAddStatisticsDuplicateFails) {
+    ExpectFailWithError(R"sql(
+        USE ydb;
+        ALTER TABLE table
+            ADD STATISTICS s1 ON (a) WITH (COUNT_MIN_SKETCH),
+            ADD STATISTICS s1 ON (b) WITH (COUNT_MIN_SKETCH);
+    )sql", "<main>:5:28: Error: Statistics s1 must be defined once\n");
+}
+
+Y_UNIT_TEST(AlterTableAddStatisticsWithoutWithIsSupported) {
+    auto res = SqlToYql(R"sql(
+        USE ydb;
+        ALTER TABLE table
+            ADD STATISTICS s1 ON (a, b);
+    )sql");
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+}
+
+Y_UNIT_TEST(AlterTableAddStatisticsEmptyWithFails) {
+    // Empty WITH () is rejected by the grammar: the statistic type list must be non-empty.
+    ExpectFailWithFuzzyError(R"sql(
+        USE ydb;
+        ALTER TABLE table
+            ADD STATISTICS s1 ON (a) WITH ();
+    )sql", "<main>:4:43: Error: mismatched input");
+}
+
+Y_UNIT_TEST(AlterTableDropStatisticsIsSupported) {
+    auto res = SqlToYql("USE ydb; ALTER TABLE table DROP STATISTICS s");
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+        if (word == "Write") {
+            UNIT_ASSERT_STRING_CONTAINS(line, "dropStatistics");
+        }
+    };
+    TWordCountHive elementStat = {"Write"};
+    VerifyProgram(res, elementStat, verifyLine);
+}
+
+Y_UNIT_TEST(StatisticsKeywordIsNotReserved) {
+    // STATISTICS is a non-reserved keyword and must remain usable as an identifier.
+    UNIT_ASSERT(SqlToYql("SELECT 1 AS statistics;").IsOk());
+    UNIT_ASSERT(SqlToYql("USE ydb; SELECT statistics FROM plato.Input;").IsOk());
+}
+
 Y_UNIT_TEST(CreateTableWithLocalBloomFilterAndDropIndexIsCorrect) {
     const auto result = SqlToYql(R"sql(
         USE ydb;
@@ -5062,6 +5245,26 @@ Y_UNIT_TEST(ShowCreateView) {
 
     UNIT_ASSERT_VALUES_EQUAL(elementStat["Read"], 1);
     UNIT_ASSERT_VALUES_EQUAL(elementStat["showCreateView"], 1);
+}
+
+Y_UNIT_TEST(ShowCreateExternalDataSource) {
+    NYql::TAstParseResult res = SqlToYql(R"(
+            USE plato;
+            SHOW CREATE EXTERNAL DATA SOURCE source;
+        )");
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+        if (word == "Read") {
+            UNIT_ASSERT_STRING_CONTAINS(line, "showCreateExternalDataSource");
+        }
+    };
+
+    TWordCountHive elementStat = {{"Read"}, {"showCreateExternalDataSource"}};
+    VerifyProgram(res, elementStat, verifyLine);
+
+    UNIT_ASSERT_VALUES_EQUAL(elementStat["Read"], 1);
+    UNIT_ASSERT_VALUES_EQUAL(elementStat["showCreateExternalDataSource"], 1);
 }
 
 Y_UNIT_TEST(OptionalAliases) {
@@ -8856,7 +9059,7 @@ Y_UNIT_TEST(MultilineComments) {
 #if ANTLR_VER == 3
     UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:4:0: Error: Unexpected token '*' : cannot match to any predicted input...\n\n");
 #else
-    UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:4:0: Error: mismatched input '*' expecting {<EOF>, ';', '(', '$', ALTER, ANALYZE, BACKUP, BATCH, COMBINE, COMMIT, CREATE, DECLARE, DEFINE, DELETE, DISCARD, DO, DROP, EVALUATE, EXPLAIN, EXPORT, FOR, FROM, GRANT, IF, IMPORT, INSERT, PARALLEL, PRAGMA, PROCESS, REDUCE, REPLACE, RESTORE, REVOKE, ROLLBACK, SELECT, SHOW, TRUNCATE, UPDATE, UPSERT, USE, VALUES}\n");
+    UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:4:0: Error: mismatched input '*' expecting {<EOF>, ';', '(', '$', ALTER, ANALYZE, BACKUP, BATCH, COMBINE, COMMIT, CREATE, DECLARE, DEFINE, DELETE, DISCARD, DO, DROP, EVALUATE, EXPLAIN, EXPORT, FOR, FROM, GRANT, IF, IMPORT, INSERT, MATERIALIZE, PARALLEL, PRAGMA, PROCESS, REDUCE, REPLACE, RESTORE, REVOKE, ROLLBACK, SELECT, SHOW, TRUNCATE, UPDATE, UPSERT, USE, VALUES, WITH}\n");
 #endif
     res = SqlToYqlWithAnsiLexer(req);
     UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
@@ -10203,6 +10406,33 @@ Y_UNIT_TEST(CreateTopicConsumer) {
     TestQuery(R"(
             CREATE TOPIC topic1 (CONSUMER cons1, CONSUMER cons2 WITH (important = false, availability_period = Interval('PT9H'))) WITH (supported_codecs = "1,2,3");
         )");
+    TestQuery(R"(
+            CREATE TOPIC topic1 (
+                CONSUMER cons1 WITH (
+                    type = 'shared',
+                    receive_message_wait_time = Interval('PT5S'),
+                    receive_message_delay = Interval('PT7S')
+                )
+            );
+        )");
+}
+
+Y_UNIT_TEST(AlterTopicConsumerReceiveMessageSettings) {
+    TestQuery(R"(
+            ALTER TOPIC topic1
+                ADD CONSUMER cons1 WITH (
+                    type = 'shared',
+                    receive_message_wait_time = Interval('PT5S'),
+                    receive_message_delay = Interval('PT7S')
+                );
+        )");
+    TestQuery(R"(
+            ALTER TOPIC topic1
+                ALTER CONSUMER cons1 SET (
+                    receive_message_wait_time = Interval('PT2S'),
+                    receive_message_delay = Interval('PT3S')
+                );
+        )");
 }
 
 Y_UNIT_TEST(AlterTopicSimple) {
@@ -10248,69 +10478,69 @@ Y_UNIT_TEST(DropTopic) {
 Y_UNIT_TEST(TopicBadRequests) {
     TestQuery(R"(
             CREATE TOPIC topic1();
-        )", false);
+        )", /*expectOk=*/false);
     TestQuery(R"(
             CREATE TOPIC topic1 SET setting1 = value1;
-        )", false);
+        )", /*expectOk=*/false);
     TestQuery(R"(
             ALTER TOPIC topic1 SET setting1 value1;
-        )", false);
+        )", /*expectOk=*/false);
     TestQuery(R"(
             ALTER TOPIC topic1 RESET setting1;
-        )", false);
+        )", /*expectOk=*/false);
 
     TestQuery(R"(
             ALTER TOPIC topic1 DROP CONSUMER consumer4 WITH (k1 = v1);
-        )", false);
+        )", /*expectOk=*/false);
 
     TestQuery(R"(
             CREATE TOPIC topic1 WITH (retention_period = 123);
-        )", false,
+        )", /*expectOk=*/false,
               {"3:58: Error: Literal of Interval type is expected for retention"});
     TestQuery(R"(
             CREATE TOPIC topic1 WITH (metrics_level = "1");
-        )", false,
+        )", /*expectOk=*/false,
               {"3:55: Error: METRICS_LEVEL value should be an integer"});
     TestQuery(R"(
             CREATE TOPIC topic1 (CONSUMER cons1, CONSUMER cons1 WITH (important = false));
-        )", false,
+        )", /*expectOk=*/false,
               {"3:59: Error: Consumer cons1 defined more than once"});
     TestQuery(R"(
             CREATE TOPIC topic1 (CONSUMER cons1 WITH (bad_option = false));
-        )", false,
+        )", /*expectOk=*/false,
               {"3:68: Error: BAD_OPTION: unknown option for consumer"});
     TestQuery(R"(
             CREATE TOPIC topic1 (CONSUMER cons1 WITH (important = false, important = true));
-        )", false,
+        )", /*expectOk=*/false,
               {"3:86: Error: IMPORTANT specified multiple times in CONSUMER statement for single consumer"});
     TestQuery(R"(
             ALTER TOPIC topic1 SET (metrics_level = "1");
-        )", false,
+        )", /*expectOk=*/false,
               {"3:53: Error: METRICS_LEVEL value should be an integer"});
     TestQuery(R"(
             ALTER TOPIC topic1 ADD CONSUMER cons1, ALTER CONSUMER cons1 RESET (important);
-        )", false,
+        )", /*expectOk=*/false,
               {"3:80: Error: IMPORTANT reset is not supported"});
     TestQuery(R"(
             ALTER TOPIC topic1 ADD CONSUMER consumer1,
                 ALTER CONSUMER consumer3 SET (supported_codecs = "RAW", read_from = 1),
                 ALTER CONSUMER consumer3 RESET (supported_codecs);
-        )", false,
+        )", /*expectOk=*/false,
               {"5:49: Error: SUPPORTED_CODECS specified multiple times in ALTER CONSUMER statement for single consumer"});
     TestQuery(R"(
             ALTER TOPIC topic1 ADD CONSUMER consumer1,
                 ALTER CONSUMER consumer3 SET (supported_codecs = "RAW", read_from = 1),
                 ALTER CONSUMER consumer3 SET (read_from = 2);
-        )", false,
+        )", /*expectOk=*/false,
               {"5:59: Error: READ_FROM specified multiple times in CONSUMER statement for single consumer"});
     TestQuery(R"(
             CREATE TOPIC topic1 (CONSUMER cons1 WITH (availability_period = 3600));
-        )", false,
+        )", /*expectOk=*/false,
               {"3:77: Error: Literal of Interval type is expected for AVAILABILITY_PERIOD setting"});
     TestQuery(R"(
             ALTER TOPIC topic1
                 ALTER CONSUMER consumer3 SET (availability_period = false);
-        )", false,
+        )", /*expectOk=*/false,
               {"4:69: Error: Literal of Interval type is expected for AVAILABILITY_PERIOD setting"});
 }
 
@@ -12815,6 +13045,152 @@ Y_UNIT_TEST(AtUnarySubexpr) {
     UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
 }
 
+Y_UNIT_TEST(AtCoalesce) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::NFeature::InlineSubquery.MinLangVer;
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        SELECT (SELECT 1) ?? 2;
+        SELECT 1 ?? (SELECT 2);
+
+        $x = (SELECT * FROM (VALUES (1)) AS x(a)) ?? '';
+
+        DEFINE SUBQUERY $y($x) AS
+            SELECT 1;
+        END DEFINE;
+
+        SELECT * FROM $y($x);
+    )sql", settings);
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+}
+
+Y_UNIT_TEST(AtBitwise) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::NFeature::InlineSubquery.MinLangVer;
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        $a = (SELECT 1) | 1;       SELECT $a;
+        $b = (SELECT 1) & 1;       SELECT $b;
+        $c = (SELECT 1) ^ 1;       SELECT $c;
+        $d = (SELECT 1) << 1;      SELECT $d;
+        $e = (SELECT 1) >> 1;      SELECT $e;
+        $f = 1 | (SELECT 1);       SELECT $f;
+        SELECT (SELECT 1) | 1;
+        SELECT 1 | (SELECT 1);
+    )sql", settings);
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+}
+
+Y_UNIT_TEST(AtComparison) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::NFeature::InlineSubquery.MinLangVer;
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        $a = (SELECT 1) = 1;       SELECT $a;
+        $b = (SELECT 1) <> 1;      SELECT $b;
+        $c = (SELECT 1) == 1;      SELECT $c;
+        $d = (SELECT 1) < 1;       SELECT $d;
+        $e = (SELECT 1) >= 1;      SELECT $e;
+        $f = 1 = (SELECT 1);       SELECT $f;
+        SELECT (SELECT 1) = 1;
+        SELECT 1 = (SELECT 1);
+    )sql", settings);
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+}
+
+Y_UNIT_TEST(AtDistinct) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::NFeature::InlineSubquery.MinLangVer;
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        $a = (SELECT 1) IS DISTINCT FROM 1;         SELECT $a;
+        $b = (SELECT 1) IS NOT DISTINCT FROM 1;     SELECT $b;
+        $c = 1 IS DISTINCT FROM (SELECT 1);         SELECT $c;
+        SELECT (SELECT 1) IS DISTINCT FROM 1;
+    )sql", settings);
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+}
+
+Y_UNIT_TEST(AtIn) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::NFeature::InlineSubquery.MinLangVer;
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        $a = (SELECT 1) IN (1, 2);     SELECT $a;
+        $b = (SELECT 1) NOT IN (1, 2); SELECT $b;
+        SELECT (SELECT 1) IN (1, 2);
+    )sql", settings);
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+}
+
+Y_UNIT_TEST(AtIsNull) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::NFeature::InlineSubquery.MinLangVer;
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        $a = (SELECT 1) IS NULL;       SELECT $a;
+        $b = (SELECT 1) IS NOT NULL;   SELECT $b;
+        SELECT (SELECT 1) IS NULL;
+    )sql", settings);
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+}
+
+Y_UNIT_TEST(AtBetween) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::NFeature::InlineSubquery.MinLangVer;
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        $a = (SELECT 1) BETWEEN 0 AND 2;                 SELECT $a;
+        $b = 1 BETWEEN (SELECT 0) AND (SELECT 2);        SELECT $b;
+        $c = (SELECT 1) NOT BETWEEN 0 AND 2;             SELECT $c;
+        $d = (SELECT 1) BETWEEN SYMMETRIC 2 AND 0;       SELECT $d;
+        SELECT (SELECT 1) BETWEEN 0 AND 2;
+    )sql", settings);
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+}
+
+Y_UNIT_TEST(AtLike) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::NFeature::InlineSubquery.MinLangVer;
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        $a = (SELECT 'a') LIKE 'a';                  SELECT $a;
+        $b = 'a' LIKE (SELECT 'a');                  SELECT $b;
+        $c = (SELECT 'a') REGEXP 'a';                SELECT $c;
+        $d = 'a' REGEXP (SELECT 'a');                SELECT $d;
+        SELECT (SELECT 'a') LIKE 'a';
+    )sql", settings);
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+}
+
+Y_UNIT_TEST(AtCase) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::NFeature::InlineSubquery.MinLangVer;
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        $a = CASE (SELECT 1) WHEN 1 THEN 2 ELSE 3 END;              SELECT $a;
+        $b = CASE WHEN (SELECT 1) = 1 THEN (SELECT 2) ELSE (SELECT 3) END;  SELECT $b;
+        SELECT CASE (SELECT 1) WHEN 1 THEN 2 ELSE 3 END;
+    )sql", settings);
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+}
+
+Y_UNIT_TEST(AtNestedOperators) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::NFeature::InlineSubquery.MinLangVer;
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        $a = ((SELECT 1) | 2) = 3;                   SELECT $a;
+        $b = (SELECT 1) + (SELECT 2) * (SELECT 3);   SELECT $b;
+        $c = NOT ((SELECT 1) = 1);                   SELECT $c;
+        $d = (SELECT 1) ?? (SELECT 2) ?? 3;          SELECT $d;
+        $e = (SELECT 1) = 1 AND (SELECT 2) = 2;      SELECT $e;
+        $f = -(SELECT 1) < ~(SELECT 2);              SELECT $f;
+        SELECT (SELECT 1) BETWEEN (SELECT 0) AND (SELECT 2);
+    )sql", settings);
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+}
+
 Y_UNIT_TEST(UnionParenthesis) {
     NSQLTranslation::TTranslationSettings settings;
     settings.LangVer = NYql::NFeature::InlineSubquery.MinLangVer;
@@ -13388,6 +13764,69 @@ Y_UNIT_TEST(FromQuotedTableWithImmediateCluster) {
     UNIT_ASSERT_VALUES_EQUAL(stat["YqlSelect"], 1);
     UNIT_ASSERT_VALUES_EQUAL(stat["Read!"], 1);
     UNIT_ASSERT_STRING_CONTAINS(program, R"('((Right! yql_read0) '"/Root/Yql/Select" '()))");
+}
+
+Y_UNIT_TEST(FromQuotedTableWithImmediateClusterWithTablePrefixPath) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::NFeature::YqlSelect.MinLangVer;
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        USE plato;
+        PRAGMA YqlSelect = 'force';
+        PRAGMA TablePathPrefix = '/Root/Yql';
+        SELECT a, b FROM Select;
+    )sql", settings);
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TWordCountHive stat = {"YqlSelect", "Read!"};
+
+    TString program = VerifyProgram(res, stat);
+    UNIT_ASSERT_VALUES_EQUAL(stat["YqlSelect"], 1);
+    UNIT_ASSERT_VALUES_EQUAL(stat["Read!"], 1);
+    UNIT_ASSERT_STRING_CONTAINS(program, R"((Key '('table (String '"/Root/Yql/Select"))) (Void) '()))");
+}
+
+Y_UNIT_TEST(FromNamedNodeWithQuotedTableWithImmediateClusterWithTablePrefixPath) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::NFeature::YqlSelect.MinLangVer;
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        USE plato;
+        PRAGMA YqlSelect = 'force';
+        PRAGMA TablePathPrefix = '/Root/Yql';
+        $x = SELECT a FROM Select;
+        SELECT $x;
+    )sql", settings);
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TWordCountHive stat = {"YqlSelect", "Read!"};
+    TString program = VerifyProgram(res, stat);
+    UNIT_ASSERT_VALUES_EQUAL(stat["YqlSelect"], 3);
+    UNIT_ASSERT_VALUES_EQUAL(stat["Read!"], 1);
+    UNIT_ASSERT_STRING_CONTAINS(program, R"((Key '('table (String '"/Root/Yql/Select"))) (Void) '()))");
+}
+
+// The test checks that the prefix is not added for temporary tables.
+Y_UNIT_TEST(FromTmpTableWithImmediateClusterWithTablePrefixPath) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::NFeature::YqlSelect.MinLangVer;
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        USE plato;
+        PRAGMA YqlSelect = 'force';
+        PRAGMA TablePathPrefix = '/Root';
+        INSERT INTO @tmp (a) VALUES (1);
+        COMMIT;
+        SELECT a FROM @tmp;
+    )sql", settings);
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TWordCountHive stat = {"YqlSelect", "Read!", "TempTable"};
+    TString program = VerifyProgram(res, stat);
+    UNIT_ASSERT_VALUES_EQUAL(stat["YqlSelect"], 1);
+    UNIT_ASSERT_VALUES_EQUAL(stat["Read!"], 1);
+    UNIT_ASSERT_VALUES_EQUAL(stat["TempTable"], 2);
+    UNIT_ASSERT_STRING_CONTAINS(program, R"(TempTable '"tmp")");
 }
 
 Y_UNIT_TEST(FromTmpTableWithImmediateCluster) {
@@ -14996,6 +15435,298 @@ Y_UNIT_TEST(PragmaUnsupportedAuto) {
 }
 
 } // Y_UNIT_TEST_SUITE(YqlSelect)
+
+Y_UNIT_TEST_SUITE(YqlSelectWithCTE) {
+
+void Parse(TString query) {
+    NYql::TAstParseResult r = SqlToYql(query);
+    TString e = Err2Str(r);
+    UNIT_ASSERT_C(!e.contains("Fatal"), e);
+    UNIT_ASSERT_C(!e.contains("ambiguity"), e);
+    UNIT_ASSERT_C(!e.contains("extraneous input"), e);
+    UNIT_ASSERT_C(!e.contains("mismatched input"), e);
+}
+
+Y_UNIT_TEST(NoSyntaxAmbiguity) {
+    Parse(R"sql(
+        WITH x AS (SELECT 1) SELECT * FROM x;
+    )sql");
+    Parse(R"sql(
+        WITH x AS (VALUES (1)) SELECT * FROM x;
+    )sql");
+    Parse(R"sql(
+        WITH x AS (SELECT 1), y AS (SELECT 1) SELECT * FROM x, y;
+    )sql");
+    Parse(R"sql(
+        WITH x(a) AS (SELECT 1) SELECT * FROM x, y;
+    )sql");
+    Parse(R"sql(
+        WITH x(a,b) AS (SELECT 1) SELECT * FROM x, y;
+    )sql");
+    Parse(R"sql(
+        WITH
+            RECURSIVE a(n) AS (
+                SELECT 1
+                UNION ALL
+                SELECT n + 1 FROM a
+                WHERE n < 5
+            ),
+            RECURSIVE b(n) AS (
+                SELECT 1
+                UNION ALL
+                SELECT n + 1 FROM b
+                WHERE n < 5
+            )
+        SELECT * FROM a UNION SELECT * FROM b;
+    )sql");
+    Parse(R"sql(
+        WITH x AS (SELECT 1), SELECT * FROM x;
+        WITH x AS (SELECT 1), y AS (SELECT 1), SELECT * FROM x, y;
+    )sql");
+    Parse(R"sql(
+        $x =
+            WITH RECURSIVE a(n) AS (
+                SELECT 1
+                UNION ALL
+                SELECT n + 1 FROM a
+                WHERE n < 5
+            )
+            SELECT * FROM a UNION SELECT * FROM b
+        ;
+    )sql");
+    Parse(R"sql(
+        $x = (
+            WITH RECURSIVE a(n) AS (
+                SELECT 1
+                UNION ALL
+                SELECT n + 1 FROM a
+                WHERE n < 5
+            )
+            SELECT * FROM a UNION SELECT * FROM b
+        );
+    )sql");
+    Parse(R"sql(
+        SELECT (
+            WITH RECURSIVE a(n) AS (
+                SELECT 1
+                UNION ALL
+                SELECT n + 1 FROM a
+                WHERE n < 5
+            )
+            SELECT * FROM a UNION SELECT * FROM b
+        );
+    )sql");
+    Parse(R"sql(
+        INSERT INTO x (b)
+        WITH RECURSIVE a(n) AS (
+            SELECT 1
+            UNION ALL
+            SELECT n + 1 FROM a
+            WHERE n < 5
+        )
+        SELECT * FROM a;
+    )sql");
+}
+
+Y_UNIT_TEST(LinearVisibilityOK) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::NFeature::YqlSelect.MinLangVer;
+    settings.YqlSelect = NSQLTranslation::EYqlSelect::Force;
+
+    auto res = SqlToYqlWithSettings(R"sql(
+        WITH
+            x AS (SELECT 0 + 1 AS a       ),
+            y AS (SELECT a + 1 AS a FROM x),
+        SELECT * FROM y;
+    )sql", settings);
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TWordCountHive stat = {"YqlSelect"};
+    VerifyProgram(res, stat);
+    UNIT_ASSERT_VALUES_EQUAL(stat["YqlSelect"], 3);
+}
+
+Y_UNIT_TEST(LinearVisibilityErr) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::NFeature::YqlSelect.MinLangVer;
+    settings.YqlSelect = NSQLTranslation::EYqlSelect::Force;
+
+    auto res = SqlToYqlWithSettings(R"sql(
+        WITH
+            y AS (SELECT a + 1 AS a FROM x),
+            x AS (SELECT 0 + 1 AS a       )
+        SELECT * FROM y;
+    )sql", settings);
+    UNIT_ASSERT(!res.IsOk());
+    UNIT_ASSERT_STRING_CONTAINS(Err2Str(res), ":3:42: Error: No cluster name given");
+    UNIT_ASSERT_STRING_CONTAINS(Err2Str(res), "If 'x' is meant to be a CTE");
+}
+
+Y_UNIT_TEST(UnusedCTETrivial) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::NFeature::YqlSelect.MinLangVer;
+    settings.YqlSelect = NSQLTranslation::EYqlSelect::Force;
+
+    auto res = SqlToYqlWithSettings(R"sql(
+        WITH x AS (SELECT 1) SELECT 1;
+    )sql", settings);
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+    UNIT_ASSERT_STRING_CONTAINS(Err2Str(res), ":2:14: Warning: CTE Symbol x is not used");
+}
+
+Y_UNIT_TEST(UnusedCTEUnwinding) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::NFeature::YqlSelect.MinLangVer;
+    settings.YqlSelect = NSQLTranslation::EYqlSelect::Force;
+
+    auto res = SqlToYqlWithSettings(R"sql(
+        WITH x AS (
+            WITH y AS (
+                WITH z AS (
+                    SELECT 1)
+                SELECT 1)
+            SELECT 1)
+        SELECT 1;
+    )sql", settings);
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+    UNIT_ASSERT_STRING_CONTAINS(Err2Str(res), ":2:14: Warning: CTE Symbol x is not used");
+    UNIT_ASSERT_STRING_CONTAINS(Err2Str(res), ":3:18: Warning: CTE Symbol y is not used");
+    UNIT_ASSERT_STRING_CONTAINS(Err2Str(res), ":4:22: Warning: CTE Symbol z is not used");
+}
+
+Y_UNIT_TEST(ScopeErr) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::NFeature::YqlSelect.MinLangVer;
+    settings.YqlSelect = NSQLTranslation::EYqlSelect::Force;
+
+    auto res = SqlToYqlWithSettings(R"sql(
+        WITH
+            y AS (
+                WITH x AS (
+                    SELECT 0 + 1 AS a
+                )
+                SELECT a + 1 AS a FROM x
+            ),
+            z AS (
+                SELECT a + 2 AS a FROM x
+            )
+        SELECT a + 3 AS a FROM z;
+    )sql", settings);
+    UNIT_ASSERT(!res.IsOk());
+    UNIT_ASSERT_STRING_CONTAINS(Err2Str(res), ":10:40: Error: No cluster name given");
+    UNIT_ASSERT_STRING_CONTAINS(Err2Str(res), "If 'x' is meant to be a CTE");
+}
+
+Y_UNIT_TEST(OnlySelectAllowed) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::NFeature::YqlSelect.MinLangVer;
+    settings.YqlSelect = NSQLTranslation::EYqlSelect::Force;
+
+    auto res = SqlToYqlWithSettings(R"sql(
+        SELECT (WITH a AS (SELECT 1) 123);
+    )sql", settings);
+    UNIT_ASSERT(!res.IsOk());
+    UNIT_ASSERT_STRING_CONTAINS(Err2Str(res), ":2:17: Error: A WITH clause can only be used before a SELECT statement");
+}
+
+Y_UNIT_TEST(Redefinition) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::NFeature::YqlSelect.MinLangVer;
+    settings.YqlSelect = NSQLTranslation::EYqlSelect::Force;
+
+    auto res = SqlToYqlWithSettings(R"sql(
+        WITH
+            x AS (SELECT 0 + 1 AS a       ),
+            x AS (SELECT a + 1 AS a FROM x),
+            x AS (SELECT a + 1 AS a FROM x),
+        SELECT * FROM x;
+    )sql", settings);
+    UNIT_ASSERT(!res.IsOk());
+    UNIT_ASSERT_STRING_CONTAINS(Err2Str(res), ":4:13: Error: Bad CTE: Redefinition is forbidden: x");
+}
+
+Y_UNIT_TEST(RecursiveReferenceFromRecursive) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::NFeature::YqlSelect.MinLangVer;
+    settings.YqlSelect = NSQLTranslation::EYqlSelect::Force;
+
+    auto res = SqlToYqlWithSettings(R"sql(
+        WITH RECURSIVE a AS (
+            WITH RECURSIVE b AS (
+                SELECT 1 AS n
+                UNION ALL
+                SELECT n + 1 AS n FROM a
+                WHERE n < 5
+            )
+            SELECT * FROM b
+        )
+        SELECT * FROM a;
+    )sql", settings);
+    UNIT_ASSERT(!res.IsOk());
+    UNIT_ASSERT_STRING_CONTAINS(
+        Err2Str(res),
+        ":6:40: Error: Can't reference outer RECURSIVE CTE 'a'. "
+        "Recursion only with a current CTE is allowed, which is 'b' here");
+}
+
+Y_UNIT_TEST(RecursiveReferenceFromSubquery) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::NFeature::YqlSelect.MinLangVer;
+    settings.YqlSelect = NSQLTranslation::EYqlSelect::Force;
+
+    const auto test = [&](TString query, TString position, TString target, TString current) {
+        auto res = SqlToYqlWithSettings(query, settings);
+        UNIT_ASSERT(!res.IsOk());
+        UNIT_ASSERT_STRING_CONTAINS(
+            Err2Str(res),
+            TStringBuilder()
+                << position << ": "
+                << "Error: Can't reference outer RECURSIVE CTE '" << target << "'. "
+                << "Recursion only with a current CTE is allowed, which is " << current << " here");
+    };
+
+    test(R"sql(
+        WITH RECURSIVE a AS (
+            SELECT 1 AS n
+            UNION ALL
+            SELECT n + 1 AS n FROM (SELECT * FROM a)
+            WHERE n < 5
+        )
+        SELECT * FROM a;
+    )sql", ":5:51", "a", "undefined");
+
+    test(R"sql(
+        WITH RECURSIVE a AS (
+            SELECT 1 AS n
+            UNION ALL
+            SELECT (SELECT n + 1 FROM a) AS n FROM a
+            WHERE n < 5
+        )
+        SELECT * FROM a;
+    )sql", ":5:39", "a", "undefined");
+
+    test(R"sql(
+        WITH RECURSIVE a AS (
+            SELECT 1 AS n
+            UNION ALL
+            SELECT EXISTS (SELECT n + 1 FROM a) AS n FROM a
+            WHERE n < 5
+        )
+        SELECT * FROM a;
+    )sql", ":5:46", "a", "undefined");
+
+    test(R"sql(
+        WITH RECURSIVE a AS (
+            SELECT 1 AS n
+            UNION ALL
+            SELECT 1 IN (SELECT n + 1 FROM a) AS n FROM a
+            WHERE n < 5
+        )
+        SELECT * FROM a;
+    )sql", ":5:44", "a", "undefined");
+}
+
+} // Y_UNIT_TEST_SUITE(YqlSelectWithCTE)
 
 Y_UNIT_TEST_SUITE(ColumnDefault) {
 

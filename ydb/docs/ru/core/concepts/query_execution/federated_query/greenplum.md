@@ -1,5 +1,7 @@
 # Работа с базами данных Greenplum
 
+{% include [!](_includes/experimental_connectors_warning.md) %}
+
 В этом разделе описана основная информация про работу с внешней базой данных [Greenplum](https://greenplum.org). Поскольку Greenplum основан на [PostgreSQL](postgresql.md), интеграции с ними работают похожим образом, а некоторые ссылки ниже могут вести на документацию PostgreSQL.
 
 Для работы с внешней базой данных Greenplum необходимо выполнить следующие шаги:

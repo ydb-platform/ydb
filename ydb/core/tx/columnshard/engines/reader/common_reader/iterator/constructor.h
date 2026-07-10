@@ -2,7 +2,7 @@
 #include "fetching.h"
 #include "source.h"
 
-#include <ydb/core/formats/arrow/arrow_filter.h>
+#include <ydb/core/formats/arrow/filter/filter.h>
 #include <ydb/core/formats/arrow/program/collection.h>
 #include <ydb/core/tx/columnshard/blob.h>
 #include <ydb/core/tx/columnshard/blobs_reader/task.h>
@@ -99,9 +99,12 @@ private:
     virtual void DoOnDataReady(const std::shared_ptr<NResourceBroker::NSubscribe::TResourcesGuard>& resourcesGuard) override;
 
     virtual bool DoOnError(const TString& storageId, const TBlobRange& range, const IBlobsReadingAction::TErrorStatus& status) override {
-        AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_SCAN)("error_on_blob_reading", range.ToString())(
-            "scan_actor_id", Source->GetContext()->GetCommonContext()->GetScanActorId())("status", status.GetErrorMessage())(
-            "status_code", status.GetStatus())("storage_id", storageId);
+        YDB_LOG_ERROR_COMP(NKikimrServices::TX_COLUMNSHARD_SCAN, "",
+            {"errorOnBlobReading", range},
+            {"scanActorId", Source->GetContext()->GetCommonContext()->GetScanActorId()},
+            {"status", status.GetErrorMessage()},
+            {"statusCode", status.GetStatus()},
+            {"storageId", storageId});
         NActors::TActorContext::AsActorContext().Send(Source->GetContext()->GetCommonContext()->GetScanActorId(),
             std::make_unique<NColumnShard::TEvPrivate::TEvTaskProcessedResult>(
                 TConclusionStatus::Fail(

@@ -5,12 +5,14 @@ import _common
 import ymake
 
 
-def onmacros_with_error(unit, *args):
+@ymake.macro
+def MACROS_WITH_ERROR(unit: ymake.Unit, *args: tuple[str, ...]):
     sys.stderr.write('This macros will fail\n')
     raise Exception('Expected fail in MACROS_WITH_ERROR')
 
 
-def onrestrict_path(unit, *args):
+@ymake.macro
+def RESTRICT_PATH(unit: ymake.Unit, *args: tuple[str, ...]):
     if args:
         if 'MSG' in args:
             pos = args.index('MSG')
@@ -25,14 +27,16 @@ def onrestrict_path(unit, *args):
             ymake.report_configure_error(error_msg)
 
 
-def onassert(unit, *args):
+@ymake.macro
+def ASSERT(unit: ymake.Unit, *args: tuple[str, ...]):
     val = unit.get(args[0])
     if val and val.lower() == "no":
         msg = ' '.join(args[1:])
         ymake.report_configure_error(msg)
 
 
-def onvalidate_in_dirs(unit, *args):
+@ymake.macro
+def VALIDATE_IN_DIRS(unit: ymake.Unit, *args: tuple[str, ...]):
     files_var = args[0]
     pattern = args[1]
     no_srcdir = args[2] == '--'
@@ -60,7 +64,8 @@ def onvalidate_in_dirs(unit, *args):
                 unit.set([files_var, ""])
 
 
-def on_assert_no_yamake(unit, *args):
+@ymake.macro
+def _ASSERT_NO_YAMAKE(unit: ymake.Unit, *args: tuple[str, ...]):
     """
     @usage: _ASSERT_NO_YAMAKE(<files> [MSG <message>])
 

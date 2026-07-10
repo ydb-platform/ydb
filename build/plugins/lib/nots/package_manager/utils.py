@@ -78,16 +78,20 @@ def build_nots_path(build_root: str) -> str:
     return build_nots
 
 
-def build_nm_store_path(build_root: str, moddir: str) -> str:
-    return os.path.join(build_nots_path(build_root), "nm_store", moddir)
-
-
+# TODO: удалить
 def build_vs_store_path(build_root: str, moddir: str) -> str:
     return os.path.join(build_nots_path(build_root), "vm_store", moddir)
 
 
-def build_traces_store_path(build_root: str, moddir: str) -> str:
-    return os.path.join(build_nots_path(build_root), "traces", moddir)
+def arc_root_to_folder_name(arc_root: str) -> str:
+    return arc_root.replace(os.sep, "-").replace(".", "-")
+
+
+def build_traces_store_path(build_root: str, moddir: str, arc_root: str = None) -> str:
+    base = build_nots_path(build_root)
+    if arc_root:
+        return os.path.join(base, "traces", arc_root_to_folder_name(arc_root), moddir)
+    return os.path.join(base, "traces", moddir)
 
 
 def build_pnpm_store_path(build_root: str) -> str:

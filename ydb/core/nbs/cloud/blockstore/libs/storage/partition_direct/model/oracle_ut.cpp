@@ -39,11 +39,23 @@ struct THostStateControllerMock: public IHostStateController
 
         return HostPBufferUsedSize;
     }
+
+    void QueryAddHost() override
+    {}
 };
+
+TStorageConfigPtr MakeStorageConfig()
+{
+    NProto::TStorageServiceConfig rawConfig;
+    rawConfig.MutableOracleConfig()->SetTimePredictionHistorySize(10);
+    rawConfig.MutableOracleConfig()->SetTimePredictionNthFromEnd(1);
+    return std::make_shared<TStorageConfig>(rawConfig);
+}
 
 }   // namespace
 
 ////////////////////////////////////////////////////////////////////////////////
+
 Y_UNIT_TEST_SUITE(TOracle)
 {
     Y_UNIT_TEST(SelectBestPBufferHostShouldPickHostWithLowestInflight)
@@ -51,7 +63,7 @@ Y_UNIT_TEST_SUITE(TOracle)
         NProto::TStorageServiceConfig rawConfig;
         auto storageConfig = std::make_shared<TStorageConfig>(rawConfig);
 
-        const std::vector<THostIndex> hostIndexes = {0, 1, 2, 3, 4};
+        const auto hosts = THostMask::MakeAll(5);
 
         TOracle oracle(storageConfig, nullptr);
 
@@ -68,7 +80,7 @@ Y_UNIT_TEST_SUITE(TOracle)
         // the minimum).
         for (size_t iter = 0; iter < 100; ++iter) {
             const THostIndex selected = oracle.SelectBestPBufferHost(
-                hostIndexes,
+                hosts,
                 EOperation::WriteToManyPBuffers);
 
             UNIT_ASSERT_VALUES_EQUAL(2u, selected);
@@ -80,7 +92,7 @@ Y_UNIT_TEST_SUITE(TOracle)
         NProto::TStorageServiceConfig rawConfig;
         auto storageConfig = std::make_shared<TStorageConfig>(rawConfig);
 
-        const std::vector<THostIndex> hostIndexes = {3};
+        const auto hosts = THostMask::MakeOne(3);
 
         TOracle oracle(storageConfig, nullptr);
 
@@ -97,7 +109,7 @@ Y_UNIT_TEST_SUITE(TOracle)
         // the minimum).
         for (size_t iter = 0; iter < 100; ++iter) {
             const THostIndex selected = oracle.SelectBestPBufferHost(
-                hostIndexes,
+                hosts,
                 EOperation::WriteToManyPBuffers);
 
             UNIT_ASSERT_VALUES_EQUAL(3u, selected);
@@ -111,7 +123,9 @@ Y_UNIT_TEST_SUITE(TOracle)
 
         // Even if some non-listed host has a lower inflight count, the
         // selection must be limited to the supplied hostIndexes.
-        const std::vector<THostIndex> hostIndexes = {0, 3};
+        THostMask hosts;
+        hosts.Set(0);
+        hosts.Set(3);
 
         TOracle oracle(storageConfig, nullptr);
 
@@ -127,7 +141,7 @@ Y_UNIT_TEST_SUITE(TOracle)
         // the minimum).
         for (size_t iter = 0; iter < 100; ++iter) {
             const THostIndex selected = oracle.SelectBestPBufferHost(
-                hostIndexes,
+                hosts,
                 EOperation::WriteToManyPBuffers);
 
             UNIT_ASSERT_VALUES_EQUAL(3u, selected);
@@ -143,7 +157,10 @@ Y_UNIT_TEST_SUITE(TOracle)
         // sampling, every tied host must have a roughly equal probability of
         // being selected. We verify this by sampling a large number of times
         // and checking that every candidate appears at least once.
-        const std::vector<THostIndex> hostIndexes = {1, 2, 4};
+        THostMask hosts;
+        hosts.Set(1);
+        hosts.Set(2);
+        hosts.Set(4);
 
         TOracle oracle(storageConfig, nullptr);
 
@@ -151,7 +168,7 @@ Y_UNIT_TEST_SUITE(TOracle)
         const size_t iterations = 3000;
         for (size_t iter = 0; iter < iterations; ++iter) {
             const THostIndex selected = oracle.SelectBestPBufferHost(
-                hostIndexes,
+                hosts,
                 EOperation::WriteToManyPBuffers);
             ++counts[selected];
         }
@@ -162,7 +179,7 @@ Y_UNIT_TEST_SUITE(TOracle)
         // Expected ~1/3 of iterations each, allow generous tolerance.
         const size_t expected = iterations / 3;
         const size_t tolerance = expected / 2;   // 50% tolerance
-        for (auto hostIndex: hostIndexes) {
+        for (auto hostIndex: hosts) {
             const size_t count = counts[hostIndex];
             UNIT_ASSERT_C(
                 count + tolerance >= expected && count <= expected + tolerance,
@@ -179,7 +196,7 @@ Y_UNIT_TEST_SUITE(TOracle)
 
         // Hosts with inflight equal to the (non-best) tie value must never be
         // picked - only ties at the global minimum are randomized.
-        const std::vector<THostIndex> hostIndexes = {0, 1, 2, 3, 4};
+        const auto hosts = THostMask::MakeAll(5);
 
         TOracle oracle(storageConfig, nullptr);
 
@@ -191,7 +208,7 @@ Y_UNIT_TEST_SUITE(TOracle)
 
         for (size_t iter = 0; iter < 200; ++iter) {
             const THostIndex selected =
-                oracle.SelectBestPBufferHost(hostIndexes, EOperation::Flush);
+                oracle.SelectBestPBufferHost(hosts, EOperation::Flush);
 
             UNIT_ASSERT_VALUES_EQUAL(2u, selected);
         }
@@ -399,6 +416,248 @@ Y_UNIT_TEST_SUITE(TOracle)
         UNIT_ASSERT_VALUES_EQUAL(
             EHostState::Online,
             hostStateController.States[0]);
+    }
+
+    Y_UNIT_TEST(GetReadHedgingDelayReturnsDefaultWhenNoHistory)
+    {
+        NProto::TStorageServiceConfig rawConfig;
+        auto storageConfig = std::make_shared<TStorageConfig>(rawConfig);
+
+        TOracle oracle(storageConfig, nullptr);
+
+        // No read requests recorded -> predictor returns zero -> fallback to
+        // default. Default ReadHedgingDelay is 1ms when not set in config.
+        const auto defaultDelay = storageConfig->GetReadHedgingDelay();
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            defaultDelay,
+            oracle.GetReadHedgingDelay(0, EDataLocation::DDisk));
+        UNIT_ASSERT_VALUES_EQUAL(
+            defaultDelay,
+            oracle.GetReadHedgingDelay(0, EDataLocation::PBuffer));
+    }
+
+    Y_UNIT_TEST(GetReadHedgingDelayDDiskAndPBufferAreIndependent)
+    {
+        auto storageConfig = MakeStorageConfig();
+
+        TOracle oracle(storageConfig, nullptr);
+        auto now = TInstant::Now();
+
+        // Feed DDisk reads with 100ms, 200ms on host 0.
+        for (auto duration: {100, 200}) {
+            oracle.OnRequestStarted(0, EOperation::ReadFromDDisk, now);
+            oracle.OnRequestSucceeded(
+                0,
+                EOperation::ReadFromDDisk,
+                now,
+                TDuration::MilliSeconds(duration));
+        }
+
+        // Feed PBuffer reads with 300ms, 400ms on host 0.
+        for (auto duration: {300, 400}) {
+            oracle.OnRequestStarted(0, EOperation::ReadFromPBuffer, now);
+            oracle.OnRequestSucceeded(
+                0,
+                EOperation::ReadFromPBuffer,
+                now,
+                TDuration::MilliSeconds(duration));
+        }
+
+        // Feed PBuffer reads with 400ms, 500ms on host 1.
+        for (auto duration: {400, 500}) {
+            oracle.OnRequestStarted(1, EOperation::ReadFromPBuffer, now);
+            oracle.OnRequestSucceeded(
+                1,
+                EOperation::ReadFromPBuffer,
+                now,
+                TDuration::MilliSeconds(duration));
+        }
+
+        // H0 DDisk predictor: [100, 200] -> predict 100.
+        UNIT_ASSERT_VALUES_EQUAL(
+            TDuration::MilliSeconds(100),
+            oracle.GetReadHedgingDelay(0, EDataLocation::DDisk));
+
+        // H0: PBuffer predictor: [300, 400] -> predict 300.
+        UNIT_ASSERT_VALUES_EQUAL(
+            TDuration::MilliSeconds(300),
+            oracle.GetReadHedgingDelay(0, EDataLocation::PBuffer));
+
+        // H1: PBuffer predictor: [400, 500] -> predict 400.
+        UNIT_ASSERT_VALUES_EQUAL(
+            TDuration::MilliSeconds(400),
+            oracle.GetReadHedgingDelay(1, EDataLocation::PBuffer));
+    }
+
+    Y_UNIT_TEST(GetWriteHedgingDelayReturnsDefaultWhenNoHistory)
+    {
+        auto storageConfig = MakeStorageConfig();
+
+        TOracle oracle(storageConfig, nullptr);
+
+        // No write requests recorded -> predictor returns zero -> fallback to
+        // default. Default WriteHedgingDelay is 1ms when not set in config.
+        const auto defaultDelay = storageConfig->GetWriteHedgingDelay();
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            defaultDelay,
+            oracle.GetWriteHedgingDelay(THostMask::MakeOne(0), false));
+        UNIT_ASSERT_VALUES_EQUAL(
+            defaultDelay,
+            oracle.GetWriteHedgingDelay(THostMask::MakeOne(0), true));
+    }
+
+    Y_UNIT_TEST(GetWriteHedgingDelayDirectAndIndirectAreIndependent)
+    {
+        auto storageConfig = MakeStorageConfig();
+
+        TOracle oracle(storageConfig, nullptr);
+        auto now = TInstant::Now();
+
+        // WriteToPBuffer (direct): [100, 200] -> predict 100ms.
+        for (auto duration: {100, 200}) {
+            oracle.OnRequestStarted(0, EOperation::WriteToPBuffer, now);
+            oracle.OnRequestSucceeded(
+                0,
+                EOperation::WriteToPBuffer,
+                now,
+                TDuration::MilliSeconds(duration));
+        }
+
+        // WriteToManyPBuffers (indirect): [300, 400] -> predict 300ms.
+        for (auto duration: {300, 400}) {
+            oracle.OnRequestStarted(0, EOperation::WriteToManyPBuffers, now);
+            oracle.OnRequestSucceeded(
+                0,
+                EOperation::WriteToManyPBuffers,
+                now,
+                TDuration::MilliSeconds(duration));
+        }
+
+        // The direct mode reads only the WriteToPBuffer predictor.
+        UNIT_ASSERT_VALUES_EQUAL(
+            TDuration::MilliSeconds(100),
+            oracle.GetWriteHedgingDelay(THostMask::MakeOne(0), false));
+        // The indirect mode reads only the WriteToManyPBuffers predictor.
+        UNIT_ASSERT_VALUES_EQUAL(
+            TDuration::MilliSeconds(300),
+            oracle.GetWriteHedgingDelay(THostMask::MakeOne(0), true));
+    }
+
+    Y_UNIT_TEST(GetFlushRequestCooldownReturnsZeroWithoutErrors)
+    {
+        NProto::TStorageServiceConfig rawConfig;
+        auto storageConfig = std::make_shared<TStorageConfig>(rawConfig);
+
+        TOracle oracle(storageConfig, nullptr);
+
+        // No errors recorded on any host -> no cooldown.
+        UNIT_ASSERT_VALUES_EQUAL(
+            TDuration::Zero(),
+            oracle.GetFlushRequestCooldown(THostMask::MakeAll(5)));
+    }
+
+    Y_UNIT_TEST(GetFlushRequestCooldownScalesWithConsecutiveErrors)
+    {
+        NProto::TStorageServiceConfig rawConfig;
+        auto storageConfig = std::make_shared<TStorageConfig>(rawConfig);
+
+        TOracle oracle(storageConfig, nullptr);
+        const auto now = TInstant::Now();
+
+        // Each consecutive error adds a 10ms penalty on host 0.
+        for (size_t errorCount = 1; errorCount <= 3; ++errorCount) {
+            oracle.OnRequestStarted(0, EOperation::WriteToPBuffer, now);
+            oracle.OnRequestFailed(0, EOperation::WriteToPBuffer, now);
+
+            UNIT_ASSERT_VALUES_EQUAL(
+                TDuration::MilliSeconds(10 * errorCount),
+                oracle.GetFlushRequestCooldown(THostMask::MakeOne(0)));
+        }
+
+        // A single success resets the consecutive error count back to zero.
+        oracle.OnRequestStarted(0, EOperation::WriteToPBuffer, now);
+        oracle.OnRequestSucceeded(
+            0,
+            EOperation::WriteToPBuffer,
+            now,
+            TDuration());
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            TDuration::Zero(),
+            oracle.GetFlushRequestCooldown(THostMask::MakeOne(0)));
+    }
+
+    Y_UNIT_TEST(GetFlushRequestCooldownReturnsMaxAcrossHosts)
+    {
+        NProto::TStorageServiceConfig rawConfig;
+        auto storageConfig = std::make_shared<TStorageConfig>(rawConfig);
+
+        TOracle oracle(storageConfig, nullptr);
+        const auto now = TInstant::Now();
+
+        // Host 1: two consecutive errors -> 20ms.
+        for (size_t i = 0; i < 2; ++i) {
+            oracle.OnRequestStarted(1, EOperation::WriteToPBuffer, now);
+            oracle.OnRequestFailed(1, EOperation::WriteToPBuffer, now);
+        }
+
+        // Host 3: four consecutive errors -> 40ms.
+        for (size_t i = 0; i < 4; ++i) {
+            oracle.OnRequestStarted(3, EOperation::WriteToPBuffer, now);
+            oracle.OnRequestFailed(3, EOperation::WriteToPBuffer, now);
+        }
+
+        // A mask covering both hosts must return the maximum cooldown.
+        UNIT_ASSERT_VALUES_EQUAL(
+            TDuration::MilliSeconds(40),
+            oracle.GetFlushRequestCooldown(
+                THostMask::MakeOne(1).Include(THostMask::MakeOne(3))));
+
+        // A mask restricted to the less-penalized host returns its own value.
+        UNIT_ASSERT_VALUES_EQUAL(
+            TDuration::MilliSeconds(20),
+            oracle.GetFlushRequestCooldown(THostMask::MakeOne(1)));
+
+        // A mask covering only error-free hosts returns zero.
+        UNIT_ASSERT_VALUES_EQUAL(
+            TDuration::Zero(),
+            oracle.GetFlushRequestCooldown(
+                THostMask::MakeOne(0).Include(THostMask::MakeOne(4))));
+    }
+
+    Y_UNIT_TEST(GetFlushRequestCooldownIsClampedToMaxReconnectDelay)
+    {
+        NProto::TStorageServiceConfig rawConfig;
+        auto storageConfig = std::make_shared<TStorageConfig>(rawConfig);
+
+        TOracle oracle(storageConfig, nullptr);
+        const auto now = TInstant::Now();
+
+        // The cooldown grows by 10ms per consecutive error and is capped at
+        // MaxReconnectDelay (10s). 10s / 10ms == 1000 errors reach the cap
+        // exactly; any additional error must not exceed it.
+        const auto maxReconnectDelay = TDuration::Seconds(10);
+        for (size_t i = 0; i < 1000; ++i) {
+            oracle.OnRequestStarted(0, EOperation::WriteToPBuffer, now);
+            oracle.OnRequestFailed(0, EOperation::WriteToPBuffer, now);
+        }
+
+        // Exactly at the cap.
+        UNIT_ASSERT_VALUES_EQUAL(
+            maxReconnectDelay,
+            oracle.GetFlushRequestCooldown(THostMask::MakeOne(0)));
+
+        // Far beyond the cap - still clamped.
+        for (size_t i = 0; i < 500; ++i) {
+            oracle.OnRequestStarted(0, EOperation::WriteToPBuffer, now);
+            oracle.OnRequestFailed(0, EOperation::WriteToPBuffer, now);
+        }
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            maxReconnectDelay,
+            oracle.GetFlushRequestCooldown(THostMask::MakeOne(0)));
     }
 }
 

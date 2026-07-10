@@ -177,9 +177,7 @@ public:
             case EType::GlobalSync:
             case EType::GlobalAsync:
             case EType::GlobalSyncUnique:
-            case EType::GlobalJson:
             case EType::LocalMinMax:
-            case EType::GlobalJsonCompact:
                 // no specialized index description
                 YQL_ENSURE(index.GetSpecializedIndexDescriptionCase() == NKikimrSchemeOp::TIndexDescription::SPECIALIZEDINDEXDESCRIPTION_NOT_SET);
                 break;
@@ -198,6 +196,16 @@ public:
                 SpecializedIndexDescription = index.GetFulltextIndexDescription();
                 break;
             }
+            case EType::GlobalJson:
+            case EType::GlobalJsonCompact:
+                // JSON indexes carry a fulltext description only when rowid mode (__ydb_row_id as doc_id)
+                // is enabled, so that UseRowIdAsDocId survives downstream into the query compiler.
+                if (index.GetSpecializedIndexDescriptionCase() == NKikimrSchemeOp::TIndexDescription::kFulltextIndexDescription) {
+                    SpecializedIndexDescription = index.GetFulltextIndexDescription();
+                } else {
+                    YQL_ENSURE(index.GetSpecializedIndexDescriptionCase() == NKikimrSchemeOp::TIndexDescription::SPECIALIZEDINDEXDESCRIPTION_NOT_SET);
+                }
+                break;
             case EType::LocalBloomFilter:
                 if (index.HasBloomFilterDescription()) {
                     SpecializedIndexDescription = ExtractBloomFilterDescription(index.GetBloomFilterDescription());
@@ -231,11 +239,18 @@ public:
             case EType::GlobalSync:
             case EType::GlobalAsync:
             case EType::GlobalSyncUnique:
-            case EType::GlobalJson:
             case EType::LocalMinMax:
-            case EType::GlobalJsonCompact:
                 // no specialized index description
                 YQL_ENSURE(message->GetSpecializedIndexDescriptionCase() == NKikimrKqp::TIndexDescriptionProto::SPECIALIZEDINDEXDESCRIPTION_NOT_SET);
+                break;
+            case EType::GlobalJson:
+            case EType::GlobalJsonCompact:
+                // JSON indexes carry a fulltext description only in rowid mode (__ydb_row_id as doc_id).
+                if (message->GetSpecializedIndexDescriptionCase() == NKikimrKqp::TIndexDescriptionProto::kFulltextIndexDescription) {
+                    SpecializedIndexDescription = message->GetFulltextIndexDescription();
+                } else {
+                    YQL_ENSURE(message->GetSpecializedIndexDescriptionCase() == NKikimrKqp::TIndexDescriptionProto::SPECIALIZEDINDEXDESCRIPTION_NOT_SET);
+                }
                 break;
             case EType::GlobalSyncVectorKMeansTree:
                 SpecializedIndexDescription = message->GetVectorIndexKmeansTreeDescription();
@@ -355,11 +370,18 @@ public:
             case EType::GlobalSync:
             case EType::GlobalAsync:
             case EType::GlobalSyncUnique:
-            case EType::GlobalJson:
             case EType::LocalMinMax:
-            case EType::GlobalJsonCompact:
                 // no specialized index description
                 Y_ASSERT(std::holds_alternative<std::monostate>(SpecializedIndexDescription));
+                break;
+            case EType::GlobalJson:
+            case EType::GlobalJsonCompact:
+                // JSON indexes carry a fulltext description only in rowid mode (__ydb_row_id as doc_id).
+                if (const auto* ft = std::get_if<NKikimrSchemeOp::TFulltextIndexDescription>(&SpecializedIndexDescription)) {
+                    *message->MutableFulltextIndexDescription() = *ft;
+                } else {
+                    Y_ASSERT(std::holds_alternative<std::monostate>(SpecializedIndexDescription));
+                }
                 break;
             case EType::GlobalSyncVectorKMeansTree:
                 *message->MutableVectorIndexKmeansTreeDescription() = std::get<NKikimrKqp::TVectorIndexKmeansTreeDescription>(SpecializedIndexDescription);
@@ -433,6 +455,31 @@ public:
                 return {};
         }
         return {};
+    }
+};
+
+struct TMultiColumnStatisticsDescription {
+    TString Name;
+    TVector<TString> Columns;
+    TVector<TString> Types;
+
+    TMultiColumnStatisticsDescription() = default;
+
+    explicit TMultiColumnStatisticsDescription(const NKikimrSchemeOp::TMultiColumnStatisticsDescription& message)
+        : Name(message.GetName())
+    {
+        for (const auto& column : message.GetColumnNames()) {
+            Columns.push_back(column);
+        }
+        for (const auto type : message.GetTypes()) {
+            switch (type) {
+                case NKikimrSchemeOp::EMultiColumnStatisticsType::COUNT_MIN_SKETCH:
+                    Types.push_back("COUNT_MIN_SKETCH");
+                    break;
+                default:
+                    break;
+            }
+        }
     }
 };
 
@@ -815,6 +862,8 @@ struct TKikimrTableMetadata : public TThrRefBase {
     // Indexes and ImplTables must be in same order
     TVector<TIndexDescription> Indexes;
     TVector<TIntrusivePtr<TKikimrTableMetadata>> ImplTables;
+
+    TVector<TMultiColumnStatisticsDescription> MultiColumnStatistics;
 
     TVector<TColumnFamily> ColumnFamilies;
     TTableSettings TableSettings;
@@ -1529,8 +1578,6 @@ public:
 
     virtual NThreading::TFuture<TTableMetadataResult> LoadTableMetadata(
         const TString& cluster, const TString& table, TLoadTableMetadataSettings settings) = 0;
-
-    virtual NThreading::TFuture<TGenericResult> SetConstraint(const TString& tableName, TVector<TSetColumnConstraintSettings>&& settings) = 0;
 
     virtual NThreading::TFuture<TGenericResult> AlterDatabase(const TString& cluster, const TAlterDatabaseSettings& settings) = 0;
 

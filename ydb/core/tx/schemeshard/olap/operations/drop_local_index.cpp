@@ -236,11 +236,11 @@ public:
 
 namespace NKikimr::NSchemeShard {
 
-ISubOperation::TPtr CreateDropLocalIndex(TOperationId id, const TTxTransaction& tx) {
+ISubOperation::TPtr CreateDropColumnTableLocalIndex(TOperationId id, const TTxTransaction& tx) {
     return MakeSubOperation<TDropLocalIndex>(id, tx);
 }
 
-ISubOperation::TPtr CreateDropLocalIndex(TOperationId id, TTxState::ETxState state) {
+ISubOperation::TPtr CreateDropColumnTableLocalIndex(TOperationId id, TTxState::ETxState state) {
     return MakeSubOperation<TDropLocalIndex>(id, state);
 }
 

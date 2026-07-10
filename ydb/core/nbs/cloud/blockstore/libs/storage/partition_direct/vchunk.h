@@ -59,6 +59,8 @@ public:
 
     void SetHostState(THostIndex hostIndex, EHostState state);
 
+    void OnHostAppended(size_t newHostCount);
+
     [[nodiscard]] const TVChunkConfig& GetConfig() const;
     [[nodiscard]] ui64 GetPBufferUsedSize(THostIndex hostIndex) const;
     [[nodiscard]] TString DebugPrintDirtyMap();
@@ -101,6 +103,7 @@ private:
         TCallContextPtr callContext,
         std::shared_ptr<TReadBlocksLocalRequest> request,
         std::shared_ptr<NWilson::TSpan> span);
+    void OnReadBlocksResponse(const IReadRequestExecutor::TResponse& response);
 
     void DoWriteBlocksLocal(std::shared_ptr<TWriteRequestBundle> bundle);
     void DoFlush(bool force);
@@ -134,6 +137,9 @@ private:
         TDDiskDataCopier::EResult result);
     void OnCopyComplete(THostIndex hostIndex, TDDiskDataCopier::EResult result);
 
+    // Checks DirtyMap's initial readiness and waits it if need.
+    void WaitForDirtyMapReady();
+
     [[nodiscard]] TString PrintInflight() const;
 
     NActors::TActorSystem* const ActorSystem = nullptr;
@@ -149,12 +155,14 @@ private:
     TVChunkConfig VChunkConfig;
     TList<TPendingVChunkConfig> PendingVChunkConfigs;
     TBlocksDirtyMap BlocksDirtyMap;
-    bool DirtyMapRestored = false;
+    // One-shot signal of the INITIAL DirtyMap assembly at tablet start.
+    NThreading::TPromise<void> DirtyMapReady = NThreading::NewPromise();
     TMap<THostIndex, TDDiskDataCopierPtr> Copiers;
 
     size_t InflightWritesCount = 0;
     size_t InflightFlushesCount = 0;
     bool CleaningUpScheduled = false;
+    bool Stopped = false;
 
     TVector<IRequestExecutorWeakPtr> Inflight;
 

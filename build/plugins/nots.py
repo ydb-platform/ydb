@@ -1,3 +1,4 @@
+import functools
 import re
 import os
 from enum import auto, StrEnum
@@ -41,6 +42,7 @@ TS_LINT_DART_FIELDS = (
     df.Size.from_macro_args_and_unit,
     df.CustomDependencies.test_depends_only,  # from macro DEPENDS()
     df.NodejsRootVarName.value,
+    df.TsResources.value,
     df.TsCheckType.value,
     df.TsCheckHasCoverage.value,
 )
@@ -352,12 +354,12 @@ def _with_report_configure_error(fn):
     Also wraps plugin function like `on<macro_name>` to register `unit` in the PluginLogger
     """
 
-    def _wrapper(*args, **kwargs):
+    @functools.wraps(fn)
+    def _wrapper(unit, *args, **kwargs):
         last_state = logger.get_state()
-        unit = args[0]
         logger.reset(unit if unit.get("TS_LOG") == "yes" else None, fn.__name__)
         try:
-            fn(*args, **kwargs)
+            fn(unit, *args, **kwargs)
         except Exception as exc:
             ymake.report_configure_error(str(exc))
             if unit.get("TS_RAISE") == "yes":
@@ -366,6 +368,11 @@ def _with_report_configure_error(fn):
                 unit.message(["WARN", "Configure error is reported. Add -DTS_RAISE to see actual exception"])
         finally:
             logger.reset(*last_state)
+
+    # Fix annotation for unit type
+    annotations = getattr(fn, '__annotations__', {}).copy()
+    annotations['unit'] = ymake.Unit
+    _wrapper.__annotations__ = annotations
 
     return _wrapper
 
@@ -443,8 +450,9 @@ def _create_pm(unit: NotsUnitType) -> 'PackageManager':
     )
 
 
+@ymake.macro
 @_with_report_configure_error
-def on_set_append_with_directive(unit: NotsUnitType, var_name: str, directive: str, *values: str) -> None:
+def _SET_APPEND_WITH_DIRECTIVE(unit: NotsUnitType, var_name: str, directive: str, *values: tuple[str, ...]) -> None:
     wrapped = [f'${{{directive}:"{v}"}}' for v in values]
 
     __set_append(unit, var_name, " ".join(wrapped))
@@ -465,8 +473,9 @@ def _check_nodejs_version(unit: NotsUnitType, major: int) -> None:
         )
 
 
+@ymake.macro
 @_with_report_configure_error
-def on_peerdir_ts_resource(unit: NotsUnitType, *resources: str) -> None:
+def _PEERDIR_TS_RESOURCE(unit: NotsUnitType, *resources: tuple[str, ...]) -> None:
     from lib.nots.package_manager import PackageManager
 
     pj = PackageManager.load_package_json_from_dir(unit.resolve(_get_source_path(unit)), empty_if_missing=True)
@@ -509,8 +518,9 @@ def on_peerdir_ts_resource(unit: NotsUnitType, *resources: str) -> None:
         unit.onpeerdir(dirs)
 
 
+@ymake.macro
 @_with_report_configure_error
-def on_ts_configure(unit: NotsUnitType) -> None:
+def _TS_CONFIGURE(unit: NotsUnitType) -> None:
     from lib.nots.package_manager import PackageJson
     from lib.nots.package_manager.utils import build_pj_path
     from lib.nots.typescript import TsConfig
@@ -579,8 +589,9 @@ def _should_setup_build_env(unit: NotsUnitType) -> bool:
     return target in build_env_for.split(":")
 
 
+@ymake.macro
 @_with_report_configure_error
-def on_setup_build_env(unit: NotsUnitType) -> None:
+def _SETUP_BUILD_ENV(unit: NotsUnitType) -> None:
     build_env_var = unit.get("TS_BUILD_ENV")
     build_env_defaults_list = _parse_list_var(
         unit, "TS_BUILD_ENV_DEFAULTS_LIST", unit.get("TS_BUILD_ENV_DEFAULTS_LIST_SEP")
@@ -916,8 +927,9 @@ def _is_ts_proto_auto(unit: NotsUnitType) -> bool:
     return not has_pj
 
 
+@ymake.macro
 @_with_report_configure_error
-def on_ts_proto_configure(unit: NotsUnitType) -> None:
+def _TS_PROTO_CONFIGURE(unit: NotsUnitType) -> None:
     if _is_ts_proto_auto(unit):
         unit.on_ts_proto_auto_configure()
         return
@@ -953,8 +965,9 @@ def on_ts_proto_configure(unit: NotsUnitType) -> None:
         )
 
 
+@ymake.macro
 @_with_report_configure_error
-def on_ts_proto_auto_configure(unit: NotsUnitType) -> None:
+def _TS_PROTO_AUTO_CONFIGURE(unit: NotsUnitType) -> None:
     out_files = _build_directives(["hide", "output"], ["package.json", "pnpm-lock.yaml"])
     __set_append(unit, "_TS_PROTO_IMPL_INOUTS", out_files)
 
@@ -985,8 +998,9 @@ def on_ts_proto_auto_configure(unit: NotsUnitType) -> None:
         )
 
 
+@ymake.macro
 @_with_report_configure_error
-def on_prepare_deps_configure(unit: NotsUnitType) -> None:
+def _PREPARE_DEPS_CONFIGURE(unit: NotsUnitType) -> None:
     if _is_ts_proto_auto(unit):
         unit.on_ts_proto_auto_prepare_deps_configure()
         return
@@ -1009,8 +1023,9 @@ def on_prepare_deps_configure(unit: NotsUnitType) -> None:
         unit.set(["_PREPARE_DEPS_CMD", "$_PREPARE_NO_DEPS_CMD"])
 
 
+@ymake.macro
 @_with_report_configure_error
-def on_ts_proto_auto_prepare_deps_configure(unit: NotsUnitType) -> None:
+def _TS_PROTO_AUTO_PREPARE_DEPS_CONFIGURE(unit: NotsUnitType) -> None:
     deps_path = unit.get("_TS_PROTO_AUTO_DEPS")
     unit.onpeerdir([deps_path])
 
@@ -1031,10 +1046,9 @@ def _node_modules_bundle_needed(unit: NotsUnitType, arc_path: str) -> bool:
     return arc_path in nm_required_for
 
 
+@ymake.macro
 @_with_report_configure_error
-def on_ts_library_configure(unit: NotsUnitType) -> None:
-    import lib.nots.package_manager.constants as constants
-
+def _TS_LIBRARY_CONFIGURE(unit: NotsUnitType) -> None:
     is_ts_package = unit.get("_TS_PACKAGE") == "yes"
     ts_build_script = unit.get("_TS_BUILD_SCRIPT")
     ts_outputs = _parse_list_var(unit, "_TS_OUTPUTS", " ")
@@ -1062,14 +1076,6 @@ def on_ts_library_configure(unit: NotsUnitType) -> None:
 
     pm = _create_pm(unit)
     pj = pm.load_package_json_from_dir(pm.sources_path)
-    has_deps = pj.has_dependencies()
-
-    if has_deps:
-        unit.onpeerdir(pj.get_workspace_dep_paths(base_path=pm.module_path))
-        nm_bundle_needed = _node_modules_bundle_needed(unit, pm.module_path)
-        if nm_bundle_needed:
-            nm_output = _build_directives(["hide", "output"], [constants.NODE_MODULES_WORKSPACE_BUNDLE_FILENAME])
-            unit.set(["_NODE_MODULES_BUNDLE_ARG", f"--nm-bundle yes {nm_output}"])
 
     # remove "^./" and "/$"
     # build/, ./build, ./build/ => build
@@ -1109,8 +1115,9 @@ def on_ts_library_configure(unit: NotsUnitType) -> None:
         unit.on_do_ts_yndexing()
 
 
+@ymake.macro
 @_with_report_configure_error
-def on_ts_check_configure(unit: NotsUnitType, validation_mode: str) -> None:
+def _TS_CHECK_CONFIGURE(unit: NotsUnitType, validation_mode: str) -> None:
     if not _is_tests_enabled(unit):
         return
 
@@ -1156,6 +1163,7 @@ def on_ts_check_configure(unit: NotsUnitType, validation_mode: str) -> None:
             NAME=[script_name],  # df.TestName.name_from_macro_args expects array
             TS_CHECK_TYPE=check_type,
             TS_CHECK_HAS_COVERAGE="yes" if cov_script_name in pj_scripts else "no",
+            erm_json=_create_erm_json(unit),
         )
         if is_medium == "yes":
             spec_args["SIZE"] = "MEDIUM"  # if not set read from macro SIZE
@@ -1173,8 +1181,9 @@ def on_ts_check_configure(unit: NotsUnitType, validation_mode: str) -> None:
             unit.set_property(["DART_DATA", data])
 
 
+@ymake.macro
 @_with_report_configure_error
-def on_node_modules_configure(unit: NotsUnitType) -> None:
+def _NODE_MODULES_CONFIGURE(unit: NotsUnitType) -> None:
     pm = _create_pm(unit)
     pj = pm.load_package_json_from_dir(pm.sources_path)
     has_deps = pj.has_dependencies()
@@ -1307,8 +1316,9 @@ def on_ts_test_for_configure(
 
 
 # noinspection PyUnusedLocal
+@ymake.macro
 @_with_report_configure_error
-def on_validate_ts_test_for_args(unit: NotsUnitType, for_mod: str, root: str) -> None:
+def _VALIDATE_TS_TEST_FOR_ARGS(unit: NotsUnitType, for_mod: str, root: str) -> None:
     if for_mod == "." or for_mod == "./":
         ymake.report_configure_error(f"Tests should be for parent module but got path '{for_mod}'")
         return
@@ -1333,8 +1343,9 @@ def on_validate_ts_test_for_args(unit: NotsUnitType, for_mod: str, root: str) ->
         )
 
 
+@ymake.macro
 @_with_report_configure_error
-def on_set_ts_test_for_vars(unit: NotsUnitType, for_mod: str) -> None:
+def _SET_TS_TEST_FOR_VARS(unit: NotsUnitType, for_mod: str) -> None:
     unit.set(["TS_TEST_FOR", "yes"])
     unit.set(["TS_TEST_FOR_DIR", unit.resolve_arc_path(for_mod)])
     unit.set(["TS_TEST_FOR_PATH", rootrel_arc_src(for_mod, unit)])
@@ -1353,13 +1364,16 @@ def __on_ts_files(unit: NotsUnitType, files_in: list[str], files_out: list[str])
     __set_append(unit, "_TS_FILES_INOUTS", new_items)
 
 
+@ymake.macro
 @_with_report_configure_error
-def on_ts_files(unit: NotsUnitType, *files: str) -> None:
+def _TS_FILES(unit: NotsUnitType, *files: tuple[str, ...]) -> None:
+    files = list(files)
     __on_ts_files(unit, files, files)
 
 
+@ymake.macro
 @_with_report_configure_error
-def on_ts_large_files(unit: NotsUnitType, destination: str, *files: list[str]) -> None:
+def _TS_LARGE_FILES(unit: NotsUnitType, destination: str, *files: tuple[str, ...]) -> None:
     if destination == REQUIRED_MISSING:
         ymake.report_configure_error(
             "Macro TS_LARGE_FILES() requires to use DESTINATION parameter.\n"
@@ -1383,15 +1397,17 @@ def on_ts_large_files(unit: NotsUnitType, destination: str, *files: list[str]) -
     __on_ts_files(unit, in_files, out_files)
 
 
+@ymake.macro
 @_with_report_configure_error
-def on_depends_on_mod(unit: NotsUnitType) -> None:
+def _DEPENDS_ON_MOD(unit: NotsUnitType) -> None:
     if unit.get("_TS_TEST_DEPENDS_ON_BUILD"):
         for_mod_path = unit.get("TS_TEST_FOR_PATH")
         unit.ondepends([for_mod_path])
 
 
+@ymake.macro
 @_with_report_configure_error
-def on_run_javascript_after_build_process_inputs(unit: NotsUnitType, js_script: str) -> None:
+def _RUN_JAVASCRIPT_AFTER_BUILD_PROCESS_INPUTS(unit: NotsUnitType, js_script: str) -> None:
     inputs = unit.get("_RUN_JAVASCRIPT_AFTER_BUILD_INPUTS").split(" ")
 
     def process_input(input: str) -> str:
@@ -1409,8 +1425,9 @@ def on_run_javascript_after_build_process_inputs(unit: NotsUnitType, js_script: 
     unit.set(["_RUN_JAVASCRIPT_AFTER_BUILD_INPUTS", " ".join(processed_inputs)])
 
 
+@ymake.macro
 @_with_report_configure_error
-def on_ts_next_experimental_build_mode(unit: NotsUnitType) -> None:
+def _TS_NEXT_EXPERIMENTAL_BUILD_MODE(unit: NotsUnitType) -> None:
     from lib.nots.package_manager import PackageManager
     from lib.nots.semver import Version
 
@@ -1431,21 +1448,24 @@ def on_ts_next_experimental_build_mode(unit: NotsUnitType) -> None:
         raise Exception(f"Unsupported Next.js version: {version} for TS_NEXT_EXPERIMENTAL_BUILD_MODE()")
 
 
+@ymake.macro
 @_with_report_configure_error
-def on_escape_spaces(unit: NotsUnitType, var_name: str) -> None:
+def _ESCAPE_SPACES(unit: NotsUnitType, var_name: str) -> None:
     prefix = "${ARCADIA_ROOT}/"
     files = __strip_prefix(prefix, unit.get(var_name)).split(f" {prefix}")
     unit.set([var_name, ""])
     __set_append(unit, var_name, [prefix + _escape_space(f) for f in files])
 
 
+@ymake.macro
 @_with_report_configure_error
-def on_ts_conf_error(unit: NotsUnitType, *messages: str) -> None:
+def _TS_CONF_ERROR(unit: NotsUnitType, *messages: tuple[str, ...]) -> None:
     msg = " ".join(messages).replace("\\n", "\n").format(COLORS=COLORS)
     ymake.report_configure_error(msg)
 
 
+@ymake.macro
 @_with_report_configure_error
-def on_ts_check_prepare_deps_configure(unit: NotsUnitType) -> None:
+def _TS_CHECK_PREPARE_DEPS_CONFIGURE(unit: NotsUnitType) -> None:
     test_mod = unit.get("TS_TEST_FOR_PATH")
     unit.onpeerdir([test_mod])

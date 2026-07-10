@@ -72,6 +72,20 @@ TConclusionStatus TZeroLevelConstructor::DoDeserializeFromJson(const NJson::TJso
         }
         CompactionTaskPortionsCountLimit = jsonValue.GetUInteger();
     }
+    if (json.Has("compact_at_level")) {
+        const auto& jsonValue = json["compact_at_level"];
+        if (!jsonValue.IsBoolean()) {
+            return TConclusionStatus::Fail("incorrect compact_at_level value (have to be boolean)");
+        }
+        CompactAtLevel = jsonValue.GetBoolean();
+    }
+    if (json.Has("skip_level_min_blob_size")) {
+        const auto& jsonValue = json["skip_level_min_blob_size"];
+        if (!jsonValue.IsUInteger()) {
+            return TConclusionStatus::Fail("incorrect skip_level_min_blob_size value (have to be unsigned int)");
+        }
+        SkipLevelMinBlobSize = jsonValue.GetUInteger();
+    }
     return TConclusionStatus::Success();
 }
 
@@ -104,6 +118,12 @@ bool TZeroLevelConstructor::DoDeserializeFromProto(const NKikimrSchemeOp::TCompa
     if (pLevel.HasCompactionTaskPortionsCountLimit()) {
         CompactionTaskPortionsCountLimit = pLevel.GetCompactionTaskPortionsCountLimit();
     }
+    if (pLevel.HasCompactAtLevel()) {
+        CompactAtLevel = pLevel.GetCompactAtLevel();
+    }
+    if (pLevel.HasSkipLevelMinBlobSize()) {
+        SkipLevelMinBlobSize = pLevel.GetSkipLevelMinBlobSize();
+    }
     return true;
 }
 
@@ -133,6 +153,12 @@ void TZeroLevelConstructor::DoSerializeToProto(NKikimrSchemeOp::TCompactionLevel
     if (CompactionTaskPortionsCountLimit) {
         mLevel.SetCompactionTaskPortionsCountLimit(*CompactionTaskPortionsCountLimit);
     }
+    if (CompactAtLevel) {
+        mLevel.SetCompactAtLevel(*CompactAtLevel);
+    }
+    if (SkipLevelMinBlobSize) {
+        mLevel.SetSkipLevelMinBlobSize(*SkipLevelMinBlobSize);
+    }
 }
 
 std::shared_ptr<NKikimr::NOlap::NStorageOptimizer::NLCBuckets::IPortionsLevel> TZeroLevelConstructor::DoBuildLevel(
@@ -141,7 +167,8 @@ std::shared_ptr<NKikimr::NOlap::NStorageOptimizer::NLCBuckets::IPortionsLevel> T
     return std::make_shared<TZeroLevelPortions>(indexLevel, nextLevel, counters,
         std::make_shared<TLimitsOverloadChecker>(PortionsCountLimit.value_or(1000000), PortionsSizeLimit),
         PortionsLiveDuration.value_or(TDuration::Max()), ExpectedBlobsSize.value_or((ui64)1 << 20), PortionsCountAvailable.value_or(10),
-        selectors, GetDefaultSelectorName(), Concurrency.value_or(1), CompactionTaskMemoryLimit, CompactionTaskPortionsCountLimit);
+        selectors, GetDefaultSelectorName(), Concurrency.value_or(1), CompactionTaskMemoryLimit, CompactionTaskPortionsCountLimit, 0,
+        CompactAtLevel.value_or(false), SkipLevelMinBlobSize);
 }
 
 }   // namespace NKikimr::NOlap::NStorageOptimizer::NLCBuckets

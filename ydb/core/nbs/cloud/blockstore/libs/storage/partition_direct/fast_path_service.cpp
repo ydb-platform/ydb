@@ -389,17 +389,11 @@ ui64 TFastPathService::GenerateLsn()
     return lsn;
 }
 
-void TFastPathService::OnBlockedGeneration(
-    size_t directBlockGroupIndex,
-    size_t hostIndex,
-    const TString& reason)
+void TFastPathService::OnBlockedGeneration(const TString& reason)
 {
     // Just forward the signal to the actor thread.
     auto event = std::make_unique<
-        TEvPartitionDirectPrivate::TEvPoisonByBlockedGeneration>(
-        directBlockGroupIndex,
-        hostIndex,
-        reason);
+        TEvPartitionDirectPrivate::TEvPoisonByBlockedGeneration>(reason);
     ActorSystem->Send(PartitionActorId, event.release());
 }
 

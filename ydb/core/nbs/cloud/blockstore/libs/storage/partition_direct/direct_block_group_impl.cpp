@@ -294,11 +294,11 @@ TDirectBlockGroup::ReadBlocksFromDDisk(
                     if (auto self = weakSelf.lock()) {
                         NProto::TError error = TranslateError(f.GetValue());
 
-                        if (self->StartSuicideIfBlocked(
+                        if (IsBlockedStatus(f.GetValue().GetStatus())) {
+                            self->HandleBlockedGeneration(
                                 hostIndex,
                                 "ReadFromDDisk",
-                                f.GetValue().GetStatus()))
-                        {
+                                f.GetValue().GetStatus());
                             error = MakeTabletGenerationBlockedError();
                         }
 
@@ -458,11 +458,11 @@ TDirectBlockGroup::WriteBlocksToDDisk(
                     if (auto self = weakSelf.lock()) {
                         NProto::TError error = TranslateError(f.GetValue());
 
-                        if (self->StartSuicideIfBlocked(
+                        if (IsBlockedStatus(f.GetValue().GetStatus())) {
+                            self->HandleBlockedGeneration(
                                 hostIndex,
                                 "WriteToDDisk",
-                                f.GetValue().GetStatus()))
-                        {
+                                f.GetValue().GetStatus());
                             error = MakeTabletGenerationBlockedError();
                         }
                         self->OnResponse(
@@ -848,11 +848,11 @@ TDBGFlushResponse TDirectBlockGroup::HandleSyncWithPBufferResponse(
             FormatError(TranslateError(response)).c_str());
 
         auto error = MakeError(E_FAIL, response.GetErrorReason());
-        if (StartSuicideIfBlocked(
+        if (IsBlockedStatus(response.GetStatus())) {
+            HandleBlockedGeneration(
                 ddiskHostIndex,
                 "SyncWithPBuffer",
-                response.GetStatus()))
-        {
+                response.GetStatus());
             error = MakeTabletGenerationBlockedError();
         }
 
@@ -1774,8 +1774,10 @@ void TDirectBlockGroup::HandleBlockedGeneration(
     DDiskConnections[hostIndex].SessionState = EDDiskSessionState::Broken;
     const TString reason = TStringBuilder()
                            << "DDisk returned BLOCKED (stale tablet generation "
-                           << TabletGeneration << "); context=" << context
-                           << "; " << PrintHostIndex(hostIndex) << "; status="
+                           << TabletGeneration << "); context: " << context
+                           << "; " << PrintHostIndex(hostIndex)
+                           << "; DBGIndex: " << DirectBlockGroupIndex
+                           << "; status="
                            << NKikimrBlobStorage::NDDisk::TReplyStatus_E_Name(
                                   status);
 
@@ -1787,20 +1789,7 @@ void TDirectBlockGroup::HandleBlockedGeneration(
         reason.c_str());
 
     // No retry/reconnect: signal the actor to suicide.
-    Service->OnBlockedGeneration(DirectBlockGroupIndex, hostIndex, reason);
-}
-
-bool TDirectBlockGroup::StartSuicideIfBlocked(
-    THostIndex hostIndex,
-    TStringBuf context,
-    NKikimrBlobStorage::NDDisk::TReplyStatus_E status)
-{
-    Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
-    if (!IsBlockedStatus(status)) {
-        return false;
-    }
-    HandleBlockedGeneration(hostIndex, context, status);
-    return true;
+    Service->OnBlockedGeneration(reason);
 }
 
 TDBGDumpResponse TDirectBlockGroup::DoDebugPrintDirtyMap()

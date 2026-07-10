@@ -783,7 +783,6 @@ Y_UNIT_TEST_SUITE(TDirectBlockGroupTest)
         UNIT_ASSERT(state.BlockedGenerationDetected);
 
         UNIT_ASSERT_VALUES_EQUAL(1, service.BlockedGenerationCount);
-        UNIT_ASSERT_VALUES_EQUAL(0, service.LastBlockedHostIndex);
         UNIT_ASSERT(service.LastBlockedReason.Contains("Connect"));
         UNIT_ASSERT(service.LastBlockedReason.Contains("BLOCKED"));
 
@@ -832,7 +831,6 @@ Y_UNIT_TEST_SUITE(TDirectBlockGroupTest)
         UNIT_ASSERT(state.BlockedGenerationDetected);
 
         UNIT_ASSERT_VALUES_EQUAL(1, service.BlockedGenerationCount);
-        UNIT_ASSERT_VALUES_EQUAL(0, service.LastBlockedHostIndex);
         UNIT_ASSERT(service.LastBlockedReason.Contains("WriteToDDisk"));
     }
 
@@ -872,7 +870,6 @@ Y_UNIT_TEST_SUITE(TDirectBlockGroupTest)
         UNIT_ASSERT(state.BlockedGenerationDetected);
 
         UNIT_ASSERT_VALUES_EQUAL(1, service.BlockedGenerationCount);
-        UNIT_ASSERT_VALUES_EQUAL(0, service.LastBlockedHostIndex);
         UNIT_ASSERT(service.LastBlockedReason.Contains("ReadFromDDisk"));
     }
 
@@ -920,7 +917,6 @@ Y_UNIT_TEST_SUITE(TDirectBlockGroupTest)
         UNIT_ASSERT(state.BlockedGenerationDetected);
 
         UNIT_ASSERT_VALUES_EQUAL(1, service.BlockedGenerationCount);
-        UNIT_ASSERT_VALUES_EQUAL(ddiskHost, service.LastBlockedHostIndex);
         UNIT_ASSERT(service.LastBlockedReason.Contains("SyncWithPBuffer"));
     }
 

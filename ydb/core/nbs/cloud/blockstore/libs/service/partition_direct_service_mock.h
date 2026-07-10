@@ -20,6 +20,8 @@ struct TPartitionDirectServiceMock: public IPartitionDirectService
     bool DropScheduledCallbacks = false;
     TVector<size_t> AddHostRequests;
     ui64 LsnGenerator = 0;
+    size_t BlockedGenerationCount = 0;
+    TString LastBlockedReason;
 
     [[nodiscard]] TVolumeConfigPtr GetVolumeConfig() const override
     {
@@ -60,18 +62,9 @@ struct TPartitionDirectServiceMock: public IPartitionDirectService
         return ++LsnGenerator;
     }
 
-    size_t BlockedGenerationCount = 0;
-    size_t LastBlockedHostIndex = 0;
-    TString LastBlockedReason;
-
-    void OnBlockedGeneration(
-        size_t directBlockGroupIndex,
-        size_t hostIndex,
-        const TString& reason) override
+    void OnBlockedGeneration(const TString& reason) override
     {
-        Y_UNUSED(directBlockGroupIndex);
         ++BlockedGenerationCount;
-        LastBlockedHostIndex = hostIndex;
         LastBlockedReason = reason;
     }
 };

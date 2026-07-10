@@ -78,17 +78,10 @@ struct TEvPartitionDirectPrivate
               TEvPoisonByBlockedGeneration,
               EvPoisonByBlockedGeneration>
     {
-        const size_t DirectBlockGroupIndex;
-        const size_t HostIndex;
         const TString Reason;
 
-        TEvPoisonByBlockedGeneration(
-            size_t directBlockGroupIndex,
-            size_t hostIndex,
-            TString reason)
-            : DirectBlockGroupIndex(directBlockGroupIndex)
-            , HostIndex(hostIndex)
-            , Reason(std::move(reason))
+        explicit TEvPoisonByBlockedGeneration(TString reason)
+            : Reason(std::move(reason))
         {}
     };
 

@@ -443,10 +443,8 @@ void TPartitionActor::HandlePoisonByBlockedGeneration(
     LOG_CRIT(
         ctx,
         NKikimrServices::NBS_PARTITION,
-        "%s SUICIDE by BLOCKED generation: DBG#%zu %s reason: %s",
+        "%s SUICIDE by BLOCKED generation. Reason: %s",
         LogTitle.GetWithTime().c_str(),
-        msg->DirectBlockGroupIndex,
-        PrintHostIndex(msg->HostIndex).c_str(),
         msg->Reason.c_str());
 
     ctx.Send(Tablet(), std::make_unique<TEvents::TEvPoisonPill>().release());

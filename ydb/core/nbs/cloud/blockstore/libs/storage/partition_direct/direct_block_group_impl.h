@@ -134,9 +134,6 @@ public:
         NKikimrBlobStorage::NDDisk::TDDiskId ddiskId,
         NKikimrBlobStorage::NDDisk::TDDiskId pbufferId) override;
 
-    bool IsDDiskSessionBroken(size_t hostIndex) const;
-    bool IsBlockedGenerationDetected() const;
-
     NThreading::TFuture<TDbgSnapshot> BuildMonSnapshot() override;
 
     // IHostStateController implementation
@@ -149,6 +146,8 @@ public:
 
     // Own methods (not part of any interface).
     ui64 GetDDiskSessionSeqNo(size_t index) const;
+    bool IsDDiskSessionBroken(size_t hostIndex) const;
+    bool IsBlockedGenerationDetected() const;
 
 private:
     using TEvSyncResult = NKikimrBlobStorage::NDDisk::TEvSyncResult;
@@ -254,11 +253,6 @@ private:
     [[nodiscard]] bool WaitForSessionLock(THostIndex hostIndex);
 
     void HandleBlockedGeneration(
-        THostIndex hostIndex,
-        TStringBuf context,
-        NKikimrBlobStorage::NDDisk::TReplyStatus_E status);
-
-    bool StartSuicideIfBlocked(
         THostIndex hostIndex,
         TStringBuf context,
         NKikimrBlobStorage::NDDisk::TReplyStatus_E status);

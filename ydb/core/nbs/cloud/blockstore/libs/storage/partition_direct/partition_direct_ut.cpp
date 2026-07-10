@@ -1474,10 +1474,7 @@ Y_UNIT_TEST_SUITE(TPartitionDirectTest)
             tabletId,
             edge,
             std::make_unique<
-                TEvPartitionDirectPrivate::TEvPoisonByBlockedGeneration>(
-                0,
-                0,
-                "test")
+                TEvPartitionDirectPrivate::TEvPoisonByBlockedGeneration>("test")
                 .release(),
             0,
             TTestActorSystem::GetPipeConfigWithRetries());

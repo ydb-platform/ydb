@@ -112,10 +112,7 @@ public:
 
     ui64 GenerateLsn() override;
 
-    void OnBlockedGeneration(
-        size_t directBlockGroupIndex,
-        size_t hostIndex,
-        const TString& reason) override;
+    void OnBlockedGeneration(const TString& reason) override;
 
     // Read-only info for the monitoring UI.
     [[nodiscard]] TFastPathServiceInfo GetMonInfo() const;

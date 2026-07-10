@@ -323,7 +323,7 @@ bool TTxStoreTableStats::PersistSingleStats(const TPathId& pathId,
     if (!shardInfo) {
         YDB_LOG_DEBUG_CTX(ctx, "No ShardInfo by shardIdx of shard",
             {"shardIdx", shardIdx},
-            {"#_datashardId;", datashardId;});
+            {"#_datashardId;", datashardId});
         return true;
     }
 

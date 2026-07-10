@@ -78,7 +78,7 @@ class TSchemeQueryExecutor: public TActorBootstrapped<TSchemeQueryExecutor> {
 
         YDB_LOG_DEBUG("TSchemeQueryExecutor HandleCompileResponse",
             {"self", SelfId()},
-            {"status", result->Status;});
+            {"status", result->Status});
 
         if (result->Status != Ydb::StatusIds::SUCCESS) {
             return Finish(result->Status, result->Issues.ToOneLineString());

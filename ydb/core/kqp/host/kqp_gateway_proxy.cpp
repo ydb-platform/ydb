@@ -19,6 +19,7 @@
 #include <ydb/core/ydb_convert/ydb_convert.h>
 #include <ydb/library/formats/arrow/protos/accessor.pb.h>
 #include <ydb/services/metadata/abstract/kqp_common.h>
+#include <ydb/services/metadata/manager/abstract.h>
 
 #include <util/generic/overloaded.h>
 
@@ -3812,7 +3813,7 @@ private:
             return Nothing();
         }
         TGenericResult errResult;
-        errResult.AddIssue(NYql::TIssue("Old secrets creation syntax is disabled now. Please use the new one"));
+        errResult.AddIssue(NYql::TIssue(NMetadata::NModifications::GetOldSecretCreationDisabledMessage()));
         errResult.SetStatus(NYql::YqlStatusFromYdbStatus(Ydb::StatusIds::BAD_REQUEST));
         return errResult;
     }

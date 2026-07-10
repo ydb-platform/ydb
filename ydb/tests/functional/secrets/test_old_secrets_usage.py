@@ -3,11 +3,14 @@ import logging
 
 import pytest
 
+from ydb.tests.library.common.wait_for import wait_for
 from ydb.tests.library.harness.kikimr_runner import KiKiMR
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
 from ydb.tests.oss.ydb_sdk_import import ydb
 
 logger = logging.getLogger(__name__)
+
+DATABASE = "/Root"
 
 
 class Utils:
@@ -23,7 +26,7 @@ class Utils:
         self._start_client()
 
     def _start_client(self):
-        self.driver = ydb.Driver(endpoint=self.cluster.nodes[1].endpoint, database="/Root")
+        self.driver = ydb.Driver(endpoint=self.cluster.nodes[1].endpoint, database=DATABASE)
         self.driver.wait(5, fail_fast=True)
         self.session_pool = ydb.SessionPool(self.driver)
 
@@ -44,11 +47,35 @@ class Utils:
         self.config.yaml_config["feature_flags"]["disable_old_secret_creation"] = disable_old_secret_creation
         self.config.yaml_config["feature_flags"]["enable_schema_secrets"] = enable_schema_secrets
         self.cluster.update_configurator_and_restart(self.config)
-        self._start_client()
+        self._start_client_after_restart()
+
+    def _start_client_after_restart(self):
+        driver_holder = {}
+
+        def driver_ready():
+            driver = ydb.Driver(endpoint=self.cluster.nodes[1].endpoint, database=DATABASE)
+            try:
+                driver.wait(timeout=5, fail_fast=True)
+                driver_holder["driver"] = driver
+                return True
+            except Exception as exc:
+                logger.info("Driver not ready yet after cluster restart: %s", exc)
+                driver.stop()
+                return False
+
+        if not wait_for(driver_ready, timeout_seconds=120, step_seconds=1):
+            raise AssertionError("Driver didn't become ready after cluster restart")
+
+        self.driver = driver_holder["driver"]
+        self.session_pool = ydb.SessionPool(self.driver)
 
     def create_old_secret(self, secret_name, value):
         with self.session_pool.checkout() as session:
             session.execute_scheme(f"CREATE OBJECT {secret_name} (TYPE SECRET) WITH value='{value}';")
+
+    def upsert_old_secret(self, secret_name, value):
+        with self.session_pool.checkout() as session:
+            session.execute_scheme(f"UPSERT OBJECT {secret_name} (TYPE SECRET) WITH value='{value}';")
 
     def alter_old_secret(self, secret_name, value):
         with self.session_pool.checkout() as session:
@@ -99,4 +126,9 @@ def test_create_eds_with_old_secret_after_disabling_old_secret_creation(old_secr
     # can not create old secrets with old secrets disabled
     with pytest.raises(Exception) as exc_info:
         old_secrets_utils.create_old_secret("NewOldSecret", value="")
+    assert "Old secrets creation syntax is disabled now. Please use the new one" in str(exc_info.value)
+
+    # can not upsert old secrets with old secrets disabled
+    with pytest.raises(Exception) as exc_info:
+        old_secrets_utils.upsert_old_secret("NewOldSecretUpsert", value="")
     assert "Old secrets creation syntax is disabled now. Please use the new one" in str(exc_info.value)

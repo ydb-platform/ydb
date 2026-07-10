@@ -712,6 +712,20 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         UNIT_ASSERT_VALUES_EQUAL_C(GetStringField(*readS, "E-Rows"), "3000000000", plan);
         UNIT_ASSERT_VALUES_EQUAL_C(GetStringField(*readT, "E-Rows"), "777", plan);
     }
+    
+    Y_UNIT_TEST(PushConstantConditionOnJoinKeyBothSides) {
+        TExplainPlanTestContext testContext;
+        auto& session = testContext.GetSession();
+        auto plan = ExecuteExplain(session, R"(
+            select t1.a, t1.b
+            from `/Root/t1` as t1
+             join `/Root/t2` as t2 on t1.a = t2.a
+             where t1.a == 1;
+        )");
+
+        const auto simplifiedPlan = GetSimplifiedPlan(plan);
+        UNIT_ASSERT_C(!FindOperatorByStringFieldContaining(simplifiedPlan, "Name", "TableFullScan"), plan);
+    }
 
     Y_UNIT_TEST(EliminateUnusedLeftJoin) {
         TExplainPlanTestContext testContext;
@@ -8578,6 +8592,199 @@ PRAGMA ydb.OptimizerHints = '
             SortDescriptions(expectedHashShuffles),
             TStringBuilder() << "Unexpected mixed hash propagation plan: "
                              << JoinSeq(", ", hashShuffles) << "\n" << plan);
+    }
+
+    Y_UNIT_TEST(ShuffleEliminationRightJoinAliasReproducer) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableNewRBO(false);
+        appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
+        appConfig.MutableTableServiceConfig()->SetAllowOlapDataQuery(true);
+        appConfig.MutableTableServiceConfig()->SetDefaultLangVer(NYql::GetMaxLangVersion());
+        appConfig.MutableTableServiceConfig()->SetBackportMode(NKikimrConfig::TTableServiceConfig_EBackportMode_All);
+        appConfig.MutableTableServiceConfig()->SetDefaultCostBasedOptimizationLevel(4);
+
+        NKikimrKqp::TKqpSetting statsSetting;
+        statsSetting.SetName("OptOverrideStatistics");
+        statsSetting.SetValue(R"({
+            "/Root/_temp/_pool_249": {"n_rows": 12, "byte_size": 1024},
+            "/Root/_temp/_pool_252": {"n_rows": 66464, "byte_size": 8517376},
+            "/Root/_temp/_pool_256": {"n_rows": 36, "byte_size": 2048},
+            "/Root/public/_accumrg28120": {"n_rows": 32601254, "byte_size": 4172960512}
+        })");
+
+        auto settings = NKqp::TKikimrSettings(appConfig).SetWithSampleTables(false);
+        settings.SetKqpSettings({statsSetting});
+        TKikimrRunner kikimr(settings);
+
+        auto schemeClient = kikimr.GetSchemeClient();
+        auto mkDir = schemeClient.MakeDirectory("/Root/_temp").GetValueSync();
+        UNIT_ASSERT_C(mkDir.IsSuccess(), mkDir.GetIssues().ToString());
+        mkDir = schemeClient.MakeDirectory("/Root/public").GetValueSync();
+        UNIT_ASSERT_C(mkDir.IsSuccess(), mkDir.GetIssues().ToString());
+
+        auto tableClient = kikimr.GetTableClient();
+        auto tableSession = tableClient.CreateSession().GetValueSync().GetSession();
+        auto schemeResult = tableSession.ExecuteSchemeQuery(R"(
+            CREATE TABLE `/Root/_temp/_pool_252` (
+                `_q_000_f_000` Decimal(10, 0),
+                `_q_000_f_001rref` String,
+                `_q_000_f_002rref` String,
+                `_q_000_f_003rref` String,
+                `_q_000_f_004rref` String,
+                `_q_000_f_005` Decimal(15, 3),
+                `_q_000_f_006` Decimal(31, 18),
+                `_ydb_pk` Int64 NOT NULL,
+                PRIMARY KEY (`_ydb_pk`)
+            );
+
+            CREATE TABLE `/Root/_temp/_pool_256` (
+                `_q_000_f_000rref` String,
+                `_ydb_pk` Int64 NOT NULL,
+                PRIMARY KEY (`_ydb_pk`)
+            );
+
+            CREATE TABLE `/Root/_temp/_pool_249` (
+                `_q_000_f_000_type` String,
+                `_q_000_f_000_rtref` String,
+                `_q_000_f_000_rrref` String,
+                `_ydb_pk` Int64 NOT NULL,
+                PRIMARY KEY (`_ydb_pk`)
+            );
+
+            CREATE TABLE `/Root/public/_accumrg28120` (
+                `_period` Timestamp64 NOT NULL,
+                `_recordertref` String NOT NULL,
+                `_recorderrref` String NOT NULL,
+                `_lineno` Decimal(9, 0) NOT NULL,
+                `_active` Bool NOT NULL,
+                `_recordkind` Decimal(1, 0) NOT NULL,
+                `_fld28121rref` String NOT NULL,
+                `_fld28122rref` String NOT NULL,
+                `_fld28123rref` String NOT NULL,
+                `_fld28124rref` String NOT NULL,
+                `_fld28125` Decimal(15, 3) NOT NULL,
+                `_fld28126` Decimal(15, 2) NOT NULL,
+                `_fld28127_type` String NOT NULL,
+                `_fld28127_rtref` String NOT NULL,
+                `_fld28127_rrref` String NOT NULL,
+                `_fld28128_type` String NOT NULL,
+                `_fld28128_rtref` String NOT NULL,
+                `_fld28128_rrref` String NOT NULL,
+                `_fld28129rref` String NOT NULL,
+                `_fld28130rref` String NOT NULL,
+                `_fld28131rref` String NOT NULL,
+                `_ydb_pk` Int64 NOT NULL,
+                PRIMARY KEY (`_ydb_pk`)
+            );
+        )").GetValueSync();
+        UNIT_ASSERT_C(schemeResult.IsSuccess(), schemeResult.GetIssues().ToString());
+
+        const TString query = R"sql(
+            PRAGMA ydb.CostBasedOptimizationLevel = "4";
+            PRAGMA ydb.OptShuffleElimination = "true";
+
+            DECLARE $const_0 AS String;
+            DECLARE $const_1 AS String;
+            DECLARE $const_2 AS Timestamp64;
+            DECLARE $const_3 AS Timestamp64;
+            DECLARE $const_4 AS Decimal(1, 0);
+
+            SELECT
+                `s2`.`__ydb_1_7`,
+                `s2`.`__ydb_1_8`,
+                `s2`.`__ydb_1_9`,
+                `s2`.`__ydb_1_10`,
+                `s2`.`__ydb_1_13`,
+                `s2`.`__ydb_1_14`,
+                `s2`.`__ydb_1_15`,
+                `t4`.`_q_000_f_000`,
+                `s2`.`__ydb_1_16`,
+                `s2`.`__ydb_1_17`,
+                `s2`.`__ydb_1_18`,
+                `s2`.`__ydb_1_19`,
+                `s2`.`__ydb_1_20`,
+                `s2`.`__ydb_1_21`,
+                `s2`.`__ydb_6_1`,
+                `s2`.`__ydb_1_12`
+            FROM `/Root/_temp/_pool_252` AS `t4`
+            RIGHT JOIN (
+                SELECT
+                    `s1`.`__ydb_1_7` AS `__ydb_1_7`,
+                    `s1`.`__ydb_1_8` AS `__ydb_1_8`,
+                    `s1`.`__ydb_1_9` AS `__ydb_1_9`,
+                    `s1`.`__ydb_1_10` AS `__ydb_1_10`,
+                    `s1`.`__ydb_1_13` AS `__ydb_1_13`,
+                    `s1`.`__ydb_1_14` AS `__ydb_1_14`,
+                    `s1`.`__ydb_1_15` AS `__ydb_1_15`,
+                    `s1`.`__ydb_1_16` AS `__ydb_1_16`,
+                    `s1`.`__ydb_1_17` AS `__ydb_1_17`,
+                    `s1`.`__ydb_1_18` AS `__ydb_1_18`,
+                    `s1`.`__ydb_1_19` AS `__ydb_1_19`,
+                    `s1`.`__ydb_1_20` AS `__ydb_1_20`,
+                    `s1`.`__ydb_1_21` AS `__ydb_1_21`,
+                    `s1`.`__ydb_1_12` AS `__ydb_1_12`,
+                    `s1`.`__ydb_6_1` AS `__ydb_6_1`
+                FROM `/Root/_temp/_pool_256` AS `t2`
+                INNER JOIN (
+                    SELECT
+                        `t1`.`_fld28121rref` AS `__ydb_1_7`,
+                        `t1`.`_fld28122rref` AS `__ydb_1_8`,
+                        `t1`.`_fld28123rref` AS `__ydb_1_9`,
+                        `t1`.`_fld28124rref` AS `__ydb_1_10`,
+                        `t1`.`_fld28127_type` AS `__ydb_1_13`,
+                        `t1`.`_fld28127_rtref` AS `__ydb_1_14`,
+                        `t1`.`_fld28127_rrref` AS `__ydb_1_15`,
+                        `t1`.`_fld28128_type` AS `__ydb_1_16`,
+                        `t1`.`_fld28128_rtref` AS `__ydb_1_17`,
+                        `t1`.`_fld28128_rrref` AS `__ydb_1_18`,
+                        `t1`.`_fld28129rref` AS `__ydb_1_19`,
+                        `t1`.`_fld28130rref` AS `__ydb_1_20`,
+                        `t1`.`_fld28131rref` AS `__ydb_1_21`,
+                        `t1`.`_fld28126` AS `__ydb_1_12`,
+                        `t6`.`__ydb_6_1` AS `__ydb_6_1`
+                    FROM `/Root/public/_accumrg28120` AS `t1`
+                    LEFT JOIN (
+                        SELECT
+                            `t1`.`_ydb_pk` AS `__ydb_pk_0`,
+                            `t6`.`_q_000_f_000` AS `__ydb_6_1`,
+                            `t6`.`_q_000_f_001rref` AS `__ydb_6_2`,
+                            `t6`.`_q_000_f_002rref` AS `__ydb_6_3`,
+                            `t6`.`_q_000_f_003rref` AS `__ydb_6_4`,
+                            `t6`.`_q_000_f_004rref` AS `__ydb_6_5`,
+                            `t6`.`_ydb_pk` AS `_ydb_pk`
+                        FROM `/Root/public/_accumrg28120` AS `t1`
+                        INNER JOIN `/Root/_temp/_pool_252` AS `t6`
+                            ON ((`t6`.`_q_000_f_001rref` = `t1`.`_fld28128_rrref`))
+                            AND ((`t6`.`_q_000_f_002rref` = `t1`.`_fld28129rref`))
+                            AND ((`t6`.`_q_000_f_003rref` = `t1`.`_fld28130rref`))
+                            AND ((`t6`.`_q_000_f_004rref` = `t1`.`_fld28131rref`))
+                        WHERE (($const_0 = `t1`.`_fld28128_type`))
+                            AND (($const_1 = `t1`.`_fld28128_rtref`))
+                    ) AS `t6`
+                        ON (`t1`.`_ydb_pk` = `t6`.`__ydb_pk_0`)
+                    LEFT ONLY JOIN `/Root/_temp/_pool_249` AS `t8`
+                        ON ((`t1`.`_fld28127_type` = `t8`.`_q_000_f_000_type`))
+                        AND ((`t1`.`_fld28127_rtref` = `t8`.`_q_000_f_000_rtref`))
+                        AND ((`t1`.`_fld28127_rrref` = `t8`.`_q_000_f_000_rrref`))
+                    WHERE ((`t1`.`_period` >= $const_2))
+                        AND ((`t1`.`_period` <= $const_3))
+                        AND (`t1`.`_active`)
+                        AND ((`t1`.`_recordkind` = $const_4))
+                ) AS `s1`
+                    ON ((`s1`.`__ydb_1_7` = `t2`.`_q_000_f_000rref`))
+            ) AS `s2`
+                ON ((`t4`.`_q_000_f_001rref` = `s2`.`__ydb_1_7`))
+                AND ((`t4`.`_q_000_f_002rref` = `s2`.`__ydb_1_8`))
+                AND ((`t4`.`_q_000_f_003rref` = `s2`.`__ydb_1_9`))
+                AND ((`t4`.`_q_000_f_004rref` = `s2`.`__ydb_1_10`))
+        )sql";
+
+        auto result = tableSession.ExplainDataQuery(query).GetValueSync();
+
+        result.GetIssues().PrintTo(Cerr);
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+        UNIT_ASSERT_C(!result.GetPlan().empty(), result.GetPlan());
     }
 
     void InsertIntoAliasesRenames(NYdb::NTable::TTableClient &db, std::string tableName, int numRows) {

@@ -504,10 +504,10 @@ namespace NActors {
         using TSubscriberHistory = std::unordered_map<TSubscriberHistoryKey, ui64, TSubscriberHistoryKeyHash>;
         static constexpr ui64 MaxSubscriberHistoryEntries = 1000;
 
-        TInterconnectSessionTCP(TInterconnectProxyTCP* const proxy, TSessionParams params);
+        explicit TInterconnectSessionTCP(TInterconnectProxyTCP* const proxy);
         ~TInterconnectSessionTCP();
 
-        void Init() override;
+        void Init(const TSessionParams& params) override;
         void CloseInputSession() override;
         bool IsRdmaInUse() override;
         bool HasRdmaState() const override;
@@ -681,7 +681,7 @@ namespace NActors {
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-        const TSessionParams Params; // stable session template used for continuation handshakes
+        TSessionParams Params; // stable session template used for continuation handshakes
         // Runtime mode negotiated for the current socket; may differ from Params on reconnect.
         bool KernelLivenessMode = false;
         std::unique_ptr<TEventHolderPool> Pool;

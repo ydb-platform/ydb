@@ -46,6 +46,7 @@ EHostState HealthToState(EHostHealth health)
         case EHostHealth::TemporaryOffline:
             return EHostState::TemporaryOffline;
         case EHostHealth::Offline:
+        case EHostHealth::Broken:
             return EHostState::Offline;
     }
 }
@@ -199,6 +200,10 @@ void TOracle::Think(TInstant now)
 
         auto errorsInfo = HostStatistics[i].GetErrorsInfo(now);
 
+        if (newHostsHealths[i] == EHostHealth::Broken) {
+            continue;
+        }
+
         const bool hasSufferingSymptom =
             (errorsInfo.ConsecutiveErrorCount != 0);
         const bool hasTemporaryOfflineSymptom =
@@ -283,6 +288,21 @@ void TOracle::OnDDiskConnected(THostIndex hostIndex, TInstant now)
 {
     Y_UNUSED(now);
     HostsReconnectDelays[hostIndex].Reset();
+}
+
+void TOracle::OnDDiskBroken(THostIndex hostIndex)
+{
+    const auto oldState = HostStates[hostIndex].State;
+    HostsHealths[hostIndex] = EHostHealth::Broken;
+    if (oldState != EHostState::Offline) {
+        HostStates[hostIndex].State = EHostState::Offline;
+        HostStateController->SetHostState(
+            hostIndex,
+            oldState,
+            EHostState::Offline);
+
+        HostStateController->QueryAddHost(GetHostCount());
+    }
 }
 
 TDuration TOracle::GetHostReconnectDelay(THostIndex hostIndex)

@@ -139,6 +139,14 @@ CreateWaitSessionCbForSyncWithPBuffer(
     return cb;
 }
 
+bool CanLeadToBlockedSession(EOperation operation)
+{
+    return operation == EOperation::ReadFromDDisk ||
+           operation == EOperation::WriteToDDisk ||
+           operation == EOperation::Flush ||
+           operation == EOperation::FlushCrossNode;
+}
+
 }   // namespace
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -386,12 +394,6 @@ TDirectBlockGroup::ReadBlocksFromDDisk(
                     if (auto self = weakSelf.lock()) {
                         NProto::TError error = TranslateError(f.GetValue());
 
-                        if (IsSessionBlockedError(error)) {
-                            self->HandleBlockedGeneration(
-                                hostIndex,
-                                "ReadFromDDisk");
-                        }
-
                         self->OnResponse(
                             hostIndex,
                             TMonotonic::Now() - startAt,
@@ -594,11 +596,6 @@ TDirectBlockGroup::WriteBlocksToDDisk(
                     if (auto self = weakSelf.lock()) {
                         NProto::TError error = TranslateError(f.GetValue());
 
-                        if (IsSessionBlockedError(error)) {
-                            self->HandleBlockedGeneration(
-                                hostIndex,
-                                "WriteToDDisk");
-                        }
                         self->OnResponse(
                             hostIndex,
                             TMonotonic::Now() - startAt,
@@ -1750,6 +1747,12 @@ void TDirectBlockGroup::OnResponse(
 
         if (IsCancelledError(error)) {
             Oracle.OnRequestCancelled(hostIndex, operation, TInstant::Now());
+        } else if (
+            CanLeadToBlockedSession(operation) && IsSessionBlockedError(error))
+        {
+            HandleBlockedGeneration(hostIndex, ToString(operation));
+        } else if (IsDeviceBrokenError(error)) {
+            Oracle.OnDDiskBroken(hostIndex);
         } else {
             Oracle.OnRequestFailed(hostIndex, operation, TInstant::Now());
         }
@@ -1864,6 +1867,7 @@ void TDirectBlockGroup::HandleBlockedGeneration(
     THostIndex hostIndex,
     TStringBuf context)
 {
+    using namespace NKikimrBlobStorage::NDDisk;
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
 
     if (BlockedGenerationDetected) {

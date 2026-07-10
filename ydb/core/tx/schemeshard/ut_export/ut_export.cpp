@@ -19,7 +19,6 @@
 #include <ydb/core/util/aws.h>
 #include <ydb/core/wrappers/s3_wrapper.h>
 #include <ydb/core/wrappers/ut_helpers/s3_mock.h>
-#include <ydb/library/aws_init/aws.h>
 #include <ydb/public/lib/value/value.h>
 
 #include <library/cpp/testing/hook/hook.h>

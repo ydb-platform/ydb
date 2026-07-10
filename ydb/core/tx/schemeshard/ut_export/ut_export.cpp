@@ -5226,4 +5226,74 @@ CREATE EXTERNAL TABLE IF NOT EXISTS `ExternalTable` (
         TestDescribeResult(DescribePath(Runtime(), "/MyRoot/ColumnTable"), {NLs::PathExist});
         UNIT_ASSERT_VALUES_EQUAL(CountCompletedBackupsRows(), 0u);
     }
+
+    Y_UNIT_TEST(ExportTableWithMultiColumnStatistics) {
+        Env();
+        ui64 txId = 100;
+
+        TestCreateTable(Runtime(), ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "key" Type: "Uint32" }
+            Columns { Name: "value" Type: "Utf8" }
+            KeyColumnNames: ["key"]
+            MultiColumnStatistics { Name: "s1" ColumnNames: "value" Types: COUNT_MIN_SKETCH }
+        )");
+        Env().TestWaitNotification(Runtime(), txId);
+
+        UpdateRow(Runtime(), "Table", 1, "valueA");
+
+        TestExport(Runtime(), ++txId, "/MyRoot", Sprintf(R"(
+            ExportToS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              items {
+                source_path: "/MyRoot/Table"
+                destination_prefix: ""
+              }
+            }
+        )", S3Port()));
+        Env().TestWaitNotification(Runtime(), txId);
+        TestGetExport(Runtime(), txId, "/MyRoot");
+
+        TestDescribeResult(DescribePath(Runtime(), "/MyRoot/Table", true, true), {
+            NLs::PathExist,
+            NLs::CheckMultiColumnStatistics("s1", {"value"}, {NKikimrSchemeOp::EMultiColumnStatisticsType::COUNT_MIN_SKETCH}),
+        });
+    }
+
+    Y_UNIT_TEST(ExportColumnTableWithMultiColumnStatistics) {
+        Env();
+        Runtime().GetAppData().FeatureFlags.SetEnableColumnTablesBackup(true);
+        ui64 txId = 100;
+
+        TestCreateColumnTable(Runtime(), ++txId, "/MyRoot", R"(
+            Name: "OlapTable"
+            ColumnShardCount: 1
+            Schema {
+                Columns { Name: "timestamp" Type: "Timestamp" NotNull: true }
+                Columns { Name: "data" Type: "Utf8" }
+                KeyColumnNames: "timestamp"
+            }
+            MultiColumnStatistics { Name: "s1" ColumnNames: "data" Types: COUNT_MIN_SKETCH }
+        )");
+        Env().TestWaitNotification(Runtime(), txId);
+
+        TestExport(Runtime(), ++txId, "/MyRoot", Sprintf(R"(
+            ExportToS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              items {
+                source_path: "/MyRoot/OlapTable"
+                destination_prefix: ""
+              }
+            }
+        )", S3Port()));
+        Env().TestWaitNotification(Runtime(), txId);
+        TestGetExport(Runtime(), txId, "/MyRoot");
+
+        TestDescribeResult(DescribePrivatePath(Runtime(), "/MyRoot/OlapTable", true, true), {
+            NLs::PathExist,
+            NLs::CheckColumnTableMultiColumnStatistics("s1", {"data"}, {NKikimrSchemeOp::EMultiColumnStatisticsType::COUNT_MIN_SKETCH}),
+        });
+    }
 }

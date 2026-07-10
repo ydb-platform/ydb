@@ -335,5 +335,6 @@ message TFeatureFlags {
     optional bool EnableFulltextIndexRowId = 289 [default = true];
     optional bool EnableForcedColumnCompactions = 290 [default = false];
     optional bool EnableExportFiltering = 291 [default = false];
-    optional bool EnableExportInParquet = 292 [default = false];
+    optional bool EnableNodeBrokerLongLease = 292 [default = false];
+    optional bool EnableExportInParquet = 293 [default = false];
 }

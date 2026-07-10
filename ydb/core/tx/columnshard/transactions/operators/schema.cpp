@@ -347,12 +347,7 @@ void TSchemaTransactionOperator::DoOnTabletInit(TColumnShard& owner) {
             {"event", "wait_on_propose"},
             {"txId", GetTxId()});
         owner.Subscribers->RegisterSubscriber(WaitOnPropose);
-    } else {
-        YDB_LOG_WARN("",
-            {"event", "remove_pathes_cleaned"},
-            {"txId", GetTxId()});
-        owner.Execute(new TTxFinishAsyncTransaction(owner, GetTxId()));
-    }
+    }   // else we need to wait for SS resend
 }
 
 void TSchemaTransactionOperator::DoStartProposeOnComplete(TColumnShard& /*owner*/, const TActorContext& /*ctx*/) {

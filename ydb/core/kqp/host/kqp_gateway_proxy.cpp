@@ -384,6 +384,30 @@ bool FillCreateTableColumnDesc(NKikimrSchemeOp::TTableDescription& tableDesc, co
     return true;
 }
 
+template <typename TTableDescProto>
+bool FillMultiColumnStatisticsDesc(TTableDescProto& tableDesc,
+    const TVector<TMultiColumnStatisticsDescription>& statisticsList, Ydb::StatusIds::StatusCode& code, TString& error)
+{
+    for (const auto& statistics : statisticsList) {
+        auto* statisticsDesc = tableDesc.AddMultiColumnStatistics();
+        statisticsDesc->SetName(statistics.Name);
+        for (const auto& column : statistics.Columns) {
+            statisticsDesc->AddColumnNames(column);
+        }
+        for (const auto& type : statistics.Types) {
+            if (type == "COUNT_MIN_SKETCH") {
+                statisticsDesc->AddTypes(NKikimrSchemeOp::EMultiColumnStatisticsType::COUNT_MIN_SKETCH);
+            } else {
+                code = Ydb::StatusIds::BAD_REQUEST;
+                error = TStringBuilder() << "Unknown multi-column statistics type: " << type;
+                return false;
+            }
+        }
+    }
+
+    return true;
+}
+
 bool FillCreateTableDesc(NYql::TKikimrTableMetadataPtr metadata, NKikimrSchemeOp::TTableDescription& tableDesc,
     const TTableProfiles& profiles, Ydb::StatusIds::StatusCode& code, TString& error, TList<TString>& warnings)
 {
@@ -408,6 +432,11 @@ bool FillCreateTableDesc(NYql::TKikimrTableMetadataPtr metadata, NKikimrSchemeOp
     if (!NGRpcService::FillCreateTableSettingsDesc(tableDesc, createTableProto, profiles, code, error, warnings)) {
         return false;
     }
+
+    if (!FillMultiColumnStatisticsDesc(tableDesc, metadata->MultiColumnStatistics, code, error)) {
+        return false;
+    }
+
     return true;
 }
 
@@ -738,6 +767,10 @@ bool FillCreateColumnTableDesc(NYql::TKikimrTableMetadataPtr metadata,
     }
 
     if (!FillCreateLocalIndexDesc(tableDesc, metadata->Indexes, code, error)) {
+        return false;
+    }
+
+    if (!FillMultiColumnStatisticsDesc(tableDesc, metadata->MultiColumnStatistics, code, error)) {
         return false;
     }
 

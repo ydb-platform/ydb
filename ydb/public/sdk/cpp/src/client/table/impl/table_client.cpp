@@ -11,6 +11,14 @@ using namespace NThreading;
 
 const TKeepAliveSettings TTableClient::TImpl::KeepAliveSettings = TKeepAliveSettings().ClientTimeout(KEEP_ALIVE_CLIENT_TIMEOUT);
 
+namespace {
+    NThreading::TFuture<void> MakeReadyFuture() {
+        auto promise = NThreading::NewPromise<void>();
+        auto future = promise.GetFuture();
+        promise.SetValue();
+        return future;
+    }
+}
 
 TDuration GetMinTimeToTouch(const TSessionPoolSettings& settings) {
     return Min(settings.CloseIdleThreshold_, settings.KeepAliveIdleThreshold_);
@@ -73,7 +81,11 @@ std::shared_ptr<NObservability::TRequestSpan> TTableClient::TImpl::CreateRetryAt
 
 TTableClient::TImpl::~TImpl() {
     if (Connections_->GetDrainOnDtors()) {
-        Drain().Wait(DRAIN_TIMEOUT);
+        const bool closeRemote = !TGRpcConnectionsImpl::IsCurrentThreadInSdkCallback();
+        auto drainFuture = Drain(closeRemote);
+        if (closeRemote) {
+            drainFuture.Wait(DRAIN_TIMEOUT);
+        }
     }
 }
 
@@ -86,9 +98,7 @@ void TTableClient::TImpl::InitStopper() {
     auto cb = [weak]() mutable {
         auto strong = weak.lock();
         if (!strong) {
-            auto promise = NThreading::NewPromise<void>();
-            promise.SetException("no more client");
-            return promise.GetFuture();
+            return MakeReadyFuture();
         }
         return strong->Drain();
     };
@@ -96,7 +106,7 @@ void TTableClient::TImpl::InitStopper() {
     DbDriverState_->AddCb(std::move(cb), TDbDriverState::ENotifyType::STOP);
 }
 
-NThreading::TFuture<void> TTableClient::TImpl::Drain() {
+NThreading::TFuture<void> TTableClient::TImpl::Drain(bool closeRemote) {
     std::vector<std::unique_ptr<TKqpSessionCommon>> sessions;
     // No realocations under lock
     sessions.reserve(Settings_.SessionPoolSettings_.MaxActiveSessions_);
@@ -108,10 +118,16 @@ NThreading::TFuture<void> TTableClient::TImpl::Drain() {
     std::vector<TAsyncStatus> closeResults;
     for (auto& s : sessions) {
         if (!s->GetId().empty()) {
-            closeResults.push_back(CloseInternal(s.get()));
+            if (closeRemote) {
+                closeResults.push_back(CloseInternal(s.get()));
+            }
+            DbDriverState_->StatCollector.DecSessionsOnHost(s->GetEndpoint());
         }
     }
     sessions.clear();
+    if (closeResults.empty()) {
+        return MakeReadyFuture();
+    }
     return NThreading::WaitExceptionOrAll(closeResults);
 }
 
@@ -1150,8 +1166,11 @@ void TTableClient::TImpl::DeleteSession(TKqpSessionCommon* sessionImpl) {
         SessionPool_.DecrementActiveCounter();
     }
 
+    const bool closeRemote = !TGRpcConnectionsImpl::IsCurrentThreadInSdkCallback();
     if (!sessionImpl->GetId().empty()) {
-        CloseInternal(sessionImpl);
+        if (closeRemote) {
+            CloseInternal(sessionImpl);
+        }
         DbDriverState_->StatCollector.DecSessionsOnHost(sessionImpl->GetEndpoint());
     }
 

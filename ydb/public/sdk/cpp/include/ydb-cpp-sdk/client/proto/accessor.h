@@ -58,6 +58,9 @@ public:
     static NTable::TIndexDescription FromProto(const Ydb::Table::TableIndex& tableIndex);
     static NTable::TIndexDescription FromProto(const Ydb::Table::TableIndexDescription& tableIndexDesc);
 
+    static NTable::TMultiColumnStatisticsDescription FromProto(const Ydb::Table::TableMultiColumnStatistics& tableMultiColumnStatistics);
+    static NTable::TMultiColumnStatisticsDescription FromProto(const Ydb::Table::TableMultiColumnStatisticsDescription& tableMultiColumnStatisticsDesc);
+
     static NTable::TChangefeedDescription FromProto(const Ydb::Table::Changefeed& changefeed);
     static NTable::TChangefeedDescription FromProto(const Ydb::Table::ChangefeedDescription& changefeed);
 

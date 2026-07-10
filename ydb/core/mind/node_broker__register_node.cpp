@@ -73,7 +73,6 @@ public:
         auto host = rec.GetHost();
         ui16 port = (ui16)rec.GetPort();
         TString addr = rec.GetAddress();
-        auto expire = rec.GetFixedNodeId() ? TInstant::Max() : Self->Dirty.Epoch.NextEnd;
 
         LOG_DEBUG(ctx, NKikimrServices::NODE_BROKER, "TTxRegisterNode Execute");
         LOG_INFO_S(ctx, NKikimrServices::NODE_BROKER,
@@ -135,7 +134,7 @@ public:
                 Self->Dirty.FixNodeId(node);
                 Self->Dirty.DbAddNode(node, txc);
                 FixNodeId = true;
-            } else if (!node.IsFixed() && node.Expire < expire) {
+            } else if (Self->Dirty.IsLeaseExtendable(node)) {
                 Self->Dirty.ExtendLease(node);
                 Self->Dirty.DbAddNode(node, txc);
                 ExtendLease = true;
@@ -170,7 +169,16 @@ public:
             Node = MakeHolder<TNodeInfo>(NodeId, rec.GetAddress(), host, rec.GetResolveHost(), port, loc);
             Node->AuthorizedByCertificate = rec.GetAuthorizedByCertificate();
             Node->Lease = 1;
-            Node->Expire = expire;
+            if (rec.GetFixedNodeId()) {
+                Node->Expire = TInstant::Max();
+                Node->ExpireV2 = TInstant::Max();
+                Node->AliveUntil = TInstant::Max();
+            } else {
+                Node->Expire = Self->Dirty.Epoch.NextEnd;
+                Node->ExpireV2 = Self->Dirty.Epoch.NextEnd + Self->Dirty.LeaseDuration;
+                Node->AliveUntil = Self->Dirty.Epoch.NextEnd;
+            }
+            Node->Liveness = ENodeLiveness::Alive;
             Node->Version = Self->Dirty.Epoch.Version + 1;
             Node->State = ENodeState::Active;
 

@@ -651,12 +651,15 @@ namespace NSchemeShardUT_Private {
         TTestActorRuntime& runtime, ui64 schemeShard, ui64 tabletId,
         NKikimrScheme::TEvFindTabletSubDomainPathIdResult::EStatus expected = NKikimrScheme::TEvFindTabletSubDomainPathIdResult::SUCCESS);
 
-    void CreateAlterLoginCreateUser(TTestActorRuntime& runtime, ui64 txId, const TString& database,
-        const TString& user, const TString& password,
-        const TVector<TExpectedResult>& expectedResults = {{NKikimrScheme::StatusSuccess}});
+    struct TTestPasswordHashes {
+        TString HashedPassword;  // new-format hash (base64 JSON)
+        TString ScramServerKey;
+    };
+
+    TTestPasswordHashes MakeTestPasswordHashes(const TString& password);
 
     void CreateAlterLoginCreateUser(TTestActorRuntime& runtime, ui64 txId, const TString& database,
-        const TString& user, const TString& hashedPassword, const TString& hashedPasswordOldFormat,
+        const TString& user, const TString& hashedPassword,
         const TVector<TExpectedResult>& expectedResults = {{NKikimrScheme::StatusSuccess}});
 
     void CreateAlterLoginRemoveUser(TTestActorRuntime& runtime, ui64 txId, const TString& database,
@@ -677,8 +680,7 @@ namespace NSchemeShardUT_Private {
         const TString& member, const TString& group,
         const TVector<TExpectedResult>& expectedResults = {{NKikimrScheme::StatusSuccess}});
 
-    NKikimrScheme::TEvLoginResult Login(TTestActorRuntime& runtime,
-        const TString& user, const TString& password);
+    NKikimrScheme::TEvLoginResult LoginExternal(TTestActorRuntime& runtime, const TString& user);
 
     NKikimrScheme::TEvLoginResult Login(TTestActorRuntime& runtime,
         const TString& user, NLoginProto::ESaslAuthMech::SaslAuthMech authMech,
@@ -696,12 +698,6 @@ namespace NSchemeShardUT_Private {
 
     void ChangeIsEnabledUser(TTestActorRuntime& runtime, ui64 txId, const TString& database,
         const TString& user, bool isEnabled);
-
-    void ChangePasswordUser(TTestActorRuntime& runtime, ui64 txId, const TString& database,
-        const TString& user, const TString& password);
-
-    void ChangePasswordHashUser(TTestActorRuntime& runtime, ui64 txId, const TString& database,
-        const TString& user, const TString& hash);
 
     // Mimics data query to a single table with multiple partitions
     class TFakeDataReq {
@@ -813,5 +809,9 @@ namespace NSchemeShardUT_Private {
     NKikimrSetColumnConstraint::TEvListResponse TestListSetColumnConstraint(TTestActorRuntime& runtime, ui64 schemeShard, const TString &dbName);
     NKikimrSetColumnConstraint::TEvListResponse TestListSetColumnConstraint(TTestActorRuntime& runtime, ui64 schemeShard, const TString &dbName,
             ui64 pageSize, const TString& pageToken, Ydb::StatusIds::StatusCode expectedStatus = Ydb::StatusIds::SUCCESS);
+    NKikimrSetColumnConstraint::TEvForgetResponse TestForgetSetColumnConstraint(TTestActorRuntime& runtime, ui64 schemeshardId, ui64 txId, const TString& dbName, ui64 operationId,
+            Ydb::StatusIds::StatusCode expectedStatus = Ydb::StatusIds::SUCCESS);
+    NKikimrSetColumnConstraint::TEvForgetResponse TestForgetSetColumnConstraint(TTestActorRuntime& runtime, ui64 txId, const TString& dbName, ui64 operationId,
+            Ydb::StatusIds::StatusCode expectedStatus = Ydb::StatusIds::SUCCESS);
     void TestCheckColumnsNotNull(TTestActorRuntime& runtime, const TString& tablePath, const std::map<TString, bool>& expectedColumnNotNullStates);
 } //NSchemeShardUT_Private

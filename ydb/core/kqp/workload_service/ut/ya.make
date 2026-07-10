@@ -10,6 +10,8 @@ ELSE()
 ENDIF()
 
 SRCS(
+    kqp_has_app_name_ut.cpp
+    kqp_member_name_ut.cpp
     kqp_query_classifier_match_ut.cpp
     kqp_query_classifier_ut.cpp
     kqp_workload_service_actors_ut.cpp

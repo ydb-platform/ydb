@@ -20,10 +20,16 @@
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/core/util/pb.h>
 
+#include <ydb/library/login/hashes_checker/hashes_checker.h>
+
 #include <yql/essentials/core/yql_type_annotation.h>
 #include <yql/essentials/public/issue/yql_issue_message.h>
 
+#include <library/cpp/json/json_writer.h>
+#include <library/cpp/string_utils/base64/base64.h>
 #include <library/cpp/testing/unittest/registar.h>
+
+#include <openssl/sha.h>
 
 #include <util/generic/maybe.h>
 #include <util/generic/ptr.h>
@@ -2559,21 +2565,44 @@ namespace NSchemeShardUT_Private {
         return TPathId(record.GetSchemeShardId(), record.GetSubDomainPathId());
     }
 
-    void CreateAlterLoginCreateUser(TTestActorRuntime& runtime, ui64 txId, const TString& database, const TString& user, const TString& password, const TVector<TExpectedResult>& expectedResults) {
-        auto modifyTx = std::make_unique<TEvSchemeShard::TEvModifySchemeTransaction>(txId, TTestTxConfig::SchemeShard);
-        auto transaction = modifyTx->Record.AddTransaction();
-        transaction->SetWorkingDir(database);
-        transaction->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpAlterLogin);
+    TTestPasswordHashes MakeTestPasswordHashes(const TString& password) {
+        // Deterministically derive a new-format password hash from the plain password.
+        //
+        // We generate a SHA-256 (scram-sha-256) hash only: argon is a legacy format now.
+        // SchemeShard verifies a SASL PLAIN login by a plain string comparison of the supplied
+        // hash against the stored one, so we don't need a real scram computation here: we just build a
+        // pseudo hash of the required byte lengths that is a stable function of the password.
+        const auto& scram = NLogin::HashesRegistry.HashNamesMap.at("scram-sha-256");
 
-        auto createUser = transaction->MutableAlterLogin()->MutableCreateUser();
-        createUser->SetUser(user);
-        createUser->SetPassword(password);
+        const auto deriveBytes = [&password](const TString& tag, size_t size) {
+            TString result;
+            TString block = tag + password;
+            while (result.size() < size) {
+                unsigned char digest[SHA256_DIGEST_LENGTH];
+                SHA256(reinterpret_cast<const unsigned char*>(block.data()), block.size(), digest);
+                result.append(reinterpret_cast<const char*>(digest), sizeof(digest));
+                block.assign(reinterpret_cast<const char*>(digest), sizeof(digest));
+            }
 
-        AsyncSend(runtime, TTestTxConfig::SchemeShard, modifyTx.release());
-        TestModificationResults(runtime, txId, expectedResults);
+            result.resize(size);
+            return result;
+        };
+
+        const TString saltB64 = Base64Encode(deriveBytes("salt:", scram.SaltSize));
+        const TString storedKeyB64 = Base64Encode(deriveBytes("stored:", scram.HashSize));
+        const TString serverKeyB64 = Base64Encode(deriveBytes("server:", scram.HashSize));
+
+        NJson::TJsonValue hashes;
+        hashes["scram-sha-256"] = ToString(scram.IterationsCount) + ":" + saltB64 + "$" + storedKeyB64 + ":" + serverKeyB64;
+        hashes["version"] = NLogin::HASHES_JSON_SCHEMA_VERSION;
+
+        return {
+            .HashedPassword = Base64Encode(NJson::WriteJson(hashes, false)),
+            .ScramServerKey = serverKeyB64,
+        };
     }
 
-    void CreateAlterLoginCreateUser(TTestActorRuntime& runtime, ui64 txId, const TString& database, const TString& user, const TString& hashedPassword, const TString& hashedPasswordOldFormat, const TVector<TExpectedResult>& expectedResults) {
+    void CreateAlterLoginCreateUser(TTestActorRuntime& runtime, ui64 txId, const TString& database, const TString& user, const TString& hashedPassword, const TVector<TExpectedResult>& expectedResults) {
         auto modifyTx = std::make_unique<TEvSchemeShard::TEvModifySchemeTransaction>(txId, TTestTxConfig::SchemeShard);
         auto transaction = modifyTx->Record.AddTransaction();
         transaction->SetWorkingDir(database);
@@ -2581,8 +2610,6 @@ namespace NSchemeShardUT_Private {
 
         auto createUser = transaction->MutableAlterLogin()->MutableCreateUser();
         createUser->SetUser(user);
-        createUser->SetIsHashedPassword(true);
-        createUser->SetPassword(hashedPasswordOldFormat);
         createUser->SetHashedPassword(hashedPassword);
 
         AsyncSend(runtime, TTestTxConfig::SchemeShard, modifyTx.release());
@@ -2653,23 +2680,10 @@ namespace NSchemeShardUT_Private {
         TestModificationResults(runtime, txId, expectedResults);
     }
 
-    NKikimrScheme::TEvLoginResult Login(TTestActorRuntime& runtime, const TString& user, const TString& password) {
-        TActorId sender = runtime.AllocateEdgeActor();
-        auto evLogin = new TEvSchemeShard::TEvLogin();
-        evLogin->Record.SetUser(user);
-        evLogin->Record.SetPassword(password);
-
-        if (auto ldapDomain = runtime.GetAppData().AuthConfig.GetLdapAuthenticationDomain(); user.EndsWith("@" + ldapDomain)) {
-            evLogin->Record.SetExternalAuth(ldapDomain);
-        }
-        ForwardToTablet(runtime, TTestTxConfig::SchemeShard, sender, evLogin);
-        TAutoPtr<IEventHandle> handle;
-        auto event = runtime.GrabEdgeEvent<TEvSchemeShard::TEvLoginResult>(handle);
-        UNIT_ASSERT(event);
-        return event->Record;
-    }
-
-    NKikimrScheme::TEvLoginResult Login(TTestActorRuntime& runtime, const TString& user, NLoginProto::ESaslAuthMech::SaslAuthMech authMech, NLoginProto::EHashType::HashType hashType, const TString& hash, const TString& authMessage) {
+    NKikimrScheme::TEvLoginResult Login(TTestActorRuntime& runtime, const TString& user,
+        NLoginProto::ESaslAuthMech::SaslAuthMech authMech, NLoginProto::EHashType::HashType hashType,
+        const TString& hash, const TString& authMessage)
+    {
         TActorId sender = runtime.AllocateEdgeActor();
         auto evLogin = new TEvSchemeShard::TEvLogin();
         evLogin->Record.SetUser(user);
@@ -2679,6 +2693,21 @@ namespace NSchemeShardUT_Private {
         hashesToValidate.SetHash(hash);
         hashesToValidate.SetAuthMessage(authMessage);
 
+        ForwardToTablet(runtime, TTestTxConfig::SchemeShard, sender, evLogin);
+        TAutoPtr<IEventHandle> handle;
+        auto event = runtime.GrabEdgeEvent<TEvSchemeShard::TEvLoginResult>(handle);
+        UNIT_ASSERT(event);
+        return event->Record;
+    }
+
+    NKikimrScheme::TEvLoginResult LoginExternal(TTestActorRuntime& runtime, const TString& user) {
+        // External (LDAP) authentication: the password is verified by LDAP, not by YDB, so it is passed through as is.
+        const auto ldapDomain = runtime.GetAppData().AuthConfig.GetLdapAuthenticationDomain();
+
+        TActorId sender = runtime.AllocateEdgeActor();
+        auto evLogin = new TEvSchemeShard::TEvLogin();
+        evLogin->Record.SetUser(user);
+        evLogin->Record.SetExternalAuth(ldapDomain);
         ForwardToTablet(runtime, TTestTxConfig::SchemeShard, sender, evLogin);
         TAutoPtr<IEventHandle> handle;
         auto event = runtime.GrabEdgeEvent<TEvSchemeShard::TEvLoginResult>(handle);
@@ -2722,21 +2751,6 @@ namespace NSchemeShardUT_Private {
         ModifyUser(runtime, txId, database, [user, isEnabled](auto* alterUser) {
             alterUser->SetUser(std::move(user));
             alterUser->SetCanLogin(isEnabled);
-        });
-    }
-
-    void ChangePasswordUser(TTestActorRuntime& runtime, ui64 txId, const TString& database, const TString& user, const TString& password) {
-        ModifyUser(runtime, txId, database, [user, password](auto* alterUser) {
-            alterUser->SetUser(std::move(user));
-            alterUser->SetPassword(std::move(password));
-        });
-    }
-
-    void ChangePasswordHashUser(TTestActorRuntime& runtime, ui64 txId, const TString& database, const TString& user, const TString& hash) {
-        ModifyUser(runtime, txId, database, [user, hash](auto* alterUser) {
-            alterUser->SetUser(std::move(user));
-            alterUser->SetPassword(std::move(hash));
-            alterUser->SetIsHashedPassword(true);
         });
     }
 
@@ -3595,6 +3609,34 @@ namespace NSchemeShardUT_Private {
         Cerr << "SET COLUMN CONSTRAINT RESPONSE LIST: " << event->ToString() << Endl;
         UNIT_ASSERT_EQUAL_C(event->Record.GetStatus(), expectedStatus, event->Record.GetIssues());
         return event->Record;
+    }
+
+    NKikimrSetColumnConstraint::TEvForgetResponse TestForgetSetColumnConstraint(
+        TTestActorRuntime& runtime,
+        ui64 schemeshardId,
+        ui64 txId,
+        const TString& dbName,
+        ui64 operationId,
+        Ydb::StatusIds::StatusCode expectedStatus)
+    {
+        ForwardToTablet(runtime, schemeshardId, runtime.AllocateEdgeActor(), new TEvSetColumnConstraint::TEvForgetRequest(txId, dbName, operationId));
+
+        TAutoPtr<IEventHandle> handle;
+        auto ev = runtime.GrabEdgeEvent<TEvSetColumnConstraint::TEvForgetResponse>(handle);
+
+        UNIT_ASSERT_VALUES_EQUAL_C(ev->Record.GetStatus(), expectedStatus, ev->Record.GetIssues());
+
+        return ev->Record;
+    }
+
+    NKikimrSetColumnConstraint::TEvForgetResponse TestForgetSetColumnConstraint(
+        TTestActorRuntime& runtime,
+        ui64 txId,
+        const TString& dbName,
+        ui64 operationId,
+        Ydb::StatusIds::StatusCode expectedStatus)
+    {
+        return TestForgetSetColumnConstraint(runtime, TTestTxConfig::SchemeShard, txId, dbName, operationId, expectedStatus);
     }
 
     void TestCheckColumnsNotNull(

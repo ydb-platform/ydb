@@ -11,6 +11,7 @@
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/host_stat.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/host_state.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/oracle.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/mon_page/mon_model.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/storage_transport/ddisk_helpers.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/storage_transport/storage_transport.h>
 
@@ -21,6 +22,17 @@
 #include <ydb/core/mind/bscontroller/types.h>
 
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
+
+////////////////////////////////////////////////////////////////////////////////
+
+// State of a logical session (lock) with a DDisk.
+// Sessions are used only for DDisk connections.
+enum class EDDiskSessionState
+{
+    NotLocked,
+    Locked,
+    Broken,
+};
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -132,6 +144,8 @@ public:
         NKikimrBlobStorage::NDDisk::TDDiskId ddiskId,
         NKikimrBlobStorage::NDDisk::TDDiskId pbufferId) override;
 
+    NThreading::TFuture<TDbgSnapshot> BuildMonSnapshot() override;
+
     // IHostStateController implementation
     void SetHostState(
         THostIndex hostIndex,
@@ -149,15 +163,6 @@ private:
     using TDDiskIdToHostIndex =
         TMap<NKikimrBlobStorage::NDDisk::TDDiskId, THostIndex, TDDiskIdLess>;
 
-    // State of a logical session (lock) with a DDisk.
-    // Sessions are used only for DDisk connections.
-    enum class EDDiskSessionState
-    {
-        NotLocked,
-        Locked,
-        Broken,
-    };
-
     struct TDDiskConnection
     {
         using TPromise = NThreading::TPromise<NProto::TError>;
@@ -173,6 +178,7 @@ private:
 
         void ResetSession();
         [[nodiscard]] const TFuture& GetFuture() const;
+        [[nodiscard]] TString DebugPrint() const;
     };
 
     void DoEstablishConnections();
@@ -246,6 +252,8 @@ private:
     [[nodiscard]] bool WaitForSessionLock(THostIndex hostIndex);
 
     TDBGDumpResponse DoDebugPrintDirtyMap();
+
+    TDbgSnapshot DoBuildMonSnapshot();
 
     NActors::TActorSystem* const ActorSystem = nullptr;
     const TStorageConfigPtr StorageConfig;

@@ -64,15 +64,21 @@ TDBGWriteBlocksToManyPBuffersResponse MakeWriteToManyPBuffersResponse(
     return result;
 }
 
+THostSnapshot MakeHostSnapshot(const TOracleHostStat& stat)
+{
+    return {
+        .Index = stat.Index,
+        .State = stat.State,
+        .Health = stat.Health,
+        .InflightByOperation = stat.InflightByOperation,
+        .Errors = stat.Errors,
+        .PBufferUsedSize = stat.PBufferUsedSize,
+    };
+}
+
 }   // namespace
 
 ////////////////////////////////////////////////////////////////////////////////
-
-const TFuture<NProto::TError>&
-TDirectBlockGroup::TDDiskConnection::GetFuture() const
-{
-    return ConnectFuture;
-}
 
 void TDirectBlockGroup::TDDiskConnection::ResetSession()
 {
@@ -83,6 +89,27 @@ void TDirectBlockGroup::TDDiskConnection::ResetSession()
     ConnectPromise = NThreading::NewPromise<NProto::TError>();
     ConnectFuture = ConnectPromise.GetFuture();
     SessionState = EDDiskSessionState::NotLocked;
+}
+
+const TFuture<NProto::TError>&
+TDirectBlockGroup::TDDiskConnection::GetFuture() const
+{
+    return ConnectFuture;
+}
+
+TString TDirectBlockGroup::TDDiskConnection::DebugPrint() const
+{
+    TStringBuilder result;
+    result << HostConnection.DebugPrint();
+    auto f = GetFuture();
+    if (f.IsReady()) {
+        result << " c:" << FormatError(f.GetValue());
+    } else {
+        result << "c:<none>";
+    }
+    result << " s:" << ToString(SessionState);
+    result << " csn:" << ConfirmedSessionSeqNo;
+    return result;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -1101,6 +1128,26 @@ NThreading::TFuture<TDBGDumpResponse> TDirectBlockGroup::Dump()
     return future;
 }
 
+NThreading::TFuture<TDbgSnapshot> TDirectBlockGroup::BuildMonSnapshot()
+{
+    auto promise = NewPromise<TDbgSnapshot>();
+    auto future = promise.GetFuture();
+    Executor->ExecuteSimple(
+        [weakSelf = weak_from_this(),
+         index = DirectBlockGroupIndex,
+         promise = std::move(promise)]   //
+        () mutable
+        {
+            if (auto self = weakSelf.lock()) {
+                promise.SetValue(self->DoBuildMonSnapshot());
+            } else {
+                promise.SetValue({.Index = index});
+            }
+        });
+
+    return future;
+}
+
 void TDirectBlockGroup::SetHostState(
     THostIndex hostIndex,
     EHostState oldState,
@@ -1672,6 +1719,14 @@ TDBGDumpResponse TDirectBlockGroup::DoDebugPrintDirtyMap()
 
     TStringBuilder sb;
     sb << "DBG[" << DirectBlockGroupIndex << "]\n";
+
+    for (const auto& conn: DDiskConnections) {
+        sb << " " << conn.DebugPrint() << "\n";
+    }
+    for (const auto& conn: PBufferConnections) {
+        sb << " " << conn.DebugPrint() << "\n";
+    }
+
     sb << Oracle.Dump();
 
     TDBGDumpResponse result;
@@ -1686,6 +1741,24 @@ TDBGDumpResponse TDirectBlockGroup::DoDebugPrintDirtyMap()
         }
     }
     return result;
+}
+
+TDbgSnapshot TDirectBlockGroup::DoBuildMonSnapshot()
+{
+    Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
+
+    const auto hostStats = Oracle.BuildHostStats(TInstant::Now());
+    TVector<THostSnapshot> hosts;
+    hosts.reserve(hostStats.size());
+    for (const auto& stat: hostStats) {
+        hosts.push_back(MakeHostSnapshot(stat));
+    }
+
+    return {
+        .Index = DirectBlockGroupIndex,
+        .VChunkCount = VChunks.size(),
+        .Hosts = std::move(hosts),
+    };
 }
 
 ////////////////////////////////////////////////////////////////////////////////

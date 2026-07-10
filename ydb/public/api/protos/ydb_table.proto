@@ -434,6 +434,30 @@ message TableIndexDescription {
     uint64 size_bytes = 7;
 }
 
+// Represent multi-column table statistics
+message TableMultiColumnStatistics {
+    enum MultiColumnStatisticsType {
+        STATISTIC_TYPE_UNSPECIFIED = 0;
+        COUNT_MIN_SKETCH = 1;
+    }
+    // Name of statistics
+    string name = 1;
+    // List of columns the statistics is built on
+    repeated string columns = 2;
+    // Types of statistics to build
+    repeated MultiColumnStatisticsType types = 3;
+}
+
+// Represent multi-column table statistics description
+message TableMultiColumnStatisticsDescription {
+    // Name of statistics
+    string name = 1;
+    // List of columns the statistics is built on
+    repeated string columns = 2;
+    // Types of statistics to build
+    repeated TableMultiColumnStatistics.MultiColumnStatisticsType types = 3;
+}
+
 // State of index building operation
 message IndexBuildState {
     enum State {
@@ -1058,6 +1082,8 @@ message CreateTableRequest {
      * The metrics configuration for the given table.
      */
     optional MetricsSettings metrics_settings = 21;
+    // List of multi-column table statistics
+    repeated TableMultiColumnStatistics statistics = 22;
 }
 
 message CreateTableResponse {
@@ -1194,6 +1220,10 @@ message AlterTableRequest {
 
     // Start set not null for table
     repeated SetNotNullItem set_not_null = 27;
+    // Add multi-column table statistics
+    repeated TableMultiColumnStatistics add_statistics = 28;
+    // Remove multi-column table statistics (by its names)
+    repeated string drop_statistics = 29;
 }
 
 message AlterTableResponse {
@@ -1325,6 +1355,8 @@ message DescribeTableResult {
      * The metrics configuration for the given table.
      */
     optional MetricsSettings metrics_settings = 19;
+    // List of multi-column table statistics
+    repeated TableMultiColumnStatisticsDescription statistics = 20;
 }
 
 message Query {

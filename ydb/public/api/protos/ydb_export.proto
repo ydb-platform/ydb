@@ -75,7 +75,7 @@ message YdbDumpFormat {
 }
 
 message ParquetFormat {
-    uint32 row_group_size = 1 [(value) = "<= 10000000"];
+    uint32 row_group_size = 1 [(value) = "[1; 10000000]"];
 }
 
 /// S3

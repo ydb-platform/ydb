@@ -330,10 +330,14 @@ void TSchemaTransactionOperator::DoOnTabletInit(TColumnShard& owner) {
     if (WaitOnPropose) {
         AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "wait_on_propose")("tx_id", GetTxId());
         owner.Subscribers->RegisterSubscriber(WaitOnPropose);
+<<<<<<< HEAD
     } else {
         AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "remove_pathes_cleaned")("tx_id", GetTxId());
         owner.Execute(new TTxFinishAsyncTransaction(owner, GetTxId()));
     }
+=======
+    }   // else we need to wait for SS resend
+>>>>>>> abb000a3607 (simplify tx (#45970))
 }
 
 void TSchemaTransactionOperator::DoStartProposeOnComplete(TColumnShard& /*owner*/, const TActorContext& /*ctx*/) {

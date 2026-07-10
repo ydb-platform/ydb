@@ -201,10 +201,20 @@ Y_UNIT_TEST_SUITE(Restore) {
             AFL_VERIFY(csControllerGuard->GetFinishedExportsCount() == 0);
             planStep = ProposeTx(runtime, sender, NKikimrTxColumnShard::TX_KIND_BACKUP, txBody.SerializeAsString(), ++txId);
             AFL_VERIFY(csControllerGuard->GetFinishedExportsCount() == 1);
+            {
+                auto evSubscribe = std::make_unique<TEvColumnShard::TEvNotifyTxCompletion>(txId);
+                ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, evSubscribe.release());
+            }
             PlanTx(runtime, sender, NKikimrTxColumnShard::TX_KIND_BACKUP, NOlap::TSnapshot(planStep, txId), false);
+            {
+                auto ev = runtime.GrabEdgeEvent<TEvColumnShard::TEvNotifyTxCompletionResult>(sender);
+                UNIT_ASSERT(ev);
+                UNIT_ASSERT(ev->Get()->Record.GetOpResult().GetSuccess());
+            }
             TestWaitCondition(runtime, "export", [&]() {
                 return NTestUtils::GetObjectKeys("test", s3Client).size() == 3;
             });
+            VerifyNoBackupOrRestoreArtifacts(runtime, csControllerGuard.operator->());
         }
 
         // restore
@@ -256,10 +266,20 @@ Y_UNIT_TEST_SUITE(Restore) {
             AFL_VERIFY(csControllerGuard->GetFinishedImportsCount() == 0);
             planStep = ProposeTx(runtime, sender, NKikimrTxColumnShard::TX_KIND_RESTORE, txBody.SerializeAsString(), ++txId);
             AFL_VERIFY(csControllerGuard->GetFinishedImportsCount() == 1);
+            {
+                auto evSubscribe = std::make_unique<TEvColumnShard::TEvNotifyTxCompletion>(txId);
+                ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, evSubscribe.release());
+            }
             PlanTx(runtime, sender, NKikimrTxColumnShard::TX_KIND_RESTORE, NOlap::TSnapshot(planStep, txId), false);
+            {
+                auto ev = runtime.GrabEdgeEvent<TEvColumnShard::TEvNotifyTxCompletionResult>(sender);
+                UNIT_ASSERT(ev);
+                UNIT_ASSERT(ev->Get()->Record.GetOpResult().GetSuccess());
+            }
             TestWaitCondition(runtime, "import", [&]() {
                 return true;
             });
+            VerifyNoBackupOrRestoreArtifacts(runtime, csControllerGuard.operator->());
 
             {
                 NActors::TLogContextGuard guard = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("TEST_STEP", 8);

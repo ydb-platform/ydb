@@ -1266,18 +1266,9 @@ bool TTablet::HandleNext(TEvTablet::TEvCommit::TPtr &ev) {
         const TLogoBlobID &id = it->Id;
         Y_ABORT_UNLESS(id.TabletID() == TabletID() && id.Generation() == StateStorageInfo.KnownGeneration);
         LogoBlobIDFromLogoBlobID(id, x->AddReferences());
-        SeenBlobForCutHistory(id);
 
         if (saveFollowerUpdate)
             entry->FollowerUpdate->References.push_back(std::make_pair(it->Id, it->Buffer));
-    }
-
-    for (const TLogoBlobID& id : msg->GcDiscovered) {
-        SeenBlobForCutHistory(id);
-    }
-
-    for (const TLogoBlobID& id : msg->GcLeft) {
-        SeenBlobForCutHistory(id);
     }
 
     if (!msg->GcDiscovered.empty()) {
@@ -1501,6 +1492,7 @@ void TTablet::FeedCutHistoryFromGraph(const TEvTablet::TDependencyGraph* graph) 
 
 void TTablet::SendBarriersForCutHistory() {
     if (!AppData()->FeatureFlags.GetEnableCutHistory()) {
+        WantCutHistoryAfterGc = false;
         return;
     }
     if (CutHistoryStatus != ECutHistoryStatus::None) {
@@ -1534,7 +1526,7 @@ void TTablet::SendBarriersForCutHistory() {
                     true,
                     nextFromGeneration - 1, Max<ui32>(),
                     nullptr, nullptr, TInstant::Max(),
-                    false, true
+                    false, TWriteSource::GcLogChannel, true
                 )
             );
             sentHardGc = true;

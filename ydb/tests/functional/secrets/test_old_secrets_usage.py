@@ -18,18 +18,33 @@ class Utils:
         self.cluster = KiKiMR(self.config)
         self.cluster.start()
 
-        driver = ydb.Driver(endpoint=self.cluster.nodes[1].endpoint, database="/Root")
-        self.session_pool = ydb.SessionPool(driver)
-        driver.wait(5, fail_fast=True)
+        self.driver = None
+        self.session_pool = None
+        self._start_client()
+
+    def _start_client(self):
+        self.driver = ydb.Driver(endpoint=self.cluster.nodes[1].endpoint, database="/Root")
+        self.driver.wait(5, fail_fast=True)
+        self.session_pool = ydb.SessionPool(self.driver)
+
+    def _stop_client(self):
+        if self.session_pool is not None:
+            self.session_pool.stop()
+            self.session_pool = None
+        if self.driver is not None:
+            self.driver.stop()
+            self.driver = None
+
+    def stop(self):
+        self._stop_client()
+        self.cluster.stop()
 
     def restart_cluster(self, disable_old_secret_creation, enable_schema_secrets=True):
+        self._stop_client()
         self.config.yaml_config["feature_flags"]["disable_old_secret_creation"] = disable_old_secret_creation
         self.config.yaml_config["feature_flags"]["enable_schema_secrets"] = enable_schema_secrets
         self.cluster.update_configurator_and_restart(self.config)
-
-        driver = ydb.Driver(endpoint=self.cluster.nodes[1].endpoint, database="/Root")
-        driver.wait()
-        self.session_pool = ydb.SessionPool(driver)
+        self._start_client()
 
     def create_old_secret(self, secret_name, value):
         with self.session_pool.checkout() as session:
@@ -56,26 +71,32 @@ class Utils:
             session.execute_scheme(f"CREATE SECRET {secret_name} WITH (value='{value}');")
 
 
-def test_create_eds_with_old_secret_after_disabling_old_secret_creation():
+@pytest.fixture
+def old_secrets_utils():
     utils = Utils()
+    yield utils
+    utils.stop()
+
+
+def test_create_eds_with_old_secret_after_disabling_old_secret_creation(old_secrets_utils):
     # can create old secrets by default
-    utils.create_old_secret("OldSecret", value="")
+    old_secrets_utils.create_old_secret("OldSecret", value="")
 
     # can use old secrets by default
-    utils.create_eds("eds-before-restart", "OldSecret")
+    old_secrets_utils.create_eds("eds-before-restart", "OldSecret")
 
-    utils.restart_cluster(disable_old_secret_creation=True)
+    old_secrets_utils.restart_cluster(disable_old_secret_creation=True)
 
     # can create schema secrets with old secrets disabled
-    utils.create_schema_secret("NewSecret", value="")
+    old_secrets_utils.create_schema_secret("NewSecret", value="")
 
     # can use old secrets with old secrets disabled
-    utils.create_eds("eds-after-restart", "OldSecret")
+    old_secrets_utils.create_eds("eds-after-restart", "OldSecret")
 
     # can alter old secrets with old secrets disabled
-    utils.alter_old_secret("OldSecret", "NewValue")
+    old_secrets_utils.alter_old_secret("OldSecret", "NewValue")
 
     # can not create old secrets with old secrets disabled
     with pytest.raises(Exception) as exc_info:
-        utils.create_old_secret("NewOldSecret", value="")
+        old_secrets_utils.create_old_secret("NewOldSecret", value="")
     assert "Old secrets creation syntax is disabled now. Please use the new one" in str(exc_info.value)

@@ -4,6 +4,22 @@
 
 namespace NKikimr::NMetadata::NModifications {
 
+namespace {
+
+const TString OldSecretCreationDisabledMessage("Old secrets creation syntax is disabled now. Please use the new one");
+
+IOperationsManager::TYqlConclusionStatus OldSecretCreationDisabledStatus() {
+    return IOperationsManager::TYqlConclusionStatus::Fail(
+        NYql::TIssuesIds::KIKIMR_BAD_REQUEST,
+        OldSecretCreationDisabledMessage);
+}
+
+bool IsOldSecretType(const TString& typeId) {
+    return to_lower(typeId) == "secret";
+}
+
+} // namespace
+
 TTableSchema::TTableSchema(const THashMap<ui32, TSysTables::TTableColumnInfo>& description) {
     std::map<TString, Ydb::Column> columns;
     std::map<ui32, Ydb::Column> pkColumns;
@@ -83,6 +99,9 @@ IOperationsManager::TYqlConclusionStatus IOperationsManager::PrepareUpsertObject
     if (!NMetadata::NProvider::TServiceOperator::IsEnabled()) {
         return TYqlConclusionStatus::Fail("metadata provider service is disabled");
     }
+    if (AppData()->FeatureFlags.GetDisableOldSecretCreation() && IsOldSecretType(settings.GetTypeId())) {
+        return OldSecretCreationDisabledStatus();
+    }
     TInternalModificationContext internalContext(context);
     internalContext.SetActivityType(EActivityType::Upsert);
     return DoPrepare(schemeOperation, settings, manager, internalContext);
@@ -94,8 +113,8 @@ IOperationsManager::TYqlConclusionStatus IOperationsManager::PrepareCreateObject
     if (!NMetadata::NProvider::TServiceOperator::IsEnabled()) {
         return TYqlConclusionStatus::Fail("metadata provider service is disabled");
     }
-    if (AppData()->FeatureFlags.GetDisableOldSecretCreation() && to_lower(settings.GetTypeId()) == "secret") {
-        return TYqlConclusionStatus::Fail("Old secrets creation syntax is disabled now. Please use the new one");
+    if (AppData()->FeatureFlags.GetDisableOldSecretCreation() && IsOldSecretType(settings.GetTypeId())) {
+        return OldSecretCreationDisabledStatus();
     }
     TInternalModificationContext internalContext(context);
     internalContext.SetActivityType(EActivityType::Create);

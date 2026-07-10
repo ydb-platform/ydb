@@ -14981,7 +14981,19 @@ END DO)",
                 CREATE OBJECT SecretName (TYPE SECRET) WITH value="secret-value";
             )sql";
             const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::INTERNAL_ERROR, result.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
+
+            UNIT_ASSERT_STRING_CONTAINS_C(
+                result.GetIssues().ToString(),
+                "Old secrets creation syntax is disabled now. Please use the new one",
+                result.GetIssues().ToString());
+        }
+        { // upsert
+            static const auto query = R"sql(
+                UPSERT OBJECT SecretName (TYPE SECRET) WITH value="secret-value";
+            )sql";
+            const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
 
             UNIT_ASSERT_STRING_CONTAINS_C(
                 result.GetIssues().ToString(),

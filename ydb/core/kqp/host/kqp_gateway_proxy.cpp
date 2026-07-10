@@ -2302,6 +2302,10 @@ public:
     TFuture<TGenericResult> UpsertObject(const TString& cluster, const TUpsertObjectSettings& settings) override {
         CHECK_PREPARED_DDL(UpsertObject);
 
+        if (const auto rejected = CheckOldSecretCreationDisabled(settings.GetTypeId())) {
+            return MakeFuture(*rejected);
+        }
+
         if (IsPrepare()) {
             return MakeFuture(PrepareObjectOperation(cluster, settings, &NMetadata::NModifications::IOperationsManager::PrepareUpsertObjectSchemeOperation));
         } else {
@@ -2312,10 +2316,8 @@ public:
     TFuture<TGenericResult> CreateObject(const TString& cluster, const TCreateObjectSettings& settings) override {
         CHECK_PREPARED_DDL(CreateObject);
 
-        if (AppData()->FeatureFlags.GetDisableOldSecretCreation() && to_lower(settings.GetTypeId()) == "secret") {
-            return MakeErrorFuture<IKikimrGateway::TGenericResult>(
-                std::make_exception_ptr(yexception() << "Old secrets creation syntax is disabled now. Please use the new one")
-            );
+        if (const auto rejected = CheckOldSecretCreationDisabled(settings.GetTypeId())) {
+            return MakeFuture(*rejected);
         }
 
         if (IsPrepare()) {
@@ -3805,6 +3807,16 @@ public:
     }
 
 private:
+    TMaybe<TGenericResult> CheckOldSecretCreationDisabled(const TString& typeId) const {
+        if (!AppData()->FeatureFlags.GetDisableOldSecretCreation() || to_lower(typeId) != "secret") {
+            return Nothing();
+        }
+        TGenericResult errResult;
+        errResult.AddIssue(NYql::TIssue("Old secrets creation syntax is disabled now. Please use the new one"));
+        errResult.SetStatus(NYql::YqlStatusFromYdbStatus(Ydb::StatusIds::BAD_REQUEST));
+        return errResult;
+    }
+
     bool IsPrepare() const {
         if (!SessionCtx) {
             return false;

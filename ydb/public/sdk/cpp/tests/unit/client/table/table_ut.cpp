@@ -443,6 +443,7 @@ TEST(TableTest, DropLastOwnersFromResponseCallbackDoesNotDeadlock) {
     ASSERT_TRUE(WaitUntil([&] {
         return connections.expired();
     }));
+    ASSERT_EQ(tableService.DeleteSessionRequests.load(), 2u);
 }
 
 TEST(TableTest, DriverStopFromResponseCallbackThenDropOwnersDoesNotDeadlock) {

@@ -81,9 +81,9 @@ std::shared_ptr<NObservability::TRequestSpan> TTableClient::TImpl::CreateRetryAt
 
 TTableClient::TImpl::~TImpl() {
     if (Connections_->GetDrainOnDtors()) {
-        const bool closeRemote = !TGRpcConnectionsImpl::IsCurrentThreadInSdkCallback();
-        auto drainFuture = Drain(closeRemote);
-        if (closeRemote) {
+        const bool waitForDrain = !TGRpcConnectionsImpl::IsCurrentThreadInSdkCallback();
+        auto drainFuture = Drain();
+        if (waitForDrain) {
             drainFuture.Wait(DRAIN_TIMEOUT);
         }
     }
@@ -106,7 +106,7 @@ void TTableClient::TImpl::InitStopper() {
     DbDriverState_->AddCb(std::move(cb), TDbDriverState::ENotifyType::STOP);
 }
 
-NThreading::TFuture<void> TTableClient::TImpl::Drain(bool closeRemote) {
+NThreading::TFuture<void> TTableClient::TImpl::Drain() {
     std::vector<std::unique_ptr<TKqpSessionCommon>> sessions;
     // No realocations under lock
     sessions.reserve(Settings_.SessionPoolSettings_.MaxActiveSessions_);
@@ -118,9 +118,7 @@ NThreading::TFuture<void> TTableClient::TImpl::Drain(bool closeRemote) {
     std::vector<TAsyncStatus> closeResults;
     for (auto& s : sessions) {
         if (!s->GetId().empty()) {
-            if (closeRemote) {
-                closeResults.push_back(CloseInternal(s.get()));
-            }
+            closeResults.push_back(CloseInternal(s.get()));
             DbDriverState_->StatCollector.DecSessionsOnHost(s->GetEndpoint());
         }
     }
@@ -1166,11 +1164,8 @@ void TTableClient::TImpl::DeleteSession(TKqpSessionCommon* sessionImpl) {
         SessionPool_.DecrementActiveCounter();
     }
 
-    const bool closeRemote = !TGRpcConnectionsImpl::IsCurrentThreadInSdkCallback();
     if (!sessionImpl->GetId().empty()) {
-        if (closeRemote) {
-            CloseInternal(sessionImpl);
-        }
+        CloseInternal(sessionImpl);
         DbDriverState_->StatCollector.DecSessionsOnHost(sessionImpl->GetEndpoint());
     }
 

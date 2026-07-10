@@ -11,7 +11,8 @@
 // Type conversions between BinaryJson, dedicated scalar types and arrow storage types.
 namespace NKikimr::NArrow::NAccessor::NSubColumns {
 
-// Logical (as seen by external consumers) value types of data stored in subcolumns.
+// Logical (as seen by external consumers) value type of data stored in a subcolumn.
+// PERSISTED: these numeric codes are written to disk as the `value_type` column of TDictStats.
 enum class EValueType : ui8 {
     BinaryJson = 0,
     Double = 1,

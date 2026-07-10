@@ -568,6 +568,13 @@ Y_UNIT_TEST_SUITE(SubColumnsDictStats) {
         }
     }
 
+    Y_UNIT_TEST(ValueTypeCodesArePersistent) {
+        UNIT_ASSERT_VALUES_EQUAL((ui32)EValueType::BinaryJson, 0u);
+        UNIT_ASSERT_VALUES_EQUAL((ui32)EValueType::Double, 1u);
+        UNIT_ASSERT_VALUES_EQUAL((ui32)EValueType::Bool, 2u);
+        UNIT_ASSERT_VALUES_EQUAL((ui32)EValueType::String, 3u);
+    }
+
     // The current format (5-column, with value_type) round-trips through serialization, preserving every field.
     Y_UNIT_TEST(NewFormatRoundTrip) {
         const std::vector<TStatsRow> rows = {

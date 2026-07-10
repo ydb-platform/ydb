@@ -2584,7 +2584,8 @@ private:
             return TStatus::Error;
         }
 
-        if (!ValidateSettings(*input.Ref().Child(TYtMaterialize::idx_Settings), EYtSettingType::Unordered | EYtSettingType::Transparent, ctx)) {
+        const auto acceptedSettings = EYtSettingType::Unordered | EYtSettingType::Transparent | EYtSettingType::PruneUnusedColumns;
+        if (!ValidateSettings(*input.Ref().Child(TYtMaterialize::idx_Settings), acceptedSettings, ctx)) {
             return TStatus::Error;
         }
 
@@ -2611,7 +2612,8 @@ private:
             return TStatus::Error;
         }
 
-        if (!ValidateSettings(*input->Child(TYtPersist::idx_Settings), EYtSettingType::Unordered | EYtSettingType::Transparent, ctx)) {
+        const auto acceptedSettings = EYtSettingType::Unordered | EYtSettingType::Transparent | EYtSettingType::PruneUnusedColumns;
+        if (!ValidateSettings(*input->Child(TYtPersist::idx_Settings), acceptedSettings, ctx)) {
             return TStatus::Error;
         }
 

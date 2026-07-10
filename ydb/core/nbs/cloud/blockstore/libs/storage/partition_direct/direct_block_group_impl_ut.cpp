@@ -191,9 +191,9 @@ Y_UNIT_TEST_SUITE(TDirectBlockGroupTest)
     }
 
     // With a 3-of-5 quorum, reads/writes to a locked host pass through,
-    // while a request to a still-connecting host is suspended until its session
-    // is established.
-    Y_UNIT_TEST_F(ShouldBlockDDiskIoUntilSessionEstablished, TDBGFixture)
+    // while a request to a still-connecting host is immediately rejected with
+    // E_REJECTED (the request is not blocked waiting for the session).
+    Y_UNIT_TEST_F(ShouldRejectDDiskIoUntilSessionEstablished, TDBGFixture)
     {
         auto executor = MakeExecutor();
         auto transport = std::make_unique<TStorageTransportMock>();
@@ -201,8 +201,7 @@ Y_UNIT_TEST_SUITE(TDirectBlockGroupTest)
         const auto& ddisks = transport->GetDDiskIds();
         // Hosts 0..2 connect immediately (default) and form the quorum; hosts
         // 3 and 4 stay pending.
-        auto pendingHost3 =
-            transport->SetPendingConnect(EConnectionType::DDisk, ddisks[3]);
+        transport->SetPendingConnect(EConnectionType::DDisk, ddisks[3]);
         transport->SetPendingConnect(EConnectionType::DDisk, ddisks[4]);
 
         auto dbg = MakeDirectBlockGroup(executor, std::move(transport));
@@ -212,8 +211,8 @@ Y_UNIT_TEST_SUITE(TDirectBlockGroupTest)
         WaitReady(initialReady);
         const auto range = TBlockRange64::WithLength(0, 1);
 
-        // Read from the still-connecting host 3 suspends inside the method, so
-        // the outer future (carrying the returned future) is not resolved.
+        // Read from the still-connecting host 3 is immediately rejected: its
+        // session is not Locked, so the request is not blocked.
         TString pendingBuffer(DefaultBlockSize, 'p');
         auto pendingRead = RunOnExecutor(
             executor,
@@ -226,13 +225,8 @@ Y_UNIT_TEST_SUITE(TDirectBlockGroupTest)
                     MakeSgList(pendingBuffer),
                     NWilson::TTraceId());
             });
-        DrainExecutor(executor);
-        UNIT_ASSERT(!pendingRead.HasValue());
-
-        // Establishing the session unblocks the read.
-        pendingHost3.SetValue(TStorageTransportMock::MakeConnectResult());
         UNIT_ASSERT_VALUES_EQUAL(
-            S_OK,
+            E_REJECTED,
             GetResponse(pendingRead).Error.GetCode());
     }
 
@@ -954,7 +948,7 @@ Y_UNIT_TEST_SUITE(TDDiskSessionSeqNoTest)
 
 Y_UNIT_TEST_SUITE(TSessionsWithRealTransport)
 {
-    Y_UNIT_TEST_F(ShouldCancelSessionWaitersOnDisconnect, TDBGFixture)
+    Y_UNIT_TEST_F(ShouldRejectReadWhileSessionNotLocked, TDBGFixture)
     {
         auto executor = MakeExecutor();
         auto transport =
@@ -972,7 +966,8 @@ Y_UNIT_TEST_SUITE(TSessionsWithRealTransport)
         const auto range = TBlockRange64::WithLength(0, 1);
         TString buffer(DefaultBlockSize, 'r');
 
-        // The read on host 0 suspends inside WaitForSessionLock.
+        // The read on host 0 is immediately rejected: its session is not
+        // Locked, so the request is not blocked waiting for the session.
         auto pendingRead = RunOnExecutor(
             executor,
             [&]
@@ -984,20 +979,10 @@ Y_UNIT_TEST_SUITE(TSessionsWithRealTransport)
                     MakeSgList(buffer),
                     NWilson::TTraceId());
             });
-        DoAllExecutorAndRuntimeWork(executor);
-        UNIT_ASSERT(!pendingRead.HasValue());
-
-        // The disconnect resets the session: ResetSession wakes the waiter with
-        // an error.
-        transportPtr->FireDisconnect(
-            EConnectionType::DDisk,
-            ddisks[0],
-            transportPtr->GetNodeId());
 
         auto innerRead = WaitFuture(executor, pendingRead, WaitTimeout);
-        UNIT_ASSERT(pendingRead.HasValue());
         auto response = WaitFuture(executor, innerRead, WaitTimeout);
-        UNIT_ASSERT_VALUES_UNEQUAL(S_OK, response.Error.GetCode());
+        UNIT_ASSERT_VALUES_EQUAL(E_REJECTED, response.Error.GetCode());
     }
 
     Y_UNIT_TEST_F(ShouldCancelActiveRequestsOnDisconnect, TDBGFixture)
@@ -1032,9 +1017,9 @@ Y_UNIT_TEST_SUITE(TSessionsWithRealTransport)
                     NWilson::TTraceId());
             });
 
-        // The session is already established, so the read does not suspend in
-        // WaitForSessionLock: the outer future resolves immediately, carrying
-        // the still-pending in-flight read future.
+        // The session is already established (Locked), so the read is not
+        // rejected: the outer future resolves immediately, carrying the
+        // still-pending in-flight read future.
         auto inFlightRead = WaitFuture(executor, pendingRead, WaitTimeout);
         DoAllExecutorAndRuntimeWork(executor);
         UNIT_ASSERT(!inFlightRead.HasValue());

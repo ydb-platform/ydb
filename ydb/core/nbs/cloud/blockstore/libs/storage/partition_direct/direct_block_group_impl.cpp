@@ -245,7 +245,8 @@ TDirectBlockGroup::ReadBlocksFromDDisk(
     using TEvReadResultFuture =
         TFuture<NKikimrBlobStorage::NDDisk::TEvReadResult>;
 
-    if (!WaitForSessionLock(hostIndex)) {
+    if (DDiskConnections[hostIndex].SessionState != EDDiskSessionState::Locked)
+    {
         return MakeFuture<TDBGReadBlocksResponse>(
             {.Error =
                  MakeError(E_REJECTED, "DDisk session is not established")});
@@ -398,7 +399,8 @@ TDirectBlockGroup::WriteBlocksToDDisk(
 
     const auto startAt = TMonotonic::Now();
 
-    if (!WaitForSessionLock(hostIndex)) {
+    if (DDiskConnections[hostIndex].SessionState != EDDiskSessionState::Locked)
+    {
         return MakeFuture<TDBGWriteBlocksResponse>(
             {.Error =
                  MakeError(E_REJECTED, "DDisk session is not established")});
@@ -704,7 +706,9 @@ NThreading::TFuture<TDBGFlushResponse> TDirectBlockGroup::SyncWithPBuffer(
 {
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
 
-    if (!WaitForSessionLock(ddiskHostIndex)) {
+    if (DDiskConnections[ddiskHostIndex].SessionState !=
+        EDDiskSessionState::Locked)
+    {
         TDBGFlushResponse rejectResponse;
         rejectResponse.Errors.reserve(segments.size());
         for (size_t i = 0; i < segments.size(); ++i) {
@@ -1685,17 +1689,6 @@ void TDirectBlockGroup::ScheduleOracleThinking()
                 self->ScheduleOracleThinking();
             }
         });
-}
-
-bool TDirectBlockGroup::WaitForSessionLock(THostIndex hostIndex)
-{
-    const auto& conn = DDiskConnections[hostIndex];
-    if (conn.SessionState != EDDiskSessionState::Locked) {
-        const auto sessionReadyFuture = conn.GetFuture();
-        Executor->WaitFor(sessionReadyFuture);
-        return conn.SessionState == EDDiskSessionState::Locked;
-    }
-    return true;
 }
 
 TDBGDumpResponse TDirectBlockGroup::DoDebugPrintDirtyMap()

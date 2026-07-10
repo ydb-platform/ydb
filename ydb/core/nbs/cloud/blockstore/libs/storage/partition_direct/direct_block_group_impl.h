@@ -246,8 +246,6 @@ private:
     void Thinking();
     void ScheduleOracleThinking();
 
-    [[nodiscard]] bool WaitForSessionLock(THostIndex hostIndex);
-
     TDBGDumpResponse DoDebugPrintDirtyMap();
 
     TDbgSnapshot DoBuildMonSnapshot();

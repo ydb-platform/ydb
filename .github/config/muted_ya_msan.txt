@@ -4,7 +4,6 @@ ydb/core/blobstorage/ut_blobstorage/ut_balancing VDiskBalancing.TestRandom_Mirro
 ydb/core/blobstorage/ut_blobstorage/ut_balancing unittest.[*/*] chunk
 ydb/core/blobstorage/ut_blobstorage/ut_bridge BridgeGet.PartRestorationAcrossBridgeOnRange
 ydb/core/blobstorage/ut_blobstorage/ut_bridge unittest.[*/*] chunk
-ydb/core/blobstorage/ut_blobstorage/ut_donor Donor.ManualCrossNodeReassignMustKeepDonorForbiddenOnRetry
 ydb/core/blobstorage/ut_blobstorage/ut_phantom_blobs PhantomBlobs.TestBlobSizeLimitAboveLimit
 ydb/core/blobstorage/ut_blobstorage/ut_phantom_blobs PhantomBlobs.TestBlobSizeLimitBelowLimit
 ydb/core/blobstorage/ut_blobstorage/ut_phantom_blobs PhantomBlobs.TestDisabling
@@ -32,51 +31,7 @@ ydb/core/kqp/ut/service KqpQueryService.FlowControllOnHugeRealTable-LongRow
 ydb/core/load_test/ut GroupWriteTest.SimpleRdma
 ydb/core/load_test/ut GroupWriteTest.WriteHardRateDispatcher
 ydb/core/load_test/ut unittest.[*/*] chunk
-ydb/core/transfer/ut/functional Transfer.AlterBatchSize
-ydb/core/transfer/ut/functional Transfer.AlterFlushInterval
-ydb/core/transfer/ut/functional Transfer.AlterLambdaOnWork
-ydb/core/transfer/ut/functional Transfer.AlterTargetDirectory
-ydb/core/transfer/ut/functional Transfer.Alter_WithSecret
-ydb/core/transfer/ut/functional Transfer.CheckCurrentDateTime
-ydb/core/transfer/ut/functional Transfer.CheckCurrentDateTime_withParams
-ydb/core/transfer/ut/functional Transfer.CreateAndAlterTransferInDirectory
-ydb/core/transfer/ut/functional Transfer.CreateTransferSourceDirNotExists
-ydb/core/transfer/ut/functional Transfer.CreateTransferSourceDirNotExists_LocalTopic
-ydb/core/transfer/ut/functional Transfer.CreateTransferSourceIsNotTopic
-ydb/core/transfer/ut/functional Transfer.CreateTransferSourceIsNotTopic_LocalTopic
-ydb/core/transfer/ut/functional Transfer.CreateTransferSourceNotExists
-ydb/core/transfer/ut/functional Transfer.CreateTransferSourceNotExists_LocalTopic
-ydb/core/transfer/ut/functional Transfer.CreateTransferTargetIsNotTable
-ydb/core/transfer/ut/functional Transfer.CreateTransferTargetNotExists
-ydb/core/transfer/ut/functional Transfer.CustomConsumer
-ydb/core/transfer/ut/functional Transfer.CustomConsumer_NotExists_Local
-ydb/core/transfer/ut/functional Transfer.CustomConsumer_NotExists_Remote
-ydb/core/transfer/ut/functional Transfer.CustomFlushInterval
-ydb/core/transfer/ut/functional Transfer.DescribeError_OnLambdaCompilation
-ydb/core/transfer/ut/functional Transfer.DescribeTransferWithErrorTopicNotFound
-ydb/core/transfer/ut/functional Transfer.ErrorInMultiLine
 ydb/core/transfer/ut/functional Transfer.LocalTopic_BigMessage
-ydb/core/transfer/ut/functional Transfer.MessageField_Attributes_Local
-ydb/core/transfer/ut/functional Transfer.MessageField_Attributes_Remote
-ydb/core/transfer/ut/functional Transfer.MessageField_CreateTimestamp_Local
-ydb/core/transfer/ut/functional Transfer.MessageField_CreateTimestamp_Remote
-ydb/core/transfer/ut/functional Transfer.MessageField_Key
-ydb/core/transfer/ut/functional Transfer.MessageField_Key_Empty
-ydb/core/transfer/ut/functional Transfer.MessageField_Partition_Local
-ydb/core/transfer/ut/functional Transfer.MessageField_Partition_Remote
-ydb/core/transfer/ut/functional Transfer.MessageField_WriteTimestamp_Local
-ydb/core/transfer/ut/functional Transfer.MessageField_WriteTimestamp_Remote
-ydb/core/transfer/ut/functional Transfer.PauseAndResumeTransfer
-ydb/core/transfer/ut/functional Transfer.PausedAfterError
-ydb/core/transfer/ut/functional Transfer.ReadFromCDC_Local
-ydb/core/transfer/ut/functional Transfer.ReadFromCDC_Remote
-ydb/core/transfer/ut/functional Transfer.TargetTableWithoutDirectory
-ydb/core/transfer/ut/functional Transfer.TargetTableWriteInsideDirectory
-ydb/core/transfer/ut/functional Transfer.TargetTableWriteOutsideDirectory
-ydb/core/transfer/ut/functional Transfer.TransferSourceDropped
-ydb/core/transfer/ut/functional Transfer.TransferSourceDropped_LocalTopic
-ydb/core/transfer/ut/functional Transfer.WriteToNotExists
-ydb/core/transfer/ut/functional Transfer.WriteToNotTable
 ydb/core/tx/schemeshard/ut_metrics unittest.[*/*] chunk
 ydb/library/actors/interconnect/ut Interconnect.KernelLivenessReconnectLocalFallbackNotAppliedRdma
 ydb/library/actors/interconnect/ut Interconnect.RdmaSimultaneousReconnectDoesNotLoop
@@ -92,14 +47,10 @@ ydb/tests/compatibility/indexes test_bloom_filter_index.py.TestBloomFilterIndex.
 ydb/tests/compatibility/indexes test_bloom_filter_index.py.TestBloomFilterIndex.test_bloom_filter_survives_version_change[restart_stable-26-2-1_to_stable-26-2-1]
 ydb/tests/compatibility/olap test_encoding.py.TestEncoding.test_encoding[rolling_stable-26-2-1_to_prestable-26-3]
 ydb/tests/compatibility/result_set_format py3test.[test_result_set_arrow.py */*] chunk
-ydb/tests/compatibility/result_set_format test_result_set_arrow.py.TestResultSetArrow.test_compression[restart_prestable-26-3_to_prestable-26-3-codec5-ROW]
-ydb/tests/compatibility/result_set_format test_result_set_arrow.py.TestResultSetArrow.test_multistatement[restart_prestable-26-3_to_stable-26-2-1-1-False-2048-ROW]
-ydb/tests/compatibility/result_set_format test_result_set_arrow.py.TestResultSetArrow.test_schema_inclusion_mode[restart_prestable-26-3_to_stable-26-2-1-0-2048-ROW]
 ydb/tests/compatibility/streaming test_scalar_topic_write.py.TestScalarTopicWriteRollingUpgradeAndDowngrade.test_rolling_upgrade[rolling_stable-26-2-1_to_prestable-26-3-False]
 ydb/tests/compatibility/streaming test_streaming.py.TestStreamingMixedCluster.test_mixed_cluster[mixed_prestable-26-3_and_stable-26-2-1-True]
 ydb/tests/compatibility/streaming test_streaming.py.TestStreamingRestartToAnotherVersion.test_restart_to_another_version[restart_prestable-26-3_to_stable-26-2-1-False]
 ydb/tests/compatibility/streaming test_streaming.py.TestStreamingRestartToAnotherVersion.test_restart_to_another_version[restart_prestable-26-3_to_stable-26-2-1-True]
-ydb/tests/compatibility/streaming test_streaming.py.TestStreamingRollingUpgradeAndDowngrade.test_rolling_upgrade[rolling_stable-26-2-1_to_prestable-26-3-False]
 ydb/tests/compatibility/stress test_stress.py.TestStress.test_log[mixed_prestable-26-3_and_stable-26-2-1-column]
 ydb/tests/compatibility/udf test_datetime2.py.TestDatetime2.test_all[mixed_prestable-26-3_and_stable-26-2-1]
 ydb/tests/compatibility/workloads test_table_schema_compatibility.py.TestTableSchemaCompatibilityRestart.test_create_alter_drop_columns_on_one_version_continue_on_another[restart_prestable-26-3_to_prestable-26-3]
@@ -1469,7 +1420,6 @@ ydb/tests/functional/sqs/with_quotas test_quoting.py.TestSqsQuotingWithLocalRate
 ydb/tests/functional/sqs/with_quotas test_quoting.py.TestSqsQuotingWithLocalRateLimiter.test_send_message_rate[tables_format_v0]
 ydb/tests/functional/sqs/with_quotas test_quoting.py.TestSqsQuotingWithLocalRateLimiter.test_send_message_rate[tables_format_v1]
 ydb/tests/functional/tpc/large py3test.[test_tpcds.py] chunk
-ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS0_1DecimalNative.test_tpcds[1]
 ydb/tests/stress/kafka/tests test_kafka_streams.py.TestYdbTopicWorkload.test
 ydb/tests/stress/oltp_workload/tests py3test.sole chunk
 ydb/tests/stress/oltp_workload/tests test_workload.py.TestYdbWorkload.test

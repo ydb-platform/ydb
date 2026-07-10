@@ -67,7 +67,7 @@ class TestIamAuth(StreamingTestBase):
 
         endpoint = self.get_endpoint(kikimr, local_topics=True)
         source_name = entity_name(f"iam_source{shared_reading!s:.1}")
-        query_name = entity_name(f"iam_query!s:.1")
+        query_name = entity_name(f"iam_query{shared_reading!s:.1}")
 
         # 1. Create the secret and set cloud_id on the database root.
         secret_name = entity_name("iam_secret")

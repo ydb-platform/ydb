@@ -3,6 +3,8 @@
 #include "ddisk_helpers.h"
 #include "ic_storage_transport_events.h"
 
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/model/log_title.h>
+
 #include <ydb/core/blobstorage/ddisk/ddisk.h>
 
 namespace NYdb::NBS::NBlockStore::NStorage::NTransport {
@@ -13,6 +15,8 @@ class TICStorageTransportActor
     : public NActors::TActorBootstrapped<TICStorageTransportActor>
 {
 private:
+    TLogTitle LogTitle;
+
     ui64 RequestIdGenerator = 0;
 
     THashMap<ui64, std::unique_ptr<TEvTransportPrivate::TEvConnect>>
@@ -58,7 +62,7 @@ private:
     THashMap<ui64, TVector<NThreading::TPromise<ui32>>> ICSubscribedNodes;
 
 public:
-    TICStorageTransportActor() = default;
+    TICStorageTransportActor(const TString& diskId, ui32 dbgIndex);
 
     ~TICStorageTransportActor() override;
 
@@ -110,7 +114,6 @@ private:
     void HandleBatchErasePersistentBuffer(
         const TEvTransportPrivate::TEvBatchEraseFromPBuffer::TPtr& ev,
         const NActors::TActorContext& ctx);
-
     void HandleBarrierErasePersistentBuffer(
         const TEvTransportPrivate::TEvBarrierEraseFromPBuffer::TPtr& ev,
         const NActors::TActorContext& ctx);
@@ -176,7 +179,7 @@ private:
 
 ////////////////////////////////////////////////////////////////////////////////
 
-NActors::TActorId CreateTransportActor();
+NActors::TActorId CreateTransportActor(const TString& diskId, ui32 dbgIndex);
 
 ////////////////////////////////////////////////////////////////////////////////
 

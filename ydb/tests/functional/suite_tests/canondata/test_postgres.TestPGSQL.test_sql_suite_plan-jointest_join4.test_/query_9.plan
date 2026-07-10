@@ -42,7 +42,7 @@
                                                 "TopSortBy": "[Arg.tt1.tt1_id,Arg.tt1.joincol,Arg.tt2.tt2_id]"
                                             },
                                             {
-                                                "Condition": "tt2.joincol = tt1.joincol",
+                                                "Condition": "tt1.joincol = tt2.joincol",
                                                 "Inputs": [
                                                     {
                                                         "ExternalPlanNodeId": 6

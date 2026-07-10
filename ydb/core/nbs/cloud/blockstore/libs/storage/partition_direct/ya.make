@@ -10,6 +10,7 @@ SRCS(
     fast_path_service.cpp
     flush_request.cpp
     load_actor_adapter.cpp
+    part_add_host_to_dbg.cpp
     part_database.cpp
     part_initschema.cpp
     part_loadstate.cpp
@@ -48,6 +49,8 @@ PEERDIR(
 
     ydb/core/mind/bscontroller
     contrib/libs/opentelemetry-proto
+
+    library/cpp/cgiparam
 )
 
 END()

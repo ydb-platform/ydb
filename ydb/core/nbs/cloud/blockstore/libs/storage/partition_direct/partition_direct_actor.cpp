@@ -175,9 +175,10 @@ TVector<IDirectBlockGroupPtr> TPartitionActor::CreateDirectBlockGroups(
     auto executors =
         nbsService->ExecutorPool.GetExecutors(DirectBlockGroupsCount);
 
-    for (size_t i = 0; i < DirectBlockGroupsCount; i++) {
+    for (ui32 dbgIndex = 0; dbgIndex < DirectBlockGroupsCount; dbgIndex++) {
         const auto& conn =
-            directBlockGroupsConnections.GetDirectBlockGroupConnections(i);
+            directBlockGroupsConnections.GetDirectBlockGroupConnections(
+                dbgIndex);
         TVector<NBsController::TDDiskId> ddiskIds;
         for (const auto& connection: conn.GetConnections()) {
             ddiskIds.push_back(
@@ -192,16 +193,18 @@ TVector<IDirectBlockGroupPtr> TPartitionActor::CreateDirectBlockGroups(
         auto directBlockGroup = std::make_shared<TDirectBlockGroup>(
             TActivationContext::ActorSystem(),
             nbsService->StorageConfig,
-            executors[i],
+            executors[dbgIndex],
             VolumeConfig.GetDiskId(),
             TabletID(),
             Executor()->Generation(),   // generation
-            i,                          // direct block group index
+            dbgIndex,
             std::move(ddiskIds),
             std::move(persistentBufferDDiskIds),
             std::make_unique<NTransport::TICStorageTransport>(
                 TActivationContext::ActorSystem(),
-                NTransport::CreateTransportActor()));
+                NTransport::CreateTransportActor(
+                    VolumeConfig.GetDiskId(),
+                    dbgIndex)));
 
         directBlockGroups.emplace_back(std::move(directBlockGroup));
     }
@@ -270,6 +273,8 @@ void TPartitionActor::Start(
         vChunkConfigsByIndex[cfg.GetVChunkIndex()] = cfg;
     }
 
+    DirectBlockGroupsConnections = directBlockGroupsConnections;
+
     const ui64 blockCount = VolumeConfig.GetPartitions(0).GetBlockCount();
     FastPathService = std::make_shared<TFastPathService>(
         TActivationContext::ActorSystem(),
@@ -311,6 +316,22 @@ void TPartitionActor::HandleFastPathServiceReady(
         NKikimrServices::NBS_PARTITION,
         "%s All DBGs reached initial locked quorum, opening endpoint",
         LogTitle.GetWithTime().c_str());
+
+    // Re-send the BSC request for an add-host in flight at the last restart
+    // (no live add can be in flight this early). BSController is idempotent.
+    if (AddHostInFlight.has_value()) {
+        LOG_INFO(
+            ctx,
+            NKikimrServices::NBS_PARTITION,
+            "%s Replaying in-flight AddHost dbgId=%lu newHostIndex=%s",
+            LogTitle.GetWithTime().c_str(),
+            AddHostInFlight->DirectBlockGroupId,
+            PrintHostIndex(AddHostInFlight->NewHostIndex).c_str());
+        SendAllocateDDiskForAddHost(
+            ctx,
+            AddHostInFlight->DirectBlockGroupId,
+            AddHostInFlight->NewHostIndex);
+    }
 
     LoadActorAdapter = CreateLoadActorAdapter(ctx.SelfID, FastPathService);
 
@@ -417,14 +438,27 @@ void TPartitionActor::HandleControllerAllocateDDiskBlockGroupResult(
     const TEvBlobStorage::TEvControllerAllocateDDiskBlockGroupResult::TPtr& ev,
     const NActors::TActorContext& ctx)
 {
-    const auto* msg = ev->Get();
-
     LOG_INFO(
         ctx,
         NKikimrServices::NBS_PARTITION,
         "%s HandleControllerAllocateDDiskBlockGroupResult record is: %s",
         LogTitle.GetWithTime().c_str(),
-        msg->Record.DebugString().data());
+        ev->Get()->Record.DebugString().data());
+
+    // The first allocation response sets up the group; any later one is the
+    // result of an add-host request.
+    if (DDiskBlockGroupAllocated) {
+        HandleAddHostAllocationResult(ev, ctx);
+    } else {
+        HandleInitialAllocationResult(ev, ctx);
+    }
+}
+
+void TPartitionActor::HandleInitialAllocationResult(
+    const TEvBlobStorage::TEvControllerAllocateDDiskBlockGroupResult::TPtr& ev,
+    const NActors::TActorContext& ctx)
+{
+    const auto* msg = ev->Get();
 
     if (msg->Record.GetStatus() == NKikimrProto::EReplyStatus::OK) {
         Y_ABORT_UNLESS(
@@ -444,7 +478,7 @@ void TPartitionActor::HandleControllerAllocateDDiskBlockGroupResult(
             }
         }
 
-        DdiskBlockGroupAllocated = true;
+        DDiskBlockGroupAllocated = true;
         ExecuteTx(ctx, CreateTx<TStorePartitionIds>(std::move(ids)));
     } else {
         LOG_ERROR(
@@ -458,6 +492,83 @@ void TPartitionActor::HandleControllerAllocateDDiskBlockGroupResult(
     }
 
     NTabletPipe::CloseClient(ctx, BSControllerPipeClient);
+}
+
+void TPartitionActor::HandleAddHostToDBG(
+    const TEvPartitionDirectPrivate::TEvAddHostToDBG::TPtr& ev,
+    const NActors::TActorContext& ctx)
+{
+    const auto* msg = ev->Get();
+    const auto dbgId = msg->DirectBlockGroupId;
+
+    LOG_INFO(
+        ctx,
+        NKikimrServices::NBS_PARTITION,
+        "%s Handle AddHostToDBG dbgId=%lu",
+        LogTitle.GetWithTime().c_str(),
+        dbgId);
+
+    // TEvAddHostToDBG is only sent by a running FastPathService, so it (and the
+    // allocated DBGs) is alive by the time we handle the request.
+    Y_ABORT_UNLESS(FastPathService);
+
+    if (!ValidateAddHostToDBGRequest(ctx, dbgId)) {
+        return;
+    }
+
+    const auto& dbgConn =
+        DirectBlockGroupsConnections.GetDirectBlockGroupConnections(dbgId);
+    const auto currentSize = static_cast<ui32>(dbgConn.GetConnections().size());
+
+    // Persist the intent before the BSController request (sent from the tx's
+    // completion). A crash after the DDisk is allocated but before the
+    // connection is persisted then leaves a durable intent, replayed on
+    // restart.
+    AddHostInFlight = TAddHostInFlight{
+        .DirectBlockGroupId = dbgId,
+        .NewHostIndex = static_cast<THostIndex>(currentSize),
+    };
+
+    ExecuteTx(
+        ctx,
+        CreateTx<TStartAddHost>(dbgId, static_cast<THostIndex>(currentSize)));
+}
+
+void TPartitionActor::SendAllocateDDiskForAddHost(
+    const TActorContext& ctx,
+    size_t dbgId,
+    THostIndex newHostIndex)
+{
+    Y_ABORT_UNLESS(AddHostInFlight.has_value());
+
+    const ui64 blockCount = VolumeConfig.GetPartitions(0).GetBlockCount();
+    const ui64 regionsCount =
+        AlignUp(blockCount * VolumeConfig.GetBlockSize(), RegionSize) /
+        RegionSize;
+
+    const auto pipe = ctx.Register(
+        NTabletPipe::CreateClient(ctx.SelfID, MakeBSControllerID()));
+    AddHostInFlight->BSPipeClient = pipe;
+
+    // Idempotent: NumDDisks=N+1 is the desired final state, not "add one"; a
+    // re-sent request returns the same DDisk from BSController's persisted
+    // allocation, so a retry (e.g. after a restart) is safe.
+    const ui32 numDDisks = static_cast<ui32>(newHostIndex) + 1;
+    auto request = std::make_unique<
+        TEvBlobStorage::TEvControllerAllocateDDiskBlockGroup>();
+    request->Record.SetDDiskPoolName(StorageConfig->GetDDiskPoolName());
+    request->Record.SetPersistentBufferDDiskPoolName(
+        StorageConfig->GetPersistentBufferDDiskPoolName());
+    request->Record.SetTabletId(TabletID());
+
+    auto* op = request->Record.AddDirectBlockGroupOperations();
+    op->SetDirectBlockGroupId(dbgId);
+    auto* define = op->MutableDefineDirectBlockGroup();
+    define->SetNumDDisks(numDDisks);
+    define->SetNumChunksPerDDisk(regionsCount);
+    define->SetNumPersistentBuffers(numDDisks);
+
+    NTabletPipe::SendData(ctx, pipe, request.release(), dbgId);
 }
 
 void TPartitionActor::HandleGetLoadActorAdapterActorId(
@@ -485,7 +596,7 @@ void TPartitionActor::HandleUpdateVolumeConfig(
         LogTitle.GetWithTime().c_str(),
         msg->Record.GetVolumeConfig().GetVersion());
 
-    if (DdiskBlockGroupAllocated) {
+    if (DDiskBlockGroupAllocated) {
         LOG_ERROR(
             ctx,
             NKikimrServices::NBS_PARTITION,
@@ -533,12 +644,12 @@ void TPartitionActor::HandleUpdateVChunkConfig(
 {
     auto& cfg = ev->Get()->VChunkConfig;
 
-    LOG_DEBUG_S(
+    LOG_INFO(
         ctx,
         NKikimrServices::NBS_PARTITION,
-        LogTitle.GetWithTime().c_str()
-            << " Handle UpdateVChunkConfig, vChunkIndex: "
-            << cfg.GetVChunkIndex());
+        "%s Handle UpdateVChunkConfig %s",
+        LogTitle.GetWithTime().c_str(),
+        cfg.DebugPrint().c_str());
 
     ExecuteTx(ctx, CreateTx<TUpdateVChunkConfig>(std::move(cfg)));
 }
@@ -572,6 +683,7 @@ STFUNC(TPartitionActor::StateWork)
         HFunc(
             TEvPartitionDirectPrivate::TEvFastPathServiceReady,
             HandleFastPathServiceReady);
+        HFunc(TEvPartitionDirectPrivate::TEvAddHostToDBG, HandleAddHostToDBG);
 
         HFunc(
             TEvPartitionDirectPrivate::TEvFastPathServiceShutdown,

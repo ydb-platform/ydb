@@ -395,6 +395,10 @@ message TSelfManagementConfig {
     optional bool AutomaticStateStorageManagement = 24; // the same for state storage
     optional bool AutomaticStateStorageBoardManagement = 25; // the same for state storage board
     optional bool AutomaticSchemeBoardManagement = 26; // the same for scheme board
+
+    // node ids onto which vdisks of static groups may be relocated during self-heal;
+    // empty list means no restriction
+    repeated uint32 StaticGroupSelfHealAllowedNodes = 27;
 }
 
 message TBlobStorageFormatConfig {

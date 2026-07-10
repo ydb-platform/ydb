@@ -361,7 +361,11 @@ public:
                 Schedule(delay, new NActors::TEvents::TEvWakeup());
                 return;
             }
-            Promise.SetException(ev->Get()->Status.ToDebugString());
+            try {
+                throw ev->Get()->Status;
+            } catch(...) {
+                Promise.SetException(std::current_exception());
+            }
         }
         PassAway();
     }
@@ -410,7 +414,7 @@ NActors::IActor* CreateAccessServiceActor() {
     asSettings.GrpcKeepAliveTimeMs = authConfig.GetAccessServiceGrpcKeepAliveTimeMs();
     asSettings.GrpcKeepAliveTimeoutMs = authConfig.GetAccessServiceGrpcKeepAliveTimeoutMs();
 
-    if (authConfig.GetPathToRootCA()) {
+    if (asSettings.EnableSsl && authConfig.GetPathToRootCA()) {
         TString certificate = TFileInput(authConfig.GetPathToRootCA()).ReadAll();
         asSettings.CertificateRootCA = certificate;
     }

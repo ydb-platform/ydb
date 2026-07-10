@@ -6,6 +6,7 @@
 #include <ydb/core/kqp/gateway/utils/metadata_helpers.h>
 #include <ydb/core/kqp/gateway/utils/scheme_helpers.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
+#include <ydb/public/sdk/cpp/src/library/grpc/client/grpc_client_low.h>
 
 #include <ydb/library/conclusion/generic/result.h>
 #include <ydb/library/actors/core/actor.h>
@@ -356,6 +357,44 @@ TAsyncStatus ResolveResourceId(TAsyncStatus validationFuture, const TExternalDat
     });
 }
 
+// XXX Don't belong here
+TYqlConclusionStatus YqlConclusionFromGrpcStatus(const NYdbGrpc::TGrpcStatus& grpcStatus) {
+    if (grpcStatus.Ok()) {
+        return TYqlConclusionStatus::Success();
+    }
+    if (grpcStatus.InternalError) {
+        return TYqlConclusionStatus::Fail(NYql::TIssuesIds::KIKIMR_INTERNAL_ERROR, TStringBuilder() << "Grpc internal error: "<< grpcStatus.Msg);
+    }
+    NYql::TIssuesIds::EIssueCode code;
+    switch (grpcStatus.GRpcStatusCode) {
+        case grpc::StatusCode::UNAVAILABLE:
+            code = NYql::TIssuesIds::KIKIMR_TEMPORARILY_UNAVAILABLE;
+            break;
+        case grpc::StatusCode::CANCELLED:
+            code = NYql::TIssuesIds::KIKIMR_OPERATION_CANCELLED;
+            break;
+        case grpc::StatusCode::UNAUTHENTICATED:
+            code = NYql::TIssuesIds::KIKIMR_UNAUTHENTICATED;
+            break;
+        case grpc::StatusCode::UNIMPLEMENTED:
+            code = NYql::TIssuesIds::KIKIMR_UNSUPPORTED;
+            break;
+        case grpc::StatusCode::RESOURCE_EXHAUSTED:
+            code = NYql::TIssuesIds::KIKIMR_OVERLOADED;
+            break;
+        case grpc::StatusCode::DEADLINE_EXCEEDED:
+            code = NYql::TIssuesIds::KIKIMR_TIMEOUT;
+            break;
+        case grpc::StatusCode::OUT_OF_RANGE:
+            code = NYql::TIssuesIds::KIKIMR_PRECONDITION_FAILED;
+            break;
+        default:
+            code = NYql::TIssuesIds::KIKIMR_INTERNAL_ERROR;
+            break;
+    }
+    return TYqlConclusionStatus::Fail(code, TStringBuilder() << "Grpc error: " << grpcStatus.Msg << ", details: " << grpcStatus.Details);
+}
+
 TAsyncStatus ValidateServiceAccount(TAsyncStatus validationFuture, const TExternalDataSourceManager::TExternalModificationContext& context, const std::shared_ptr<NKikimrSchemeOp::TModifyScheme>& schemeTxState, const std::shared_ptr<std::vector<TString>>& secrets) {
     return ChainFeatures(validationFuture, [schemeTxState, context, secrets] {
         auto actorSystem = context.GetActorSystem();
@@ -368,6 +407,8 @@ TAsyncStatus ValidateServiceAccount(TAsyncStatus validationFuture, const TExtern
             try {
                 future.GetValueSync();
                 return TYqlConclusionStatus::Success();
+            } catch (const NYdbGrpc::TGrpcStatus& grpcStatus) {
+                return YqlConclusionFromGrpcStatus(grpcStatus);
             } catch (...) {
                 return TYqlConclusionStatus::Fail(NYql::TIssuesIds::KIKIMR_INTERNAL_ERROR, TStringBuilder() << "Unexpected exception: " << CurrentExceptionMessage());
             }

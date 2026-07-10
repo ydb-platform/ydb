@@ -2030,10 +2030,14 @@ private:
         if (!FederatedQuerySetup || !FeatureFlags.GetEnableExternalDataSourceAuthMethodIam() || AccessServiceService) {
             return;
         }
-        auto actor = CreateAccessServiceActor();
-        AccessServiceService = TActivationContext::Register(actor);
-        TActivationContext::ActorSystem()->RegisterLocalService(
-            MakeKqpAccessServiceId(), AccessServiceService);
+        try {
+            auto actor = CreateAccessServiceActor();
+            AccessServiceService = TActivationContext::Register(actor);
+            TActivationContext::ActorSystem()->RegisterLocalService(
+                MakeKqpAccessServiceId(), AccessServiceService);
+        } catch(const std::exception& ex) {
+            KQP_PROXY_LOG_E("Failed to start AccessService service actor: " << ex.what());
+        }
     }
 
 private:

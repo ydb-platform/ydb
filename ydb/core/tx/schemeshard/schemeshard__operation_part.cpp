@@ -13,6 +13,7 @@
 #include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/tx/replication/controller/public_events.h>
 #include <ydb/core/tx/sequenceshard/public/events.h>
+#include <ydb/core/test_tablet/events.h>
 #include <ydb/core/tx/tx_processing.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD

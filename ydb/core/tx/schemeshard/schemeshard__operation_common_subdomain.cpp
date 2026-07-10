@@ -109,7 +109,7 @@ bool TConfigureParts::HandleReply(TEvSubDomain::TEvConfigureStatus::TPtr& ev, TO
         return false;
     }
 
-    YDB_LOG_DEBUG_CTX(context.Ctx, "Got OK TEvConfigureStatus from",
+    YDB_LOG_DEBUG_CTX(context.Ctx, "Got OK TEvConfigureStatus",
         {"debugHint", DebugHint()},
         {"tablet", tabletId},
         {"shardIdx", shardIdx},

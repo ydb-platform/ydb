@@ -215,7 +215,7 @@ public:
                 operation.GetVolumeConfig());
         const ui64 shardsToCreate = defaultPartitionCount + 1;
 
-        YDB_LOG_NOTICE_CTX(context.Ctx, "TCreateBlockStoreVolume Propose ",
+        YDB_LOG_NOTICE_CTX(context.Ctx, "TCreateBlockStoreVolume Propose",
             {"path", parentPathStr},
             {"name", name},
             {"opId", OperationId},

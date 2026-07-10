@@ -328,7 +328,7 @@ public:
 
         NKikimrSchemeOp::EDropWaitPolicy dropPolicy = drop.HasWaitPolicy() ? drop.GetWaitPolicy() : NKikimrSchemeOp::EDropFailOnChanges;
 
-        YDB_LOG_NOTICE_CTX(context.Ctx, "TDropPQ Propose ",
+        YDB_LOG_NOTICE_CTX(context.Ctx, "TDropPQ Propose",
             {"path", parentPathStr},
             {"name", name},
             {"pathId", drop.GetId()},

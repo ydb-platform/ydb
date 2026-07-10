@@ -130,7 +130,7 @@ struct TSchemeShard::TTxCleanDroppedPaths : public TTransactionBase<TSchemeShard
             Self->CleanDroppedPathsCandidates.erase(itCandidate);
             TPathElement::TPtr path = Self->PathsById.at(pathId);
             if (path->DbRefCount == 0 && path->Dropped()) {
-                YDB_LOG_DEBUG_CTX(ctx, "TTxCleanDroppedPaths: PersistRemovePath for",
+                YDB_LOG_DEBUG_CTX(ctx, "TTxCleanDroppedPaths: PersistRemovePath",
                     {"pathId", pathId},
                     {"schemeshard", Self->TabletID()});
                 Self->PersistRemovePath(db, path);
@@ -214,7 +214,7 @@ struct TSchemeShard::TTxCleanDroppedSubDomains : public TTransactionBase<TScheme
                 path->AllChildrenCount == 0 &&
                 domain->GetInternalShards().empty())
             {
-                YDB_LOG_DEBUG_CTX(ctx, "TTxCleanDroppedPaths: PersistRemoveSubDomain for",
+                YDB_LOG_DEBUG_CTX(ctx, "TTxCleanDroppedPaths: PersistRemoveSubDomain",
                     {"pathId", pathId},
                     {"schemeshard", Self->TabletID()});
                 Self->PersistRemoveSubDomain(db, pathId);

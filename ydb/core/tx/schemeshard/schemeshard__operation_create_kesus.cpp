@@ -298,7 +298,7 @@ public:
         const TString& parentPathStr = Transaction.GetWorkingDir();
         const TString& name = Transaction.GetKesus().GetName();
 
-        YDB_LOG_NOTICE_CTX(context.Ctx, "TCreateKesus Propose ",
+        YDB_LOG_NOTICE_CTX(context.Ctx, "TCreateKesus Propose",
             {"path", parentPathStr},
             {"name", name},
             {"opId", OperationId},

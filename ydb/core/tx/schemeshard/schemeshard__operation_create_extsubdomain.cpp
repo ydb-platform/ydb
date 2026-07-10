@@ -53,7 +53,7 @@ public:
         const TString& parentPathStr = Transaction.GetWorkingDir();
         const TString& name = settings.GetName();
 
-        YDB_LOG_NOTICE_CTX(context.Ctx, "TCreateExtSubDomain Propose path ",
+        YDB_LOG_NOTICE_CTX(context.Ctx, "TCreateExtSubDomain Propose path",
             {"parentPathStr", parentPathStr},
             {"name", name},
             {"opId", OperationId},

@@ -128,7 +128,7 @@ public:
         const auto& newStreamName = newStreamDesc.GetName();
         const auto acceptExisted = !Transaction.GetFailOnExist();
 
-        YDB_LOG_NOTICE_CTX(context.Ctx, "TRotateCdcStream Propose / ",
+        YDB_LOG_NOTICE_CTX(context.Ctx, "TRotateCdcStream Propose ",
             {"#_context.SS->TabletID", context.SS->TabletID()},
             {"opId", OperationId},
             {"oldStream", workingDir},
@@ -527,7 +527,7 @@ public:
         const auto& oldStreamName = op.GetOldStreamName();
         const auto& newStreamName = op.GetNewStream().GetStreamDescription().GetName();
 
-        YDB_LOG_NOTICE_CTX(context.Ctx, "TRotateCdcStreamAtTable Propose / / / ",
+        YDB_LOG_NOTICE_CTX(context.Ctx, "TRotateCdcStreamAtTable Propose / / ",
             {"#_context.SS->TabletID", context.SS->TabletID()},
             {"opId", OperationId},
             {"oldStream", workingDir},

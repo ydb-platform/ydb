@@ -367,7 +367,7 @@ public:
         auto& descr = Transaction.GetSequence();
         const TString& name = descr.GetName();
 
-        YDB_LOG_NOTICE_CTX(context.Ctx, "TCreateSequence Propose ",
+        YDB_LOG_NOTICE_CTX(context.Ctx, "TCreateSequence Propose",
             {"path", parentPathStr},
             {"name", name},
             {"opId", OperationId},
@@ -390,7 +390,8 @@ public:
             if (checks) {
                 if (parentPath.Parent()->IsTableIndex()) {
                     // Only __ydb_id sequence can be created in the prefixed index
-                    if (name != NTableIndex::NKMeans::IdColumnSequence) {
+                    if (name != NTableIndex::NKMeans::IdColumnSequence &&
+                        name != NTableIndex::NFulltext::GenSequence) {
                         result->SetError(NKikimrScheme::EStatus::StatusNameConflict, "sequences are not allowed in indexes");
                         return result;
                     }

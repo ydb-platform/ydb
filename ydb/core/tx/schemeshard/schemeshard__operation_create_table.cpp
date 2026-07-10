@@ -443,13 +443,13 @@ public:
         const TString& parentPathStr = Transaction.GetWorkingDir();
         const TString& name = schema.GetName();
 
-        YDB_LOG_NOTICE_CTX(context.Ctx, "TCreateTable Propose ",
+        YDB_LOG_NOTICE_CTX(context.Ctx, "TCreateTable Propose",
             {"path", parentPathStr},
             {"name", name},
             {"opId", OperationId},
             {"schemeshard", ssId});
 
-        YDB_LOG_DEBUG_CTX(context.Ctx, "TCreateTable Propose ",
+        YDB_LOG_DEBUG_CTX(context.Ctx, "TCreateTable Propose",
             {"path", parentPathStr},
             {"name", name},
             {"opId", OperationId},
@@ -634,6 +634,7 @@ public:
             .EnableTableDatetime64 = AppData()->FeatureFlags.GetEnableTableDatetime64(),
             .EnableParameterizedDecimal = AppData()->FeatureFlags.GetEnableParameterizedDecimal(),
             .EnableDetailedMetrics = AppData()->FeatureFlags.GetEnableDataShardDetailedMetrics(),
+            .EnableColumnStatistics = AppData()->FeatureFlags.GetEnableColumnStatistics(),
         };
         TTableInfo::TAlterDataPtr alterData = TTableInfo::CreateAlterData(
             nullptr,

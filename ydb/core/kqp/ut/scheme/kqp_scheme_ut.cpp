@@ -183,6 +183,274 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             result.GetStatus(), EStatus::SCHEME_ERROR, result.GetIssues().ToString());
     }
 
+    Y_UNIT_TEST(CreateTableWithMultiColumnStatistics) {
+        NKikimrConfig::TFeatureFlags featureFlags;
+        featureFlags.SetEnableColumnStatistics(true);
+        TKikimrRunner kikimr(featureFlags);
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        {
+            auto result = session.ExecuteSchemeQuery(R"(
+                CREATE TABLE `/Root/Orders` (
+                    order_id Uint64,
+                    customer_id Uint64,
+                    order_date Date,
+                    status Utf8,
+                    PRIMARY KEY (order_id),
+                    STATISTICS orders_stats ON (customer_id, order_date) WITH (COUNT_MIN_SKETCH)
+                );
+            )").ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        // DescribeTable round-trip: the declared statistics must come back.
+        {
+            auto describe = session.DescribeTable("/Root/Orders").ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(describe.GetStatus(), EStatus::SUCCESS, describe.GetIssues().ToString());
+            const auto statistics = describe.GetTableDescription().GetMultiColumnStatisticsDescriptions();
+            UNIT_ASSERT_VALUES_EQUAL(statistics.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(statistics[0].GetName(), "orders_stats");
+            UNIT_ASSERT_VALUES_EQUAL(statistics[0].GetColumns().size(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(statistics[0].GetColumns()[0], "customer_id");
+            UNIT_ASSERT_VALUES_EQUAL(statistics[0].GetColumns()[1], "order_date");
+            UNIT_ASSERT_VALUES_EQUAL(statistics[0].GetTypes().size(), 1);
+            UNIT_ASSERT(statistics[0].GetTypes()[0] == EMultiColumnStatisticsType::CountMinSketch);
+        }
+
+        {
+            auto result = session.ExecuteSchemeQuery(R"(
+                ALTER TABLE `/Root/Orders`
+                    ADD STATISTICS cust_status ON (customer_id, status) WITH (COUNT_MIN_SKETCH),
+                    ADD STATISTICS cust_date ON (customer_id, order_date) WITH (COUNT_MIN_SKETCH);
+            )").ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        {
+            auto result = session.ExecuteSchemeQuery(R"(
+                ALTER TABLE `/Root/Orders` DROP STATISTICS cust_status;
+            )").ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        // After ADD (x2) and DROP (x1): orders_stats and cust_date remain.
+        {
+            auto describe = session.DescribeTable("/Root/Orders").ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(describe.GetStatus(), EStatus::SUCCESS, describe.GetIssues().ToString());
+            const auto statistics = describe.GetTableDescription().GetMultiColumnStatisticsDescriptions();
+            UNIT_ASSERT_VALUES_EQUAL(statistics.size(), 2);
+            TSet<std::string> names;
+            for (const auto& s : statistics) {
+                names.insert(s.GetName());
+            }
+            UNIT_ASSERT(names.contains("orders_stats"));
+            UNIT_ASSERT(names.contains("cust_date"));
+            UNIT_ASSERT(!names.contains("cust_status"));
+        }
+
+        // Unknown statistic type must be rejected
+        {
+            auto result = session.ExecuteSchemeQuery(R"(
+                ALTER TABLE `/Root/Orders`
+                    ADD STATISTICS bad_stats ON (customer_id) WITH (HISTOGRAM);
+            )").ExtractValueSync();
+            UNIT_ASSERT_VALUES_UNEQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        // Unknown column must be rejected
+        {
+            auto result = session.ExecuteSchemeQuery(R"(
+                ALTER TABLE `/Root/Orders`
+                    ADD STATISTICS bad_col ON (missing_column) WITH (COUNT_MIN_SKETCH);
+            )").ExtractValueSync();
+            UNIT_ASSERT_VALUES_UNEQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        // Dropping a non-existent statistics must be rejected
+        {
+            auto result = session.ExecuteSchemeQuery(R"(
+                ALTER TABLE `/Root/Orders` DROP STATISTICS cust_status;
+            )").ExtractValueSync();
+            UNIT_ASSERT_VALUES_UNEQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+    }
+
+    Y_UNIT_TEST(MultiColumnStatisticsWithoutWithMeansAllTypes) {
+        NKikimrConfig::TFeatureFlags featureFlags;
+        featureFlags.SetEnableColumnStatistics(true);
+        TKikimrRunner kikimr(featureFlags);
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        {
+            auto result = session.ExecuteSchemeQuery(R"(
+                CREATE TABLE `/Root/Orders` (
+                    order_id Uint64,
+                    customer_id Uint64,
+                    order_date Date,
+                    PRIMARY KEY (order_id),
+                    STATISTICS orders_stats ON (customer_id, order_date)
+                );
+            )").ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        {
+            auto describe = session.DescribeTable("/Root/Orders").ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(describe.GetStatus(), EStatus::SUCCESS, describe.GetIssues().ToString());
+            const auto statistics = describe.GetTableDescription().GetMultiColumnStatisticsDescriptions();
+            UNIT_ASSERT_VALUES_EQUAL(statistics.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(statistics[0].GetName(), "orders_stats");
+            UNIT_ASSERT_VALUES_EQUAL(statistics[0].GetTypes().size(), 0);
+        }
+
+        {
+            auto result = session.ExecuteSchemeQuery(R"(
+                ALTER TABLE `/Root/Orders`
+                    ADD STATISTICS cust_only ON (customer_id);
+            )").ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        {
+            auto describe = session.DescribeTable("/Root/Orders").ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(describe.GetStatus(), EStatus::SUCCESS, describe.GetIssues().ToString());
+            const auto statistics = describe.GetTableDescription().GetMultiColumnStatisticsDescriptions();
+            UNIT_ASSERT_VALUES_EQUAL(statistics.size(), 2);
+            for (const auto& stat : statistics) {
+                if (stat.GetName() == "cust_only") {
+                    UNIT_ASSERT_VALUES_EQUAL(stat.GetTypes().size(), 0);
+                }
+            }
+        }
+    }
+
+    Y_UNIT_TEST(CreateTableWithMultiColumnStatisticsDisabled) {
+        NKikimrConfig::TFeatureFlags featureFlags;
+        featureFlags.SetEnableColumnStatistics(false);
+        TKikimrRunner kikimr(featureFlags);
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        auto result = session.ExecuteSchemeQuery(R"(
+            CREATE TABLE `/Root/Orders` (
+                order_id Uint64,
+                customer_id Uint64,
+                PRIMARY KEY (order_id),
+                STATISTICS orders_stats ON (customer_id) WITH (COUNT_MIN_SKETCH)
+            );
+        )").ExtractValueSync();
+        UNIT_ASSERT_VALUES_UNEQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    }
+
+    Y_UNIT_TEST(CreateColumnTableWithMultiColumnStatistics) {
+        NKikimrConfig::TFeatureFlags featureFlags;
+        featureFlags.SetEnableColumnStatistics(true);
+        TKikimrRunner kikimr(featureFlags);
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        {
+            auto result = session.ExecuteSchemeQuery(R"(
+                CREATE TABLE `/Root/ColumnOrders` (
+                    order_id Uint64 NOT NULL,
+                    customer_id Uint64,
+                    order_date Date,
+                    PRIMARY KEY (order_id),
+                    STATISTICS orders_stats ON (customer_id, order_date) WITH (COUNT_MIN_SKETCH)
+                )
+                WITH (STORE = COLUMN);
+            )").ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        // DescribeTable round-trip for a column table.
+        {
+            auto describe = session.DescribeTable("/Root/ColumnOrders").ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(describe.GetStatus(), EStatus::SUCCESS, describe.GetIssues().ToString());
+            const auto statistics = describe.GetTableDescription().GetMultiColumnStatisticsDescriptions();
+            UNIT_ASSERT_VALUES_EQUAL(statistics.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(statistics[0].GetName(), "orders_stats");
+            UNIT_ASSERT_VALUES_EQUAL(statistics[0].GetColumns().size(), 2);
+            UNIT_ASSERT(statistics[0].GetTypes().size() == 1
+                && statistics[0].GetTypes()[0] == EMultiColumnStatisticsType::CountMinSketch);
+        }
+
+        {
+            auto result = session.ExecuteSchemeQuery(R"(
+                ALTER TABLE `/Root/ColumnOrders`
+                    ADD STATISTICS cust_date ON (customer_id, order_date) WITH (COUNT_MIN_SKETCH);
+            )").ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        {
+            auto describe = session.DescribeTable("/Root/ColumnOrders").ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(describe.GetStatus(), EStatus::SUCCESS, describe.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL(describe.GetTableDescription().GetMultiColumnStatisticsDescriptions().size(), 2);
+        }
+
+        {
+            auto result = session.ExecuteSchemeQuery(R"(
+                ALTER TABLE `/Root/ColumnOrders` DROP STATISTICS cust_date;
+            )").ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        {
+            auto describe = session.DescribeTable("/Root/ColumnOrders").ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(describe.GetStatus(), EStatus::SUCCESS, describe.GetIssues().ToString());
+            const auto statistics = describe.GetTableDescription().GetMultiColumnStatisticsDescriptions();
+            UNIT_ASSERT_VALUES_EQUAL(statistics.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(statistics[0].GetName(), "orders_stats");
+        }
+    }
+
+    Y_UNIT_TEST(ColumnTableMultiColumnStatisticsWithoutWithMeansAllTypes) {
+        NKikimrConfig::TFeatureFlags featureFlags;
+        featureFlags.SetEnableColumnStatistics(true);
+        TKikimrRunner kikimr(featureFlags);
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        {
+            auto result = session.ExecuteSchemeQuery(R"(
+                CREATE TABLE `/Root/ColumnOrders` (
+                    order_id Uint64 NOT NULL,
+                    customer_id Uint64,
+                    order_date Date,
+                    PRIMARY KEY (order_id),
+                    STATISTICS orders_stats ON (customer_id, order_date)
+                )
+                WITH (STORE = COLUMN);
+            )").ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        {
+            auto describe = session.DescribeTable("/Root/ColumnOrders").ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(describe.GetStatus(), EStatus::SUCCESS, describe.GetIssues().ToString());
+            const auto statistics = describe.GetTableDescription().GetMultiColumnStatisticsDescriptions();
+            UNIT_ASSERT_VALUES_EQUAL(statistics.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(statistics[0].GetTypes().size(), 0);
+        }
+
+        {
+            auto result = session.ExecuteSchemeQuery(R"(
+                ALTER TABLE `/Root/ColumnOrders`
+                    ADD STATISTICS cust_only ON (customer_id);
+            )").ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        {
+            auto describe = session.DescribeTable("/Root/ColumnOrders").ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(describe.GetStatus(), EStatus::SUCCESS, describe.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL(describe.GetTableDescription().GetMultiColumnStatisticsDescriptions().size(), 2);
+        }
+    }
+
     Y_UNIT_TEST(UseNonexistentTable) {
         TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();
@@ -1609,7 +1877,9 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
     }
 
     Y_UNIT_TEST(DataShardBloomFilterIndex) {
-        TKikimrRunner kikimr;
+        auto serverSettings = TKikimrSettings();
+        serverSettings.AppConfig.MutableFeatureFlags()->SetEnableLocalIndexAsSchemeObject(true);
+        TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -1751,7 +2021,9 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         // engine keeps its length-only ByKeyFilterPrefix. From a single CREATE, verify every
         // observable of that mirror: schemeshard children, DescribeTable (no double-listing) and
         // SHOW CREATE rendering; then that DROP INDEX by name removes both the object and the prefix.
-        TKikimrRunner kikimr;
+        auto serverSettings = TKikimrSettings();
+        serverSettings.AppConfig.MutableFeatureFlags()->SetEnableLocalIndexAsSchemeObject(true);
+        TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -1837,7 +2109,9 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         // clears its config and the alter still reaches the datashard, which must drop its engine
         // filter (previously it kept a stale filter because an empty prefix list looked like
         // "no change"). The table must remain fully queryable, and a bloom index can be re-added.
-        TKikimrRunner kikimr;
+        auto serverSettings = TKikimrSettings();
+        serverSettings.AppConfig.MutableFeatureFlags()->SetEnableLocalIndexAsSchemeObject(true);
+        TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
         auto queryClient = kikimr.GetQueryClient();
@@ -1890,7 +2164,9 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
     Y_UNIT_TEST(DataShardBloomFilterIndexCreateBadPrefix) {
         // CREATE-time validation: bloom filter columns must be a left prefix of the primary key,
         // because the named scheme object stores the columns while the engine prefix is length-only.
-        TKikimrRunner kikimr;
+        auto serverSettings = TKikimrSettings();
+        serverSettings.AppConfig.MutableFeatureFlags()->SetEnableLocalIndexAsSchemeObject(true);
+        TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -11992,6 +12268,54 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             const auto query = R"(
                 --!syntax_v1
                 CREATE TOPIC `/Root/topic1` (
+                    CONSUMER cs WITH (type='streaming', receive_message_wait_time=Interval('PT5S'))
+                )
+            )";
+            const auto result = executeQuery(query);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "receive_message_wait_time is not supported for streaming consumers", result.GetIssues().ToString());
+        }
+        {
+            const auto query = R"(
+                --!syntax_v1
+                CREATE TOPIC `/Root/topic1` (
+                    CONSUMER cs WITH (type='streaming', receive_message_delay=Interval('PT7S'))
+                )
+            )";
+            const auto result = executeQuery(query);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "receive_message_delay is not supported for streaming consumers", result.GetIssues().ToString());
+        }
+        {
+            const auto query = R"(
+                --!syntax_v1
+                CREATE TOPIC `/Root/topic_with_receive_settings` (
+                    CONSUMER cs WITH (
+                        type='shared',
+                        receive_message_wait_time=Interval('PT5S'),
+                        receive_message_delay=Interval('PT7S')
+                    )
+                )
+            )";
+            const auto result = executeQuery(query);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+        {
+            const auto query = R"(
+                --!syntax_v1
+                ALTER TOPIC `/Root/topic_with_receive_settings`
+                    ALTER CONSUMER cs SET (
+                        receive_message_wait_time=Interval('PT2S'),
+                        receive_message_delay=Interval('PT3S')
+                    )
+            )";
+            const auto result = executeQuery(query);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+        {
+            const auto query = R"(
+                --!syntax_v1
+                CREATE TOPIC `/Root/topic1` (
                     CONSUMER cs WITH (type='shared', dead_letter_policy='delete', dead_letter_queue='other_topic')
                 )
             )";
@@ -12166,7 +12490,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                 CONCURRENT_QUERY_LIMIT=20
             );)").GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::PRECONDITION_FAILED);
-        UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "Resource pool id should not contain '/' symbol", result.GetIssues().ToString());
+        UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "Resource pool name should not contain '/' symbol", result.GetIssues().ToString());
 
         result = session.ExecuteSchemeQuery(R"(
             CREATE RESOURCE POOL MyResourcePool WITH (
@@ -14899,6 +15223,77 @@ END DO)",
         UNIT_ASSERT_VALUES_EQUAL_C(compactOp.Status().GetStatus(), EStatus::SUCCESS, compactOp.Status().GetIssues().ToString());
     }
 
+    Y_UNIT_TEST_TWIN(AlterTableCompactColumnTableSql, UseQueryService) {
+        NKikimrConfig::TFeatureFlags featureFlags;
+        featureFlags.SetEnableForcedColumnCompactions(true);
+        TKikimrRunner kikimr(featureFlags);
+        auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+        auto queryClient = kikimr.GetQueryClient();
+
+        {
+            auto query = R"sql(
+                CREATE TABLE `/Root/TestTable` (
+                    Key Uint64 NOT NULL,
+                    Value String,
+                    PRIMARY KEY (Key)
+                ) WITH (
+                    STORE = COLUMN
+                );)sql";
+            auto result = ExecuteGeneric<UseQueryService>(queryClient, session, query);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+        {
+            // A standalone (tiling++) column table supports forced compaction; an empty table already
+            // has no intersecting portions, so it completes successfully.
+            auto query = R"sql(
+                ALTER TABLE `/Root/TestTable` COMPACT WITH (PARALLEL = 2, CASCADE = false);
+            )sql";
+            auto result = ExecuteGeneric<UseQueryService>(queryClient, session, query);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToOneLineString());
+        }
+        {
+            // Cascade compaction is not supported for column tables.
+            auto query = R"sql(
+                ALTER TABLE `/Root/TestTable` COMPACT WITH (PARALLEL = 2, CASCADE = true);
+            )sql";
+            auto result = ExecuteGeneric<UseQueryService>(queryClient, session, query);
+            UNIT_ASSERT_VALUES_UNEQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToOneLineString());
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "Cascade compaction is not supported for column tables",
+                result.GetIssues().ToString());
+        }
+    }
+
+    Y_UNIT_TEST_TWIN(AlterTableCompactColumnTableDisabled, UseQueryService) {
+        // Without the column-compaction feature flag, forced compaction is rejected for column tables.
+        NKikimrConfig::TFeatureFlags featureFlags;
+        featureFlags.SetEnableForcedCompactions(true);
+        TKikimrRunner kikimr(featureFlags);
+        auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+        auto queryClient = kikimr.GetQueryClient();
+
+        {
+            auto query = R"sql(
+                CREATE TABLE `/Root/TestTable` (
+                    Key Uint64 NOT NULL,
+                    Value String,
+                    PRIMARY KEY (Key)
+                ) WITH (
+                    STORE = COLUMN
+                );)sql";
+            auto result = ExecuteGeneric<UseQueryService>(queryClient, session, query);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+        {
+            auto query = R"sql(
+                ALTER TABLE `/Root/TestTable` COMPACT WITH (PARALLEL = 2, CASCADE = false);
+            )sql";
+            auto result = ExecuteGeneric<UseQueryService>(queryClient, session, query);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToOneLineString());
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "Compact is not allowed for column tables",
+                result.GetIssues().ToString());
+        }
+    }
+
     Y_UNIT_TEST(AlterTableCompactPublicApi) {
         NKikimrConfig::TFeatureFlags featureFlags;
         featureFlags.SetEnableForcedCompactions(true);
@@ -16906,7 +17301,6 @@ Y_UNIT_TEST_SUITE(KqpOlapTypes) {
     Y_UNIT_TEST(BackupReturnsOperationIdArrowFormat) {
         NKikimrConfig::TAppConfig config;
         config.MutableFeatureFlags()->SetEnableBackupService(true);
-        config.MutableFeatureFlags()->SetEnableArrowResultSetFormat(true);
 
         TKikimrRunner kikimr(NKqp::TKikimrSettings(config)
             .SetEnableBackupService(true));

@@ -94,7 +94,7 @@ public:
 
             auto seqNo = context.SS->StartRound(*txState);
 
-            YDB_LOG_DEBUG_CTX(context.Ctx, "Propose modify scheme on",
+            YDB_LOG_DEBUG_CTX(context.Ctx, "Propose modify scheme",
                 {"debugHint", DebugHint()},
                 {"dstDatashard", dstDatashardId},
                 {"idx", dstShardIdx},
@@ -518,7 +518,7 @@ public:
         const TString& name = Transaction.GetCreateTable().GetName();
         const auto acceptExisted = !Transaction.GetFailOnExist();
 
-        YDB_LOG_NOTICE_CTX(context.Ctx, "TCopyTable Propose ",
+        YDB_LOG_NOTICE_CTX(context.Ctx, "TCopyTable Propose",
             {"path", parentPath},
             {"name", name},
             {"opId", OperationId},
@@ -759,6 +759,7 @@ public:
             .EnableTableDatetime64 = true,
             .EnableParameterizedDecimal = true,
             .EnableDetailedMetrics = true,
+            .EnableColumnStatistics = AppData()->FeatureFlags.GetEnableColumnStatistics(),
         };
         TTableInfo::TAlterDataPtr alterData = TTableInfo::CreateAlterData(nullptr, schema, *typeRegistry,
             limits, *domainInfo, featureFlags, errStr, LocalSequences);
@@ -1043,6 +1044,11 @@ TVector<ISubOperation::TPtr> CreateCopyTable(TOperationId nextId, const TTxTrans
         Y_ABORT_UNLESS(childPath.Base()->PathId == pathId);
 
         TTableIndexInfo::TPtr indexInfo = context.SS->Indexes.at(pathId);
+
+        if (indexInfo->State != NKikimrSchemeOp::EIndexState::EIndexStateReady) {
+            continue;
+        }
+
         {
             auto schema = TransactionTemplate(dstPath.PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpCreateTableIndex);
             schema.SetFailOnExist(tx.GetFailOnExist());

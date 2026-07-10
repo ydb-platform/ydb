@@ -361,7 +361,7 @@ public:
         const TString workingDir = Transaction.GetWorkingDir();
         const TString mainTableName = opDescr.GetName();
 
-        YDB_LOG_NOTICE_CTX(context.Ctx, "TUpdateMainTableOnIndexMove Propose ",
+        YDB_LOG_NOTICE_CTX(context.Ctx, "TUpdateMainTableOnIndexMove Propose",
             {"path", workingDir},
             {"mainTableName", mainTableName},
             {"opId", OperationId},

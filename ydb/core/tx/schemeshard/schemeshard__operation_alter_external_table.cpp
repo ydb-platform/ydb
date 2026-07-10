@@ -249,7 +249,7 @@ public:
         const auto& externalTableDescription = Transaction.GetCreateExternalTable();
         const TString& name = externalTableDescription.GetName();
 
-        YDB_LOG_NOTICE_CTX(context.Ctx, "TAlterExternalTable Propose ",
+        YDB_LOG_NOTICE_CTX(context.Ctx, "TAlterExternalTable Propose",
             {"#_context.SS->TabletID", context.SS->TabletID()},
             {"opId", OperationId},
             {"path", parentPathStr},

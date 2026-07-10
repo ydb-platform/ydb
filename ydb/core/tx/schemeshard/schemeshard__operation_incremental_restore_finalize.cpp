@@ -356,7 +356,7 @@ class TIncrementalRestoreFinalizeOp: public TSubOperationWithContext {
                             }
                             context.SS->PersistTableIndexAlterVersion(db, indexPathId, index);
 
-                            YDB_LOG_INFO_CTX(context.Ctx, "SyncIndexSchemaVersions: Index AlterVersion updated from",
+                            YDB_LOG_INFO_CTX(context.Ctx, "SyncIndexSchemaVersions: Index AlterVersion updated",
                                 {"#_context.SS->TabletID", context.SS->TabletID()},
                                 {"oldVersion", oldVersion},
                                 {"#_context.SS->Indexes[indexPathId]->AlterVersion", context.SS->Indexes[indexPathId]->AlterVersion});

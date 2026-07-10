@@ -22,6 +22,8 @@
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::BUILD_INDEX
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::BUILD_INDEX
+
 
 namespace NKikimr {
 namespace NSchemeShard {
@@ -505,11 +507,50 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateBuildFulltextPropose(
     op = CalcFulltextCompactImplTableDesc(tableInfo, tableInfo->PartitionConfig(),
         NKikimrSchemeOp::TTableDescription(),
         std::get_if<NKikimrSchemeOp::TFulltextIndexDescription>(&buildInfo.SpecializedIndexDescription),
-        buildInfo.IndexType, prefixColumns);
+        buildInfo.IndexType, prefixColumns, true);
 
     op.SetName(TString::Join(NTableIndex::ImplTable, NTableIndex::NKMeans::BuildSuffix0));
 
     YDB_LOG_NOTICE("CreateBuildPropose",
+        {"#_buildInfo.Id", buildInfo.Id},
+        {"#_buildInfo.State", buildInfo.State},
+        {"#_propose->Record", propose->Record.ShortDebugString()});
+
+    return propose;
+}
+
+// Creates the transient "row-id source" table for a compact rowid-mode build: the main table re-keyed
+// by the dense seq, holding the indexed text + data columns. Dropped on apply (IsBuildImplTable).
+THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateBuildFulltextRowIdSrcPropose(
+    TSchemeShard* ss, const TIndexBuildInfo& buildInfo)
+{
+    Y_ENSURE(buildInfo.IsBuildFulltextCompactRowId());
+
+    auto propose = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(ui64(buildInfo.ApplyTxId), ss->TabletID());
+    propose->Record.SetFailOnExist(true);
+    NKikimrSchemeOp::TModifyScheme& modifyScheme = *propose->Record.AddTransaction();
+    modifyScheme.SetInternal(true);
+
+    auto path = TPath::Init(buildInfo.TablePathId, ss);
+    const auto& tableInfo = ss->Tables.at(path->PathId);
+
+    modifyScheme.SetWorkingDir(path.Dive(buildInfo.IndexName).PathString());
+    modifyScheme.SetOperationType(NKikimrSchemeOp::ESchemeOpInitiateBuildIndexImplTable);
+    auto& op = *modifyScheme.MutableCreateTable();
+
+    THashSet<TString> dataColumns(buildInfo.DataColumns.begin(), buildInfo.DataColumns.end());
+    // Index columns are [prefix..., text]; the indexed text/JSON column is the last one. JSON builds carry
+    // no fulltext settings, so the column name must be taken from here rather than the index description.
+    Y_ENSURE(!buildInfo.IndexColumns.empty());
+    op = CalcFulltextRowIdSrcImplTableDesc(tableInfo, tableInfo->PartitionConfig(),
+        dataColumns,
+        buildInfo.IndexColumns.back(),
+        NKikimrSchemeOp::TTableDescription(),
+        std::get<NKikimrSchemeOp::TFulltextIndexDescription>(buildInfo.SpecializedIndexDescription));
+
+    op.SetName(TString::Join(NTableIndex::ImplTable, NTableIndex::NFulltext::RowIdSrcBuildSuffix));
+
+    YDB_LOG_NOTICE("CreateBuildFulltextRowIdSrcPropose",
         {"#_buildInfo.Id", buildInfo.Id},
         {"#_buildInfo.State", buildInfo.State},
         {"#_propose->Record", propose->Record.ShortDebugString()});
@@ -1343,11 +1384,49 @@ private:
             {"TUploadSampleK", buildInfo});
     }
 
+    // Compact rowid-mode prepass: copy the (arbitrary-PK) main table into the transient row-id source
+    // table, re-keyed by __ydb_row_id, so the later posting fill visits doc ids in ascending order (the
+    // order the compact delta format requires). This is a plain re-keying row copy, so it reuses the
+    // generic secondary-index build scan (TBuildIndexScan) rather than a bespoke fulltext scan path: it
+    // is a secondary index over [__ydb_row_id] carrying the indexed text + data columns as values.
+    void SendBuildFulltextRowIdSrcRequest(TShardIdx shardIdx, TIndexBuildInfo& buildInfo) {
+        auto ev = MakeHolder<TEvDataShard::TEvBuildIndexCreateRequest>();
+        ev->Record.SetId(ui64(BuildId));
+
+        // Scan the snapshotted main table; FillScanRequestCommon attaches the build snapshot.
+        ev->Record.SetOwnerId(buildInfo.TablePathId.OwnerId);
+        ev->Record.SetPathId(buildInfo.TablePathId.LocalPathId);
+
+        TPath implTable = GetBuildPath(Self, buildInfo,
+            TString::Join(NTableIndex::ImplTable, NTableIndex::NFulltext::RowIdSrcBuildSuffix));
+        const auto& implTableInfo = Self->Tables.at(implTable.Base()->PathId);
+        auto columns = NTableIndex::ExtractInfo(implTableInfo);
+        // Key = [__ydb_row_id]; data = the indexed text column + data columns.
+        for (const auto& key : columns.Keys) {
+            ev->Record.AddIndexColumns(key);
+            columns.Columns.erase(key);
+        }
+        for (const auto& column : columns.Columns) {
+            ev->Record.AddDataColumns(column);
+        }
+
+        ev->Record.SetDatabaseName(CanonizePath(Self->RootPathElements));
+        ev->Record.SetTargetName(implTable.PathString());
+
+        auto shardId = FillScanRequestCommon(ev->Record, shardIdx, buildInfo);
+
+        LOG_N("TTxBuildProgress: TEvBuildIndexCreateRequest (fulltext rowid prepass): " << ev->Record.ShortDebugString());
+
+        ToTabletSend.emplace(shardId, std::move(ev));
+    }
+
     void SendBuildFulltextIndexRequest(TShardIdx shardIdx, TIndexBuildInfo& buildInfo) {
         auto ev = MakeHolder<TEvDataShard::TEvBuildFulltextIndexRequest>();
         ev->Record.SetId(ui64(BuildId));
 
-        buildInfo.TablePathId.ToProto(ev->Record.MutablePathId());
+        // The scanned table is the main table, except the compact rowid-mode posting fill, which scans
+        // the row-id source table built by the prepass (see GetShardsPath).
+        GetShardsPath(buildInfo)->PathId.ToProto(ev->Record.MutablePathId());
         ev->Record.SetDatabaseName(CanonizePath(Self->RootPathElements));
 
         if (buildInfo.IndexType == NKikimrSchemeOp::EIndexType::EIndexTypeGlobalJson ||
@@ -1381,11 +1460,16 @@ private:
             TPath implTable = GetBuildPath(Self, buildInfo, TString(NTableIndex::ImplTable) + (compact ? NTableIndex::NKMeans::BuildSuffix0 : ""));
             buildInfo.TargetName = implTable.PathString();
         }
-        if (const auto* fulltextDesc = std::get_if<NKikimrSchemeOp::TFulltextIndexDescription>(
-                &buildInfo.SpecializedIndexDescription);
-            fulltextDesc && fulltextDesc->GetUseRowIdAsDocId())
-        {
-            ev->Record.SetUseRowIdAsDocId(true);
+        // UseRowIdAsDocId applies only to non-compact (plain/relevance) builds, which scan the main
+        // table directly with __ydb_row_id as doc id. Compact builds get the row id via the prepass
+        // (the posting fill then scans the row-id source table, whose PK already is the doc id).
+        if (!compact) {
+            if (const auto* fulltextDesc = std::get_if<NKikimrSchemeOp::TFulltextIndexDescription>(
+                    &buildInfo.SpecializedIndexDescription);
+                fulltextDesc && fulltextDesc->GetUseRowIdAsDocId())
+            {
+                ev->Record.SetUseRowIdAsDocId(true);
+            }
         }
         ev->Record.SetIndexName(buildInfo.TargetName);
         ev->Record.SetIndexType(ConvertFulltextType(buildInfo.IndexType));
@@ -2339,6 +2423,28 @@ private:
         bool done = false;
 
         switch (buildInfo.SubState) {
+        case TIndexBuildInfo::ESubState::FulltextRowIdSrc:
+            // Compact rowid-mode prepass: copy the main table into the row-id source table (a generic
+            // secondary-index build over __ydb_row_id), then go back through CreateBuild (to build the
+            // 0build posting table) and the posting fill.
+            LOG_D("FillFulltextIndex RowIdSrc");
+            if (NoShardsAdded(buildInfo)) {
+                AddAllShards(buildInfo);
+            }
+            done = SendToShards(buildInfo, [&](TShardIdx shardIdx) { SendBuildFulltextRowIdSrcRequest(shardIdx, buildInfo); }) &&
+                buildInfo.DoneShards.size() == buildInfo.Shards.size();
+            if (done) {
+                LOG_D("FillFulltextIndex RowIdSrc Done");
+                ClearDoneShards(txc, buildInfo);
+                NIceDb::TNiceDb db{txc.DB};
+                buildInfo.SubState = TIndexBuildInfo::ESubState::None;
+                Self->PersistBuildIndexState(db, buildInfo);
+                Self->PersistBuildIndexShardStatusReset(db, buildInfo);
+                ChangeState(BuildId, TIndexBuildInfo::EState::CreateBuild);
+                Progress(BuildId);
+                done = false;
+            }
+            break;
         case TIndexBuildInfo::ESubState::None:
             // Stage 1 for FulltextRelevance - build "posting" table (token-documents)
             YDB_LOG_DEBUG("FillFulltextIndex Posting",
@@ -2575,6 +2681,16 @@ public:
             return true;
         }
 
+        if (!buildInfo.DependencyTxIds.empty()) {
+            TStringBuilder msg;
+            msg << "TTxBuildProgress: " << BuildId << " " << buildInfo.State << ": waiting for dependencies:";
+            for (auto& txId: buildInfo.DependencyTxIds) {
+                msg << " " << txId;
+            }
+            LOG_N(msg);
+            return true;
+        }
+
         switch (buildInfo.State) {
         case TIndexBuildInfo::EState::Invalid:
             Y_ENSURE(false, "Unreachable");
@@ -2682,6 +2798,13 @@ public:
             } else if (!buildInfo.InitiateTxDone) {
                 Send(Self->SelfId(), MakeHolder<TEvSchemeShard::TEvNotifyTxCompletion>(ui64(buildInfo.InitiateTxId)));
             } else {
+                if (buildInfo.IsBuildFulltextCompactRowId() &&
+                    buildInfo.SubState == TIndexBuildInfo::ESubState::None) {
+                    // Run the row-id source prepass first: CreateBuild builds the rowid source table.
+                    NIceDb::TNiceDb db(txc.DB);
+                    buildInfo.SubState = TIndexBuildInfo::ESubState::FulltextRowIdSrc;
+                    Self->PersistBuildIndexState(db, buildInfo);
+                }
                 if (buildInfo.IsBuildVectorIndex() && buildInfo.KMeans.NeedsAnotherLevel() ||
                     buildInfo.IsBuildFulltextCompact()) {
                     ChangeState(BuildId, TIndexBuildInfo::EState::CreateBuild);
@@ -2737,9 +2860,7 @@ public:
                 buildInfo.ApplyTxDone = false;
 
                 NIceDb::TNiceDb db(txc.DB);
-                Self->PersistBuildIndexApplyTxId(db, buildInfo);
-                Self->PersistBuildIndexApplyTxStatus(db, buildInfo);
-                Self->PersistBuildIndexApplyTxDone(db, buildInfo);
+                Self->PersistBuildIndexApplyTx(db, buildInfo);
 
                 ChangeState(BuildId, TIndexBuildInfo::EState::CreateBuild);
                 Progress(BuildId);
@@ -2751,7 +2872,11 @@ public:
                 AllocateTxId(BuildId);
             } else if (buildInfo.ApplyTxStatus == NKikimrScheme::StatusSuccess) {
                 if (buildInfo.IsBuildFulltextCompact()) {
-                    Send(Self->SelfId(), CreateBuildFulltextPropose(Self, buildInfo), 0, ui64(BuildId));
+                    if (buildInfo.SubState == TIndexBuildInfo::ESubState::FulltextRowIdSrc) {
+                        Send(Self->SelfId(), CreateBuildFulltextRowIdSrcPropose(Self, buildInfo), 0, ui64(BuildId));
+                    } else {
+                        Send(Self->SelfId(), CreateBuildFulltextPropose(Self, buildInfo), 0, ui64(BuildId));
+                    }
                 } else {
                     Send(Self->SelfId(), CreateBuildPropose(Self, buildInfo), 0, ui64(BuildId));
                 }
@@ -2766,9 +2891,7 @@ public:
                 buildInfo.ApplyTxDone = false;
 
                 NIceDb::TNiceDb db(txc.DB);
-                Self->PersistBuildIndexApplyTxId(db, buildInfo);
-                Self->PersistBuildIndexApplyTxStatus(db, buildInfo);
-                Self->PersistBuildIndexApplyTxDone(db, buildInfo);
+                Self->PersistBuildIndexApplyTx(db, buildInfo);
 
                 ChangeState(BuildId, TIndexBuildInfo::EState::Filling);
                 Progress(BuildId);
@@ -2796,6 +2919,9 @@ public:
                     buildInfo.SubState == TIndexBuildInfo::ESubState::UniqConsistentValidation ||
                     buildInfo.SubState == TIndexBuildInfo::ESubState::PrepareValidation) {
                     tableName = NTableIndex::ImplTable;
+                } else if (buildInfo.SubState == TIndexBuildInfo::ESubState::None && buildInfo.IsBuildFulltextCompactRowId()) {
+                    // Lock the row-id source table before the posting fill scans it.
+                    tableName = TString::Join(NTableIndex::ImplTable, NTableIndex::NFulltext::RowIdSrcBuildSuffix);
                 } else {
                     tableName = buildInfo.KMeans.ReadFrom();
                 }
@@ -2808,9 +2934,7 @@ public:
                 buildInfo.ApplyTxDone = false;
 
                 NIceDb::TNiceDb db(txc.DB);
-                Self->PersistBuildIndexApplyTxId(db, buildInfo);
-                Self->PersistBuildIndexApplyTxStatus(db, buildInfo);
-                Self->PersistBuildIndexApplyTxDone(db, buildInfo);
+                Self->PersistBuildIndexApplyTx(db, buildInfo);
 
                 ChangeState(BuildId, TIndexBuildInfo::EState::Filling);
                 Progress(BuildId);
@@ -2831,9 +2955,7 @@ public:
                 buildInfo.ApplyTxDone = false;
 
                 NIceDb::TNiceDb db(txc.DB);
-                Self->PersistBuildIndexApplyTxId(db, buildInfo);
-                Self->PersistBuildIndexApplyTxStatus(db, buildInfo);
-                Self->PersistBuildIndexApplyTxDone(db, buildInfo);
+                Self->PersistBuildIndexApplyTx(db, buildInfo);
 
                 ChangeState(BuildId, TIndexBuildInfo::EState::Filling);
                 Progress(BuildId);
@@ -2853,9 +2975,7 @@ public:
                 buildInfo.ApplyTxDone = false;
 
                 NIceDb::TNiceDb db(txc.DB);
-                Self->PersistBuildIndexApplyTxId(db, buildInfo);
-                Self->PersistBuildIndexApplyTxStatus(db, buildInfo);
-                Self->PersistBuildIndexApplyTxDone(db, buildInfo);
+                Self->PersistBuildIndexApplyTx(db, buildInfo);
 
                 ChangeState(BuildId, TIndexBuildInfo::EState::Filling);
                 Progress(BuildId);
@@ -3045,6 +3165,11 @@ public:
                         return GetBuildPath(Self, buildInfo, TString::Join(NTableIndex::ImplTable, NTableIndex::NKMeans::BuildSuffix0));
                     }
                     return GetBuildPath(Self, buildInfo, NTableIndex::ImplTable);
+                }
+                // Compact rowid-mode: the posting fill (SubState None) scans the row-id source table;
+                // the prepass (FulltextRowIdSrc) and all other builds scan the main table.
+                if (buildInfo.SubState == TIndexBuildInfo::ESubState::None && buildInfo.IsBuildFulltextCompactRowId()) {
+                    return GetBuildPath(Self, buildInfo, TString::Join(NTableIndex::ImplTable, NTableIndex::NFulltext::RowIdSrcBuildSuffix));
                 }
                 return TPath::Init(buildInfo.TablePathId, Self);
             case TIndexBuildInfo::EBuildKind::BuildSecondaryUniqueIndex:
@@ -3836,6 +3961,23 @@ public:
         const auto txId = CompletedTxId;
 
         const auto* buildIdPtr = Self->TxIdToIndexBuilds.FindPtr(txId);
+
+        if (Self->TxIdToDependentIndexBuild.contains(txId)) {
+            THashSet<TIndexBuildId> deps = std::move(Self->TxIdToDependentIndexBuild.at(txId));
+            Self->TxIdToDependentIndexBuild.erase(txId);
+            for (auto& dependentBuildId: deps) {
+                LOG_N("TTxReply txId: " << txId << " : trying to resume dependent index build " << dependentBuildId);
+                if (Self->IndexBuilds.contains(dependentBuildId)) {
+                    auto& buildInfo = *Self->IndexBuilds.at(dependentBuildId);
+                    buildInfo.DependencyTxIds.erase(txId);
+                    Progress(dependentBuildId);
+                }
+            }
+            if (!buildIdPtr) {
+                return true;
+            }
+        }
+
         if (!buildIdPtr) {
             YDB_LOG_INFO("TTxReply TEvNotifyTxCompletionResult superfluous message BuildIndexId not found",
                 {"logPrefix", LogPrefix},
@@ -3862,7 +4004,7 @@ public:
             Y_ENSURE(txId == buildInfo.LockTxId);
 
             buildInfo.LockTxDone = true;
-            Self->PersistBuildIndexLockTxDone(db, buildInfo);
+            Self->PersistBuildIndexLockTx(db, buildInfo);
             break;
         }
         case TIndexBuildInfo::EState::AlterMainTable:
@@ -3870,7 +4012,7 @@ public:
             Y_ENSURE(txId == buildInfo.AlterMainTableTxId);
 
             buildInfo.AlterMainTableTxDone = true;
-            Self->PersistBuildIndexAlterMainTableTxDone(db, buildInfo);
+            Self->PersistBuildIndexAlterMainTableTx(db, buildInfo);
             break;
         }
         case TIndexBuildInfo::EState::CreateBuildSequence:
@@ -3878,7 +4020,7 @@ public:
             Y_ENSURE(txId == buildInfo.CreateBuildSequenceTxId);
 
             buildInfo.CreateBuildSequenceTxDone = true;
-            Self->PersistBuildIndexCreateBuildSequenceTxDone(db, buildInfo);
+            Self->PersistBuildIndexCreateBuildSequenceTx(db, buildInfo);
             break;
         }
         case TIndexBuildInfo::EState::Initiating:
@@ -3886,7 +4028,7 @@ public:
             Y_ENSURE(txId == buildInfo.InitiateTxId);
 
             buildInfo.InitiateTxDone = true;
-            Self->PersistBuildIndexInitiateTxDone(db, buildInfo);
+            Self->PersistBuildIndexInitiateTx(db, buildInfo);
             break;
         }
         case TIndexBuildInfo::EState::Cancellation_DroppingColumns:
@@ -3895,7 +4037,7 @@ public:
             Y_ENSURE(txId == buildInfo.DropColumnsTxId);
 
             buildInfo.DropColumnsTxDone = true;
-            Self->PersistBuildIndexDropColumnsTxDone(db, buildInfo);
+            Self->PersistBuildIndexDropColumnsTx(db, buildInfo);
             break;
         }
         case TIndexBuildInfo::EState::DropBuild:
@@ -3910,7 +4052,7 @@ public:
             Y_ENSURE(txId == buildInfo.ApplyTxId, state);
 
             buildInfo.ApplyTxDone = true;
-            Self->PersistBuildIndexApplyTxDone(db, buildInfo);
+            Self->PersistBuildIndexApplyTx(db, buildInfo);
             break;
         }
         case TIndexBuildInfo::EState::Unlocking:
@@ -3920,7 +4062,7 @@ public:
             Y_ENSURE(txId == buildInfo.UnlockTxId, state);
 
             buildInfo.UnlockTxDone = true;
-            Self->PersistBuildIndexUnlockTxDone(db, buildInfo);
+            Self->PersistBuildIndexUnlockTx(db, buildInfo);
             break;
         }
         case TIndexBuildInfo::EState::Invalid:
@@ -4027,19 +4169,37 @@ public:
             return true;
         };
 
+        auto shouldRetry = [&]() {
+            if (record.GetStatus() == NKikimrScheme::StatusMultipleModifications) {
+                // most modifications are forbidden during index build, however,
+                // copying the main table without indexes, or at least without the
+                // new unfinished index is allowed. in this case the main table will
+                // have PathStateCopying and we just need to retry our proposal when
+                // copying finishes.
+                auto it = Self->PathsById.find(buildInfo.TablePathId);
+                if (it != Self->PathsById.end() && it->second->PathState == NKikimrSchemeOp::EPathStateCopying) {
+                    auto copyTxId = it->second->LastTxId;
+                    LOG_I("TTxReply : Waiting for txId " << copyTxId << " to retry index build id# " << BuildId);
+                    buildInfo.DependencyTxIds.insert(copyTxId);
+                    Self->TxIdToDependentIndexBuild[copyTxId].insert(buildInfo.Id);
+                    // subscribe to tx notification
+                    Send(Self->SelfId(), MakeHolder<TEvSchemeShard::TEvNotifyTxCompletion>(ui64(copyTxId)));
+                    return true;
+                }
+            }
+            return false;
+        };
+
         auto ifErrorMoveTo = [&] (TIndexBuildInfo::EState to) {
             if (record.GetStatus() == NKikimrScheme::StatusAccepted) {
                 // no op
-            } else if (record.GetStatus() == NKikimrScheme::StatusAlreadyExists) {
-                Y_ENSURE(false, "NEED MORE TESTING");
-                // no op
-            } else {
-                Self->PersistBuildIndexAddIssue(db, buildInfo, TStringBuilder()
-                    << "At " << state << " state got unsuccess propose result"
-                    << ", status: " << NKikimrScheme::EStatus_Name(record.GetStatus())
-                    << ", reason: " << record.GetReason());
-                ChangeState(buildInfo.Id, to);
+                return;
             }
+            Self->PersistBuildIndexAddIssue(db, buildInfo, TStringBuilder()
+                << "At " << state << " state got unsuccess propose result"
+                << ", status: " << NKikimrScheme::EStatus_Name(record.GetStatus())
+                << ", reason: " << record.GetReason());
+            ChangeState(buildInfo.Id, to);
         };
 
         switch (state) {
@@ -4048,7 +4208,7 @@ public:
             Y_ENSURE(txId == buildInfo.LockTxId);
 
             buildInfo.LockTxStatus = record.GetStatus();
-            Self->PersistBuildIndexLockTxStatus(db, buildInfo);
+            Self->PersistBuildIndexLockTx(db, buildInfo);
 
             if (!replyOnCreation()) {
                 return false;
@@ -4059,20 +4219,32 @@ public:
         {
             Y_ENSURE(txId == buildInfo.AlterMainTableTxId);
 
-            buildInfo.AlterMainTableTxStatus = record.GetStatus();
-            Self->PersistBuildIndexAlterMainTableTxStatus(db, buildInfo);
-
-            ifErrorMoveTo(TIndexBuildInfo::EState::Rejection_Unlocking);
+            if (shouldRetry()) {
+                buildInfo.AlterMainTableTxId = InvalidTxId;
+                buildInfo.AlterMainTableTxStatus = NKikimrScheme::StatusSuccess;
+                buildInfo.AlterMainTableTxDone = false;
+                Self->PersistBuildIndexAlterMainTableTx(db, buildInfo);
+            } else {
+                buildInfo.AlterMainTableTxStatus = record.GetStatus();
+                Self->PersistBuildIndexAlterMainTableTx(db, buildInfo);
+                ifErrorMoveTo(TIndexBuildInfo::EState::Rejection_Unlocking);
+            }
             break;
         }
         case TIndexBuildInfo::EState::CreateBuildSequence:
         {
             Y_ENSURE(txId == buildInfo.CreateBuildSequenceTxId);
 
-            buildInfo.CreateBuildSequenceTxStatus = record.GetStatus();
-            Self->PersistBuildIndexCreateBuildSequenceTxStatus(db, buildInfo);
-
-            ifErrorMoveTo(TIndexBuildInfo::EState::Rejection_Unlocking);
+            if (shouldRetry()) {
+                buildInfo.CreateBuildSequenceTxId = InvalidTxId;
+                buildInfo.CreateBuildSequenceTxStatus = NKikimrScheme::StatusSuccess;
+                buildInfo.CreateBuildSequenceTxDone = false;
+                Self->PersistBuildIndexCreateBuildSequenceTx(db, buildInfo);
+            } else {
+                buildInfo.CreateBuildSequenceTxStatus = record.GetStatus();
+                Self->PersistBuildIndexCreateBuildSequenceTx(db, buildInfo);
+                ifErrorMoveTo(TIndexBuildInfo::EState::Rejection_Unlocking);
+            }
             break;
         }
         case TIndexBuildInfo::EState::Initiating:
@@ -4080,7 +4252,7 @@ public:
             Y_ENSURE(txId == buildInfo.InitiateTxId);
 
             buildInfo.InitiateTxStatus = record.GetStatus();
-            Self->PersistBuildIndexInitiateTxStatus(db, buildInfo);
+            Self->PersistBuildIndexInitiateTx(db, buildInfo);
 
             if (buildInfo.IsBuildColumns()) {
                 ifErrorMoveTo(TIndexBuildInfo::EState::Rejection_DroppingColumns);
@@ -4097,31 +4269,43 @@ public:
         {
             Y_ENSURE(txId == buildInfo.ApplyTxId);
 
-            if (record.GetStatus() != NKikimrScheme::StatusAccepted &&
-                record.GetStatus() != NKikimrScheme::StatusAlreadyExists) {
-                // Otherwise we won't cancel the index build correctly
-                buildInfo.ApplyTxId = {};
+            if (shouldRetry()) {
+                buildInfo.ApplyTxId = InvalidTxId;
                 buildInfo.ApplyTxStatus = NKikimrScheme::StatusSuccess;
                 buildInfo.ApplyTxDone = false;
+                Self->PersistBuildIndexApplyTx(db, buildInfo);
             } else {
-                buildInfo.ApplyTxStatus = record.GetStatus();
+                if (record.GetStatus() != NKikimrScheme::StatusAccepted &&
+                    record.GetStatus() != NKikimrScheme::StatusAlreadyExists) {
+                    // Otherwise we won't cancel the index build correctly
+                    buildInfo.ApplyTxId = {};
+                    buildInfo.ApplyTxStatus = NKikimrScheme::StatusSuccess;
+                    buildInfo.ApplyTxDone = false;
+                } else {
+                    buildInfo.ApplyTxStatus = record.GetStatus();
+                }
+                Self->PersistBuildIndexApplyTx(db, buildInfo);
+                ifErrorMoveTo(TIndexBuildInfo::EState::Rejection_Applying);
             }
-            Self->PersistBuildIndexApplyTxStatus(db, buildInfo);
-
-            ifErrorMoveTo(TIndexBuildInfo::EState::Rejection_Applying);
             break;
         }
         case TIndexBuildInfo::EState::Applying:
         {
             Y_ENSURE(txId == buildInfo.ApplyTxId);
 
-            buildInfo.ApplyTxStatus = record.GetStatus();
-            Self->PersistBuildIndexApplyTxStatus(db, buildInfo);
-
-            if (buildInfo.IsBuildColumns()) {
-                ifErrorMoveTo(TIndexBuildInfo::EState::Rejection_DroppingColumns);
+            if (shouldRetry()) {
+                buildInfo.ApplyTxId = InvalidTxId;
+                buildInfo.ApplyTxStatus = NKikimrScheme::StatusSuccess;
+                buildInfo.ApplyTxDone = false;
+                Self->PersistBuildIndexApplyTx(db, buildInfo);
             } else {
-                ifErrorMoveTo(TIndexBuildInfo::EState::Rejection_Unlocking);
+                buildInfo.ApplyTxStatus = record.GetStatus();
+                Self->PersistBuildIndexApplyTx(db, buildInfo);
+                if (buildInfo.IsBuildColumns()) {
+                    ifErrorMoveTo(TIndexBuildInfo::EState::Rejection_DroppingColumns);
+                } else {
+                    ifErrorMoveTo(TIndexBuildInfo::EState::Rejection_Unlocking);
+                }
             }
             break;
         }
@@ -4129,23 +4313,35 @@ public:
         {
             Y_ENSURE(txId == buildInfo.ApplyTxId);
 
-            buildInfo.ApplyTxStatus = record.GetStatus();
-            Self->PersistBuildIndexApplyTxStatus(db, buildInfo);
-
-            ifErrorMoveTo(TIndexBuildInfo::EState::Rejection_Unlocking);
+            if (shouldRetry()) {
+                buildInfo.ApplyTxId = InvalidTxId;
+                buildInfo.ApplyTxStatus = NKikimrScheme::StatusSuccess;
+                buildInfo.ApplyTxDone = false;
+                Self->PersistBuildIndexApplyTx(db, buildInfo);
+            } else {
+                buildInfo.ApplyTxStatus = record.GetStatus();
+                Self->PersistBuildIndexApplyTx(db, buildInfo);
+                ifErrorMoveTo(TIndexBuildInfo::EState::Rejection_Unlocking);
+            }
             break;
         }
         case TIndexBuildInfo::EState::Unlocking:
         {
             Y_ENSURE(txId == buildInfo.UnlockTxId);
 
-            buildInfo.UnlockTxStatus = record.GetStatus();
-            Self->PersistBuildIndexUnlockTxStatus(db, buildInfo);
-
-            if (buildInfo.IsBuildColumns()) {
-                ifErrorMoveTo(TIndexBuildInfo::EState::Rejection_DroppingColumns);
+            if (shouldRetry()) {
+                buildInfo.UnlockTxId = InvalidTxId;
+                buildInfo.UnlockTxStatus = NKikimrScheme::StatusSuccess;
+                buildInfo.UnlockTxDone = false;
+                Self->PersistBuildIndexUnlockTx(db, buildInfo);
             } else {
-                ifErrorMoveTo(TIndexBuildInfo::EState::Rejection_Unlocking);
+                buildInfo.UnlockTxStatus = record.GetStatus();
+                Self->PersistBuildIndexUnlockTx(db, buildInfo);
+                if (buildInfo.IsBuildColumns()) {
+                    ifErrorMoveTo(TIndexBuildInfo::EState::Rejection_DroppingColumns);
+                } else {
+                    ifErrorMoveTo(TIndexBuildInfo::EState::Rejection_Unlocking);
+                }
             }
             break;
         }
@@ -4153,24 +4349,36 @@ public:
         {
             Y_ENSURE(txId == buildInfo.DropColumnsTxId);
 
-            buildInfo.DropColumnsTxStatus = record.GetStatus();
-            Self->PersistBuildIndexDropColumnsTxStatus(db, buildInfo);
-
-            ifErrorMoveTo(TIndexBuildInfo::EState::Cancellation_Applying);
+            if (shouldRetry()) {
+                buildInfo.DropColumnsTxId = InvalidTxId;
+                buildInfo.DropColumnsTxStatus = NKikimrScheme::StatusSuccess;
+                buildInfo.DropColumnsTxDone = false;
+                Self->PersistBuildIndexDropColumnsTx(db, buildInfo);
+            } else {
+                buildInfo.DropColumnsTxStatus = record.GetStatus();
+                Self->PersistBuildIndexDropColumnsTx(db, buildInfo);
+                ifErrorMoveTo(TIndexBuildInfo::EState::Cancellation_Applying);
+            }
             break;
         }
         case TIndexBuildInfo::EState::Rejection_DroppingColumns:
         {
             Y_ENSURE(txId == buildInfo.DropColumnsTxId);
 
-            buildInfo.DropColumnsTxStatus = record.GetStatus();
-            Self->PersistBuildIndexDropColumnsTxStatus(db, buildInfo);
-
-            auto notApplied = !buildInfo.ApplyTxDone && buildInfo.ApplyTxStatus == NKikimrScheme::StatusSuccess;
-            if (buildInfo.InitiateTxDone && notApplied) {
-                ifErrorMoveTo(TIndexBuildInfo::EState::Rejection_Applying);
+            if (shouldRetry()) {
+                buildInfo.DropColumnsTxId = InvalidTxId;
+                buildInfo.DropColumnsTxStatus = NKikimrScheme::StatusSuccess;
+                buildInfo.DropColumnsTxDone = false;
+                Self->PersistBuildIndexDropColumnsTx(db, buildInfo);
             } else {
-                ifErrorMoveTo(TIndexBuildInfo::EState::Rejection_Unlocking);
+                buildInfo.DropColumnsTxStatus = record.GetStatus();
+                Self->PersistBuildIndexDropColumnsTx(db, buildInfo);
+                auto notApplied = !buildInfo.ApplyTxDone && buildInfo.ApplyTxStatus == NKikimrScheme::StatusSuccess;
+                if (buildInfo.InitiateTxDone && notApplied) {
+                    ifErrorMoveTo(TIndexBuildInfo::EState::Rejection_Applying);
+                } else {
+                    ifErrorMoveTo(TIndexBuildInfo::EState::Rejection_Unlocking);
+                }
             }
             break;
         }
@@ -4178,30 +4386,48 @@ public:
         {
             Y_ENSURE(txId == buildInfo.ApplyTxId);
 
-            buildInfo.ApplyTxStatus = record.GetStatus();
-            Self->PersistBuildIndexApplyTxStatus(db, buildInfo);
-
-            ifErrorMoveTo(TIndexBuildInfo::EState::Cancellation_Unlocking);
+            if (shouldRetry()) {
+                buildInfo.ApplyTxId = InvalidTxId;
+                buildInfo.ApplyTxStatus = NKikimrScheme::StatusSuccess;
+                buildInfo.ApplyTxDone = false;
+                Self->PersistBuildIndexApplyTx(db, buildInfo);
+            } else {
+                buildInfo.ApplyTxStatus = record.GetStatus();
+                Self->PersistBuildIndexApplyTx(db, buildInfo);
+                ifErrorMoveTo(TIndexBuildInfo::EState::Cancellation_Unlocking);
+            }
             break;
         }
         case TIndexBuildInfo::EState::Cancellation_Unlocking:
         {
             Y_ENSURE(txId == buildInfo.UnlockTxId);
 
-            buildInfo.UnlockTxStatus = record.GetStatus();
-            Self->PersistBuildIndexUnlockTxStatus(db, buildInfo);
-
-            ifErrorMoveTo(TIndexBuildInfo::EState::Cancelled);
+            if (shouldRetry()) {
+                buildInfo.UnlockTxId = InvalidTxId;
+                buildInfo.UnlockTxStatus = NKikimrScheme::StatusSuccess;
+                buildInfo.UnlockTxDone = false;
+                Self->PersistBuildIndexUnlockTx(db, buildInfo);
+            } else {
+                buildInfo.UnlockTxStatus = record.GetStatus();
+                Self->PersistBuildIndexUnlockTx(db, buildInfo);
+                ifErrorMoveTo(TIndexBuildInfo::EState::Cancelled);
+            }
             break;
         }
         case TIndexBuildInfo::EState::Rejection_Unlocking:
         {
             Y_ENSURE(txId == buildInfo.UnlockTxId);
 
-            buildInfo.UnlockTxStatus = record.GetStatus();
-            Self->PersistBuildIndexUnlockTxStatus(db, buildInfo);
-
-            ifErrorMoveTo(TIndexBuildInfo::EState::Rejected);
+            if (shouldRetry()) {
+                buildInfo.UnlockTxId = InvalidTxId;
+                buildInfo.UnlockTxStatus = NKikimrScheme::StatusSuccess;
+                buildInfo.UnlockTxDone = false;
+                Self->PersistBuildIndexUnlockTx(db, buildInfo);
+            } else {
+                buildInfo.UnlockTxStatus = record.GetStatus();
+                Self->PersistBuildIndexUnlockTx(db, buildInfo);
+                ifErrorMoveTo(TIndexBuildInfo::EState::Rejected);
+            }
             break;
         }
         case TIndexBuildInfo::EState::Invalid:
@@ -4260,25 +4486,25 @@ public:
         case TIndexBuildInfo::EState::AlterMainTable:
             if (!buildInfo.AlterMainTableTxId) {
                 buildInfo.AlterMainTableTxId = txId;
-                Self->PersistBuildIndexAlterMainTableTxId(db, buildInfo);
+                Self->PersistBuildIndexAlterMainTableTx(db, buildInfo);
             }
             break;
         case TIndexBuildInfo::EState::CreateBuildSequence:
             if (!buildInfo.CreateBuildSequenceTxId) {
                 buildInfo.CreateBuildSequenceTxId = txId;
-                Self->PersistBuildIndexCreateBuildSequenceTxId(db, buildInfo);
+                Self->PersistBuildIndexCreateBuildSequenceTx(db, buildInfo);
             }
             break;
         case TIndexBuildInfo::EState::Locking:
             if (!buildInfo.LockTxId) {
                 buildInfo.LockTxId = txId;
-                Self->PersistBuildIndexLockTxId(db, buildInfo);
+                Self->PersistBuildIndexLockTx(db, buildInfo);
             }
             break;
         case TIndexBuildInfo::EState::Initiating:
             if (!buildInfo.InitiateTxId) {
                 buildInfo.InitiateTxId = txId;
-                Self->PersistBuildIndexInitiateTxId(db, buildInfo);
+                Self->PersistBuildIndexInitiateTx(db, buildInfo);
             }
             break;
         case TIndexBuildInfo::EState::ProvisioningRowIdColumn:
@@ -4310,14 +4536,14 @@ public:
         case TIndexBuildInfo::EState::Rejection_Applying:
             if (!buildInfo.ApplyTxId) {
                 buildInfo.ApplyTxId = txId;
-                Self->PersistBuildIndexApplyTxId(db, buildInfo);
+                Self->PersistBuildIndexApplyTx(db, buildInfo);
             }
             break;
         case TIndexBuildInfo::EState::Cancellation_DroppingColumns:
         case TIndexBuildInfo::EState::Rejection_DroppingColumns:
             if (!buildInfo.DropColumnsTxId) {
                 buildInfo.DropColumnsTxId = txId;
-                Self->PersistBuildIndexDropColumnsTxId(db, buildInfo);
+                Self->PersistBuildIndexDropColumnsTx(db, buildInfo);
             }
             break;
         case TIndexBuildInfo::EState::Unlocking:
@@ -4325,7 +4551,7 @@ public:
         case TIndexBuildInfo::EState::Rejection_Unlocking:
             if (!buildInfo.UnlockTxId) {
                 buildInfo.UnlockTxId = txId;
-                Self->PersistBuildIndexUnlockTxId(db, buildInfo);
+                Self->PersistBuildIndexUnlockTx(db, buildInfo);
             }
             break;
         case TIndexBuildInfo::EState::Invalid:

@@ -210,7 +210,7 @@ public:
         const TString& parentPathStr = Transaction.GetWorkingDir();
         const auto& streamingQueryDescription = Transaction.GetCreateStreamingQuery();
         const TString& name = streamingQueryDescription.GetName();
-        YDB_LOG_NOTICE_CTX(context.Ctx, "TAlterStreamingQuery Propose: ",
+        YDB_LOG_NOTICE_CTX(context.Ctx, "TAlterStreamingQuery Propose",
             {"#_context.SS->TabletID", context.SS->TabletID()},
             {"opId", OperationId},
             {"path", parentPathStr},

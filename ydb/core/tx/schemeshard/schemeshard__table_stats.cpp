@@ -8,6 +8,8 @@
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
+
 
 namespace NKikimr {
 namespace NSchemeShard {
@@ -197,6 +199,8 @@ TPartitionStats TTxStoreTableStats::PrepareStats(const T& rec,
     newStats.DataSize = tableStats.GetDataSize();
     newStats.IndexSize = tableStats.GetIndexSize();
     newStats.ByKeyFilterSize = tableStats.GetByKeyFilterSize();
+    newStats.SmallBlobsVolumeBytes = tableStats.GetSmallBlobsVolumeBytes();
+    newStats.SmallBlobsCount = tableStats.GetSmallBlobsCount();
     newStats.LastAccessTime = TInstant::MilliSeconds(tableStats.GetLastAccessTime());
     newStats.LastUpdateTime = TInstant::MilliSeconds(tableStats.GetLastUpdateTime());
 
@@ -426,6 +430,8 @@ bool TTxStoreTableStats::PersistSingleStats(const TPathId& pathId,
     }
 
     TDiskSpaceUsageDelta diskSpaceUsageDelta;
+    i64 smallBlobsBytesDelta = 0;
+    i64 smallBlobsCountDelta = 0;
 
     if (isDataShard) {
         if (!Self->Tables.contains(pathId)) {
@@ -463,7 +469,11 @@ bool TTxStoreTableStats::PersistSingleStats(const TPathId& pathId,
         }
 
         TOlapStoreInfo::TPtr olapStore = Self->OlapStores[pathId];
+        const ui64 prevSmallBlobsBytes = olapStore->Stats.Aggregated.SmallBlobsVolumeBytes;
+        const ui64 prevSmallBlobsCount = olapStore->Stats.Aggregated.SmallBlobsCount;
         olapStore->UpdateShardStats(&diskSpaceUsageDelta, shardIdx, newStats, now);
+        smallBlobsBytesDelta = static_cast<i64>(olapStore->Stats.Aggregated.SmallBlobsVolumeBytes) - static_cast<i64>(prevSmallBlobsBytes);
+        smallBlobsCountDelta = static_cast<i64>(olapStore->Stats.Aggregated.SmallBlobsCount) - static_cast<i64>(prevSmallBlobsCount);
         updateSubdomainInfo = true;
 
         const auto tables = rec.GetTables();
@@ -502,7 +512,11 @@ bool TTxStoreTableStats::PersistSingleStats(const TPathId& pathId,
             {"size", rec.GetTables().size()});
 
         auto columnTable = Self->ColumnTables.GetVerifiedPtr(pathId);
+        const ui64 prevSmallBlobsBytes = columnTable->Stats.Aggregated.SmallBlobsVolumeBytes;
+        const ui64 prevSmallBlobsCount = columnTable->Stats.Aggregated.SmallBlobsCount;
         columnTable->UpdateShardStats(&diskSpaceUsageDelta, shardIdx, newStats, now);
+        smallBlobsBytesDelta = static_cast<i64>(columnTable->Stats.Aggregated.SmallBlobsVolumeBytes) - static_cast<i64>(prevSmallBlobsBytes);
+        smallBlobsCountDelta = static_cast<i64>(columnTable->Stats.Aggregated.SmallBlobsCount) - static_cast<i64>(prevSmallBlobsCount);
         updateSubdomainInfo = true;
 
         YDB_LOG_DEBUG_CTX(ctx, "Aggregated stats for pathId RowCount DataSize",
@@ -513,7 +527,8 @@ bool TTxStoreTableStats::PersistSingleStats(const TPathId& pathId,
 
     if (updateSubdomainInfo) {
         subDomainInfo->AggrDiskSpaceUsage(Self, diskSpaceUsageDelta);
-        if (subDomainInfo->CheckDiskSpaceQuotas(Self)) {
+        subDomainInfo->AggrSmallBlobsUsage(Self, smallBlobsBytesDelta, smallBlobsCountDelta);
+        if (subDomainInfo->CheckQuotas(Self)) {
             auto subDomainId = Self->ResolvePathIdForDomain(pathElement);
             Self->PersistSubDomainState(db, subDomainId, *subDomainInfo);
             // Publish is done in a separate transaction, so we may call this directly
@@ -527,7 +542,7 @@ bool TTxStoreTableStats::PersistSingleStats(const TPathId& pathId,
         return true;
     }
 
-    if (table->IsTTLEnabled()) {
+    if (Self->TTLEnabledTables.contains(pathId)) {
         if (auto* p = table->GetPartitionStore().FindPtr(shardIdx)) {
             auto& lag = p->LastCondEraseLag;
 
@@ -676,12 +691,8 @@ bool TTxStoreTableStats::VerifySplitAndRequestStats(
     }
 
     if (newPartitionStats.HasBorrowedData) {
-        LOG_NOTICE_S(
-            ctx,
-            NKikimrServices::FLAT_TX_SCHEMESHARD,
-            "Postpone split tablet " << datashardId
-                << " because it has borrow parts, enqueue compact them first"
-        );
+        YDB_LOG_NOTICE_CTX(ctx, "Postpone split tablet because it has borrow parts, enqueue compact them first",
+            {"datashardId", datashardId});
 
         Self->EnqueueBorrowedCompaction(shardIdx);
         return false;

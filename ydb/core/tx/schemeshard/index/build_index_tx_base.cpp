@@ -23,7 +23,7 @@ void TSchemeShard::TIndexBuilder::TTxBase::ApplyState(NTabletFlatExecutor::TTran
         const auto* buildInfoPtr = Self->IndexBuilds.FindPtr(buildId);
         Y_VERIFY_S(buildInfoPtr, "IndexBuilds has no " << buildId);
         auto& buildInfo = *buildInfoPtr->get();
-        YDB_LOG_INFO("Change state from",
+        YDB_LOG_INFO("Change state",
             {"logPrefix", LogPrefix},
             {"#_buildInfo.State", buildInfo.State},
             {"state", state});
@@ -46,7 +46,7 @@ void TSchemeShard::TIndexBuilder::TTxBase::ApplyState(NTabletFlatExecutor::TTran
         const auto* operationInfoPtr = Self->SetColumnConstraintOperations.FindPtr(operationId);
         Y_VERIFY_S(operationInfoPtr, "SetColumnConstraintOperations has no " << operationId);
         auto& operationInfo = *operationInfoPtr->get();
-        YDB_LOG_INFO("Change SetColumnConstraint state from",
+        YDB_LOG_INFO("Change SetColumnConstraint state",
             {"logPrefix", LogPrefix},
             {"#_ToString(operationInfo.OperationState)", ToString(operationInfo.OperationState)},
             {"#_ToString(state)", ToString(state)});

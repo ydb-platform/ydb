@@ -8,6 +8,8 @@
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
+
 namespace NKikimr {
 namespace NSchemeShard {
 
@@ -588,7 +590,7 @@ void TSideEffects::DoUpdateTenant(TSchemeShard* ss, NTabletFlatExecutor::TTransa
             continue;
         }
 
-        YDB_LOG_INFO_CTX(ctx, "Send TEvUpdateTenantSchemeShard to",
+        YDB_LOG_INFO_CTX(ctx, "Send TEvUpdateTenantSchemeShard",
             {"actor", tenantLink.ActorId},
             {"msg", message->Record.ShortDebugString()},
             {"schemeshard", ss->TabletID()});
@@ -671,14 +673,12 @@ void TSideEffects::DoBindMsg(TSchemeShard *ss, const TActorContext &ctx) {
         Y_ABORT_UNLESS(message->IsSerializable());
 
         if (!ss->Operations.contains(opId.GetTxId())) {
-            LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                       "Send tablet strongly msg "
-                           << ", operation already done"
-                           << ", operationId: " << opId
-                           << " from tablet: " << ss->TabletID()
-                           << " to tablet: " << tablet
-                           << " cookie: " << cookie
-                           << " msg type: " << msgType);
+            YDB_LOG_DEBUG_CTX(ctx, "Send tablet strongly msg operation already done from to msg",
+                {"operationId", opId},
+                {"fromTablet", ss->TabletID()},
+                {"toTablet", tablet},
+                {"cookie", cookie},
+                {"type", msgType});
             return;
         }
 
@@ -702,7 +702,7 @@ void TSideEffects::DoBindMsgAcks(TSchemeShard *ss, const TActorContext &ctx) {
         TPipeMessageId cookie;
         std::tie(opId, tablet, cookie) = ack;
 
-        YDB_LOG_TRACE_CTX(ctx, "Ack tablet strongly msg from",
+        YDB_LOG_TRACE_CTX(ctx, "Ack tablet strongly msg",
             {"opId", opId},
             {"fromTablet", ss->TabletID()},
             {"toTablet", tablet},
@@ -946,7 +946,7 @@ void TSideEffects::DoDoneParts(TSchemeShard *ss, const TActorContext &ctx) {
             }
         }
 
-        YDB_LOG_INFO_CTX(ctx, "Part operation is done progress is ",
+        YDB_LOG_INFO_CTX(ctx, "Part operation is done progress is",
             {"id", opId},
             {"#_operation->DoneParts.size", operation->DoneParts.size()},
             {"#_operation->Parts.size", operation->Parts.size()});

@@ -382,7 +382,7 @@ public:
         const auto& acl = Transaction.GetModifyACL().GetDiffACL();
         const auto acceptExisted = !Transaction.GetFailOnExist();
 
-        YDB_LOG_NOTICE_CTX(context.Ctx, "TCreateReplication Propose ",
+        YDB_LOG_NOTICE_CTX(context.Ctx, "TCreateReplication Propose",
             {"#_context.SS->TabletID", context.SS->TabletID()},
             {"opId", OperationId},
             {"path", workingDir},

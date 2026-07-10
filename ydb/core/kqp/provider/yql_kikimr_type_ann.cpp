@@ -21,7 +21,7 @@
 #include <yql/essentials/parser/pg_wrapper/interface/type_desc.h>
 #include <yql/essentials/providers/common/provider/yql_provider.h>
 
-#include <library/cpp/containers/absl_flat_hash/flat_hash_set.h>
+#include <library/cpp/containers/absl/flat_hash_set.h>
 
 #include <util/generic/is_in.h>
 
@@ -1566,7 +1566,7 @@ private:
                             NKikimr::NOlap::NIndexes::NMinMax::IncorrectIndexColumnsErrorMessage(indexColums)));
                         return IGraphTransformer::TStatus::Error;
                     }
-                    
+
                     break;
                 }
             }
@@ -1585,6 +1585,36 @@ private:
             );
 
             meta->Indexes.push_back(indexDesc);
+        }
+
+        for (const auto& statistics : create.Statistics()) {
+            if (!SessionCtx->Config().FeatureFlags.GetEnableColumnStatistics()) {
+                ctx.AddError(TIssue(ctx.GetPosition(statistics.Pos()),
+                    "Multi-column statistics support is disabled"));
+                return TStatus::Error;
+            }
+
+            TMultiColumnStatisticsDescription statisticsDesc;
+            statisticsDesc.Name = TString(statistics.Name().Value());
+            for (const auto& column : statistics.Columns()) {
+                if (!meta->Columns.contains(TString(column.Value()))) {
+                    ctx.AddError(TIssue(ctx.GetPosition(column.Pos()), TStringBuilder()
+                        << "Statistics column: " << column.Value() << " was not found in the table"));
+                    return TStatus::Error;
+                }
+                statisticsDesc.Columns.push_back(TString(column.Value()));
+            }
+            for (const auto& type : statistics.Types()) {
+                const auto typeName = to_upper(TString(type.Value()));
+                if (typeName != "COUNT_MIN_SKETCH") {
+                    ctx.AddError(TIssue(ctx.GetPosition(type.Pos()), TStringBuilder()
+                        << "Unknown statistic type: " << TString(type.Value())));
+                    return TStatus::Error;
+                }
+                statisticsDesc.Types.push_back(typeName);
+            }
+
+            meta->MultiColumnStatistics.push_back(statisticsDesc);
         }
 
         for (const auto& changefeed : create.Changefeeds()) {
@@ -2062,13 +2092,6 @@ private:
                             return TStatus::Error;
                         }
                     } else if (alterColumnAction == "setDefaultValue") {
-                        if (!SessionCtx->Config().FeatureFlags.GetEnableSetDropDefaultValue()) {
-                            ctx.AddError(TIssue(ctx.GetPosition(nameNode.Pos()), TStringBuilder()
-                                << "AlterTable : " << NCommon::FullTableName(table->Metadata->Cluster, table->Metadata->Name)
-                                << "\". Set/drop default value is not enabled."));
-                            return TStatus::Error;
-                        }
-
                         if (table->Metadata->Kind == EKikimrTableKind::Olap) {
                             ctx.AddError(TIssue(ctx.GetPosition(alterColumnList.Pos()),
                                 "Default values are not supported in column tables"));
@@ -2108,13 +2131,6 @@ private:
                             return *status;
                         }
                     } else if (alterColumnAction == "dropDefault") {
-                        if (!SessionCtx->Config().FeatureFlags.GetEnableSetDropDefaultValue()) {
-                            ctx.AddError(TIssue(ctx.GetPosition(nameNode.Pos()), TStringBuilder()
-                                << "AlterTable : " << NCommon::FullTableName(table->Metadata->Cluster, table->Metadata->Name)
-                                << "\". Set/drop default value is not enabled."));
-                            return TStatus::Error;
-                        }
-
                         auto* column = table->Metadata->Columns.FindPtr(name);
                         if (table->Metadata->Kind == EKikimrTableKind::Olap) {
                             ctx.AddError(TIssue(ctx.GetPosition(alterColumnList.Pos()),
@@ -2252,6 +2268,8 @@ private:
                     && name != "dropChangefeed"
                     && name != "renameIndexTo"
                     && name != "alterIndex"
+                    && name != "addStatistics"
+                    && name != "dropStatistics"
                     && name != "compact")
             {
                 ctx.AddError(TIssue(ctx.GetPosition(action.Name().Pos()),

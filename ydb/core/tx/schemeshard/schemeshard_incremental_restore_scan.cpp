@@ -13,6 +13,8 @@
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
+
 #if defined LOG_D || \
     defined LOG_W || \
     defined LOG_N || \
@@ -76,10 +78,11 @@ public:
                 {"tableOps", state.TableOperations.size()});
         }
 
-        LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[IncrementalRestore] " << "Checking completion: InProgressOperations.size()=" << state.InProgressOperations.size()
-              << ", CompletedOperations.size()=" << state.CompletedOperations.size()
-              << ", CurrentIncrementalIdx=" << state.CurrentIncrementalIdx
-              << ", IncrementalBackups.size()=" << state.IncrementalBackups.size());
+        YDB_LOG_INFO_CTX(ctx, "[IncrementalRestore] Checking completion",
+            {"#_InProgressOperations.size", state.InProgressOperations.size()},
+            {"#_CompletedOperations.size", state.CompletedOperations.size()},
+            {"currentIncrementalIdx", state.CurrentIncrementalIdx},
+            {"#_IncrementalBackups.size", state.IncrementalBackups.size()});
 
         if (!state.AreAllCurrentOperationsComplete()) {
             const TInstant now = ctx.Now();
@@ -675,7 +678,8 @@ void TSchemeShard::Handle(TEvPrivate::TEvRunIncrementalRestore::TPtr& ev, const 
             {"backupName", backupName});
     }
 
-    LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[IncrementalRestore] " << "Handle(TEvRunIncrementalRestore) state now has " << state.IncrementalBackups.size() << " incremental backups");
+    YDB_LOG_INFO_CTX(ctx, "[IncrementalRestore] Handle(TEvRunIncrementalRestore) state now has incremental backups",
+        {"#_state.IncrementalBackups.size", state.IncrementalBackups.size()});
 
     IncrementalRestoreStates[ui64(operationId.GetTxId())] = std::move(state);
 
@@ -1153,7 +1157,7 @@ void TSchemeShard::EnqueueIncrementalRestoreIndexesRecursive(
                 pending.TargetTablePath = targetTablePath;
                 pending.SpecificImplTableName = implName;
                 stateIt->second.PendingTables.push_back(std::move(pending));
-                YDB_LOG_INFO_CTX(ctx, "[IncrementalRestore] Enqueued index ",
+                YDB_LOG_INFO_CTX(ctx, "[IncrementalRestore] Enqueued index",
                     {"#_sub-op", indexName},
                     {"implName", implName},
                     {"targetTablePath", targetTablePath});
@@ -1206,7 +1210,8 @@ void TSchemeShard::EnqueueAndDiscoverIndexRestoreOperations(
         return;
     }
 
-    LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[IncrementalRestore] " << "Discovering indexes for restore at: " << indexMetaBasePath);
+    YDB_LOG_INFO_CTX(ctx, "[IncrementalRestore] Discovering indexes for restore",
+        {"at", indexMetaBasePath});
 
     EnqueueIncrementalRestoreIndexesRecursive(
         operationId,
@@ -1273,7 +1278,7 @@ void TSchemeShard::CreateSingleIndexRestoreOperation(
                     if (implName == specificImplTableName) {
                         indexImplTablePathId = implPathId;
                         indexFound = true;
-                        YDB_LOG_INFO_CTX(ctx, "[IncrementalRestore] Found index impl ",
+                        YDB_LOG_INFO_CTX(ctx, "[IncrementalRestore] Found index impl",
                             {"table", indexName},
                             {"implName", implName});
                         break;

@@ -26,7 +26,8 @@ namespace NKikimr::NKqp {
 enum EStatisticsType : ui32 {
     BaseTable,
     FilteredFactTable,
-    ManyManyJoin
+    ManyManyJoin,
+    Constant
 };
 
 enum EStorageType : ui32 {

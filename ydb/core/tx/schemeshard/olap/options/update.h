@@ -13,6 +13,8 @@ class TOlapOptionsUpdate {
 private:
     YDB_ACCESSOR(bool, SchemeNeedActualization, false);
     YDB_ACCESSOR_DEF(std::optional<TString>, ScanReaderPolicyName);
+    YDB_ACCESSOR_DEF(std::optional<bool>, InsertOptionsBuildIndexesEnabled);
+    YDB_ACCESSOR_DEF(std::optional<ui64>, InsertOptionsBuildIndexesMinBlobBytes);
     YDB_ACCESSOR_DEF(NOlap::NStorageOptimizer::TOptimizerPlannerConstructorContainer, CompactionPlannerConstructor);
     YDB_ACCESSOR_DEF(NOlap::NDataAccessorControl::TMetadataManagerConstructorContainer, MetadataManagerConstructor);
 public:
@@ -37,6 +39,15 @@ public:
             }
             CompactionPlannerConstructor = container.DetachResult();
         }
+        if (alterRequest.GetOptions().HasInsertOptions()) {
+            const auto& optionsProto = alterRequest.GetOptions().GetInsertOptions();
+            if (optionsProto.HasBuildIndexesEnabled()) {
+                InsertOptionsBuildIndexesEnabled = optionsProto.GetBuildIndexesEnabled();
+            }
+            if (optionsProto.HasBuildIndexesMinBlobBytes()) {
+                InsertOptionsBuildIndexesMinBlobBytes = optionsProto.GetBuildIndexesMinBlobBytes();
+            }
+        }
         return true;
     }
     void SerializeToProto(NKikimrSchemeOp::TAlterColumnTableSchema& alterRequest) const {
@@ -49,6 +60,15 @@ public:
         }
         if (MetadataManagerConstructor.HasObject()) {
             MetadataManagerConstructor.SerializeToProto(*alterRequest.MutableOptions()->MutableMetadataManagerConstructor());
+        }
+        if (InsertOptionsBuildIndexesEnabled || InsertOptionsBuildIndexesMinBlobBytes) {
+            auto& options = *alterRequest.MutableOptions()->MutableInsertOptions();
+            if (InsertOptionsBuildIndexesEnabled) {
+                options.SetBuildIndexesEnabled(*InsertOptionsBuildIndexesEnabled);
+            }
+            if (InsertOptionsBuildIndexesMinBlobBytes) {
+                options.SetBuildIndexesMinBlobBytes(*InsertOptionsBuildIndexesMinBlobBytes);
+            }
         }
     }
 };

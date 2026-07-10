@@ -192,7 +192,7 @@ private:
 
     void Notify(TTxId txId, const THashSet<TActorId>& subscribers, const TActorContext& ctx) {
         for (const auto& subscriber : subscribers) {
-            YDB_LOG_DEBUG_CTX(ctx, "TTxAckPublishToSchemeBoard Notify send TEvNotifyTxCompletionResult at",
+            YDB_LOG_DEBUG_CTX(ctx, "TTxAckPublishToSchemeBoard Notify send TEvNotifyTxCompletionResult",
                 {"schemeshard", Self->TabletID()},
                 {"actorId", subscriber});
 

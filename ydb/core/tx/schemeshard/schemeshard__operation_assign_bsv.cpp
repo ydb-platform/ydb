@@ -20,7 +20,7 @@ public:
         const TString mountToken = Transaction.GetAssignBlockStoreVolume().GetNewMountToken();
         const auto version = Transaction.GetAssignBlockStoreVolume().GetTokenVersion();
 
-        YDB_LOG_NOTICE_CTX(context.Ctx, "TAssignBlockStoreVolume Propose ",
+        YDB_LOG_NOTICE_CTX(context.Ctx, "TAssignBlockStoreVolume Propose",
             {"path", parentPathStr},
             {"name", name},
             {"operationId", OperationId},

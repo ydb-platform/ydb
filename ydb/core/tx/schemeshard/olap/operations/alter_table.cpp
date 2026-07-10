@@ -276,7 +276,7 @@ public:
 
         const TString& parentPathStr = Transaction.GetWorkingDir();
         const TString& name = Transaction.HasAlterColumnTable() ? Transaction.GetAlterColumnTable().GetName() : Transaction.GetAlterTable().GetName();
-        YDB_LOG_NOTICE_CTX(context.Ctx, "TAlterColumnTable Propose ",
+        YDB_LOG_NOTICE_CTX(context.Ctx, "TAlterColumnTable Propose",
             {"path", parentPathStr},
             {"name", name},
             {"opId", OperationId},

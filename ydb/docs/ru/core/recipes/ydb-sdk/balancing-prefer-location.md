@@ -4,7 +4,7 @@
 
 {% list tabs %}
 
-- С++
+- C++
 
   {% list tabs %}
 

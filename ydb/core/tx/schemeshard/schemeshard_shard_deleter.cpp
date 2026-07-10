@@ -58,7 +58,7 @@ void TShardDeleter::SendDeleteRequests(TTabletId hiveTabletId,
 }
 
 void TShardDeleter::ResendDeleteRequests(TTabletId hiveTabletId, const THashMap<TShardIdx, TShardInfo>& shardsInfos, const NActors::TActorContext &ctx) {
-    YDB_LOG_NOTICE_CTX(ctx, "Resending tablet deletion requests from",
+    YDB_LOG_NOTICE_CTX(ctx, "Resending tablet deletion requests",
         {"myTabletID", MyTabletID},
         {"hiveTabletId", hiveTabletId});
 
@@ -79,7 +79,7 @@ void TShardDeleter::ResendDeleteRequest(TTabletId hiveTabletId,
                                         const THashMap<TShardIdx, TShardInfo>& shardsInfos,
                                         TShardIdx shardIdx,
                                         const NActors::TActorContext &ctx) {
-    YDB_LOG_NOTICE_CTX(ctx, "Resending tablet deletion request from",
+    YDB_LOG_NOTICE_CTX(ctx, "Resending tablet deletion request",
         {"myTabletID", MyTabletID},
         {"hiveTabletId", hiveTabletId});
 
@@ -107,7 +107,7 @@ void TShardDeleter::RedirectDeleteRequest(TTabletId hiveFromTabletId,
                                           TShardIdx shardIdx,
                                           const THashMap<TShardIdx, TShardInfo>& shardsInfos,
                                           const NActors::TActorContext &ctx) {
-    YDB_LOG_NOTICE_CTX(ctx, "Redirecting tablet deletion requests from",
+    YDB_LOG_NOTICE_CTX(ctx, "Redirecting tablet deletion requests",
         {"hiveFromTabletId", hiveFromTabletId},
         {"hiveToTabletId", hiveToTabletId});
     auto itFromHive = PerHiveDeletions.find(hiveFromTabletId);

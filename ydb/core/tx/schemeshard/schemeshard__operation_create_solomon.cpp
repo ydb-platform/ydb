@@ -251,7 +251,7 @@ public:
 
         const ui64 shardsToCreate = solomonDescription.GetPartitionCount() + solomonDescription.AdoptedPartitionsSize();
 
-        YDB_LOG_NOTICE_CTX(context.Ctx, "TCreateSolomon Propose ",
+        YDB_LOG_NOTICE_CTX(context.Ctx, "TCreateSolomon Propose",
             {"path", parentPathStr},
             {"name", name},
             {"opId", OperationId},

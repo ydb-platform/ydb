@@ -15,11 +15,14 @@
 #include <ydb/core/tablet_flat/tablet_flat_executor.h>
 #include <ydb/core/tx/schemeshard/generated/dispatch_op.h>
 #include <ydb/core/tx/schemeshard/schemeshard_pq_helpers.h>
+#include <ydb/core/test_tablet/events.h>
 
 #include <ydb/library/protobuf_printer/security_printer.h>
 
 #include <util/generic/algorithm.h>
 #include <util/string/builder.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
 
@@ -674,7 +677,7 @@ struct TSchemeShard::TTxOperationPlanStep: public NTabletFlatExecutor::TTransact
         const auto step = TStepId(record.GetStep());
         const size_t txCount = record.TransactionsSize();
 
-        YDB_LOG_NOTICE_CTX(ctx, "TTxOperationPlanStep Execute transactions count in",
+        YDB_LOG_NOTICE_CTX(ctx, "TTxOperationPlanStep Execute transactions count",
             {"stepId", step},
             {"step", txCount},
             {"schemeshard", Self->TabletID()});
@@ -1312,6 +1315,12 @@ ISubOperation::TPtr TOperation::RestorePart(TTxState::ETxType txType, TTxState::
     case TTxState::ETxType::TxTruncateTable:
         return CreateTruncateTable(NextPartId(), txState);
 
+    // TestShardSet
+    case TTxState::ETxType::TxCreateTestShardSet:
+        return CreateNewTestShardSet(NextPartId(), txState);
+    case TTxState::ETxType::TxDropTestShardSet:
+        return CreateDropTestShardSet(NextPartId(), txState);
+
     case TTxState::ETxType::TxInvalid:
         Y_UNREACHABLE();
     }
@@ -1674,6 +1683,12 @@ TVector<ISubOperation::TPtr> TDefaultOperationFactory::MakeOperationParts(
 
     case NKikimrSchemeOp::EOperationType::ESchemeOpTruncateTable:
         return CreateConsistentTruncateTable(op.NextPartId(), tx, context);
+
+    // TestShardSet
+    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateTestShardSet:
+        return {CreateNewTestShardSet(op.NextPartId(), tx)};
+    case NKikimrSchemeOp::EOperationType::ESchemeOpDropTestShardSet:
+        return {CreateDropTestShardSet(op.NextPartId(), tx)};
     }
 
     Y_UNREACHABLE();
@@ -1735,7 +1750,7 @@ void TOperation::DoNotify(TSchemeShard*, TSideEffects& sideEffects, const TActor
 }
 
 bool TOperation::IsReadyToDone(const TActorContext& ctx) const {
-    YDB_LOG_DEBUG_CTX(ctx, "TOperation IsReadyToDone ready ",
+    YDB_LOG_DEBUG_CTX(ctx, "TOperation IsReadyToDone ready",
         {"txId", TxId},
         {"parts", DoneParts.size()},
         {"#_Parts.size", Parts.size()});
@@ -1744,7 +1759,7 @@ bool TOperation::IsReadyToDone(const TActorContext& ctx) const {
 }
 
 bool TOperation::IsReadyToPropose(const TActorContext& ctx) const {
-    YDB_LOG_DEBUG_CTX(ctx, "TOperation IsReadyToPropose ready ",
+    YDB_LOG_DEBUG_CTX(ctx, "TOperation IsReadyToPropose ready",
         {"txId", TxId},
         {"parts", ReadyToProposeParts.size()},
         {"#_Parts.size", Parts.size()});
@@ -1839,11 +1854,10 @@ void TOperation::RegisterRelationByTabletId(TSubTxId partId, TTabletId tablet, c
         return;
     }
 
-    LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                "TOperation RegisterRelationByTabletId"
-                    << ", TxId: " << TxId
-                    << ", partId: " << partId
-                    << ", tablet: " << tablet);
+    YDB_LOG_DEBUG_CTX(ctx, "TOperation RegisterRelationByTabletId",
+        {"txId", TxId},
+        {"partId", partId},
+        {"tablet", tablet});
 
     RelationsByTabletId[tablet] = partId;
 }

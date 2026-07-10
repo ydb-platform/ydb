@@ -227,7 +227,7 @@ void TSchemeShard::StartTablePartitionsFormatSweep(NIceDb::TNiceDb& db, bool tar
         return;
     }
 
-    YDB_LOG_NOTICE("TablePartitionsFormatSweep start: tables to process tables total switch to",
+    YDB_LOG_NOTICE("TablePartitionsFormatSweep start: tables to process tables total switch",
         {"#_sweep.Queue.size", sweep.Queue.size()},
         {"#_Tables.size", Tables.size()},
         {"#_num_0", (sweep.TargetIsShardIdx ? "shardidx" : "position")},
@@ -246,7 +246,7 @@ void TSchemeShard::StartTablePartitionsFormatSweep(NIceDb::TNiceDb& db, bool tar
 void TSchemeShard::PauseTablePartitionsFormatSweep(NIceDb::TNiceDb& db) {
     auto& sweep = TablePartitionsFormatSweep;
 
-    YDB_LOG_NOTICE("TablePartitionsFormatSweep pause: tables to process tables total switch to",
+    YDB_LOG_NOTICE("TablePartitionsFormatSweep pause: tables to process tables total switch",
         {"#_sweep.Queue.size", sweep.Queue.size()},
         {"#_Tables.size", Tables.size()},
         {"#_num_0", (sweep.TargetIsShardIdx ? "shardidx" : "position")},
@@ -262,7 +262,7 @@ void TSchemeShard::PauseTablePartitionsFormatSweep(NIceDb::TNiceDb& db) {
 void TSchemeShard::ResumeTablePartitionsFormatSweep(NIceDb::TNiceDb& db) {
     auto& sweep = TablePartitionsFormatSweep;
 
-    YDB_LOG_NOTICE("TablePartitionsFormatSweep resume: tables to process tables total switch to",
+    YDB_LOG_NOTICE("TablePartitionsFormatSweep resume: tables to process tables total switch",
         {"#_sweep.Queue.size", sweep.Queue.size()},
         {"#_Tables.size", Tables.size()},
         {"#_num_0", (sweep.TargetIsShardIdx ? "shardidx" : "position")},
@@ -280,7 +280,7 @@ void TSchemeShard::ResumeTablePartitionsFormatSweep(NIceDb::TNiceDb& db) {
 void TSchemeShard::CancelTablePartitionsFormatSweep(NIceDb::TNiceDb& db) {
     auto& sweep = TablePartitionsFormatSweep;
 
-    YDB_LOG_NOTICE("TablePartitionsFormatSweep cancel: tables to process tables total switch to",
+    YDB_LOG_NOTICE("TablePartitionsFormatSweep cancel: tables to process tables total switch",
         {"#_sweep.Queue.size", sweep.Queue.size()},
         {"#_Tables.size", Tables.size()},
         {"#_num_0", (sweep.TargetIsShardIdx ? "shardidx" : "position")},
@@ -338,7 +338,7 @@ void TSchemeShard::ContinueTablePartitionsFormatSweep() {
         return;
     }
 
-    YDB_LOG_NOTICE("TablePartitionsFormatSweep continue: tables to process tables total switch to",
+    YDB_LOG_NOTICE("TablePartitionsFormatSweep continue: tables to process tables total switch",
         {"#_sweep.Queue.size", sweep.Queue.size()},
         {"#_Tables.size", Tables.size()},
         {"#_num_0", (sweep.TargetIsShardIdx ? "shardidx" : "position")},

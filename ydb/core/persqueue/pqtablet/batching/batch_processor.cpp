@@ -6,6 +6,10 @@
 
 namespace NKikimr::NPQ::NBatching {
 
+namespace {
+    constexpr TStringBuf COMPACTIFICATION_WORKER = "compactification_worker";
+}
+
 TBatchProcessor::TBatchProcessor(ui64 tabletId, const NActors::TActorId& tabletActorId)
     : TBaseTabletActor(tabletId, tabletActorId, NKikimrServices::PERSQUEUE)
 {
@@ -32,6 +36,11 @@ void TBatchProcessor::Handle(TEvProcessBatch::TPtr& ev, const NActors::TActorCon
     ctx.Send(actorId, new TEvProcessBatch(std::move(ev->Get()->Context)));
 }
 
+void TBatchProcessor::Handle(TEvProcessBatchKeys::TPtr& ev, const NActors::TActorContext& ctx) {
+    const auto actorId = GetOrCreateConsumerProcessor(TString{COMPACTIFICATION_WORKER});
+    ctx.Send(actorId, new TEvProcessBatchKeys(std::move(ev->Get()->Context)));
+}
+
 void TBatchProcessor::HandleConsumerRemoved(TEvPQ::TEvConsumerRemoved::TPtr& ev, const NActors::TActorContext&) {
     auto it = ConsumerProcessors.find(ev->Get()->Consumer);
     if (it != ConsumerProcessors.end()) {
@@ -50,6 +59,7 @@ void TBatchProcessor::Handle(NActors::TEvents::TEvPoisonPill::TPtr&, const NActo
 STFUNC(TBatchProcessor::StateWork) {
     switch (ev->GetTypeRewrite()) {
         HFunc(TEvProcessBatch, Handle);
+        HFunc(TEvProcessBatchKeys, Handle);
         HFunc(TEvPQ::TEvConsumerRemoved, HandleConsumerRemoved);
         HFunc(NActors::TEvents::TEvPoisonPill, Handle);
     default:

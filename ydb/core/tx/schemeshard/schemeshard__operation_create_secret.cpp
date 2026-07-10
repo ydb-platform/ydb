@@ -148,7 +148,7 @@ public:
 
         const TString& secretName = createSecretProto.GetName();
 
-        YDB_LOG_NOTICE_CTX(context.Ctx, "TCreateSecret Propose ",
+        YDB_LOG_NOTICE_CTX(context.Ctx, "TCreateSecret Propose",
             {"#_context.SS->SelfTabletId", context.SS->SelfTabletId()},
             {"path", parentPathStr},
             {"secretName", secretName},

@@ -87,7 +87,7 @@ public:
 
         ui64 shardsToCreate = settings.GetCoordinators() + settings.GetMediators();
 
-        YDB_LOG_NOTICE_CTX(context.Ctx, "TCreateSubDomain Propose ",
+        YDB_LOG_NOTICE_CTX(context.Ctx, "TCreateSubDomain Propose",
             {"path", parentPathStr},
             {"name", name},
             {"opId", OperationId},

@@ -369,6 +369,7 @@ public:
             case NKikimrSchemeOp::EPathType::EPathTypeTransfer:
             case NKikimrSchemeOp::EPathType::EPathTypeBlobDepot:
             case NKikimrSchemeOp::EPathType::EPathTypeBackupCollection:
+            case NKikimrSchemeOp::EPathType::EPathTypeTestShardSet:
                 Y_ABORT("UNIMPLEMENTED");
             case NKikimrSchemeOp::EPathType::EPathTypeInvalid:
                 Y_UNREACHABLE();
@@ -1124,7 +1125,7 @@ public:
         const TString& parentPathStr = Transaction.GetWorkingDir();
         const TString& name = info.GetName();
 
-        YDB_LOG_NOTICE_CTX(context.Ctx, "TUpgradeSubDomain Propose ",
+        YDB_LOG_NOTICE_CTX(context.Ctx, "TUpgradeSubDomain Propose",
             {"path", parentPathStr},
             {"name", name},
             {"opId", OperationId},
@@ -1373,7 +1374,7 @@ public:
         const TString& parentPathStr = Transaction.GetWorkingDir();
         const TString& name = info.GetName();
 
-        YDB_LOG_INFO_CTX(context.Ctx, "TUpgradeSubDomainDecision Propose ",
+        YDB_LOG_INFO_CTX(context.Ctx, "TUpgradeSubDomainDecision Propose",
             {"path", parentPathStr},
             {"name", name},
             {"decision", NKikimrSchemeOp::TUpgradeSubDomain::EDecision_Name(decision)},

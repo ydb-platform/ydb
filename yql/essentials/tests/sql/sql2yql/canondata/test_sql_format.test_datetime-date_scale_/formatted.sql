@@ -1,4 +1,3 @@
-/* postgres can not */
 SELECT
     CAST(CAST(1u AS date) AS datetime)
 ;

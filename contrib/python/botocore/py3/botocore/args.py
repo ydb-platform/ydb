@@ -16,6 +16,7 @@ This module (and all function/classes within this module) should be
 considered internal, and *not* a public API.
 
 """
+
 import copy
 import logging
 import socket
@@ -267,11 +268,15 @@ class ClientArgsCreator:
                     client_config.disable_request_compression
                 ),
                 client_context_params=client_config.client_context_params,
+                sigv4a_signing_region_set=(
+                    client_config.sigv4a_signing_region_set
+                ),
             )
         self._compute_retry_config(config_kwargs)
         self._compute_connect_timeout(config_kwargs)
         self._compute_user_agent_appid_config(config_kwargs)
         self._compute_request_compression_config(config_kwargs)
+        self._compute_sigv4a_signing_region_set_config(config_kwargs)
         s3_config = self.compute_s3_config(client_config)
 
         is_s3_service = self._is_s3_service(service_name)
@@ -460,7 +465,7 @@ class ClientArgsCreator:
 
     def _set_global_sts_endpoint(self, endpoint_config, is_secure):
         scheme = 'https' if is_secure else 'http'
-        endpoint_config['endpoint_url'] = '%s://sts.amazonaws.com' % scheme
+        endpoint_config['endpoint_url'] = f'{scheme}://sts.amazonaws.com'
         endpoint_config['signing_region'] = 'us-east-1'
 
     def _resolve_endpoint(
@@ -576,25 +581,24 @@ class ClientArgsCreator:
     def _validate_min_compression_size(self, min_size):
         min_allowed_min_size = 1
         max_allowed_min_size = 1048576
-        if min_size is not None:
-            error_msg_base = (
-                f'Invalid value "{min_size}" for '
-                'request_min_compression_size_bytes.'
+        error_msg_base = (
+            f'Invalid value "{min_size}" for '
+            'request_min_compression_size_bytes.'
+        )
+        try:
+            min_size = int(min_size)
+        except (ValueError, TypeError):
+            msg = (
+                f'{error_msg_base} Value must be an integer. '
+                f'Received {type(min_size)} instead.'
             )
-            try:
-                min_size = int(min_size)
-            except (ValueError, TypeError):
-                msg = (
-                    f'{error_msg_base} Value must be an integer. '
-                    f'Received {type(min_size)} instead.'
-                )
-                raise botocore.exceptions.InvalidConfigError(error_msg=msg)
-            if not min_allowed_min_size <= min_size <= max_allowed_min_size:
-                msg = (
-                    f'{error_msg_base} Value must be between '
-                    f'{min_allowed_min_size} and {max_allowed_min_size}.'
-                )
-                raise botocore.exceptions.InvalidConfigError(error_msg=msg)
+            raise botocore.exceptions.InvalidConfigError(error_msg=msg)
+        if not min_allowed_min_size <= min_size <= max_allowed_min_size:
+            msg = (
+                f'{error_msg_base} Value must be between '
+                f'{min_allowed_min_size} and {max_allowed_min_size}.'
+            )
+            raise botocore.exceptions.InvalidConfigError(error_msg=msg)
 
         return min_size
 
@@ -767,3 +771,13 @@ class ClientArgsCreator:
                 f'maximum length of {USERAGENT_APPID_MAXLEN} characters.'
             )
         config_kwargs['user_agent_appid'] = user_agent_appid
+
+    def _compute_sigv4a_signing_region_set_config(self, config_kwargs):
+        sigv4a_signing_region_set = config_kwargs.get(
+            'sigv4a_signing_region_set'
+        )
+        if sigv4a_signing_region_set is None:
+            sigv4a_signing_region_set = self._config_store.get_config_variable(
+                'sigv4a_signing_region_set'
+            )
+        config_kwargs['sigv4a_signing_region_set'] = sigv4a_signing_region_set

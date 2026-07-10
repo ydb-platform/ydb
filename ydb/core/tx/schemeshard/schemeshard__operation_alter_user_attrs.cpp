@@ -21,7 +21,7 @@ public:
         const TString& parentPathStr = Transaction.GetWorkingDir();
         const TString& name = userAttrsPatch.GetPathName();
 
-        YDB_LOG_NOTICE_CTX(context.Ctx, "TAlterUserAttrs Propose ",
+        YDB_LOG_NOTICE_CTX(context.Ctx, "TAlterUserAttrs Propose",
             {"path", parentPathStr},
             {"name", name},
             {"operationId", OperationId},

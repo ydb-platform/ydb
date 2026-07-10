@@ -77,7 +77,7 @@ NOperationQueue::EStartStatus TSchemeShard::StartBackgroundCleaning(const TPathI
     }
 
     auto ctx = ActorContext();
-    YDB_LOG_INFO_CTX(ctx, "next in cleaning events cleaning events at schemeshard",
+    YDB_LOG_INFO_CTX(ctx, "Next in cleaning events cleaning events at schemeshard",
         {"dir", JoinPath({info->WorkingDir, info->Name})},
         {"pathId", pathId},
         {"ownerId", info->TempDirOwnerActorId},
@@ -251,7 +251,7 @@ void TSchemeShard::HandleBackgroundCleaningCompletionResult(const TTxId& txId) {
     Y_ABORT_UNLESS(BackgroundCleaningState.at(pathId).TxIds.contains(txId));
 
     auto ctx = ActorContext();
-    YDB_LOG_INFO_CTX(ctx, "next in cleaning events cleaning events at schemeshard",
+    YDB_LOG_INFO_CTX(ctx, "Next in cleaning events cleaning events at schemeshard",
         {"txId", txId},
         {"wakeup", BackgroundCleaningQueue->GetWakeupDelta()},
         {"queue", BackgroundCleaningQueue->GetRate()},
@@ -265,7 +265,7 @@ void TSchemeShard::OnBackgroundCleaningTimeout(const TPathId& pathId) {
     auto info = ResolveTempDirInfo(pathId);
 
     auto ctx = ActorContext();
-    YDB_LOG_INFO_CTX(ctx, "next in cleaning events cleaning events at schemeshard",
+    YDB_LOG_INFO_CTX(ctx, "Next in cleaning events cleaning events at schemeshard",
         {"dir", JoinPath({info->WorkingDir, info->Name})},
         {"ownerId", info->TempDirOwnerActorId},
         {"wakeup", BackgroundCleaningQueue->GetWakeupDelta()},
@@ -309,7 +309,7 @@ void TSchemeShard::RetryNodeSubscribe(ui32 nodeId) {
 
     retryState.RetryNumber++;
     auto ctx = ActorContext();
-    YDB_LOG_INFO_CTX(ctx, "count of retries last retry at schemeshard",
+    YDB_LOG_INFO_CTX(ctx, "Count of retries last retry at schemeshard",
         {"nodeId", nodeId},
         {"retries", retryState.RetryNumber},
         {"limit", BackgroundCleaningRetrySettings.GetMaxRetryNumber()},
@@ -365,7 +365,7 @@ bool TSchemeShard::CheckOwnerUndelivered(TEvents::TEvUndelivered::TPtr& ev) {
     }
 
     auto ctx = ActorContext();
-    YDB_LOG_INFO_CTX(ctx, "undelivered at schemeshard",
+    YDB_LOG_INFO_CTX(ctx, "Undelivered at schemeshard",
         {"ownerActorId", ownerActorId},
         {"reason", ev->Get()->Reason},
         {"tabletID", TabletID()});
@@ -420,7 +420,7 @@ void TSchemeShard::HandleBackgroundCleaningTransactionResult(
     Y_ABORT_UNLESS(BackgroundCleaningState.at(pathId).TxIds.contains(txId));
 
     auto ctx = ActorContext();
-    YDB_LOG_INFO_CTX(ctx, "next in cleaning events cleaning events at schemeshard",
+    YDB_LOG_INFO_CTX(ctx, "Next in cleaning events cleaning events at schemeshard",
         {"txId", txId},
         {"wakeup", BackgroundCleaningQueue->GetWakeupDelta()},
         {"queue", BackgroundCleaningQueue->GetRate()},

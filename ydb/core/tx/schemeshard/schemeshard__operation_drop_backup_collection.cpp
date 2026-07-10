@@ -361,7 +361,7 @@ public:
         const TString& rootPathStr = Transaction.GetWorkingDir();
         const auto& dropDescription = Transaction.GetDropBackupCollection();
         const TString& name = dropDescription.GetName();
-        YDB_LOG_NOTICE_CTX(context.Ctx, "TDropBackupCollection Propose: ",
+        YDB_LOG_NOTICE_CTX(context.Ctx, "TDropBackupCollection Propose",
             {"#_context.SS->TabletID", context.SS->TabletID()},
             {"opId", OperationId},
             {"path", rootPathStr},

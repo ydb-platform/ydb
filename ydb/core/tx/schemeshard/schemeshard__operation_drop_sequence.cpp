@@ -246,7 +246,7 @@ public:
         const TString& parentPathStr = Transaction.GetWorkingDir();
         const TString& name = drop.GetName();
 
-        YDB_LOG_NOTICE_CTX(context.Ctx, "TDropSequence Propose ",
+        YDB_LOG_NOTICE_CTX(context.Ctx, "TDropSequence Propose",
             {"path", parentPathStr},
             {"name", name},
             {"pathId", drop.GetId()},
@@ -293,11 +293,6 @@ public:
 
             if (checks) {
                 if (parent.Parent()->IsTableIndex()) {
-                    // Only __ydb_id sequence can be present in the prefixed index
-                    if (name != NTableIndex::NKMeans::IdColumnSequence) {
-                        result->SetError(NKikimrScheme::EStatus::StatusNameConflict, "sequences are not allowed in indexes");
-                        return result;
-                    }
                     checks.IsInsideTableIndexPath()
                         .IsUnderDeleting()
                         .IsUnderTheSameOperation(OperationId.GetTxId()); // allowed only as part of consistent operations

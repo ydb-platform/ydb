@@ -1,4 +1,5 @@
 #include "client_session.h"
+#include "session_state_handler.h"
 
 #define INCLUDE_YDB_INTERNAL_H
 #include <ydb/public/sdk/cpp/src/client/impl/internal/plain_status/status.h>
@@ -42,7 +43,7 @@ public:
     {}
 
     TSession::TImpl* TrySharedOwning() noexcept {
-        auto old = Semaphore.fetch_add(1); 
+        auto old = Semaphore.fetch_add(1);
         if (old == 0) {
             OwnerThread.store(std::this_thread::get_id());
             return Ptr;
@@ -76,9 +77,17 @@ void TSession::TImpl::StartAsyncRead(TStreamProcessorPtr ptr, std::weak_ptr<ISes
     auto resp = std::make_shared<Ydb::Query::SessionState>();
     ptr->Read(resp.get(), [resp, ptr, client, holder](NYdbGrpc::TGrpcStatus grpcStatus) mutable {
         switch (grpcStatus.GRpcStatusCode) {
-            case grpc::StatusCode::OK:
-                StartAsyncRead(ptr, client, holder);
+            case grpc::StatusCode::OK: {
+                auto impl = holder->TrySharedOwning();
+                if (impl) {
+                    const auto action = HandleAttachSessionState(*resp, impl, client.lock());
+                    if (action == EAttachStreamReadAction::Continue) {
+                        StartAsyncRead(ptr, client, holder);
+                    }
+                    holder->Release();
+                }
                 break;
+            }
             default: {
                 auto impl = holder->TrySharedOwning();
                 if (impl) {

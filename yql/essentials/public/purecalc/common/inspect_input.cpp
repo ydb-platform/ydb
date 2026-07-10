@@ -18,13 +18,13 @@ bool TryFetchInputIndexFromSelf(const TExprNode& node, TExprContext& ctx, ui32 i
 
     if (!TryFromString(node.Child(0)->Content(), result)) {
         auto message = TStringBuilder() << "Index " << TString{node.Child(0)->Content()}.Quote() << " isn't UI32";
-        ctx.AddError(TIssue(ctx.GetPosition(node.Child(0)->Pos()), std::move(message)));
+        ctx.AddError(TIssue(ctx.GetPosition(node.Child(0)->Pos()), message));
         return false;
     }
 
     if (result >= inputsCount) {
         auto message = TStringBuilder() << "Invalid input index: " << result << " is out of range [0;" << inputsCount << ")";
-        ctx.AddError(TIssue(ctx.GetPosition(node.Child(0)->Pos()), std::move(message)));
+        ctx.AddError(TIssue(ctx.GetPosition(node.Child(0)->Pos()), message));
         return false;
     }
 

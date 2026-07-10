@@ -303,7 +303,7 @@ THolder<TProposeResponse> TAlterFileStore::Propose(
         ? context.SS->MakeLocalId(operation.GetPathId())
         : InvalidPathId;
 
-    YDB_LOG_NOTICE_CTX(context.Ctx, "TAlterFileStore Propose ",
+    YDB_LOG_NOTICE_CTX(context.Ctx, "TAlterFileStore Propose",
         {"path", parentPathStr},
         {"name", name},
         {"pathId", pathId},

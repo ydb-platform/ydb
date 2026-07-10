@@ -1117,7 +1117,7 @@ TVector<ISubOperation::TPtr> CreateCompatibleAlterExtSubDomain(TOperationId id, 
     const auto& inputSettings = tx.GetSubDomain();
     const TString& name = inputSettings.GetName();
 
-    YDB_LOG_INFO_CTX(context.Ctx, "CreateCompatibleAlterExtSubDomain, opId path ",
+    YDB_LOG_INFO_CTX(context.Ctx, "CreateCompatibleAlterExtSubDomain, opId path",
         {"#_context.SS->TabletID", context.SS->TabletID()},
         {"id", id},
         {"parentPathStr", parentPathStr},

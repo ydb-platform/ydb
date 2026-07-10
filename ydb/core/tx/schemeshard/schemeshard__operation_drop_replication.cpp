@@ -289,7 +289,7 @@ public:
         const auto& op = Transaction.GetDrop();
         const auto& name = op.GetName();
 
-        YDB_LOG_NOTICE_CTX(context.Ctx, "TDropReplication Propose ",
+        YDB_LOG_NOTICE_CTX(context.Ctx, "TDropReplication Propose",
             {"#_context.SS->TabletID", context.SS->TabletID()},
             {"opId", OperationId},
             {"path", workingDir},

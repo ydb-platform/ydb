@@ -409,7 +409,7 @@ public:
         const TString& parentPathStr = Transaction.GetWorkingDir();
         const TString& name = sequenceAlter.GetName();
 
-        YDB_LOG_NOTICE_CTX(context.Ctx, "TAlterSequence Propose ",
+        YDB_LOG_NOTICE_CTX(context.Ctx, "TAlterSequence Propose",
             {"path", parentPathStr},
             {"name", name},
             {"operationId", OperationId},
@@ -432,8 +432,8 @@ public:
             if (checks) {
                 if (parentPath.Parent()->IsTableIndex()) {
                     checks.IsInsideTableIndexPath();
-                    // Only __ydb_id sequence can be altered and only by internal transactions (build_index__progress)
-                    if (name != NTableIndex::NKMeans::IdColumnSequence || !Transaction.GetInternal()) {
+                    // Index sequences can be altered only by internal transactions (build_index__progress)
+                    if (!Transaction.GetInternal()) {
                         result->SetError(NKikimrScheme::EStatus::StatusNameConflict, "sequences are not allowed in indexes");
                         return result;
                     }

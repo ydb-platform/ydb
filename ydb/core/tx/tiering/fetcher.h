@@ -108,7 +108,10 @@ private:
     void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
         const NSchemeCache::TSchemeCacheNavigate* result = ev->Get()->Request.Get();
         for (auto entry : result->ResultSet) {
-            AFL_DEBUG(NKikimrServices::TX_TIERING)("component", "TSchemeObjectWatcher")("event", ev->ToString())("path", JoinPath(entry.Path));
+            YDB_LOG_DEBUG_COMP(NKikimrServices::TX_TIERING, "",
+                {"component", "TSchemeObjectWatcher"},
+                {"event", ev->ToString()},
+                {"path", JoinPath(entry.Path)});
             switch (entry.Status) {
                 case NSchemeCache::TSchemeCacheNavigate::EStatus::Ok:
                     WatchPathId(entry.TableId.PathId);
@@ -137,7 +140,9 @@ private:
     }
 
     void Handle(TEvTxProxySchemeCache::TEvWatchNotifyUpdated::TPtr& ev) {
-        AFL_DEBUG(NKikimrServices::TX_TIERING)("event", "object_fetched")("path", ev->Get()->Path);
+        YDB_LOG_DEBUG_COMP(NKikimrServices::TX_TIERING, "",
+            {"event", "object_fetched"},
+            {"path", ev->Get()->Path});
         const auto& describeResult = *ev->Get()->Result;
         Send(Owner, new NTiers::TEvNotifySchemeObjectUpdated(describeResult.GetPath(), describeResult.GetPathDescription()));
     }
@@ -146,13 +151,16 @@ private:
         const auto& record = ev->Get();
         const TString name = TString(ExtractBase(record->Path));
         const TString storageDir = TString(ExtractParent(record->Path));
-        AFL_DEBUG(NKikimrServices::TX_TIERING)("event", "object_deleted")("path", record->Path);
+        YDB_LOG_DEBUG_COMP(NKikimrServices::TX_TIERING, "",
+            {"event", "object_deleted"},
+            {"path", record->Path});
         Send(Owner, new NTiers::TEvNotifySchemeObjectDeleted(record->Path));
     }
 
     void Handle(NTiers::TEvWatchSchemeObject::TPtr& ev) {
-        AFL_DEBUG(NKikimrServices::TX_TIERING)("event", "watch_scheme_objects")(
-            "names", JoinStrings(ev->Get()->GetObjectPaths().begin(), ev->Get()->GetObjectPaths().end(), ","));
+        YDB_LOG_DEBUG_COMP(NKikimrServices::TX_TIERING, "",
+            {"event", "watch_scheme_objects"},
+            {"names", JoinStrings(ev->Get()->GetObjectPaths().begin(), ev->Get()->GetObjectPaths().end(), ",")});
         WatchObjects(ev->Get()->GetObjectPaths());
     }
 
@@ -162,7 +170,9 @@ private:
     }
 
     void Handle(NActors::TEvents::TEvUndelivered::TPtr& ev) {
-        AFL_WARN(NKikimrServices::TX_TIERING)("error", "event_undelivered_to_scheme_cache")("reason", ev->Get()->Reason);
+        YDB_LOG_WARN_COMP(NKikimrServices::TX_TIERING, "",
+            {"error", "event_undelivered_to_scheme_cache"},
+            {"reason", ev->Get()->Reason});
     }
 
 public:

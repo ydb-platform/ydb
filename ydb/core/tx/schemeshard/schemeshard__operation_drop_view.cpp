@@ -115,7 +115,7 @@ public:
         const TString& workingDir = Transaction.GetWorkingDir();
         const TString& name = drop.GetName();
 
-        YDB_LOG_NOTICE_CTX(context.Ctx, "TDropView Propose ",
+        YDB_LOG_NOTICE_CTX(context.Ctx, "TDropView Propose",
             {"#_context.SS->SelfTabletId", context.SS->SelfTabletId()},
             {"opId", OperationId},
             {"path", workingDir},

@@ -4,6 +4,8 @@
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
+
 namespace NKikimr::NSchemeShard {
 
 void TSchemeShard::AddForcedCompaction(
@@ -73,6 +75,52 @@ void TSchemeShard::PersistForcedCompactionState(NIceDb::TNiceDb& db, const TForc
 
 void TSchemeShard::PersistForcedCompactionForget(NIceDb::TNiceDb& db, const TForcedCompactionInfo& info) {
     db.Table<Schema::ForcedCompactions>().Key(info.Id).Delete();
+}
+
+void TSchemeShard::ForgetForcedCompaction(NIceDb::TNiceDb& db, const TForcedCompactionInfo& info) {
+    const ui64 id = info.Id;
+    const auto byTimeKey = std::make_pair(info.StartTime, id);
+
+    PersistForcedCompactionForget(db, info);
+    ForcedCompactionsByTime.erase(byTimeKey);
+    ForcedCompactions.erase(id);
+}
+
+bool TSchemeShard::TryFreeForcedCompactionSlot(NIceDb::TNiceDb& db, const TActorContext& ctx) {
+    const ui32 limit = ForcedCompactionStoredOperationsLimit;
+    if (limit == 0 || ForcedCompactions.size() < limit) {
+        return true;
+    }
+    if (!ForcedCompactionAutoForgetOperations) {
+        return false;
+    }
+
+    // need to free enough slots so that one more operation fits within the limit
+    const size_t needToFree = ForcedCompactions.size() - limit + 1;
+    TVector<ui64> toForget;
+    toForget.reserve(needToFree);
+    for (const auto& [_, id] : ForcedCompactionsByTime) { // oldest first
+        if (toForget.size() >= needToFree) {
+            break;
+        }
+        if (ForcedCompactions.at(id)->IsFinished()) {
+            toForget.push_back(id);
+        }
+    }
+
+    if (toForget.size() < needToFree) {
+        return false;
+    }
+
+    for (const ui64 id : toForget) {
+        YDB_LOG_INFO_CTX(ctx, "[ForcedCompaction] [AutoForget] Forgetting finished to make room for a new operation, at schemeshard",
+            {"compaction", id},
+            {"limit", limit},
+            {"tabletID", TabletID()});
+        ForgetForcedCompaction(db, *ForcedCompactions.at(id));
+    }
+
+    return true;
 }
 
 void TSchemeShard::PersistForcedCompactionShards(NIceDb::TNiceDb& db, const TForcedCompactionInfo& info, const TVector<std::pair<TShardIdx, TPathId>>& shardsToCompact) {
@@ -269,7 +317,7 @@ NOperationQueue::EStartStatus TSchemeShard::StartForcedCompaction(const TShardId
     const auto& datashardId = it->second.TabletID;
     const auto& pathId = it->second.PathId;
 
-    YDB_LOG_INFO_CTX(ctx, "next wakeup in shards shards at schemeshard",
+    YDB_LOG_INFO_CTX(ctx, "Next wakeup in shards shards at schemeshard",
         {"pathId", pathId},
         {"datashard", datashardId},
         {"in", ForcedCompactionQueue->GetWakeupDelta()},
@@ -344,12 +392,12 @@ void TSchemeShard::HandleForcedCompactionResult(TEvDataShard::TEvCompactTableRes
                 {"status", (int)record.GetStatus()},
                 {"tabletID", TabletID()});
         } else {
-            LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[ForcedCompaction] [Finished] Compaction completed "
-                "for pathId# " << pathId << ", datashard# " << tabletId
-                << ", shardIdx# " << shardIdx
-                << " with status# " << (int)record.GetStatus()
-                << " at schemeshard " << TabletID()
-                << " (no ForcedCompactionQueue)");
+            YDB_LOG_INFO_CTX(ctx, "With at schemeshard (no ForcedCompactionQueue)",
+                {"pathId", pathId},
+                {"datashard", tabletId},
+                {"shardIdx", shardIdx},
+                {"status", (int)record.GetStatus()},
+                {"tabletID", TabletID()});
         }
         CompleteForcedCompactionForShard(shardIdx, ctx);
     }
@@ -400,7 +448,7 @@ void TSchemeShard::ProcessForcedCompactionOnSplitMerge(
         if (compaction->TotalShardCount >= removedSrcShardCount) {
             compaction->TotalShardCount -= removedSrcShardCount;
         } else {
-            YDB_LOG_WARN_CTX(ctx, "but removed in-flight src shards setting TotalShardCount to 0 dst shards for at schemeshard",
+            YDB_LOG_WARN_CTX(ctx, "But removed in-flight src shards setting TotalShardCount to 0 dst shards for at schemeshard",
                 {"totalShardCount", compaction->TotalShardCount},
                 {"removedSrcShardCount", removedSrcShardCount},
                 {"#_dstShardIdxs.size", dstShardIdxs.size()},
@@ -456,7 +504,7 @@ void TSchemeShard::OnForcedCompactionTimeout(const TShardIdx& shardIdx) {
     const auto& datashardId = it->second.TabletID;
     const auto& pathId = it->second.PathId;
 
-    YDB_LOG_INFO_CTX(ctx, "next wakeup in shards shards at schemeshard",
+    YDB_LOG_INFO_CTX(ctx, "Next wakeup in shards shards at schemeshard",
         {"pathId", pathId},
         {"datashard", datashardId},
         {"in", ForcedCompactionQueue->GetWakeupDelta()},

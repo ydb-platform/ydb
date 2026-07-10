@@ -29,7 +29,7 @@ public:
         const auto& acl = op.GetDiffACL();
         const auto& owner = op.GetNewOwner();
 
-        YDB_LOG_NOTICE_CTX(context.Ctx, "TModifyACL Propose ",
+        YDB_LOG_NOTICE_CTX(context.Ctx, "TModifyACL Propose",
             {"path", parentPathStr},
             {"name", name},
             {"operationId", OperationId},

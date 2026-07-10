@@ -458,6 +458,31 @@ public:
     }
 };
 
+struct TMultiColumnStatisticsDescription {
+    TString Name;
+    TVector<TString> Columns;
+    TVector<TString> Types;
+
+    TMultiColumnStatisticsDescription() = default;
+
+    explicit TMultiColumnStatisticsDescription(const NKikimrSchemeOp::TMultiColumnStatisticsDescription& message)
+        : Name(message.GetName())
+    {
+        for (const auto& column : message.GetColumnNames()) {
+            Columns.push_back(column);
+        }
+        for (const auto type : message.GetTypes()) {
+            switch (type) {
+                case NKikimrSchemeOp::EMultiColumnStatisticsType::COUNT_MIN_SKETCH:
+                    Types.push_back("COUNT_MIN_SKETCH");
+                    break;
+                default:
+                    break;
+            }
+        }
+    }
+};
+
 void FillLocalBloomFilterSetting(TIndexDescription::TLocalBloomFilterDescription& desc,
     const TString& name, const TString& value, TString& error);
 
@@ -837,6 +862,8 @@ struct TKikimrTableMetadata : public TThrRefBase {
     // Indexes and ImplTables must be in same order
     TVector<TIndexDescription> Indexes;
     TVector<TIntrusivePtr<TKikimrTableMetadata>> ImplTables;
+
+    TVector<TMultiColumnStatisticsDescription> MultiColumnStatistics;
 
     TVector<TColumnFamily> ColumnFamilies;
     TTableSettings TableSettings;
@@ -1551,8 +1578,6 @@ public:
 
     virtual NThreading::TFuture<TTableMetadataResult> LoadTableMetadata(
         const TString& cluster, const TString& table, TLoadTableMetadataSettings settings) = 0;
-
-    virtual NThreading::TFuture<TGenericResult> SetConstraint(const TString& tableName, TVector<TSetColumnConstraintSettings>&& settings) = 0;
 
     virtual NThreading::TFuture<TGenericResult> AlterDatabase(const TString& cluster, const TAlterDatabaseSettings& settings) = 0;
 

@@ -382,7 +382,7 @@ public:
             ? TPathId::FromProto(op.GetPathId())
             : InvalidPathId;
 
-        YDB_LOG_NOTICE_CTX(context.Ctx, "TAlterReplication Propose ",
+        YDB_LOG_NOTICE_CTX(context.Ctx, "TAlterReplication Propose",
             {"#_context.SS->TabletID", context.SS->TabletID()},
             {"opId", OperationId},
             {"path", workingDir},

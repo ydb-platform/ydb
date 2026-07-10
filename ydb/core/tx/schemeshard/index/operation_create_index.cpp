@@ -113,7 +113,7 @@ public:
         const TString& parentPathStr = Transaction.GetWorkingDir();
         const TString& name = tableIndexCreation.GetName();
 
-        YDB_LOG_NOTICE_CTX(context.Ctx, "TCreateTableIndex Propose ",
+        YDB_LOG_NOTICE_CTX(context.Ctx, "TCreateTableIndex Propose",
             {"path", parentPathStr},
             {"name", name},
             {"operationId", OperationId},

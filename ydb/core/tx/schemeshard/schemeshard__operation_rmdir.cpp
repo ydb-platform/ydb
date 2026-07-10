@@ -22,7 +22,7 @@ public:
         const TString& parentPathStr = Transaction.GetWorkingDir();
         const TString& name = drop.GetName();
 
-        YDB_LOG_NOTICE_CTX(context.Ctx, "TRmDir Propose ",
+        YDB_LOG_NOTICE_CTX(context.Ctx, "TRmDir Propose",
             {"path", parentPathStr},
             {"name", name},
             {"pathId", drop.GetId()},

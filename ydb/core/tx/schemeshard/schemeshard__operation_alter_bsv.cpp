@@ -398,7 +398,7 @@ public:
         const TPathId pathId = alter.HasPathId()
             ? context.SS->MakeLocalId(alter.GetPathId()) : InvalidPathId;
 
-        YDB_LOG_NOTICE_CTX(context.Ctx, "TAlterBlockStoreVolume Propose ",
+        YDB_LOG_NOTICE_CTX(context.Ctx, "TAlterBlockStoreVolume Propose",
             {"path", parentPathStr},
             {"name", name},
             {"pathId", pathId},

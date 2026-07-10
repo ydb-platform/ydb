@@ -123,7 +123,7 @@ public:
         const TString& name = desc.GetName();
         const TString acl = Transaction.GetModifyACL().GetDiffACL();
 
-        YDB_LOG_NOTICE_CTX(context.Ctx, "TCreateBackupCollection Propose: ",
+        YDB_LOG_NOTICE_CTX(context.Ctx, "TCreateBackupCollection Propose",
             {"#_context.SS->TabletID", context.SS->TabletID()},
             {"opId", OperationId},
             {"path", rootPathStr},

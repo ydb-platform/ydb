@@ -232,7 +232,7 @@ public:
     THolder<TProposeResponse> Propose(const TString& owner, TOperationContext& context) override {
         const TString& parentPathStr = Transaction.GetWorkingDir();
         const TString& name = Transaction.GetCreateStreamingQuery().GetName();
-        YDB_LOG_NOTICE_CTX(context.Ctx, "TCreateStreamingQuery Propose: ",
+        YDB_LOG_NOTICE_CTX(context.Ctx, "TCreateStreamingQuery Propose",
             {"#_context.SS->TabletID", context.SS->TabletID()},
             {"opId", OperationId},
             {"path", parentPathStr},

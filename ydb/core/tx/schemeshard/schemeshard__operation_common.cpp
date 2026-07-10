@@ -8,10 +8,13 @@
 #include <ydb/core/kesus/tablet/events.h>
 #include <ydb/core/mind/hive/hive.h>
 #include <ydb/core/persqueue/events/global.h>
+#include <ydb/core/test_tablet/events.h>
 #include <ydb/core/tx/columnshard/columnshard.h>
 #include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/tx/replication/controller/public_events.h>
 #include <ydb/core/tx/sequenceshard/public/events.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
 
@@ -261,6 +264,9 @@ bool TCreateParts::HandleReply(TEvHive::TEvCreateTabletReply::TPtr& ev, TOperati
             break;
         case ETabletType::BackupController:
             context.SS->TabletCounters->Simple()[COUNTER_BACKUP_CONTROLLER_TABLET_COUNT].Add(1);
+            break;
+        case ETabletType::TestShard:
+            context.SS->TabletCounters->Simple()[COUNTER_TEST_SHARD_COUNT].Add(1);
             break;
         default:
             break;
@@ -1236,6 +1242,35 @@ void ValidateNoTransactionOnPaths(TOperationId operationId, const THashSet<TPath
             continue;
         }
         Y_VERIFY_S(false, "unexpected transaction: " << otherTxId << " found on the subdomain being deleted by transaction " << operationId.GetTxId());
+    }
+}
+
+void AbortRelatedOperations(TOperationId operationId, const THashSet<TTxId>& relatedTx, TOperationContext& context, TStringBuf logPrefix) {
+    const TTabletId ssId = context.SS->SelfTabletId();
+
+    for (auto otherTxId: relatedTx) {
+        if (otherTxId == operationId.GetTxId()) {
+            continue;
+        }
+
+        YDB_LOG_NOTICE_CTX(context.Ctx, "",
+            {"logPrefix", logPrefix},
+            {"dependentTransaction", operationId.GetTxId()},
+            {"parentTransaction", otherTxId},
+            {"schemeshard", ssId});
+
+        context.OnComplete.Dependence(otherTxId, operationId.GetTxId());
+
+        Y_ABORT_UNLESS(context.SS->Operations.contains(otherTxId));
+        auto otherOperation = context.SS->Operations.at(otherTxId);
+        // AbortUnsafe marks parts as done; clear active barriers first to avoid
+        // IsDoneBarrier() VERIFY when a blocked part is force-aborted.
+        otherOperation->ForceClearBarriers();
+        for (ui32 partId = 0; partId < otherOperation->Parts.size(); ++partId) {
+            if (auto part = otherOperation->Parts.at(partId)) {
+                part->AbortUnsafe(operationId.GetTxId(), context);
+            }
+        }
     }
 }
 

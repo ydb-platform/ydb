@@ -745,7 +745,7 @@ struct TReaderTraits {
 };
 
 inline std::unique_ptr<IBlockReader> MakeBlockReader(const ITypeInfoHelper& typeInfoHelper, const TType* type) {
-    return DispatchByArrowTraits<TReaderTraits>(typeInfoHelper, type, nullptr);
+    return DispatchByArrowTraits<TReaderTraits>(typeInfoHelper, type, /*pgBuilder=*/nullptr);
 }
 
 inline void UpdateBlockItemSerializeProps(const ITypeInfoHelper& typeInfoHelper, const TType* type, TBlockItemSerializeProps& props) {

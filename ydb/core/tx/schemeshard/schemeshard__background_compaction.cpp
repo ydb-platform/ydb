@@ -2,6 +2,8 @@
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
+
 namespace NKikimr::NSchemeShard {
 
 NOperationQueue::EStartStatus TSchemeShard::StartBackgroundCompaction(const TShardCompactionInfo& info) {
@@ -22,7 +24,7 @@ NOperationQueue::EStartStatus TSchemeShard::StartBackgroundCompaction(const TSha
     const auto& datashardId = it->second.TabletID;
     const auto& pathId = it->second.PathId;
 
-    YDB_LOG_INFO_CTX(ctx, "next wakeup in shards waiting after shards shards at schemeshard",
+    YDB_LOG_INFO_CTX(ctx, "Next wakeup in shards waiting after shards shards at schemeshard",
         {"pathId", pathId},
         {"datashard", datashardId},
         {"compactionInfo", info},
@@ -65,7 +67,7 @@ void TSchemeShard::OnBackgroundCompactionTimeout(const TShardCompactionInfo& inf
     const auto& datashardId = it->second.TabletID;
     const auto& pathId = it->second.PathId;
 
-    YDB_LOG_INFO_CTX(ctx, "next wakeup in shards waiting after shards shards at schemeshard",
+    YDB_LOG_INFO_CTX(ctx, "Next wakeup in shards waiting after shards shards at schemeshard",
         {"pathId", pathId},
         {"datashard", datashardId},
         {"compactionInfo", info},
@@ -235,13 +237,13 @@ void TSchemeShard::UpdateBackgroundCompaction(
             {"lastFullCompaction", TInstant::Seconds(newStats.FullCompactionTs)},
             {"tabletID", TabletID()});
     } else {
-        LOG_TRACE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-            "[BackgroundCompaction] [Update] Skipped shard# " << shardIdx
-            << " with partCount# " << newStats.PartCount
-            << ", rowCount# " << newStats.RowCount
-            << ", searchHeight# " << newStats.SearchHeight
-            << ", lastFullCompaction# " << TInstant::Seconds(newStats.FullCompactionTs)
-            << " at schemeshard " << TabletID());
+        YDB_LOG_TRACE_CTX(ctx, "[BackgroundCompaction] [Update] Skipped with at schemeshard",
+            {"shard", shardIdx},
+            {"partCount", newStats.PartCount},
+            {"rowCount", newStats.RowCount},
+            {"searchHeight", newStats.SearchHeight},
+            {"lastFullCompaction", TInstant::Seconds(newStats.FullCompactionTs)},
+            {"tabletID", TabletID()});
     }
 
     UpdateBackgroundCompactionQueueMetrics();

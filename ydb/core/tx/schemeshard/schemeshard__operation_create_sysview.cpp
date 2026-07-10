@@ -112,13 +112,13 @@ public:
 
         const TString& name = sysViewDescription.GetName();
 
-        YDB_LOG_NOTICE_CTX(context.Ctx, "TCreateSysView Propose ",
+        YDB_LOG_NOTICE_CTX(context.Ctx, "TCreateSysView Propose",
             {"#_context.SS->SelfTabletId", context.SS->SelfTabletId()},
             {"path", parentPathStr},
             {"name", name},
             {"opId", OperationId});
 
-        YDB_LOG_DEBUG_CTX(context.Ctx, "TCreateSysView Propose ",
+        YDB_LOG_DEBUG_CTX(context.Ctx, "TCreateSysView Propose",
             {"#_context.SS->SelfTabletId", context.SS->SelfTabletId()},
             {"path", parentPathStr},
             {"name", name},

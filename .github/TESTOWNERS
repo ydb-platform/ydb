@@ -64,6 +64,7 @@
 /ydb/core/tx/schemeshard/ut_login_large @ydb-platform/Security
 /ydb/tests/functional/secrets @ydb-platform/Security
 /ydb/tests/functional/security @ydb-platform/Security
+/ydb/services/scheme_secret/ut @ydb-platform/Security
 
 #YDB Query Execution Team @gridnevvvit TEAM:@ydb-platform/qp
 /ydb/core/kqp @ydb-platform/qp
@@ -102,9 +103,11 @@
 /ydb/services/keyvalue/ut @ydb-platform/blobstorage
 /ydb/tests/functional/bridge @ydb-platform/blobstorage
 /ydb/tests/functional/dstool @ydb-platform/blobstorage
+/ydb/tests/functional/blobstorage @ydb-platform/blobstorage
 /ydb/tests/compatibility/distconf @ydb-platform/blobstorage
 /ydb/tests/stress/testshard_workload @ydb-platform/blobstorage
 /ydb/tools/stress_tool @ydb-platform/blobstorage
+/ydb/tools/mnc @ydb-platform/blobstorage
 /ydb/core/load_test @ydb-platform/blobstorage
 /ydb/tests/stress/reconfig_state_storage_workload @ydb-platform/blobstorage
 

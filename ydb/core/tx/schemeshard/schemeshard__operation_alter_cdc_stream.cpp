@@ -109,7 +109,7 @@ public:
         const auto& op = Transaction.GetAlterCdcStream();
         const auto& streamName = op.GetStreamName();
 
-        YDB_LOG_NOTICE_CTX(context.Ctx, "TAlterCdcStream Propose ",
+        YDB_LOG_NOTICE_CTX(context.Ctx, "TAlterCdcStream Propose",
             {"#_context.SS->TabletID", context.SS->TabletID()},
             {"opId", OperationId},
             {"stream", workingDir},
@@ -372,7 +372,7 @@ public:
         const auto& tableName = op.GetTableName();
         const auto& streamName = op.GetStreamName();
 
-        YDB_LOG_NOTICE_CTX(context.Ctx, "TAlterCdcStreamAtTable Propose / ",
+        YDB_LOG_NOTICE_CTX(context.Ctx, "TAlterCdcStreamAtTable Propose ",
             {"#_context.SS->TabletID", context.SS->TabletID()},
             {"opId", OperationId},
             {"stream", workingDir},

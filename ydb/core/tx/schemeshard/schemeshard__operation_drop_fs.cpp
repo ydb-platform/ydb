@@ -174,7 +174,7 @@ THolder<TProposeResponse> TDropFileStore::Propose(
     const TString& parentPathStr = Transaction.GetWorkingDir();
     const TString& name = operation.GetName();
 
-    YDB_LOG_NOTICE_CTX(context.Ctx, "TDropFileStore Propose ",
+    YDB_LOG_NOTICE_CTX(context.Ctx, "TDropFileStore Propose",
         {"path", parentPathStr},
         {"name", name},
         {"pathId", operation.GetId()},

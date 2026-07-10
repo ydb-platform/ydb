@@ -3,8 +3,11 @@
 #include "direct_builder.h"
 
 #include <util/string/escape.h>
+#include <ydb/core/formats/arrow/accessor/common/chunk_data.h>
+#include <ydb/core/formats/arrow/accessor/dictionary/constructor.h>
 #include <ydb/core/formats/arrow/accessor/plain/accessor.h>
 #include <ydb/core/formats/arrow/accessor/sparsed/accessor.h>
+#include <ydb/core/formats/arrow/serializer/abstract.h>
 
 #include <contrib/libs/simdjson/include/simdjson.h>
 
@@ -28,6 +31,13 @@ void TColumnElements::BuildPlainAccessor(const ui32 recordsCount) {
         builder.AddRecord(*it, std::string_view(rec.Data(), rec.Size()));
     }
     Accessor = builder.Finish(recordsCount);
+}
+
+void TColumnElements::BuildDictionaryAccessor(const ui32 recordsCount) {
+    BuildPlainAccessor(recordsCount);
+    const TChunkConstructionData cData(
+        recordsCount, nullptr, arrow::binary(), NSerialization::TSerializerContainer::GetDefaultSerializer());
+    Accessor = NDictionary::TConstructor().Construct(Accessor, cData).DetachResult();
 }
 
 std::shared_ptr<TSubColumnsArray> TDataBuilder::Finish() {
@@ -57,7 +67,7 @@ std::shared_ptr<TSubColumnsArray> TDataBuilder::Finish() {
     };
     std::sort(columnElements.begin(), columnElements.end(), predSortElements);
     std::sort(otherElements.begin(), otherElements.end(), predSortElements);
-    TDictStats columnStats = BuildStats(columnElements, Settings, CurrentRecordIndex);
+    TDictStats columnStats = BuildStats(columnElements, Settings, CurrentRecordIndex, /*allowDictionary*/ true);
     {
         ui32 columnIdx = 0;
         for (auto&& i : columnElements) {
@@ -68,13 +78,15 @@ std::shared_ptr<TSubColumnsArray> TDataBuilder::Finish() {
                 case IChunkedArray::EType::SparsedArray:
                     i->BuildSparsedAccessor(CurrentRecordIndex);
                     break;
+                case IChunkedArray::EType::Dictionary:
+                    i->BuildDictionaryAccessor(CurrentRecordIndex);
+                    break;
                 case IChunkedArray::EType::Undefined:
                 case IChunkedArray::EType::SerializedChunkedArray:
                 case IChunkedArray::EType::CompositeChunkedArray:
                 case IChunkedArray::EType::SubColumnsArray:
                 case IChunkedArray::EType::SubColumnsPartialArray:
                 case IChunkedArray::EType::ChunkedArray:
-                case IChunkedArray::EType::Dictionary:
                     AFL_VERIFY(false);
             }
             ++columnIdx;
@@ -113,7 +125,7 @@ TOthersData TDataBuilder::MergeOthers(const std::vector<TColumnElements*>& other
             std::push_heap(heap.begin(), heap.end());
         }
     }
-    return othersBuilder->Finish(TOthersData::TFinishContext(BuildStats(otherKeys, Settings, recordsCount)));
+    return othersBuilder->Finish(TOthersData::TFinishContext(BuildStats(otherKeys, Settings, recordsCount, /*allowDictionary*/ false)));
 }
 
 std::string BuildString(const TStringBuf currentPrefix, const TStringBuf key) {

@@ -163,7 +163,7 @@ public:
         const auto& externalDataSourceDescription = Transaction.GetCreateExternalDataSource();
         const TString& name = externalDataSourceDescription.GetName();
 
-        YDB_LOG_NOTICE_CTX(context.Ctx, "TAlterExternalDataSource Propose ",
+        YDB_LOG_NOTICE_CTX(context.Ctx, "TAlterExternalDataSource Propose",
             {"#_context.SS->TabletID", context.SS->TabletID()},
             {"opId", OperationId},
             {"path", parentPathStr},

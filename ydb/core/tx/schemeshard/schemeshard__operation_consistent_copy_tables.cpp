@@ -10,6 +10,8 @@
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
+
 static bool ShouldOmitAutomaticIndexProcessing(const NKikimrSchemeOp::TCopyTableConfig& descr) {
     if (descr.GetOmitIndexes()) {
         return true;  // User explicitly wants to skip indexes
@@ -306,11 +308,18 @@ bool CreateConsistentCopyTables(
                 continue;
             }
 
+            Y_ABORT_UNLESS(srcIndexPath.Base()->PathId == pathId);
+            TTableIndexInfo::TPtr indexInfo = context.SS->Indexes.at(pathId);
+            if (indexInfo->State != NKikimrSchemeOp::EIndexState::EIndexStateReady) {
+                YDB_LOG_TRACE_CTX(context.Ctx, "CreateConsistentCopyTables: Skipping a non-ready index in state",
+                    {"name", name},
+                    {"#_indexInfo->State", indexInfo->State});
+                continue;
+            }
+
             YDB_LOG_TRACE_CTX(context.Ctx, "CreateConsistentCopyTables: Creating index copy operation",
                 {"for", name});
 
-            Y_ABORT_UNLESS(srcIndexPath.Base()->PathId == pathId);
-            TTableIndexInfo::TPtr indexInfo = context.SS->Indexes.at(pathId);
             auto scheme = CreateIndexTask(indexInfo, dstIndexPath);
             if (!scheme) {
                 result = {CreateReject(nextId, NKikimrScheme::EStatus::StatusInvalidParameter,

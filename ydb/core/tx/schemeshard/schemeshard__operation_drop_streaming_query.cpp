@@ -184,7 +184,7 @@ public:
         const TString& parentPathStr = Transaction.GetWorkingDir();
         const auto& dropDescription = Transaction.GetDrop();
         const TString& name = dropDescription.GetName();
-        YDB_LOG_NOTICE_CTX(context.Ctx, "TDropStreamingQuery Propose: ",
+        YDB_LOG_NOTICE_CTX(context.Ctx, "TDropStreamingQuery Propose",
             {"#_context.SS->TabletID", context.SS->TabletID()},
             {"opId", OperationId},
             {"path", parentPathStr},

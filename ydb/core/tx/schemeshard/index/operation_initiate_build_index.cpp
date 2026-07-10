@@ -301,7 +301,7 @@ public:
         const TString& parentPathStr = Transaction.GetWorkingDir();
         const TString& tableName = schema.GetTableName();
 
-        YDB_LOG_NOTICE_CTX(context.Ctx, "TInitializeBuildIndex Propose ",
+        YDB_LOG_NOTICE_CTX(context.Ctx, "TInitializeBuildIndex Propose",
             {"path", parentPathStr},
             {"tableName", tableName},
             {"opId", OperationId},

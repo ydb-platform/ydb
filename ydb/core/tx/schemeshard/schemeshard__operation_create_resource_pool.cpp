@@ -135,7 +135,7 @@ public:
         const TString& parentPathStr = Transaction.GetWorkingDir();
         const auto& resourcePoolDescription = Transaction.GetCreateResourcePool();
         const TString& name = resourcePoolDescription.GetName();
-        YDB_LOG_NOTICE_CTX(context.Ctx, "TCreateResourcePool Propose: ",
+        YDB_LOG_NOTICE_CTX(context.Ctx, "TCreateResourcePool Propose",
             {"#_context.SS->TabletID", context.SS->TabletID()},
             {"opId", OperationId},
             {"path", parentPathStr},

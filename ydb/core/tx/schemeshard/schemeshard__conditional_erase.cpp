@@ -7,6 +7,8 @@
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
+
 namespace NKikimr {
 namespace NSchemeShard {
 
@@ -234,7 +236,9 @@ struct TSchemeShard::TTxRunConditionalErase: public TSchemeShard::TRwTxBase {
 
             const auto [tableInfo, tablePathId, shardIdx] = ResolveInfo(Self, tabletId);
             if (!tableInfo || tablePathId == InvalidPathId || shardIdx == InvalidShardIdx) {
-                Y_DEBUG_ABORT("Unreachable");
+                YDB_LOG_WARN_CTX(ctx, "Unable to resolve info in DoComplete",
+                    {"tabletId", tabletId},
+                    {"schemeshard", Self->TabletID()});
                 continue;
             }
 

@@ -21,7 +21,7 @@ NOperationQueue::EStartStatus TSchemeShard::StartBorrowedCompaction(const TShard
     const auto& datashardId = it->second.TabletID;
     const auto& pathId = it->second.PathId;
 
-    YDB_LOG_INFO_CTX(ctx, "next in shards shards at schemeshard",
+    YDB_LOG_INFO_CTX(ctx, "Next in shards shards at schemeshard",
         {"pathId", pathId},
         {"datashard", datashardId},
         {"wakeup", BorrowedCompactionQueue->GetWakeupDelta()},
@@ -60,7 +60,7 @@ void TSchemeShard::OnBorrowedCompactionTimeout(const TShardIdx& shardIdx) {
     const auto& datashardId = it->second.TabletID;
     const auto& pathId = it->second.PathId;
 
-    YDB_LOG_INFO_CTX(ctx, "next in shards shards at schemeshard",
+    YDB_LOG_INFO_CTX(ctx, "Next in shards shards at schemeshard",
         {"pathId", pathId},
         {"datashard", datashardId},
         {"wakeup", BorrowedCompactionQueue->GetWakeupDelta()},
@@ -137,7 +137,7 @@ void TSchemeShard::Handle(TEvDataShard::TEvCompactBorrowedResult::TPtr &ev, cons
     auto duration = BorrowedCompactionQueue->OnDone(shardIdx);
 
     if (shardIdx == InvalidShardIdx) {
-        YDB_LOG_WARN_CTX(ctx, "next in shards shards at schemeshard",
+        YDB_LOG_WARN_CTX(ctx, "Next in shards shards at schemeshard",
             {"pathId", pathId},
             {"datashard", tabletId},
             {"in", duration.MilliSeconds()},
@@ -147,7 +147,7 @@ void TSchemeShard::Handle(TEvDataShard::TEvCompactBorrowedResult::TPtr &ev, cons
             {"running", BorrowedCompactionQueue->RunningSize()},
             {"tabletID", TabletID()});
     } else {
-        YDB_LOG_INFO_CTX(ctx, "next in shards shards at schemeshard",
+        YDB_LOG_INFO_CTX(ctx, "Next in shards shards at schemeshard",
             {"pathId", pathId},
             {"datashard", tabletId},
             {"shardIdx", shardIdx},

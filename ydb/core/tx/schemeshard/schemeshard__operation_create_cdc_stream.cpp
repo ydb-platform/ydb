@@ -118,7 +118,7 @@ public:
         const auto& streamName = streamDesc.GetName();
         const auto acceptExisted = !Transaction.GetFailOnExist();
 
-        YDB_LOG_NOTICE_CTX(context.Ctx, "TNewCdcStream Propose ",
+        YDB_LOG_NOTICE_CTX(context.Ctx, "TNewCdcStream Propose",
             {"#_context.SS->TabletID", context.SS->TabletID()},
             {"opId", OperationId},
             {"stream", workingDir},
@@ -533,7 +533,7 @@ public:
         const auto& tableName = op.GetTableName();
         const auto& streamName = op.GetStreamDescription().GetName();
 
-        YDB_LOG_NOTICE_CTX(context.Ctx, "TNewCdcStreamAtTable Propose / ",
+        YDB_LOG_NOTICE_CTX(context.Ctx, "TNewCdcStreamAtTable Propose ",
             {"#_context.SS->TabletID", context.SS->TabletID()},
             {"opId", OperationId},
             {"stream", workingDir},
@@ -716,8 +716,8 @@ void DoCreatePqPart(
     if (IsReplicationSupportTopicAutopartitioning(op)) {
         auto * ps = pqConfig.MutablePartitionStrategy();
         ps->SetPartitionStrategyType(::NKikimrPQ::TPQTabletConfig_TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_CAN_SPLIT);
-        ps->SetMinPartitionCount(std::min<ui32>(std::max<ui32>(table->GetPartitions().size() / 16, 1), TSchemeShard::MaxPQGroupPartitionsCount));
-        ps->SetMaxPartitionCount(std::min<ui32>(std::max<ui32>(table->GetPartitions().size() * 16, 50), TSchemeShard::MaxPQGroupPartitionsCount));
+        ps->SetMinPartitionCount(std::max<ui32>(table->GetPartitions().size() / 16, 1));
+        ps->SetMaxPartitionCount(std::max<ui32>(table->GetPartitions().size() * 16, 50));
         ps->SetScaleThresholdSeconds(30);
     } else if (op.GetTopicAutoPartitioning()) {
         auto * ps = pqConfig.MutablePartitionStrategy();
@@ -956,6 +956,11 @@ TVector<ISubOperation::TPtr> CreateNewCdcStream(TOperationId opId, const TTxTran
         {"#_context.SS->TabletID", context.SS->TabletID()},
         {"opId", opId},
         {"tx", tx.ShortDebugString()});
+
+    if (!AppData()->PQConfig.GetTopicsAreFirstClassCitizen()) {
+        return {CreateReject(opId, NKikimrScheme::EStatus::StatusPreconditionFailed, TStringBuilder()
+            << "CDC stream creation is not allowed when topic is not FirstClassCitizen")};
+    }
 
     const auto acceptExisted = !tx.GetFailOnExist();
     const auto& op = tx.GetCreateCdcStream();

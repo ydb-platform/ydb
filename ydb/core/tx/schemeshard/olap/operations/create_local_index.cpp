@@ -129,7 +129,7 @@ public:
 
         const TString& name = tableIndexCreation.GetName();
 
-        YDB_LOG_NOTICE_CTX(context.Ctx, "TCreateLocalIndex Propose ",
+        YDB_LOG_NOTICE_CTX(context.Ctx, "TCreateLocalIndex Propose",
             {"path", parentPathStr},
             {"name", name},
             {"operationId", OperationId},

@@ -13,6 +13,8 @@
 
 #include <unordered_set>
 
+#define YDB_LOG_THIS_FILE_COMPONENT BS_PHANTOM_FLAG_PROCESSOR
+
 namespace NKikimr::NSyncLog {
 
 ////////////////////////////////////////////////////////////////////////////
@@ -31,10 +33,10 @@ public:
     }
 
     void Bootstrap() {
-        STLOG(PRI_NOTICE, BS_PHANTOM_FLAG_PROCESSOR, BSPFP01, VDISKP(Ctx.SyncLogCtx->VCtx,
-                "Bootstrap PhantomFlagStorageProcessor"),
-                (ChunkCount, Data.Chunks.size()),
-                (ChunkSize, Data.ChunkSize));
+        YDB_LOG_NOTICE(VDISKP(Ctx.SyncLogCtx->VCtx, "Bootstrap PhantomFlagStorageProcessor"),
+            {"marker", "BSPFP01"},
+            {"chunkCount", Data.Chunks.size()},
+            {"chunkSize", Data.ChunkSize});
         Send(Ctx.ChunkKeeperId, new TEvChunkKeeperDiscover(SubsystemId));
         RequestInFlight = true;
         Become(&TThis::StateInit);
@@ -97,9 +99,9 @@ private:
     // Handlers
     //////////////////////////////////////////////////////////////////////
     void HandleInit(const TEvChunkKeeperDiscoverResult::TPtr& ev) {
-        STLOG(PRI_NOTICE, BS_PHANTOM_FLAG_PROCESSOR, BSPFP02, VDISKP(Ctx.SyncLogCtx->VCtx,
-                "Handle TEvChunkKeeperDiscoverResult"),
-                (Event, ev->Get()->ToString()));
+        YDB_LOG_NOTICE(VDISKP(Ctx.SyncLogCtx->VCtx, "Handle TEvChunkKeeperDiscoverResult"),
+            {"marker", "BSPFP02"},
+            {"event", ev->Get()->ToString()});
         RequestInFlight = false;
         switch (ev->Get()->Status) {
         case NKikimrProto::OK: {
@@ -139,9 +141,9 @@ private:
     }
 
     void Handle(TEvPhantomFlagStorageWriteItems::TPtr ev) {
-        STLOG(PRI_DEBUG, BS_PHANTOM_FLAG_PROCESSOR, BSPFP03, VDISKP(Ctx.SyncLogCtx->VCtx,
-                "Handle TEvPhantomFlagStorageWriteItems"),
-                (ItemCount, ev->Get()->Items.size()));
+        YDB_LOG_DEBUG_COMP(BS_PHANTOM_FLAG_PROCESSOR, VDISKP(Ctx.SyncLogCtx->VCtx, "Handle TEvPhantomFlagStorageWriteItems"),
+            {"marker", "BSPFP03"},
+            {"itemCount", ev->Get()->Items.size()});
         TWriteBatch batch{.SourceChunkIdx = std::nullopt};
         std::ranges::move(ev->Get()->Items.begin(), ev->Get()->Items.end(),
                 std::back_inserter(batch.Items));
@@ -152,10 +154,10 @@ private:
     void Handle(TEvPhantomFlagExtractedFromChunk::TPtr ev) {
         const ui32 chunkIdx = ev->Get()->ChunkIdx;
         auto& flags = ev->Get()->Flags;
-        STLOG(PRI_NOTICE, BS_PHANTOM_FLAG_PROCESSOR, BSPFP12, VDISKP(Ctx.SyncLogCtx->VCtx,
-                "Handle TEvPhantomFlagExtractedFromChunk"),
-                (SourceChunkIdx, chunkIdx),
-                (FlagCount, flags.size()));
+        YDB_LOG_NOTICE_COMP(BS_PHANTOM_FLAG_PROCESSOR, VDISKP(Ctx.SyncLogCtx->VCtx, "Handle TEvPhantomFlagExtractedFromChunk"),
+            {"marker", "BSPFP12"},
+            {"sourceChunkIdx", chunkIdx},
+            {"flagCount", flags.size()});
         TWriteBatch batch{.SourceChunkIdx = chunkIdx};
         for (const TLogoBlobRec& flag : flags) {
             batch.Items.push_back(TPhantomFlagStorageItem::CreateFlag(&flag));
@@ -165,9 +167,9 @@ private:
     }
 
     void Handle(const TEvChunkKeeperAllocateResult::TPtr& ev) {
-        STLOG(PRI_NOTICE, BS_PHANTOM_FLAG_PROCESSOR, BSPFP04, VDISKP(Ctx.SyncLogCtx->VCtx,
-                "Handle TEvChunkKeeperAllocateResult"),
-                (Event, ev->Get()->ToString()));
+        YDB_LOG_NOTICE(VDISKP(Ctx.SyncLogCtx->VCtx, "Handle TEvChunkKeeperAllocateResult"),
+            {"marker", "BSPFP04"},
+            {"event", ev->Get()->ToString()});
         RequestInFlight = false;
         switch (ev->Get()->Status) {
         case NKikimrProto::OK: {
@@ -188,9 +190,9 @@ private:
     }
 
     void Handle(const TEvChunkKeeperFreeResult::TPtr& ev) {
-        STLOG(PRI_NOTICE, BS_PHANTOM_FLAG_PROCESSOR, BSPFP05, VDISKP(Ctx.SyncLogCtx->VCtx,
-                "Handle TEvChunkKeeperFreeResult"),
-                (Event, ev->Get()->ToString()));
+        YDB_LOG_NOTICE(VDISKP(Ctx.SyncLogCtx->VCtx, "Handle TEvChunkKeeperFreeResult"),
+            {"marker", "BSPFP05"},
+            {"event", ev->Get()->ToString()});
         RequestInFlight = false;
         Data.Chunks.erase(ev->Get()->ChunkIdx);
         CommitState();
@@ -198,9 +200,9 @@ private:
     }
 
     void Handle(const NPDisk::TEvChunkWriteResult::TPtr& ev) {
-        STLOG(PRI_DEBUG, BS_PHANTOM_FLAG_PROCESSOR, BSPFP06, VDISKP(Ctx.SyncLogCtx->VCtx,
-                "Handle TEvChunkWriteResult"),
-                (Event, ev->Get()->ToString()));
+        YDB_LOG_DEBUG(VDISKP(Ctx.SyncLogCtx->VCtx, "Handle TEvChunkWriteResult"),
+            {"marker", "BSPFP06"},
+            {"event", ev->Get()->ToString()});
         CHECK_PDISK_RESPONSE(Ctx.SyncLogCtx->VCtx, ev, TActivationContext::AsActorContext());
         RequestInFlight = false;
         ui32 chunkIdx = ev->Get()->ChunkIdx;
@@ -220,9 +222,9 @@ private:
     }
 
     void Handle(const NPDisk::TEvChunkReadResult::TPtr& ev) {
-        STLOG(PRI_DEBUG, BS_PHANTOM_FLAG_PROCESSOR, BSPFP07, VDISKP(Ctx.SyncLogCtx->VCtx,
-                "Handle TEvChunkReadResult"),
-                (Event, ev->Get()->ToString()));
+        YDB_LOG_DEBUG(VDISKP(Ctx.SyncLogCtx->VCtx, "Handle TEvChunkReadResult"),
+            {"marker", "BSPFP07"},
+            {"event", ev->Get()->ToString()});
         CHECK_PDISK_RESPONSE(Ctx.SyncLogCtx->VCtx, ev, TActivationContext::AsActorContext());
         Y_ABORT_UNLESS(ActiveSnapshotRequest);
         ui32 chunkIdx = ev->Get()->ChunkIdx;
@@ -238,18 +240,19 @@ private:
     }
 
     void Handle(const TEvPhantomFlagStorageGetSnapshot::TPtr& ev) {
-        STLOG(PRI_NOTICE, BS_PHANTOM_FLAG_PROCESSOR, BSPFP08, VDISKP(Ctx.SyncLogCtx->VCtx,
+        YDB_LOG_NOTICE(VDISKP(Ctx.SyncLogCtx->VCtx,
                 "Handle TEvPhantomFlagStorageGetSnapshot"),
-                (ProcessedChunkCount, ev->Get()->ProcessedChunks.size()));
+            {"marker", "BSPFP08"},
+            {"processedChunkCount", ev->Get()->ProcessedChunks.size()});
         EnqueueGetSnapshot(ev->Sender, std::move(ev->Get()->SyncLogSnapshot),
                 std::move(ev->Get()->ProcessedChunks));
         ProcessQueues();
     }
 
     void Handle(const TEvPhantomFlagStorageDrop::TPtr&) {
-        STLOG(PRI_NOTICE, BS_PHANTOM_FLAG_PROCESSOR, BSPFP11, VDISKP(Ctx.SyncLogCtx->VCtx,
-                "Handle TEvPhantomFlagStorageDrop"),
-                (ChunkCount, Data.Chunks.size()));
+        YDB_LOG_NOTICE(VDISKP(Ctx.SyncLogCtx->VCtx, "Handle TEvPhantomFlagStorageDrop"),
+            {"marker", "BSPFP11"},
+            {"chunkCount", Data.Chunks.size()});
         TailChunkIdx = std::nullopt;
         TailAvailableSize = 0;
         BatchQueue.clear();
@@ -266,9 +269,10 @@ private:
     void Handle(const TEvPhantomFlagStorageFinishBuilder::TPtr& ev) {
         TPhantomFlags& flags = ev->Get()->Flags;
         TPhantomFlagThresholds& thresholds = ev->Get()->Thresholds;
-        STLOG(PRI_INFO, BS_PHANTOM_FLAG_PROCESSOR, BSPFP13, VDISKP(Ctx.SyncLogCtx->VCtx,
+        YDB_LOG_INFO(VDISKP(Ctx.SyncLogCtx->VCtx,
                 "Handle TEvPhantomFlagStorageFinishBuilder"),
-                (FlagCount, flags.size()));
+            {"marker", "BSPFP13"},
+            {"flagCount", flags.size()});
         Y_ABORT_UNLESS(ActiveSnapshotRequest);
         Y_ABORT_UNLESS(ActiveSnapshotRequest->BuilderRunning);
         SendSnapshotBatch(std::move(flags), std::move(thresholds), /*eof=*/true);
@@ -416,17 +420,19 @@ private:
                     new NPDisk::TEvChunkRead(Ctx.SyncLogCtx->PDiskCtx->Dsk->Owner,
                             Ctx.SyncLogCtx->PDiskCtx->Dsk->OwnerRound,
                             *nextChunk, 0, chunk.DataSize, NPriRead::SyncLog, nullptr));
-            STLOG(PRI_DEBUG, BS_PHANTOM_FLAG_PROCESSOR, BSPFP14, VDISKP(Ctx.SyncLogCtx->VCtx,
+            YDB_LOG_DEBUG(VDISKP(Ctx.SyncLogCtx->VCtx,
                     "Snapshot: reading chunk"),
-                    (ChunkIdx, *nextChunk),
-                    (DataSize, chunk.DataSize));
+                {"marker", "BSPFP14"},
+                {"chunkIdx", *nextChunk},
+                {"dataSize", chunk.DataSize});
         } else {
             // All persistent chunks have been delivered to this requester;
             // run the builder against the synclog snapshot to produce the
             // final batch (which also carries Eof=true).
             ActiveSnapshotRequest->BuilderRunning = true;
-            STLOG(PRI_NOTICE, BS_PHANTOM_FLAG_PROCESSOR, BSPFP10, VDISKP(Ctx.SyncLogCtx->VCtx,
-                    "Snapshot: invoking builder for final batch"));
+            YDB_LOG_NOTICE(VDISKP(Ctx.SyncLogCtx->VCtx,
+                    "Snapshot: invoking builder for final batch"),
+                {"marker", "BSPFP10"});
             Register(CreatePhantomFlagStorageBuilderActor(Ctx.SyncLogCtx, SelfId(),
                     std::move(ActiveSnapshotRequest->Snapshot), false));
         }
@@ -434,11 +440,12 @@ private:
 
     void SendSnapshotBatch(TPhantomFlags&& flags, TPhantomFlagThresholds&& thresholds, bool eof) {
         Y_ABORT_UNLESS(ActiveSnapshotRequest);
-        STLOG(PRI_NOTICE, BS_PHANTOM_FLAG_PROCESSOR, BSPFP09, VDISKP(Ctx.SyncLogCtx->VCtx,
+        YDB_LOG_NOTICE(VDISKP(Ctx.SyncLogCtx->VCtx,
                 "Send snapshot batch"),
-                (FlagCount, flags.size()),
-                (Eof, eof),
-                (ProcessedChunkCount, ActiveSnapshotRequest->ProcessedChunks.size()));
+            {"marker", "BSPFP09"},
+            {"flagCount", flags.size()},
+            {"eof", eof},
+            {"processedChunkCount", ActiveSnapshotRequest->ProcessedChunks.size()});
         Send(ActiveSnapshotRequest->Requester, new TEvPhantomFlagStorageGetSnapshotResult(
                 std::move(flags),
                 std::move(thresholds),

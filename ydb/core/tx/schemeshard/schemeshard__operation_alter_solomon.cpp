@@ -183,7 +183,7 @@ public:
         const TString& name = alter.GetName();
         const ui32 channelProfileId = alter.GetChannelProfileId();
 
-        YDB_LOG_NOTICE_CTX(context.Ctx, "TAlterSolomon Propose ",
+        YDB_LOG_NOTICE_CTX(context.Ctx, "TAlterSolomon Propose",
             {"path", parentPathStr},
             {"name", name},
             {"opId", OperationId},

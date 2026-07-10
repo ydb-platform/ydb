@@ -325,7 +325,7 @@ public:
         auto& createDescription = Transaction.GetCreateColumnStore();
         const TString& name = createDescription.GetName();
 
-        YDB_LOG_NOTICE_CTX(context.Ctx, "TCreateOlapStore Propose ",
+        YDB_LOG_NOTICE_CTX(context.Ctx, "TCreateOlapStore Propose",
             {"path", parentPathStr},
             {"name", name},
             {"opId", OperationId},

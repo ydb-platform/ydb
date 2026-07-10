@@ -110,7 +110,7 @@ public:
         const TString& parentPathStr = Transaction.GetWorkingDir();
         const TString& secretName = alterSecretProto.GetName();
 
-        YDB_LOG_NOTICE_CTX(context.Ctx, "TAlterSecret Propose ",
+        YDB_LOG_NOTICE_CTX(context.Ctx, "TAlterSecret Propose",
             {"#_context.SS->SelfTabletId", context.SS->SelfTabletId()},
             {"path", parentPathStr},
             {"secretName", secretName},

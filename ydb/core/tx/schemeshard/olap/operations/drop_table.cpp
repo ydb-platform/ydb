@@ -392,7 +392,7 @@ public:
         const TString& name = drop.GetName();
         auto opTxId = OperationId.GetTxId();
 
-        YDB_LOG_NOTICE_CTX(context.Ctx, "TDropColumnTable Propose ",
+        YDB_LOG_NOTICE_CTX(context.Ctx, "TDropColumnTable Propose",
             {"path", parentPathStr},
             {"name", name},
             {"pathId", drop.GetId()},

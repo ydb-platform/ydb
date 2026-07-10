@@ -285,7 +285,7 @@ public:
         const TString& parentPathStr = Transaction.GetWorkingDir();
         const TString& name = Transaction.GetDrop().GetName();
 
-        YDB_LOG_NOTICE_CTX(context.Ctx, "TDropTableIndex Propose ",
+        YDB_LOG_NOTICE_CTX(context.Ctx, "TDropTableIndex Propose",
             {"path", parentPathStr},
             {"name", name},
             {"pathId", Transaction.GetDrop().GetId()},

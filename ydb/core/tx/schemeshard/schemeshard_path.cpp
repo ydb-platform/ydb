@@ -11,6 +11,8 @@
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
+
 namespace NKikimr::NSchemeShard {
 
 TPath::TChecker::TChecker(const TPath& path, const NCompat::TSourceLocation location)
@@ -1242,6 +1244,19 @@ const TPath::TChecker& TPath::TChecker::Or(TCheckerMethodPtr leftFunc, TCheckerM
     return *this;
 }
 
+const TPath::TChecker& TPath::TChecker::IsTestShardSet(EStatus status) const {
+    if (Failed) {
+        return *this;
+    }
+
+    if (Path.Base()->IsTestShardSet()) {
+        return *this;
+    }
+
+    return Fail(status, TStringBuilder() << "path is not a test shard set"
+        << " (" << BasicPathInfo(Path.Base()) << ")");
+}
+
 TString TPath::TChecker::BasicPathInfo(TPathElement::TPtr element) const {
     return TStringBuilder()
         << "id: " << element->PathId << ", "
@@ -1519,10 +1534,9 @@ TPath TPath::ResolveWithInactive(TOperationId opId, const TString path, TSchemeS
         --headSubTxId;
     }
 
-    LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::FLAT_TX_SCHEMESHARD,
-                 "ResolveWithInactive: NO attach to the TargetPath of head operation"
-                 << " path: " << path
-                 << " opId: " << opId);
+    YDB_LOG_DEBUG("ResolveWithInactive: NO attach to the TargetPath of head operation",
+        {"path", path},
+        {"opId", opId});
 
     return Resolve(nullPrefix, std::move(pathParts));
 }
@@ -1885,6 +1899,12 @@ bool TPath::IsTransfer() const {
     return Base()->IsTransfer();
 }
 
+bool TPath::IsTestShardSet() const {
+    Y_ABORT_UNLESS(IsResolved());
+
+    return Base()->IsTestShardSet();
+}
+
 bool TPath::IsSupportedInExports() const {
     Y_ABORT_UNLESS(IsResolved());
 
@@ -2018,14 +2038,17 @@ TString TPath::GetEffectiveACL() const {
         if (element->CachedEffectiveACLVersion != version || !element->CachedEffectiveACL) {  // path needs actualizing
             if (item == Elements.begin()) { // it is root
                 if (!SS->IsDomainSchemeShard) {
-                    element->CachedEffectiveACL.Update(SS->ParentDomainCachedEffectiveACL, element->ACL, element->IsContainer());
+                    element->CachedEffectiveACL.Update(SS->ParentDomainCachedEffectiveACL,
+                        element->ACL, element->IsContainer(), /*isTenantRoot*/ true);
                 } else {
                     element->CachedEffectiveACL.Init(element->ACL);
                 }
             } else { // path element in the middle
                 auto prevIt = std::prev(item);
                 const auto& prevElement = *prevIt;
-                element->CachedEffectiveACL.Update(prevElement->CachedEffectiveACL, element->ACL, element->IsContainer());
+                element->CachedEffectiveACL.Update(prevElement->CachedEffectiveACL,
+                    element->ACL, element->IsContainer(),
+                    /*isTenantRoot*/ element->IsPlainSubDomainRoot() || element->IsExternalSubDomainRoot());
             }
             element->CachedEffectiveACLVersion = version;
         }

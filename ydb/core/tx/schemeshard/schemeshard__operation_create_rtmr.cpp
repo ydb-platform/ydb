@@ -221,7 +221,7 @@ public:
 
         const ui64 shardsToCreate = rtmrVolumeDescription.GetPartitionsCount();
 
-        YDB_LOG_NOTICE_CTX(context.Ctx, "TCreateRTMR Propose ",
+        YDB_LOG_NOTICE_CTX(context.Ctx, "TCreateRTMR Propose",
             {"path", parentPathStr},
             {"name", name},
             {"opId", OperationId},

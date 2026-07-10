@@ -102,7 +102,7 @@ public:
             ? TTxId(op.GetLockTxId())
             : OperationId.GetTxId();
 
-        YDB_LOG_NOTICE_CTX(context.Ctx, "TCreateLock Propose ",
+        YDB_LOG_NOTICE_CTX(context.Ctx, "TCreateLock Propose",
             {"#_context.SS->TabletID", context.SS->TabletID()},
             {"opId", OperationId},
             {"path", workingDir},

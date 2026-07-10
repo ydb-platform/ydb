@@ -127,7 +127,7 @@ public:
 
         const TString& name = tableIndexAlter.GetName();
 
-        YDB_LOG_NOTICE_CTX(context.Ctx, "TAlterLocalIndex Propose ",
+        YDB_LOG_NOTICE_CTX(context.Ctx, "TAlterLocalIndex Propose",
             {"path", parentPathStr},
             {"name", name},
             {"operationId", OperationId},

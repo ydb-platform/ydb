@@ -99,7 +99,7 @@ public:
         const auto& workingDir = Transaction.GetWorkingDir();
         const auto& op = Transaction.GetLockConfig();
 
-        YDB_LOG_NOTICE_CTX(context.Ctx, "TDropLock Propose ",
+        YDB_LOG_NOTICE_CTX(context.Ctx, "TDropLock Propose",
             {"#_context.SS->TabletID", context.SS->TabletID()},
             {"opId", OperationId},
             {"path", workingDir},

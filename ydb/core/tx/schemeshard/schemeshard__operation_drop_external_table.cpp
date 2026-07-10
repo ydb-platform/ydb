@@ -123,7 +123,7 @@ public:
         const TString& workingDir = Transaction.GetWorkingDir();
         const TString& name = drop.GetName();
 
-        YDB_LOG_NOTICE_CTX(context.Ctx, "TDropExternalTable Propose ",
+        YDB_LOG_NOTICE_CTX(context.Ctx, "TDropExternalTable Propose",
             {"#_context.SS->TabletID", context.SS->TabletID()},
             {"opId", OperationId},
             {"path", workingDir},

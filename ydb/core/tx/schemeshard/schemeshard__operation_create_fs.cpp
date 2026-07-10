@@ -286,7 +286,7 @@ THolder<TProposeResponse> TCreateFileStore::Propose(
     const TString& name = Transaction.GetCreateFileStore().GetName();
     const ui64 shardsToCreate = 1;
 
-    YDB_LOG_NOTICE_CTX(context.Ctx, "TCreateFileStore Propose ",
+    YDB_LOG_NOTICE_CTX(context.Ctx, "TCreateFileStore Propose",
         {"path", parentPathStr},
         {"name", name},
         {"opId", OperationId},

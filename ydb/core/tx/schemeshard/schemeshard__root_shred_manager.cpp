@@ -5,6 +5,8 @@
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
+
 namespace NKikimr::NSchemeShard {
 
 TRootShredManager::TStarter::TStarter(TRootShredManager* const manager)
@@ -91,6 +93,7 @@ void TRootShredManager::StartShred(NIceDb::TNiceDb& db) {
     const auto ctx = SchemeShard->ActorContext();
     ++Generation;
     ++BscGeneration;
+    CleanupOldGenerationsOnShred(db);
     Queue->Clear();
     ActivePipes.clear();
     for (const auto& [pathId, status] : WaitingShredTenants) {
@@ -173,7 +176,7 @@ NOperationQueue::EStartStatus TRootShredManager::StartShredOperation(const TPath
     auto ctx = SchemeShard->ActorContext();
     auto it = SchemeShard->SubDomains.find(pathId);
     if (it == SchemeShard->SubDomains.end()) {
-        YDB_LOG_WARN_CTX(ctx, "[RootShredManager] [Start] Failed to resolve subdomain info for",
+        YDB_LOG_WARN_CTX(ctx, "[RootShredManager] [Start] Failed to resolve subdomain info",
             {"pathId", pathId},
             {"schemeshard", SchemeShard->TabletID()});
         return NOperationQueue::EStartStatus::EOperationRemove;
@@ -207,7 +210,7 @@ void TRootShredManager::HandleDisconnect(TTabletId tabletId, const TActorId& cli
     if (it == ActivePipes.end() || it->second != clientId) {
         return;
     }
-    YDB_LOG_INFO_CTX(ctx, "[RootShredManager] [Disconnect] Shred disconnect to",
+    YDB_LOG_INFO_CTX(ctx, "[RootShredManager] [Disconnect] Shred disconnect",
         {"tablet", tabletId},
         {"schemeshard", SchemeShard->TabletID()});
     ActivePipes.erase(pathId);
@@ -307,8 +310,10 @@ bool TRootShredManager::Restore(NIceDb::TNiceDb& db) {
         } else {
             Generation = 0;
             Status = EShredStatus::UNSPECIFIED;
+            TVector<ui64> generationsToCleanup;
             while (!rowset.EndOfSet()) {
                 ui64 generation = rowset.GetValue<Schema::ShredGenerations::Generation>();
+                generationsToCleanup.push_back(generation);
                 if (generation >= Generation) {
                     Generation = generation;
                     BscGeneration = Generation;
@@ -319,6 +324,9 @@ bool TRootShredManager::Restore(NIceDb::TNiceDb& db) {
                     return false;
                 }
             }
+            // Max generation should not be removed.
+            std::erase(generationsToCleanup, Generation);
+
             if (Status == EShredStatus::UNSPECIFIED || Status == EShredStatus::COMPLETED) {
                 auto ctx = SchemeShard->ActorContext();
                 TDuration interval = AppData(ctx)->TimeProvider->Now() - StartTime;
@@ -328,6 +336,8 @@ bool TRootShredManager::Restore(NIceDb::TNiceDb& db) {
                     CurrentWakeupInterval = ShredInterval - interval;
                 }
             }
+
+            CleanupOldGenerationsOnRestore(db, generationsToCleanup);
         }
     }
     {
@@ -393,6 +403,33 @@ TRootShredManager::TQueue::TConfig TRootShredManager::ConvertConfig(const NKikim
     queueConfig.InflightLimit = config.GetInflightLimit();
     queueConfig.Timeout = TDuration::Zero(); // unlimited
     return queueConfig;
+}
+
+void TRootShredManager::CleanupOldGenerationsOnRestore(NIceDb::TNiceDb& db, const TVector<ui64>& generationsToCleanup) {
+    auto ctx = SchemeShard->ActorContext();
+
+    for (ui64 generation : generationsToCleanup) {
+        if (generation >= Generation) {
+            // This should never occur because of the way the collection is initialized. Nevertheless, throwing
+            // an assertion from non-core logic—which includes the obsolete record shredding mechanism—is risky,
+            // so only a warning is output.
+            YDB_LOG_WARN_CTX(ctx, "[RootShredManager] Restore: Invalid element in >= current shredding generation Element will be skipped. This should never occur",
+                {"collection", generation},
+                {"generation", Generation});
+        } else {
+            db.Table<Schema::ShredGenerations>().Key(generation).Delete();
+        }
+    }
+}
+
+void TRootShredManager::CleanupOldGenerationsOnShred(NIceDb::TNiceDb& db) {
+    if (Generation >= 2) {
+        // Generation - 2 is used in order not to remove record with max Generation that might be used within TRootShredManager::Restore
+        // to restore Generation property. Despite the fact that both removal and further update is performed within same transaction and thus
+        // there's no chance of a data loss in case of (Generation -1) removal and SchemaShard death after removal but before updating
+        // Schema::ShredGenerations with new value (Generation -2) is used for greater robustness.
+        db.Table<Schema::ShredGenerations>().Key(Generation - 2).Delete();
+    }
 }
 
 struct TSchemeShard::TTxShredManagerInit : public TSchemeShard::TRwTxBase {
@@ -575,3 +612,4 @@ NTabletFlatExecutor::ITransaction* TSchemeShard::CreateTxCompleteShredBSC(TEvBlo
 }
 
 } // NKikimr::NSchemeShard
+

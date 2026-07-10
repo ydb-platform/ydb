@@ -147,7 +147,7 @@ protected:
             return true;
         }
 
-        YDB_LOG_ERROR("Error at",
+        YDB_LOG_ERROR("Error",
             {"marker", marker},
             {"self", this->SelfId()},
             {"error", result});

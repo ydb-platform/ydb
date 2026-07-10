@@ -415,7 +415,7 @@ public:
         auto ssId = context.SS->SelfTabletId();
         auto tabletId = TTabletId(ev->Get()->Record.GetTabletId());
 
-        YDB_LOG_INFO_CTX(context.Ctx, "HandleReply TEvSplitPartitioningChangedAck from",
+        YDB_LOG_INFO_CTX(context.Ctx, "HandleReply TEvSplitPartitioningChangedAck",
             {"debugHint", DebugHint()},
             {"datashard", tabletId},
             {"schemeshard", ssId});

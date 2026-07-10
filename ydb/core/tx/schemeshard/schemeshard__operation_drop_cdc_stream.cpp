@@ -113,7 +113,7 @@ public:
         const auto& op = Transaction.GetDrop();
         const auto& streamName = op.GetName();
 
-        YDB_LOG_NOTICE_CTX(context.Ctx, "TDropCdcStream Propose ",
+        YDB_LOG_NOTICE_CTX(context.Ctx, "TDropCdcStream Propose",
             {"#_context.SS->TabletID", context.SS->TabletID()},
             {"opId", OperationId},
             {"stream", workingDir},
@@ -356,7 +356,7 @@ public:
         const auto& op = Transaction.GetDropCdcStream();
         const auto& tableName = op.GetTableName();
 
-        YDB_LOG_NOTICE_CTX(context.Ctx, "TDropCdcStreamAtTable Propose ",
+        YDB_LOG_NOTICE_CTX(context.Ctx, "TDropCdcStreamAtTable Propose",
             {"#_context.SS->TabletID", context.SS->TabletID()},
             {"opId", OperationId},
             {"table", workingDir},

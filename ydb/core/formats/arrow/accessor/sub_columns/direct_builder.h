@@ -201,7 +201,7 @@ public:
         return builder.Finish();
     }
 
-    TOthersData MergeOthers(const std::vector<TColumnElements*>& otherKeys, const ui32 recordsCount) const;
+    TOthersData MergeOthers(const std::vector<TColumnElements*>& otherKeys) const;
 
     std::shared_ptr<TSubColumnsArray> Finish();
 };

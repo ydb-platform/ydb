@@ -91,7 +91,7 @@ std::shared_ptr<TSubColumnsArray> TDataBuilder::Finish() {
     };
     std::sort(columnElements.begin(), columnElements.end(), predSortElements);
     std::sort(otherElements.begin(), otherElements.end(), predSortElements);
-    TDictStats columnStats = BuildStats(columnElements, CurrentRecordIndex, true);
+    TDictStats columnStats = BuildStats(columnElements, Settings, true);
     {
         ui32 columnIdx = 0;
         for (auto&& i : columnElements) {
@@ -117,7 +117,7 @@ std::shared_ptr<TSubColumnsArray> TDataBuilder::Finish() {
         }
     }
 
-    TOthersData rbOthers = MergeOthers(otherElements, CurrentRecordIndex);
+    TOthersData rbOthers = MergeOthers(otherElements);
 
     auto records = std::make_shared<TGeneralContainer>(CurrentRecordIndex);
     for (size_t idx = 0; idx < columnElements.size(); ++idx) {
@@ -127,7 +127,7 @@ std::shared_ptr<TSubColumnsArray> TDataBuilder::Finish() {
     return std::make_shared<TSubColumnsArray>(std::move(cData), std::move(rbOthers), Type, CurrentRecordIndex, Settings);
 }
 
-TOthersData TDataBuilder::MergeOthers(const std::vector<TColumnElements*>& otherKeys, const ui32 recordsCount) const {
+TOthersData TDataBuilder::MergeOthers(const std::vector<TColumnElements*>& otherKeys) const {
     std::vector<THeapElements> heap;
     ui32 idx = 0;
     for (auto&& i : otherKeys) {
@@ -149,7 +149,7 @@ TOthersData TDataBuilder::MergeOthers(const std::vector<TColumnElements*>& other
             std::push_heap(heap.begin(), heap.end());
         }
     }
-    return othersBuilder->Finish(TOthersData::TFinishContext(BuildStats(otherKeys, recordsCount, false)));
+    return othersBuilder->Finish(TOthersData::TFinishContext(BuildStats(otherKeys, Settings, false)));
 }
 
 std::string BuildString(const TStringBuf currentPrefix, const TStringBuf key) {

@@ -985,7 +985,7 @@ struct TEvTablet {
     struct TEvMoveData : TEventPB<TEvMoveData, NKikimrTabletBase::TEvMoveData, EvMoveData> {
         TEvMoveData() = default;
 
-        TEvMoveData(const std::vector<ui32>& groups) {
+        explicit TEvMoveData(const std::vector<ui32>& groups) {
             Record.MutableGroups()->Assign(groups.begin(), groups.end());
         }
     };

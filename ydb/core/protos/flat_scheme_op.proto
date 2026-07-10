@@ -474,6 +474,10 @@ message TTableDescription {
     optional TTableDetailedMetricsSettings DetailedMetricsSettings = 51;
 
     reserved 52;
+
+    // Multi-column statistics.
+    repeated TMultiColumnStatisticsDescription MultiColumnStatistics = 53;
+    repeated string DropMultiColumnStatistics = 54;
 }
 
 message TCompressionOptions {
@@ -658,6 +662,19 @@ message TOlapIndexDescription {
     }
 }
 
+enum EMultiColumnStatisticsType {
+    MULTI_COLUMN_STATISTICS_UNSPECIFIED = 0;
+    COUNT_MIN_SKETCH = 1;
+}
+
+// Multi-column table statistics
+message TMultiColumnStatisticsDescription {
+    optional string Name = 1;
+    repeated string ColumnNames = 2;
+    repeated uint32 ColumnIds = 3;
+    repeated EMultiColumnStatisticsType Types = 4;
+}
+
 enum EColumnTableEngine {
     COLUMN_ENGINE_NONE = 0;
     COLUMN_ENGINE_REPLACING_TIMESERIES = 1;
@@ -687,6 +704,8 @@ message TCompactionLevelConstructorContainer {
         optional uint64 Concurrency = 6;
         optional uint64 CompactionTaskMemoryLimit = 7;
         optional uint64 CompactionTaskPortionsCountLimit = 8;
+        optional bool CompactAtLevel = 9 [default = false];
+        optional uint64 SkipLevelMinBlobSize = 10;
     }
 
     message TOneLayer {
@@ -777,11 +796,17 @@ message TMetadataManagerConstructorContainer {
     }
 }
 
+message TInsertOptions {
+    optional bool BuildIndexesEnabled = 1 [default = false];
+    optional uint64 BuildIndexesMinBlobBytes = 2 [default = 0];
+}
+
 message TColumnTableSchemeOptions {
     optional bool SchemeNeedActualization = 1 [default = false];
     optional TCompactionPlannerConstructorContainer CompactionPlannerConstructor = 3;
     optional TMetadataManagerConstructorContainer MetadataManagerConstructor = 4;
     optional string ScanReaderPolicyName = 5;
+    optional TInsertOptions InsertOptions = 6;
 }
 
 message TColumnTableSchema {
@@ -827,6 +852,7 @@ message TColumnTableRequestedOptions {
     optional TCompactionPlannerConstructorContainer CompactionPlannerConstructor = 3;
     optional TMetadataManagerConstructorContainer MetadataManagerConstructor = 4;
     optional string ScanReaderPolicyName = 5;
+    optional TInsertOptions InsertOptions = 6;
 }
 
 message TAlterColumnTableSchema {
@@ -1081,6 +1107,8 @@ message TColumnTableDescription {
     optional string CopyFromTable = 16;
 
     optional bool IsBackup = 17;
+
+    repeated TMultiColumnStatisticsDescription MultiColumnStatistics = 18;
 }
 
 message TAlterColumnTable {
@@ -1094,6 +1122,9 @@ message TAlterColumnTable {
 
     optional TAlterShards AlterShards = 6;
     optional TReshardColumnTable ReshardColumnTable = 7;
+
+    repeated TMultiColumnStatisticsDescription UpsertMultiColumnStatistics = 8;
+    repeated string DropMultiColumnStatistics = 9;
 }
 
 message TReshardColumnTable {
@@ -1104,7 +1135,7 @@ message TLoginCreateUser {
     optional string User = 1;
     optional string Password = 2 [(Ydb.sensitive) = true];
     optional bool CanLogin = 3 [default = true];
-    optional bool IsHashedPassword = 4 [default = false, deprecated = true];
+    reserved 4; reserved "IsHashedPassword";
     optional string HashedPassword = 5 [(Ydb.sensitive) = true];
 }
 
@@ -1112,7 +1143,7 @@ message TLoginModifyUser {
     optional string User = 1;
     optional string Password = 2 [(Ydb.sensitive) = true];
     optional bool CanLogin = 3;
-    optional bool IsHashedPassword = 4 [default = false, deprecated = true];
+    reserved 4; reserved "IsHashedPassword";
     optional string HashedPassword = 5 [(Ydb.sensitive) = true];
 }
 

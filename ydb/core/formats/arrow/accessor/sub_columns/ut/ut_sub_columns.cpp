@@ -1,7 +1,10 @@
+#include <ydb/core/formats/arrow/accessor/common/chunk_data.h>
 #include <ydb/core/formats/arrow/accessor/plain/accessor.h>
 #include <ydb/core/formats/arrow/accessor/sub_columns/accessor.h>
+#include <ydb/core/formats/arrow/accessor/sub_columns/constructor.h>
 #include <ydb/core/formats/arrow/accessor/sub_columns/data_extractor.h>
 #include <ydb/core/formats/arrow/accessor/sub_columns/json_value_path.h>
+#include <ydb/core/formats/arrow/serializer/abstract.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 #include <yql/essentials/types/binary_json/read.h>
@@ -122,6 +125,48 @@ Y_UNIT_TEST_SUITE(SubColumnsArrayAccessor) {
                 }
             }
         }
+    }
+
+    Y_UNIT_TEST(DictionaryColumns) {
+        using namespace NKikimr::NArrow::NAccessor::NSubColumns;
+        // dictionaryKff = 2: a separated column is dictionary-encoded when
+        // distinct * 2 <= usageCount. othersFraction = 0 => everything separated.
+        NSubColumns::TSettings settings(4, 1024, 0, 0, TDataAdapterContainer::GetDefault(), /*dictionaryKff*/ 2);
+
+        std::vector<TString> jsons;
+        for (ui32 i = 0; i < 40; ++i) {
+            // "c" repeats over 2 distinct values -> dictionary; "a" is all distinct -> plain.
+            jsons.push_back(TStringBuilder() << R"({"a":")" << i << R"(","c":")" << (i % 2 ? "xxxx" : "yyyy") << R"("})");
+        }
+
+        TTrivialArray::TPlainBuilder<arrow::BinaryType> arrBuilder;
+        ui32 idx = 0;
+        for (auto&& i : jsons) {
+            auto v = NBinaryJson::SerializeToBinaryJson(i);
+            NBinaryJson::TBinaryJson* bJson = std::get_if<NBinaryJson::TBinaryJson>(&v);
+            UNIT_ASSERT(bJson);
+            arrBuilder.AddRecord(idx++, std::string_view(bJson->data(), bJson->size()));
+        }
+        auto bJsonArr = arrBuilder.Finish(jsons.size());
+        auto arrData = TSubColumnsArray::Make(bJsonArr, settings, bJsonArr->GetDataType()).DetachResult();
+
+        // At least one separated column ("c") must be dictionary-encoded.
+        const auto& cstats = arrData->GetColumnsData().GetStats();
+        bool anyDict = false;
+        for (ui32 i = 0; i < cstats.GetColumnsCount(); ++i) {
+            anyDict |= (cstats.GetAccessorType(i) == IChunkedArray::EType::Dictionary);
+        }
+        UNIT_ASSERT_C(anyDict, "expected at least one dictionary column: " + arrData->DebugJson().GetStringRobust());
+
+        const TString original = PrintBinaryJsons(arrData->GetChunkedArray());
+
+        // Full serialize -> deserialize round-trip must reconstruct identical values.
+        auto serializer = NSerialization::TSerializerContainer::GetDefaultSerializer();
+        TChunkConstructionData cData(arrData->GetRecordsCount(), nullptr, arrow::binary(), serializer);
+        const TString blob = arrData->SerializeToString(cData);
+        NSubColumns::TConstructor constructor(settings);
+        auto restored = constructor.DeserializeFromString(blob, cData).DetachResult();
+        UNIT_ASSERT_VALUES_EQUAL(PrintBinaryJsons(restored->GetChunkedArray()), original);
     }
 
     Y_UNIT_TEST(FiltersDef) {

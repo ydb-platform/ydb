@@ -20,7 +20,6 @@ enum class ETopicSqsCountersBackend {
 struct TTopicSqsActionCounters {
     ::NMonitoring::TDynamicCounters::TCounterPtr Success;
     ::NMonitoring::TDynamicCounters::TCounterPtr Errors;
-    ::NMonitoring::TDynamicCounters::TCounterPtr Infly;
     ::NMonitoring::THistogramPtr Duration;
     ::NMonitoring::THistogramPtr WorkingDuration;
 };
@@ -33,10 +32,6 @@ struct TTopicYmqActionCounters {
 };
 
 struct TTopicQueueLeaderCounters {
-    ::NMonitoring::TDynamicCounters::TCounterPtr RequestsThrottled;
-    ::NMonitoring::TDynamicCounters::TCounterPtr QueueMasterStartProblems;
-    ::NMonitoring::TDynamicCounters::TCounterPtr QueueLeaderStartProblems;
-
     ::NMonitoring::TDynamicCounters::TCounterPtr MessagesPurged;
     ::NMonitoring::THistogramPtr MessageReceiveAttempts;
     ::NMonitoring::THistogramPtr ClientMessageProcessing_Duration;
@@ -57,7 +52,6 @@ struct TTopicQueueLeaderCounters {
     ::NMonitoring::TDynamicCounters::TCounterPtr InflyMessagesCount;
     ::NMonitoring::TDynamicCounters::TCounterPtr OldestMessageAgeSeconds;
 
-    ::NMonitoring::TDynamicCounters::TCounterPtr ReceiveMessage_KeysInvalidated;
     ::NMonitoring::THistogramPtr ReceiveMessageImmediate_Duration;
 
     THashMap<TString, TTopicSqsActionCounters> SqsActionCounters;

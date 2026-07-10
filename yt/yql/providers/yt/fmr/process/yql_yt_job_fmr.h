@@ -135,10 +135,21 @@ protected:
     }
 
 private:
-    void FillQueueFromSingleInputTable(ui64 tableIndex);
+    void FillQueueFromSingleInputTable(ui64 tableIndex, bool needsTableIndexMarking);
     void FillQueueFromInputTablesUnordered();
     void FillQueueFromInputTablesOrdered();
     void FillQueueFromReduceInput();
+
+    // Per-reader original input positions (TYtTableRef::TableIndex / TFmrTableRef::TableIndex) for a
+    // physical task-table-ref, in the same order GetTableInputStreams returns readers for it (one
+    // TYtTableTaskRef can bundle rows from several original input tables). This is what TableName()
+    // resolution and the table_index stream markers must use, since it's unique per original input
+    // position (unlike the operation's InputGroups/Group, which several distinct tables can share).
+    std::vector<ui32> GetTableIndicesForInput(const TTaskTableRef& tableRef) const;
+    // True only if InputTables_ actually spans more than one original input position: a single input
+    // always decodes fine against the decoder's default TableIndex_ (0), so tagging rows would be
+    // pure overhead.
+    bool NeedsTableIndexMarking() const;
 
     void InitializeFmrUserJob(TVector<TString>* mapperBlobs = nullptr);
 

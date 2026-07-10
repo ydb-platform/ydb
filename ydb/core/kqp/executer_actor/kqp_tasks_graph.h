@@ -1,7 +1,8 @@
 #pragma once
 
-#include "max_tasks_graph.h"
 #include "shard_key_ranges.h"
+
+#include <memory>
 
 #include <ydb/core/kqp/common/kqp_user_request_context.h>
 #include <ydb/core/kqp/common/kqp_yql.h>
@@ -19,7 +20,19 @@ namespace NKikimrKqp {
 
 namespace NKikimr::NKqp {
 
+class TMaxTasksGraph;
 struct TQueryExecutionStats;
+
+struct TPlacementParams {
+    ui64 ExecuterNodeId = 0;                     // 0 == no local-node context: skip the local-node/DC heuristics.
+    ui64 LocalMemory = 0;                        // executer node free memory (RM GetLocalResources) - for the "fits locally" test.
+    ui32 LocalExecutionUnits = 0;                // executer node available compute actors.
+    ui64 MaxNonParallelTasksExecutionLimit = 8;  // scan/default single-node threshold.
+    ui64 MaxNonParallelDataQueryTasksLimit = 1000; // data-query single-node threshold (when MayRunTasksLocally).
+    ui64 MaxNonParallelTopStageExecutionLimit = 1; // pin the top stage locally if it has no more tasks than this.
+    bool PreferLocalDatacenterExecution = true;
+    bool MayRunTasksLocally = false;
+};
 
 struct TColumnShardHashV1Params {
     ui64 SourceShardCount = 0;
@@ -313,22 +326,9 @@ struct TTaskOutputMeta {
 };
 
 struct TTaskMeta {
-    // For data executer (unresolved shards case):
-    // - ShardId is set in case we don't know NodeId, later we gather all ShardId tasks (without writes) into RemoteTasks,
-    //   set inside ScanTasksFromSource only.
-    // - NodeId is set if it's local node id, otherwise set ShardId
-
-    enum ETaskType : ui32 {
-        Unknown = 0,
-        Compute = 1,
-        Scan = 2,
-    };
-
-    ui64 ShardId = 0; // only in case of non-scans (data-query & legacy scans)
-    ui64 NodeId = 0;  // only in case of scans over persistent snapshots
+    std::optional<ui64> ExpectedNodeId;
     bool ScanTask = false;
     TActorId ExecuterId;
-    ETaskType Type = Unknown;
 
     TActorId ResultChannelActorId;
     bool Completed = false;
@@ -394,12 +394,13 @@ public:
         const TKqpRequestCounters::TPtr& counters,
         TActorId bufferActorId,
         TIntrusiveConstPtr<NACLib::TUserToken> userToken,
-        bool shrinkTasks
+        bool useKqpTasksGraphV2
     );
+    ~TKqpTasksGraph();
 
     void ResolveShards(TGraphMeta::TShardToNodeMap&& shardsToNodes);
 
-    size_t BuildAllTasks(std::optional<TLlvmSettings> llvmSettings, const TVector<NKikimrKqp::TKqpNodeResources>& resourcesSnapshot, TQueryExecutionStats* stats);
+    size_t BuildAllTasks(std::optional<TLlvmSettings> llvmSettings, const TVector<NKikimrKqp::TKqpNodeResources>& resourcesSnapshot, TQueryExecutionStats* stats, const TPlacementParams& placementParams = {});
     void BuildLiteralTasks();
 
     NYql::NDqProto::TDqTask* ArenaSerializeTaskToProto(const TTask& task, bool serializeAsyncIoSettings);
@@ -416,13 +417,17 @@ public:
 private:
     void FillStages();
 
-    void CountScanTasksFromSource(const TStageInfo& stageInfo, bool limitTasksPerNode);
-    void CountFullTextScanTasksFromSource(const TStageInfo& stageInfo);
-    void CountSysViewTasksFromSource(const TStageInfo& stageInfo);
-    void CountReadTasksFromSource(const TStageInfo& stageInfo, size_t resourceSnapshotSize, ui32 scheduledTaskCount);
-    void CountSysViewScanTasks(const TStageInfo& stageInfo);
-    void CountComputeTasks(const TStageInfo& stageInfo, ui32 nodesCount);
-    void CountScanTasksFromShards(const TStageInfo& stageInfo, bool enableShuffleElimination);
+    // Groups the stage's already-placed tasks (stageInfo.Tasks) by their Meta.ExpectedNodeId. Used by Build* methods
+    // that fill tasks per node. Every task must already have ExpectedNodeId set (done by the placement pipeline).
+    THashMap<ui64, TVector<ui64>> GroupStageTasksByNode(const TStageInfo& stageInfo) const;
+
+    void CountScanTasksFromSource(TStageInfo& stageInfo, bool limitTasksPerNode);
+    void CountFullTextScanTasksFromSource(TStageInfo& stageInfo);
+    void CountSysViewTasksFromSource(TStageInfo& stageInfo);
+    void CountReadTasksFromSource(TStageInfo& stageInfo, size_t resourceSnapshotSize, ui32 scheduledTaskCount);
+    void CountSysViewScanTasks(TStageInfo& stageInfo);
+    void CountComputeTasks(TStageInfo& stageInfo, ui32 nodesCount);
+    void CountScanTasksFromShards(TStageInfo& stageInfo, bool enableShuffleElimination);
 
     TMaybe<size_t> BuildScanTasksFromSource(TStageInfo& stageInfo, TQueryExecutionStats* stats);
     void BuildFullTextScanTasksFromSource(TStageInfo& stageInfo, TQueryExecutionStats* stats);
@@ -471,6 +476,8 @@ private:
 
     void FillSecureParamsFromStage(THashMap<TString, TString>& secureParams, const NKqpProto::TKqpPhyStage& stage) const;
 
+    bool StageNeedsLocalPlacement(const NKqpProto::TKqpPhyStage& stage, const TStageInfo& stageInfo) const;
+
     void BuildExternalSinks(const NKqpProto::TKqpSink& sink, TKqpTasksGraph::TTaskType& task) const;
     void BuildInternalSinks(const NKqpProto::TKqpSink& sink, const TStageInfo& stageInfo, const std::vector<std::pair<ui64, i64>>& internalSinksOrder, TKqpTasksGraph::TTaskType& task) const;
     void BuildInternalOutputTransform(const NKqpProto::TKqpOutputTransform& transform, const TStageInfo& stageInfo, const std::vector<std::pair<ui64, i64>>& internalSinksOrder, TKqpTasksGraph::TTaskType& task) const;
@@ -487,8 +494,8 @@ private:
     TKqpRequestCounters::TPtr Counters;
     TActorId BufferActorId; // TODO: not sure if it belongs here
     const TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
-    TMaxTasksGraph MaxTasksGraph;
-    const bool ShrinkTasks;
+    std::unique_ptr<TMaxTasksGraph> MaxTasksGraph;
+    const bool UseKqpTasksGraphV2;
 };
 
 } // namespace NKikimr::NKqp

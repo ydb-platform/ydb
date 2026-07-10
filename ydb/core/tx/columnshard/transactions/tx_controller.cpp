@@ -112,9 +112,7 @@ bool TTxController::Load(NTabletFlatExecutor::TTransactionContext& txc) {
 std::shared_ptr<TTxController::ITransactionOperator> TTxController::UpdateTxSourceInfo(
     const TFullTxInfo& tx, NTabletFlatExecutor::TTransactionContext& txc) {
     auto op = GetTxOperator(tx.GetTxId(), ETxOperatorStatus::InProgress);
-    const bool sourceChanged = op->GetTxInfo().Source != tx.Source;
-    op->ResetStatusOnUpdate(sourceChanged);
-
+    op->ResetStatusOnUpdate();
     auto& txInfo = op->MutableTxInfo();
     txInfo.Source = tx.Source;
     txInfo.MinStep = tx.MinStep;
@@ -489,11 +487,8 @@ void TTxController::FinishProposeOnComplete(ITransactionOperator& txOperator, co
         {"event", "start"},
         {"txInfo", txOperator.GetTxInfo().DebugString()});
     AFL_VERIFY(!txOperator.IsFail());
-    const bool shouldSendReply = txOperator.ShouldSendReplyOnComplete();
     txOperator.FinishProposeOnComplete(Owner, ctx);
-    if (shouldSendReply) {
-        txOperator.SendReply(Owner, ctx);
-    }
+    txOperator.SendReply(Owner, ctx);
     Counters.OnFinishProposeOnComplete(txOperator.GetOpType());
 }
 

@@ -335,6 +335,7 @@ message TFeatureFlags {
     optional bool EnableFulltextIndexRowId = 289 [default = true];
     optional bool EnableForcedColumnCompactions = 290 [default = false];
     optional bool EnableExportFiltering = 291 [default = false];
+    optional bool EnableNodeBrokerLongLease = 292 [default = false];
     // For test purposes only, may cause persistent system failure if enabled
-    optional bool BsControllerRestartBeforeCompatibilityInfoUpdate = 292 [default = false];
+    optional bool BsControllerRestartBeforeCompatibilityInfoUpdate = 293 [default = false];
 }

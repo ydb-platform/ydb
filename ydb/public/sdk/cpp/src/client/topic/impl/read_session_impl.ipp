@@ -3657,9 +3657,15 @@ void TDeferredActions<UseMigrationProtocol>::DeferScheduleCallback(TDuration del
 }
 
 template<bool UseMigrationProtocol>
-void TDeferredActions<UseMigrationProtocol>::DeferCallback(std::function<void()> callback) {
+void TDeferredActions<UseMigrationProtocol>::DeferCallback(
+    std::function<void()> callback,
+    NYdbGrpc::TQueueClientCallbackGuardFactory callbackGuardFactory)
+{
     Y_ASSERT(!DirectReadActions.Callback);
-    DirectReadActions.Callback = std::move(callback);
+    DirectReadActions.Callback = typename TDirectReadDeferredActions::TCallback{
+        std::move(callback),
+        std::move(callbackGuardFactory)
+    };
 }
 
 template<bool UseMigrationProtocol>
@@ -3789,7 +3795,9 @@ template<bool UseMigrationProtocol>
 void TDeferredActions<UseMigrationProtocol>::DirectReadCallback() {
     auto& callback = DirectReadActions.Callback;
     if (callback) {
-        (*callback)();
+        NYdbGrpc::RunQueueClientCallback(callback->CallbackGuardFactory, [&] {
+            callback->Callback();
+        });
     }
 }
 

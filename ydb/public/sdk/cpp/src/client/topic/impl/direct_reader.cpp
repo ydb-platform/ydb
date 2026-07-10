@@ -588,7 +588,8 @@ void TDirectReadSession::OnReadDone(NYdbGrpc::TGrpcStatus&& grpcStatus, size_t c
                 cbContext = SelfContext, partitionSessionId = partitionSessionId.value()
             ]() {
                 callbacks->OnDirectReadDone(messages);
-            }
+            },
+            ClientContext->GetCallbackGuardFactory()
         );
     }
 

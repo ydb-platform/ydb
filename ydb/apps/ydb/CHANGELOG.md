@@ -1,3 +1,4 @@
+* Exposed the `ydb workload testshard` command for creating and managing TestShard tablets for storage load testing.
 
 ## 2.33.0 ##
 

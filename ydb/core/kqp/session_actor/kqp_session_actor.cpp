@@ -771,7 +771,11 @@ public:
             return;
         }
 
-        QueryState->FillTopicOperations();
+        if (QueryState->HasDeferredPublication()) {
+            QueryState->FillDeferredPublicationOperations();
+        } else {
+            QueryState->FillTopicOperations();
+        }
 
         if (!AreAllTheTopicsAndPartitionsKnown()) {
             auto navigate = QueryState->BuildSchemeCacheNavigate();
@@ -785,7 +789,8 @@ public:
             ythrow TRequestFail(Ydb::StatusIds::BAD_REQUEST) << message;
         }
 
-        if (HasTopicWriteOperations() && !HasTopicApiWriteOperations() && !HasKafkaApiWriteOperations()) {
+        if (HasTopicWriteOperations() && !HasTopicApiWriteOperations() && !HasKafkaApiWriteOperations()
+            && !HasDeferredPublicationOperations()) {
             Become(&TKqpSessionActor::ExecuteState);
             Send(MakeTxProxyID(), new TEvTxUserProxy::TEvAllocateTxId, 0, QueryState->QueryId);
             return;
@@ -3942,7 +3947,8 @@ private:
 
         QueryState->TxCtx->TopicOperations.CacheSchemeCacheNavigate(response->ResultSet);
 
-        if (HasTopicWriteOperations() && !HasTopicApiWriteOperations() && !HasKafkaApiWriteOperations()) {
+        if (HasTopicWriteOperations() && !HasTopicApiWriteOperations() && !HasKafkaApiWriteOperations()
+            && !HasDeferredPublicationOperations()) {
             Send(MakeTxProxyID(), new TEvTxUserProxy::TEvAllocateTxId, 0, QueryState->QueryId);
             return;
         }
@@ -3973,6 +3979,10 @@ private:
 
     bool HasTopicApiWriteOperations() const {
         return QueryState->TxCtx->TopicOperations.HasWriteId();
+    }
+
+    bool HasDeferredPublicationOperations() const {
+        return QueryState->TxCtx->TopicOperations.HasDeferredPublicationOperations();
     }
 
     ui64 GetTopicWriteId() const {

@@ -44,6 +44,11 @@ struct TWriteId {
         return Proto.Id_case() == NKikimrPQ::TWriteId::kKafkaApi;
     }
 
+    bool IsDeferredPublicationApiTransaction() const
+    {
+        return Proto.Id_case() == NKikimrPQ::TWriteId::kDeferredPublicationApi;
+    }
+
     // Precondition: IsTopicApiTransaction(). Otherwise returns default proto values (0).
     ui64 GetNodeId() const
     {

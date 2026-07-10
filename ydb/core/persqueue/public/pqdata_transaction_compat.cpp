@@ -47,6 +47,14 @@ bool HasLegacy(const NKikimrPQ::TWriteId& writeId)
         || writeId.HasNodeId() || writeId.HasKeyId();
 }
 
+void ClearLegacyWriteIdFields(NKikimrPQ::TWriteId& writeId)
+{
+    writeId.ClearNodeId();
+    writeId.ClearKeyId();
+    writeId.SetKafkaTransaction(false);
+    writeId.ClearKafkaProducerInstanceId();
+}
+
 void ClearLegacyPartitionOpFields(NKikimrPQ::TPartitionOperation& op)
 {
     op.ClearCommitOffsetsBegin();
@@ -109,6 +117,15 @@ void DowngradeKafkaWriteToLegacy(
     CopyKafkaProducerInstanceId(
         write.GetKafka().GetKafkaProducerInstanceId(),
         op.MutableKafkaProducerInstanceId());
+}
+
+void DowngradeDeferredPublicationWriteToLegacy(
+    const NKikimrPQ::TPartitionOperation::TWriteOp& write,
+    NKikimrPQ::TPartitionOperation& op)
+{
+    // Legacy wire has no deferred-publication API; keep only SkipConflictCheck in sync with canonical write.
+    ClearLegacyPartitionOpFields(op);
+    op.SetSkipConflictCheck(write.GetSkipConflictCheck());
 }
 
 bool HasLegacyPartitionOp(const NKikimrPQ::TPartitionOperation& op)
@@ -189,6 +206,9 @@ void DowngradeToLegacy(NKikimrPQ::TWriteId& writeId)
         case NKikimrPQ::TWriteId::kKafkaApi:
             DowngradeKafkaApiToLegacy(writeId.GetKafkaApi(), writeId);
             break;
+        case NKikimrPQ::TWriteId::kDeferredPublicationApi:
+            ClearLegacyWriteIdFields(writeId);
+            break;
         case NKikimrPQ::TWriteId::ID_NOT_SET:
             break;
     }
@@ -230,6 +250,9 @@ void DowngradeToLegacy(NKikimrPQ::TPartitionOperation& op)
                     break;
                 case NKikimrPQ::TPartitionOperation::TWriteOp::kKafka:
                     DowngradeKafkaWriteToLegacy(op.GetWrite(), op);
+                    break;
+                case NKikimrPQ::TPartitionOperation::TWriteOp::kDeferredPublication:
+                    DowngradeDeferredPublicationWriteToLegacy(op.GetWrite(), op);
                     break;
                 case NKikimrPQ::TPartitionOperation::TWriteOp::API_NOT_SET:
                     ClearLegacyPartitionOpFields(op);

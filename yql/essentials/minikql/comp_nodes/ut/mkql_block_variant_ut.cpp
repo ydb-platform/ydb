@@ -198,7 +198,7 @@ std::shared_ptr<arrow::ArrayData> DoSerializerRoundtrip(
     deserializer->LoadMetadata([&]() -> ui64 { return metadata[metaIdx++]; });
     auto restored = deserializer->LoadArray(buffer, blockLen, TMaybe<size_t>(0));
 
-    ValidateDatum(restored, Nothing(), blockType, NYql::EDatumValidationMode::Expensive);
+    TBlockHelper().ValidateDatum(restored, Nothing(), blockType);
     UNIT_ASSERT_VALUES_EQUAL(restored->length, arrayData->length);
     return restored;
 }
@@ -296,6 +296,7 @@ Y_UNIT_TEST(TrimmerCompactsChildren) {
 
         auto sliced = NYql::NUdf::DeepSlice(*arrayData, static_cast<i64>(startOffset), static_cast<i64>(subsize));
         auto trimmed = MakeBlockTrimmer(TTypeInfoHelper(), itemType, arrow::default_memory_pool())->Trim(sliced);
+        helper.ValidateDatum(trimmed, Nothing(), blockType);
 
         auto reader = NYql::NUdf::MakeBlockReader(TTypeInfoHelper(), itemType);
         UNIT_ASSERT_VALUES_EQUAL(trimmed->length, subsize);
@@ -405,9 +406,8 @@ Y_UNIT_TEST(VariantRoundtripFuzzied) {
     using TVar = std::variant<ui32, ui64>;
     auto rng = CreateDeterministicRandomProvider(50);
     const TVector<TVar> input = GenerateRandomData<TVar>(rng, 7);
-    TBlockHelper().TestKernelFuzzied(
-        input, input,
-        [](TSetup<false>&, TRuntimeNode node) { return node; });
+    TBlockHelper().TestKernelFuzzied(input, input,
+                                     [](TSetup<false>&, TRuntimeNode node) { return node; });
 }
 
 Y_UNIT_TEST(OptionalVariantRoundtripFuzzied) {
@@ -415,9 +415,8 @@ Y_UNIT_TEST(OptionalVariantRoundtripFuzzied) {
     auto rng = CreateDeterministicRandomProvider(51);
     const TVector<TMaybe<TVar>> input =
         GenerateRandomData<TMaybe<TVar>>(rng, TGeneratorSettings<TMaybe<TVar>>{.NullProbability = 0.3}, 6);
-    TBlockHelper().TestKernelFuzzied(
-        input, input,
-        [](TSetup<false>&, TRuntimeNode node) { return node; });
+    TBlockHelper().TestKernelFuzzied(input, input,
+                                     [](TSetup<false>&, TRuntimeNode node) { return node; });
 }
 
 Y_UNIT_TEST(VariantStringUi32ChopRoundtrip) {
@@ -594,6 +593,7 @@ Y_UNIT_TEST(StructVariantScalarRoundtrip) {
     auto value = graph->GetValue();
 
     const auto& datum = TArrowBlock::From(value).GetDatum();
+    TBlockHelper().ValidateDatum(datum, Nothing(), blockType);
     UNIT_ASSERT(datum.is_scalar());
     UNIT_ASSERT_EQUAL(datum.type()->id(), arrow::Type::DENSE_UNION);
     const auto* vs = dynamic_cast<const NYql::NUdf::TDenseUnionScalar*>(datum.scalar().get());
@@ -693,6 +693,7 @@ Y_UNIT_TEST(SaveItemAndAddFromInputBuffer) {
             builder->Add(in);
         }
         auto datum = builder->Build(true);
+        helper.ValidateDatum(datum, Nothing(), blockType);
         auto resultData = datum.array();
         UNIT_ASSERT_VALUES_EQUAL(resultData->length, subsize);
         for (size_t i = 0; i < subsize; ++i) {
@@ -739,6 +740,7 @@ Y_UNIT_TEST(SaveScalarItemAndAddFromInputBuffer) {
     auto builder = NYql::NUdf::MakeArrayBuilder(TTypeInfoHelper(), itemType, *arrow::default_memory_pool(), 10, nullptr);
     builder->Add(in);
     auto resultDatum = builder->Build(true);
+    helper.ValidateDatum(resultDatum, Nothing(), blockType);
     auto resultData = resultDatum.array();
 
     UNIT_ASSERT_VALUES_EQUAL(resultData->length, 1);
@@ -761,6 +763,8 @@ Y_UNIT_TEST(BuilderAddDefault) {
     builder->AddDefault();
 
     auto datum = builder->Build(true);
+    helper.ValidateDatum(datum, Nothing(), blockType);
+
     auto resultData = datum.array();
 
     UNIT_ASSERT_VALUES_EQUAL(resultData->length, 2);
@@ -792,6 +796,7 @@ Y_UNIT_TEST(BuilderAddManyContiguous) {
         builder->AddMany(&item, 1, beginIndex, count);
 
         auto datum = builder->Build(true);
+        helper.ValidateDatum(datum, Nothing(), blockType);
         auto resultData = datum.array();
 
         UNIT_ASSERT_VALUES_EQUAL(resultData->length, count);
@@ -820,6 +825,7 @@ Y_UNIT_TEST(BuilderAddManySparseBitmap) {
         builder->AddMany(*sourceData, popCount, bitmap.data(), dataSize);
 
         auto datum = builder->Build(true);
+        helper.ValidateDatum(datum, Nothing(), blockType);
         auto resultData = datum.array();
 
         UNIT_ASSERT_VALUES_EQUAL(resultData->length, popCount);
@@ -851,6 +857,7 @@ Y_UNIT_TEST(BuilderAddManyIndexed) {
         builder->AddMany(&item, 1, indexes.data(), indexCount);
 
         auto datum = builder->Build(true);
+        helper.ValidateDatum(datum, Nothing(), blockType);
         auto resultData = datum.array();
 
         UNIT_ASSERT_VALUES_EQUAL(resultData->length, indexCount);
@@ -919,6 +926,7 @@ Y_UNIT_TEST(TrimmerAllSameAlternative) {
 
         auto sliced = NYql::NUdf::DeepSlice(*arrayData, 0, static_cast<i64>(data.size()));
         auto trimmed = MakeBlockTrimmer(TTypeInfoHelper(), itemType, arrow::default_memory_pool())->Trim(sliced);
+        helper.ValidateDatum(trimmed, Nothing(), blockType);
 
         UNIT_ASSERT_VALUES_EQUAL(trimmed->length, 3);
         UNIT_ASSERT_VALUES_EQUAL(trimmed->child_data[0]->length, 0);
@@ -942,6 +950,7 @@ Y_UNIT_TEST(TrimmerEmptySlice) {
 
         auto empty = NYql::NUdf::DeepSlice(*arrayData, 0, 0);
         auto trimmed = MakeBlockTrimmer(TTypeInfoHelper(), itemType, arrow::default_memory_pool())->Trim(empty);
+        helper.ValidateDatum(trimmed, Nothing(), blockType);
 
         UNIT_ASSERT_VALUES_EQUAL(trimmed->length, 0);
         UNIT_ASSERT_VALUES_EQUAL(trimmed->child_data[0]->length, 0);

@@ -1198,14 +1198,14 @@ void TResourceBrokerActor::Handle(TEvResourceBroker::TEvConfigure::TPtr &ev,
     auto &config = ev->Get()->Record;
     if (ev->Get()->Merge) {
         YDB_LOG_INFO_CTX(ctx, "New config",
-            {"diff", config});
+            {"diff", config.ShortDebugString()});
         auto current = ResourceBroker->GetConfig();
         MergeConfigUpdates(current, config);
         config.Swap(&current);
     }
 
     YDB_LOG_INFO_CTX(ctx, "New",
-        {"config", config});
+        {"config", config.ShortDebugString()});
 
     TSet<TString> queues;
     TSet<TString> tasks;
@@ -1248,7 +1248,7 @@ void TResourceBrokerActor::Handle(TEvResourceBroker::TEvConfigure::TPtr &ev,
     }
 
     YDB_LOG_CTX(ctx, success ? NActors::NLog::PRI_INFO : NActors::NLog::PRI_ERROR, "Configure",
-        {"result", response->Record});
+        {"result", response->Record.ShortDebugString()});
 
     auto newConfig = ResourceBroker->GetConfig();
     for (auto& queue : newConfig.GetQueues()) {

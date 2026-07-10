@@ -34,6 +34,7 @@ ydb/core/tx/schemeshard/ut_set_column_constraint_reboots unittest.[*/*] chunk
 ydb/library/actors/core/ut TestThreadContextQueueTimestamps.CurrentQueueTimestamps
 ydb/public/sdk/cpp/src/client/topic/ut/with_direct_read_ut Describe.DescribePartitionPermissions
 ydb/public/sdk/cpp/tests/integration/sessions YdbSdkSessions.CloseSessionWithSessionPoolFromDtors
+ydb/public/sdk/cpp/tests/integration/topic gtest.[*/*] chunk
 ydb/public/sdk/cpp/tests/integration/topic/with_direct_read gtest.[*/*] chunk
 ydb/services/cms/ut TGRpcCmsTest.RemoveWithAnotherTokenTest
 ydb/services/datastreams/ut DataStreams.TestGetRecords1MBMessagesOneByOneByTS

@@ -53,7 +53,7 @@
 #define Y_UNIT_TEST_QUAD(N, OPT1, OPT2) Y_UNIT_TEST_QUAD_IMPL(N, OPT1, OPT2, TCurrentTestCase)
 #define Y_UNIT_TEST_QUAD_F(N, OPT1, OPT2, F) Y_UNIT_TEST_QUAD_IMPL(N, OPT1, OPT2, F)
 
-#define Y_UNIT_TEST_OCTO_IMPL(N, OPT1, OPT2, OPT3, F)                                                                         \
+#define Y_UNIT_TEST_OCTET_IMPL(N, OPT1, OPT2, OPT3, F)                                                                        \
     template <bool OPT1, bool OPT2, bool OPT3>                                                                                \
     struct TTestCase##N : public F {                                                                                          \
         TString NameHolder_;                                                                                                  \
@@ -80,5 +80,5 @@
     template <bool OPT1, bool OPT2, bool OPT3>                                                                                \
     void TTestCase##N<OPT1, OPT2, OPT3>::Execute_(NUnitTest::TTestContext& ut_context Y_DECLARE_UNUSED)
 
-#define Y_UNIT_TEST_OCTO(N, OPT1, OPT2, OPT3) Y_UNIT_TEST_OCTO_IMPL(N, OPT1, OPT2, OPT3, TCurrentTestCase)
-#define Y_UNIT_TEST_OCTO_F(N, OPT1, OPT2, OPT3, F) Y_UNIT_TEST_OCTO_IMPL(N, OPT1, OPT2, OPT3, F)
+#define Y_UNIT_TEST_OCTET(N, OPT1, OPT2, OPT3) Y_UNIT_TEST_OCTET_IMPL(N, OPT1, OPT2, OPT3, TCurrentTestCase)
+#define Y_UNIT_TEST_OCTET_F(N, OPT1, OPT2, OPT3, F) Y_UNIT_TEST_OCTET_IMPL(N, OPT1, OPT2, OPT3, F)

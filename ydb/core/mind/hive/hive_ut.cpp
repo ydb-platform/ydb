@@ -2852,6 +2852,32 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         WaitForTabletIsUp(runtime, tabletId, 0, &pipeConfig);
     }
 
+    Y_UNIT_TEST(TestNodeDisconnectedButAlive) {
+        TTestBasicRuntime runtime(1, false);
+        Setup(runtime, true);
+        TActorId sender = runtime.AllocateEdgeActor();
+        const ui64 hiveTablet = MakeDefaultHiveID();
+        const ui64 testerTablet = MakeTabletID(false, 1);
+        CreateTestBootstrapper(runtime, CreateTestTabletInfo(hiveTablet, TTabletTypes::Hive), &CreateDefaultHive);
+
+        TTabletTypes::EType tabletType = TTabletTypes::Dummy;
+        THolder<TEvHive::TEvCreateTablet> ev(new TEvHive::TEvCreateTablet(testerTablet, 100500, tabletType, BINDED_CHANNELS));
+        ui64 tabletId = SendCreateTestTablet(runtime, hiveTablet, testerTablet, std::move(ev), 0, true);
+
+        NTabletPipe::TClientConfig pipeConfig;
+        pipeConfig.RetryPolicy = NTabletPipe::TClientRetryPolicy::WithRetries();
+        pipeConfig.ForceLocal = true;
+
+        WaitForTabletIsUp(runtime, tabletId, 0, &pipeConfig);
+
+        // Simulating a case where IC between hive and node breaks
+        // Hive has nowhere to start the tablet anyway, so it must not kill it
+        TBlockEvents<TEvLocal::TEvPing> blockReconnect(runtime);
+        runtime.SendToPipe(hiveTablet, sender, new TEvInterconnect::TEvNodeDisconnected(runtime.GetNodeId(0)));
+        runtime.WaitFor("process disconnect", [&] { return !blockReconnect.empty(); });
+        MakeSureTabletIsUp(runtime, tabletId, 0, &pipeConfig);
+    }
+
     Y_UNIT_TEST(TestLocalReplacement) {
         TTestBasicRuntime runtime(2, false);
         Setup(runtime, true);
@@ -7832,11 +7858,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
 
         // restart to kick tablet
         SendKillLocal(runtime, 0);
-        {
-            TDispatchOptions options;
-            options.FinalEvents.emplace_back(TEvLocal::EvStopTablet);
-            runtime.DispatchEvents(options);
-        }
+        MakeSureTabletIsDown(runtime, dummyTabletId, 0);
         CreateLocal(runtime, 0);
 
         MakeSureTabletIsUp(runtime, dummyTabletId, 0);
@@ -7857,11 +7879,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
 
         // restart to kick tablet
         SendKillLocal(runtime, 1);
-        {
-            TDispatchOptions options;
-            options.FinalEvents.emplace_back(TEvLocal::EvStopTablet);
-            runtime.DispatchEvents(options);
-        }
+        MakeSureTabletIsDown(runtime, dummyTabletId, 0);
         CreateLocalForTenant(runtime, 1, "/dc-1/tenant1");
 
         MakeSureTabletIsUp(runtime, dummyTabletId, 0);
@@ -7938,11 +7956,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
 
         // restart to kick tablet
         SendKillLocal(runtime, 0);
-        {
-            TDispatchOptions options;
-            options.FinalEvents.emplace_back(TEvLocal::EvStopTablet);
-            runtime.DispatchEvents(options);
-        }
+        MakeSureTabletIsDown(runtime, dummyTabletId, 0);
         CreateLocal(runtime, 0);
 
         MakeSureTabletIsUp(runtime, dummyTabletId, 0);
@@ -7963,11 +7977,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
 
         // restart to kick tablet
         SendKillLocal(runtime, 1);
-        {
-            TDispatchOptions options;
-            options.FinalEvents.emplace_back(TEvLocal::EvStopTablet);
-            runtime.DispatchEvents(options);
-        }
+        MakeSureTabletIsDown(runtime, dummyTabletId, 0);
         CreateLocalForTenant(runtime, 1, "/dc-1/tenant1");
 
         MakeSureTabletIsUp(runtime, dummyTabletId, 0);

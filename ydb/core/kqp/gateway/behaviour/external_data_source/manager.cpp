@@ -310,7 +310,7 @@ bool IsIamAuth(const auto& schemeTx) {
     return schemeTx.GetCreateExternalDataSource().GetAuth().identity_case() == NKikimrSchemeOp::TAuth::kIam;
 }
 bool IsResolveResourceIdNeeded(const auto& schemeTx) {
-    return IsIamAuth(schemeTx) && !schemeTx.GetCreateExternalDataSource().GetAuth().GetIam().HasResourceId();
+    return !schemeTx.GetCreateExternalDataSource().GetAuth().GetIam().HasResourceId();
 }
 
 TAsyncStatus ResolveResourceId(TAsyncStatus validationFuture, const TExternalDataSourceManager::TExternalModificationContext& context, const std::shared_ptr<NKikimrSchemeOp::TModifyScheme>& schemeTxState, const std::shared_ptr<std::vector<TString>>& secrets) {
@@ -355,37 +355,42 @@ TAsyncStatus ResolveResourceId(TAsyncStatus validationFuture, const TExternalDat
             });
     });
 }
+
+TAsyncStatus ValidateServiceAccount(TAsyncStatus validationFuture, const TExternalDataSourceManager::TExternalModificationContext& context, const std::shared_ptr<NKikimrSchemeOp::TModifyScheme>& schemeTxState, const std::shared_ptr<std::vector<TString>>& secrets) {
+    return ChainFeatures(validationFuture, [schemeTxState, context, secrets] {
+        auto actorSystem = context.GetActorSystem();
+        Y_ENSURE(secrets && secrets->size() == 1);
+        auto& iamAuth = schemeTxState->GetCreateExternalDataSource().GetAuth().GetIam();
+        return AuthorizeServiceAccountUse(iamAuth.GetServiceAccountId(),
+                (*secrets)[0],
+                actorSystem
+        ).Apply([](const NThreading::TFuture<void>& future) {
+            try {
+                future.GetValueSync();
+                return TYqlConclusionStatus::Success();
+            } catch (...) {
+                return TYqlConclusionStatus::Fail(NYql::TIssuesIds::KIKIMR_INTERNAL_ERROR, TStringBuilder() << "Unexpected exception: " << CurrentExceptionMessage());
+            }
+        });
+    });
+}
 } // namespace {
 
 TAsyncStatus TExternalDataSourceManager::ExecuteSchemeRequest(const NKikimrSchemeOp::TModifyScheme& schemeTx, const TExternalModificationContext& context, NKqpProto::TKqpSchemeOperation::OperationCase operationCase) const {
     TAsyncStatus validationFuture = NThreading::MakeFuture<TYqlConclusionStatus>(TYqlConclusionStatus::Success());
     auto schemeTxState = std::make_shared<NKikimrSchemeOp::TModifyScheme>(schemeTx);
     if (operationCase == NKqpProto::TKqpSchemeOperation::kCreateExternalDataSource) {
-        bool isResolveResourceIdNeeded = IsResolveResourceIdNeeded(schemeTx);
-        auto secrets = isResolveResourceIdNeeded ? std::make_shared<std::vector<TString>>() : nullptr;
+        bool isIamAuth = IsIamAuth(schemeTx);
+        bool isResolveResourceIdNeeded = isIamAuth && IsResolveResourceIdNeeded(schemeTx);
+        auto secrets = isIamAuth ? std::make_shared<std::vector<TString>>() : nullptr;
         validationFuture = ChainFeatures(validationFuture, [schemeTxState, context, secrets] {
             return ValidateExternalDatasourceSecrets(schemeTxState->GetCreateExternalDataSource(), context, secrets);
         });
         if (isResolveResourceIdNeeded) {
             validationFuture = ResolveResourceId(validationFuture, context, schemeTxState, secrets);
         }
-        if (IsIamAuth(schemeTx)) {
-            validationFuture = ChainFeatures(validationFuture, [schemeTxState, context, secrets] {
-                auto actorSystem = context.GetActorSystem();
-                Y_ENSURE(secrets && secrets->size() == 1);
-                auto& iamAuth = schemeTxState->GetCreateExternalDataSource().GetAuth().GetIam();
-                return AuthorizeServiceAccountUse(iamAuth.GetServiceAccountId(),
-                        (*secrets)[0],
-                        actorSystem
-                ).Apply([](const NThreading::TFuture<void>& future) {
-                    try {
-                        future.GetValueSync();
-                        return TYqlConclusionStatus::Success();
-                    } catch (...) {
-                        return TYqlConclusionStatus::Fail(NYql::TIssuesIds::KIKIMR_INTERNAL_ERROR, TStringBuilder() << "AUTH_METHOD=IAM: Failed ServiceAccount access check: " << CurrentExceptionMessage());
-                    }
-                });
-            });
+        if (isIamAuth) {
+            validationFuture = ValidateServiceAccount(validationFuture, context, schemeTxState, secrets);
         }
     }
     return ChainFeatures(validationFuture, [schemeTxState, context] {

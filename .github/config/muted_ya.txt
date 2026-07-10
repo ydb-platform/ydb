@@ -22,7 +22,9 @@ ydb/core/kafka_proxy/ut KafkaProtocol.TopicsCompactionGapFromRetention
 ydb/core/kafka_proxy/ut unittest.sole chunk
 ydb/core/kqp/ut/query KqpAnalyze.AnalyzeTable-ColumnStore
 ydb/core/kqp/ut/query KqpAnalyzeOperations.AnalyzeOperationsLifecycle
+ydb/core/kqp/ut/scheme KqpScheme.CreateDropTableMultipleTime
 ydb/core/load_test/ut GroupWriteTest.SimpleRdma
+ydb/core/mind/hive/ut THiveTest.TestServerlessComputeResourcesMode
 ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/ut TVChunkTest.ShouldSwitchHostToOfflineAndBack
 ydb/core/transfer/ut/large TransferLarge.Transfer100KM_10P_LocalRead_TopicAutoPartitioning
 ydb/core/tx/schemeshard/ut_compaction_reboots SchemeshardForcedCompactionTestReboots.ForceCompactWithIndexCreation[TabletRebootsBucket0]
@@ -32,6 +34,7 @@ ydb/core/tx/schemeshard/ut_set_column_constraint_reboots unittest.[*/*] chunk
 ydb/library/actors/core/ut TestThreadContextQueueTimestamps.CurrentQueueTimestamps
 ydb/public/sdk/cpp/src/client/topic/ut/with_direct_read_ut Describe.DescribePartitionPermissions
 ydb/public/sdk/cpp/tests/integration/sessions YdbSdkSessions.CloseSessionWithSessionPoolFromDtors
+ydb/public/sdk/cpp/tests/integration/topic/with_direct_read gtest.[*/*] chunk
 ydb/services/cms/ut TGRpcCmsTest.RemoveWithAnotherTokenTest
 ydb/services/datastreams/ut DataStreams.TestGetRecords1MBMessagesOneByOneByTS
 ydb/services/deprecated/persqueue_v0/ut TDeprecatedPQGrpcDeadTest.ProcessGlobalGrpcDeadDoesNotStopLiveDeprecatedPQWriteSession
@@ -58,9 +61,11 @@ ydb/tests/fq/streaming test_udfs.py.TestUdfsUsage.test_precompute_recovery[False
 ydb/tests/fq/streaming test_udfs.py.TestUdfsUsage.test_precompute_recovery[True]
 ydb/tests/functional/blobstorage test_node_warden_cache.py.TestNodeWardenCacheFile.test_cache_file_lifecycle_and_restart
 ydb/tests/functional/dstool test_canonical_requests.py.Test.test_group_add
+ydb/tests/functional/nbs test_nbs.py.TestNbs.test_nbs_disk_creation
 ydb/tests/functional/nbs test_nbs.py.TestNbs.test_nbs_multiple_disks_creation
 ydb/tests/functional/query_cache/warmup test_warmup.py.TestCompileCacheViewPeerWarnings.test_peer_scan_warnings_increment_on_dead_peer
 ydb/tests/functional/query_cache/warmup test_warmup.py.TestWarmupRestart.test_warmup_basic
+ydb/tests/functional/sqs/cloud test_yandex_cloud_mode.py.TestSqsYandexCloudMode.test_dlq_mechanics_in_cloud[fifo]
 ydb/tests/functional/sqs/migration/compatibility/common ydb.tests.functional.sqs.common.test_queue_counters.py.TestSqsGettingCounters.test_sqs_action_counters
 ydb/tests/functional/sqs/migration/compatibility/large ydb.tests.functional.sqs.large.test_leader_start_inflight.py.TestSqsMultinodeCluster.test_limit_leader_start_inflight[tables_format_v0-std]
 ydb/tests/functional/sqs/migration/finished/large ydb.tests.functional.sqs.large.test_leader_start_inflight.py.TestSqsMultinodeCluster.test_limit_leader_start_inflight[tables_format_v0-std]

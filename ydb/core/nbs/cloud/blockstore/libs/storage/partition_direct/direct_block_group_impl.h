@@ -25,6 +25,17 @@ namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 ////////////////////////////////////////////////////////////////////////////////
 
+// State of a logical session (lock) with a DDisk.
+// Sessions are used only for DDisk connections.
+enum class EDDiskSessionState
+{
+    NotLocked,
+    Locked,
+    Broken,
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
 class TDirectBlockGroup
     : public IDirectBlockGroup
     , public IHostStateController
@@ -152,15 +163,6 @@ private:
     using TDDiskIdToHostIndex =
         TMap<NKikimrBlobStorage::NDDisk::TDDiskId, THostIndex, TDDiskIdLess>;
 
-    // State of a logical session (lock) with a DDisk.
-    // Sessions are used only for DDisk connections.
-    enum class EDDiskSessionState
-    {
-        NotLocked,
-        Locked,
-        Broken,
-    };
-
     struct TDDiskConnection
     {
         using TPromise = NThreading::TPromise<NProto::TError>;
@@ -176,6 +178,7 @@ private:
 
         void ResetSession();
         [[nodiscard]] const TFuture& GetFuture() const;
+        [[nodiscard]] TString DebugPrint() const;
     };
 
     void DoEstablishConnections();

@@ -187,6 +187,10 @@ static NKikimrSchemeOp::TTableDescription RebuildTableDescription(
         tableDesc.MutableColumns()->Add()->CopyFrom(src.GetColumns(it->second));
     }
 
+    for (const auto& stat : scheme.statistics()) {
+        FillMultiColumnStatistics(*tableDesc.AddMultiColumnStatistics(), stat);
+    }
+
     return tableDesc;
 }
 

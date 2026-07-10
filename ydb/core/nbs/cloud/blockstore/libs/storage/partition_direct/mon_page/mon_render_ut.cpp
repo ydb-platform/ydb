@@ -58,6 +58,7 @@ Y_UNIT_TEST_SUITE(TMonRenderTest)
         UNIT_ASSERT_STRING_CONTAINS(html, "Overview");
         UNIT_ASSERT_STRING_CONTAINS(html, "page=overview");
         UNIT_ASSERT_STRING_CONTAINS(html, "page=dbg");
+        UNIT_ASSERT_STRING_CONTAINS(html, "page=localdb");
         UNIT_ASSERT_STRING_CONTAINS(html, "DirectBlockGroups");
         UNIT_ASSERT_STRING_CONTAINS(html, "VChunks (total)");
         UNIT_ASSERT_STRING_CONTAINS(html, "LSN counter");
@@ -99,6 +100,8 @@ Y_UNIT_TEST_SUITE(TMonRenderTest)
         UNIT_ASSERT_STRING_CONTAINS(html, "1 Online");
         UNIT_ASSERT_STRING_CONTAINS(html, "1 Sufferer");
         UNIT_ASSERT_STRING_CONTAINS(html, "Consecutive success");
+        // The add-host button lives on the detail page only.
+        UNIT_ASSERT(!html.Contains("action=addhost"));
     }
 
     Y_UNIT_TEST(DbgDetailShowsHostsTable)
@@ -116,6 +119,20 @@ Y_UNIT_TEST_SUITE(TMonRenderTest)
             html,
             "WriteToPBuffer");   // operation column
         UNIT_ASSERT_STRING_CONTAINS(html, "back to DBGs");
+        // The add-host form: POST with parameters both in the URL (read by
+        // the tablet) and as hidden fields (read by the mon proxy router).
+        UNIT_ASSERT_STRING_CONTAINS(html, "<form method='post'");
+        UNIT_ASSERT_STRING_CONTAINS(html, "page=dbg&dbg=1&action=addhost");
+        UNIT_ASSERT_STRING_CONTAINS(
+            html,
+            "<input type='hidden' name='TabletID' value='42'/>");
+        UNIT_ASSERT_STRING_CONTAINS(
+            html,
+            "<input type='hidden' name='dbg' value='1'/>");
+        UNIT_ASSERT_STRING_CONTAINS(
+            html,
+            "<input type='hidden' name='action' value='addhost'/>");
+        UNIT_ASSERT_STRING_CONTAINS(html, "Add host");
     }
 
     Y_UNIT_TEST(DbgDetailNotFound)
@@ -128,6 +145,34 @@ Y_UNIT_TEST_SUITE(TMonRenderTest)
 
         const TString html = RenderMonPage(data);
         UNIT_ASSERT_STRING_CONTAINS(html, "not found");
+    }
+
+    Y_UNIT_TEST(LocalDbShowsPersistedState)
+    {
+        const TMonPageData data{
+            .Page = EMonPage::LocalDb,
+            .TabletInfo = {.TabletId = 42},
+            .LocalDb =
+                TLocalDbContents{
+                    .VolumeConfig = "DiskId: vol-1",
+                    .VChunkConfigs = {TVChunkConfig::MakeDefault(3, 5, 3)},
+                },
+        };
+
+        const TString html = RenderMonPage(data);
+        UNIT_ASSERT_STRING_CONTAINS(html, "Local DB");
+        // Long proto dumps are collapsed; the summary is styled to look
+        // clickable (fold triangle + pointer).
+        UNIT_ASSERT_STRING_CONTAINS(html, "<details");
+        UNIT_ASSERT_STRING_CONTAINS(
+            html,
+            "<summary style='display:list-item; cursor:pointer;");
+        UNIT_ASSERT_STRING_CONTAINS(html, "DiskId: vol-1");
+        // DirectBlockGroupsConnections / AddHostInProgress not persisted.
+        UNIT_ASSERT_STRING_CONTAINS(html, "(none)");
+        UNIT_ASSERT_STRING_CONTAINS(
+            html,
+            "VChunkConfigs (persisted overrides)");
     }
 }
 

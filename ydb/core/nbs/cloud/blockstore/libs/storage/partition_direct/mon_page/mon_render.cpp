@@ -31,6 +31,8 @@ const char* PageParam(EMonPage page)
             return "overview";
         case EMonPage::Dbg:
             return "dbg";
+        case EMonPage::LocalDb:
+            return "localdb";
     }
     return "overview";
 }
@@ -42,6 +44,8 @@ const char* PageTitle(EMonPage page)
             return "Overview";
         case EMonPage::Dbg:
             return "DBGs";
+        case EMonPage::LocalDb:
+            return "Local DB";
     }
     return "";
 }
@@ -114,6 +118,7 @@ void RenderMenu(
     static const EMonPage pages[] = {
         EMonPage::Overview,
         EMonPage::Dbg,
+        EMonPage::LocalDb,
     };
     str << "<div style='margin:0.5em 0 1em;'>";
     for (EMonPage page: pages) {
@@ -255,6 +260,25 @@ void RenderDbgDetail(
 {
     str << "<div style='margin-bottom:0.5em;'><a href='?TabletID="
         << tabletInfo.TabletId << "&page=dbg'>&larr; back to DBGs</a></div>";
+    // POST, not a link: link prefetching must not add hosts.
+    //
+    // The same parameters go into both the action URL and the hidden fields
+    // because the request has two readers, each looking at one place only:
+    // the mon proxy picks the target tablet from the POST body, while the
+    // tablet's Cgi() reads the URL query.
+    str << "<form method='post' action='?TabletID=" << tabletInfo.TabletId
+        << "&page=dbg&dbg=" << dbg.Index
+        << "&action=addhost' style='margin-bottom:0.5em;'>"
+           "<input type='hidden' name='TabletID' value='"
+        << tabletInfo.TabletId
+        << "'/>"
+           "<input type='hidden' name='page' value='dbg'/>"
+           "<input type='hidden' name='dbg' value='"
+        << dbg.Index
+        << "'/>"
+           "<input type='hidden' name='action' value='addhost'/>"
+           "<button type='submit' class='btn btn-default'>Add host</button>"
+           "</form>";
     HTML (str) {
         TAG (TH3) {
             str << "DBG #" << dbg.Index;
@@ -324,6 +348,65 @@ void RenderDbgDetail(
     }
 }
 
+void RenderProtoDump(
+    IOutputStream& str,
+    const char* name,
+    const std::optional<TString>& dump)
+{
+    if (!dump) {
+        str << "<div style='margin-bottom:0.5em;'>" << name << " (none)</div>";
+        return;
+    }
+    // display:list-item brings back the fold triangle that the page CSS
+    // hides; the pointer marks the line as clickable.
+    str << "<details style='margin-bottom:0.5em;'>"
+           "<summary style='display:list-item; cursor:pointer;'>"
+        << name << "</summary><pre>" << HtmlEscape(*dump) << "</pre></details>";
+}
+
+void RenderLocalDb(IOutputStream& str, const TLocalDbContents& db)
+{
+    HTML (str) {
+        TAG (TH3) {
+            str << "Local DB";
+        }
+        RenderProtoDump(str, "VolumeConfig", db.VolumeConfig);
+        RenderProtoDump(
+            str,
+            "DirectBlockGroupsConnections",
+            db.DirectBlockGroupsConnections);
+        RenderProtoDump(str, "AddHostInProgress", db.AddHostInProgress);
+        TAG (TH4) {
+            str << "VChunkConfigs (persisted overrides)";
+        }
+        TABLE_CLASS ("table table-condensed") {
+            TABLEHEAD () {
+                TABLER () {
+                    TABLEH () {
+                        str << "VChunkIndex";
+                    }
+                    TABLEH () {
+                        str << "Config";
+                    }
+                }
+            }
+            TABLEBODY () {
+                for (const auto& config: db.VChunkConfigs) {
+                    TABLER () {
+                        TABLED () {
+                            str << config.GetVChunkIndex();
+                        }
+                        TABLED () {
+                            str << "<pre>" << HtmlEscape(config.DebugPrint())
+                                << "</pre>";
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
 void RenderDbg(IOutputStream& str, const TMonPageData& data)
 {
     if (!data.SelectedDbg) {
@@ -371,6 +454,11 @@ TString RenderMonPage(const TMonPageData& data)
             break;
         case EMonPage::Dbg:
             RenderDbg(str, data);
+            break;
+        case EMonPage::LocalDb:
+            if (data.LocalDb) {
+                RenderLocalDb(str, *data.LocalDb);
+            }
             break;
     }
     return str.Str();

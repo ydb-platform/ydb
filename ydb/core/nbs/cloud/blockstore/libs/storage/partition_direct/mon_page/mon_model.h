@@ -4,6 +4,7 @@
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/host_stat.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/host_state.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/oracle.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/vchunk_config.h>
 
 #include <util/generic/string.h>
 #include <util/generic/vector.h>
@@ -19,6 +20,7 @@ enum class EMonPage
 {
     Overview,
     Dbg,
+    LocalDb,
 };
 
 struct TTabletInfo
@@ -53,6 +55,17 @@ struct TDbgSnapshot
     TVector<THostSnapshot> Hosts;
 };
 
+// Persisted tablet state (local DB). Protos are pre-dumped to text; an absent
+// value means the row was never persisted.
+struct TLocalDbContents
+{
+    std::optional<TString> VolumeConfig;
+    std::optional<TString> DirectBlockGroupsConnections;
+    std::optional<TString> AddHostInProgress;
+    // Persisted per-vchunk overrides.
+    TVector<TVChunkConfig> VChunkConfigs;
+};
+
 struct TMonPageData
 {
     EMonPage Page = EMonPage::Overview;
@@ -64,6 +77,8 @@ struct TMonPageData
     TVector<TDbgSnapshot> Dbgs;
     // DBG detail index (absent => list view).
     std::optional<ui32> SelectedDbg;
+    // Local DB tab.
+    std::optional<TLocalDbContents> LocalDb;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -855,6 +855,8 @@ public:
 
     bool HostHasRunningSystemTablet(const TString &hostName) const;
 
+    bool HasBootstrapTabletNodes() const;
+
     bool HasPDisk(TPDiskID pdId) const {
         return PDisks.contains(pdId);
     }
@@ -1120,6 +1122,7 @@ public:
     THashMap<ui32, TVector<NKikimrConfig::TBootstrap::ETabletType>> NodeToTabletTypes;
     THashSet<TTabletTypes::EType> SystemTabletTypes;
     THashSet<ui32> NodesWithRunningSystemTablet;
+    bool UseDynamicSysTabletChecking = false;
 
     THashMap<TPileId, TSysNodesCheckers> SysNodesCheckers;
 

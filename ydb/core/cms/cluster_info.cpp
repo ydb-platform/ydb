@@ -431,23 +431,10 @@ void TClusterInfo::ClearNode(ui32 nodeId)
         return;
 
     auto &node = NodeRef(nodeId);
-    const TSet<ui64> tabletsToCheck(node.Tablets);
     NodeTabletsByNode.erase(nodeId);
+    for (auto tablet : node.Tablets)
+        Tablets.erase(tablet);
     node.Tablets.clear();
-
-    for (ui64 tabletId : tabletsToCheck) {
-        bool existsOnOtherNode = false;
-        for (const auto &[otherNodeId, tablets] : NodeTabletsByNode) {
-            if (tablets.contains(tabletId)) {
-                Tablets[tabletId] = tablets.at(tabletId);
-                existsOnOtherNode = true;
-                break;
-            }
-        }
-        if (!existsOnOtherNode) {
-            Tablets.erase(tabletId);
-        }
-    }
     node.HasTenantInfo = false;
     node.State = NKikimrCms::DOWN;
     node.UpdateNodeState();
@@ -1031,21 +1018,27 @@ void TClusterInfo::GenerateTenantNodesCheckers() {
 }
 
 void TClusterInfo::GenerateSysTabletsNodesCheckers() {
+    UseDynamicSysTabletChecking = !HasBootstrapTabletNodes();
+    SystemTabletTypes.clear();
+
     for (auto tablet : BootstrapConfig.GetTablet()) {
-        for (auto nodeId : tablet.GetNode()) {
-            if (!HasNode(nodeId)) {
-                YDB_LOG_ERROR("Got node with system tablet, which exists in configuration, but does not exist in cluster",
-                    {"nodeId", nodeId});
-                continue;
-            }
-            const ui32 pileId = NodeIdToPileId.contains(nodeId) ? NodeIdToPileId[nodeId] : 0;
-            auto& sysNodesChecker = SysNodesCheckers[pileId][tablet.GetType()];
-            if (!sysNodesChecker)
-                sysNodesChecker = TSimpleSharedPtr<TSysTabletsNodesCounter>(new TSysTabletsNodesCounter(tablet.GetType()));
-            NodeToTabletTypes[nodeId].push_back(tablet.GetType());
-            NodeRef(nodeId).AddNodeGroup(sysNodesChecker);
-        }
         SystemTabletTypes.insert(BootstrapperTypeToTabletType(tablet.GetType()));
+        if (!UseDynamicSysTabletChecking) {
+            for (auto nodeId : tablet.GetNode()) {
+                if (!HasNode(nodeId)) {
+                    BLOG_ERROR(TStringBuilder() << "Got node " << nodeId
+                                                << " with system tablet, which exists in configuration, "
+                                                   "but does not exist in cluster.");
+                    continue;
+                }
+                const ui32 pileId = NodeIdToPileId.contains(nodeId) ? NodeIdToPileId[nodeId] : 0;
+                auto& sysNodesChecker = SysNodesCheckers[pileId][tablet.GetType()];
+                if (!sysNodesChecker)
+                    sysNodesChecker = TSimpleSharedPtr<TSysTabletsNodesCounter>(new TSysTabletsNodesCounter(tablet.GetType()));
+                NodeToTabletTypes[nodeId].push_back(tablet.GetType());
+                NodeRef(nodeId).AddNodeGroup(sysNodesChecker);
+            }
+        }
     }
 
     GenerateNodesWithRunningSystemTablet();
@@ -1069,6 +1062,15 @@ void TClusterInfo::GenerateNodesWithRunningSystemTablet() {
             }
         }
     }
+}
+
+bool TClusterInfo::HasBootstrapTabletNodes() const {
+    for (const auto &tablet : BootstrapConfig.GetTablet()) {
+        if (tablet.GetNodeSize() > 0) {
+            return true;
+        }
+    }
+    return false;
 }
 
 bool TClusterInfo::NodeHasRunningSystemTablet(ui32 nodeId) const {

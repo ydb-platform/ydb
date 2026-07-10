@@ -1003,7 +1003,7 @@ void CreateYtFileTable(const TFsPath& dataDir, const TString tableName, const TE
     rowSpec->SetColumnOrder(std::move(columnOrder));
 
     NYT::TNode attrs = NYT::TNode::CreateMap();
-    rowSpec->FillAttrNode(attrs[YqlRowSpecAttribute], 0, /*useCompactForm=*/false);
+    rowSpec->FillAttrNode(attrs[YqlRowSpecAttribute], /*useCompactForm=*/false);
 
     NYT::TNode spec;
     rowSpec->FillCodecNode(spec[YqlRowSpecAttribute]);

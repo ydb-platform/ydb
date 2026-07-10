@@ -5241,7 +5241,6 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                         {"id", buildInfo.Id},
                         {"#_TypeName(exc)", TypeName(exc)},
                         {"#_exc.what", exc.what()},
-                        {"endl", Endl},
                         {"#_TBackTrace::FromCurrentException().PrintToString", TBackTrace::FromCurrentException().PrintToString()},
                         {"TIndexBuildInfo", buildInfo});
 

@@ -117,17 +117,17 @@ public:
         itUsedKey->second.AddValue(value);
     }
 
-    TDictStats BuildStats(const TSettings& settings, const ui32 recordsCount) const {
+    TDictStats BuildStats() const {
         TDictStats::TBuilder statBuilder;
         for (auto&& i : UsedKeys) {
             statBuilder.Add(i.second.GetKeyName(), i.second.GetRecordsCount(), i.second.GetDataSize(),
-                i.second.GetAccessorType(settings, recordsCount), i.second.GetValueType());
+                i.second.GetAccessorType(), i.second.GetValueType());
         }
         return statBuilder.Finish();
     }
 };
 
-TOthersData TOthersData::ApplyFilter(const TColumnFilter& filter, const TSettings& settings) const {
+TOthersData TOthersData::ApplyFilter(const TColumnFilter& filter) const {
     if (filter.IsTotalAllowFilter()) {
         return *this;
     } else if (filter.IsTotalDenyFilter()) {
@@ -175,7 +175,7 @@ TOthersData TOthersData::ApplyFilter(const TColumnFilter& filter, const TSetting
         currentAcceptance = !currentAcceptance;
         filterIntervalStart += *it;
     }
-    auto stats = usedKeys.BuildStats(settings, resultRecordsCount);
+    auto stats = usedKeys.BuildStats();
     const std::vector<ui32> decoder = usedKeys.BuildDecoder();
     auto keyIndexBuilder = NArrow::MakeBuilder(arrow::uint32());
     for (auto&& i : originalKeys) {
@@ -191,7 +191,7 @@ TOthersData TOthersData::ApplyFilter(const TColumnFilter& filter, const TSetting
     return TOthersData(stats, records);
 }
 
-TOthersData TOthersData::Slice(const ui32 offset, const ui32 count, const TSettings& settings) const {
+TOthersData TOthersData::Slice(const ui32 offset, const ui32 count) const {
     AFL_VERIFY(Records->GetColumnsCount() == 3);
     if (!count || !Records || !Records->num_rows()) {
         return TOthersData::BuildEmpty();
@@ -213,7 +213,7 @@ TOthersData TOthersData::Slice(const ui32 offset, const ui32 count, const TSetti
         }
     }
     const std::vector<ui32> keyIndexDecoder = usedKeys.BuildDecoder();
-    const TDictStats sliceStats = usedKeys.BuildStats(settings, count);
+    const TDictStats sliceStats = usedKeys.BuildStats();
 
     {
         auto recordIndexBuilder = NArrow::MakeBuilder(arrow::uint32());

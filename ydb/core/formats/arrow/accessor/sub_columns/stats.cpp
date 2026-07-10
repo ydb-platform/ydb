@@ -39,15 +39,15 @@ TSplittedColumns TDictStats::SplitByVolume(const TSettings& settings, const ui32
     auto columnsBuilder = MakeBuilder();
     auto othersBuilder = MakeBuilder();
     for (auto&& i : columnStats) {
-        columnsBuilder.Add(i.GetKeyName(), i.GetRecordsCount(), i.GetDataSize(), i.GetAccessorType(settings, recordsCount), i.GetValueType());
+        columnsBuilder.Add(i.GetKeyName(), i.GetRecordsCount(), i.GetDataSize(), i.GetAccessorType(), i.GetValueType());
     }
     for (auto&& i : otherStats) {
-        othersBuilder.Add(i.GetKeyName(), i.GetRecordsCount(), i.GetDataSize(), i.GetAccessorType(settings, recordsCount), i.GetValueType());
+        othersBuilder.Add(i.GetKeyName(), i.GetRecordsCount(), i.GetDataSize(), i.GetAccessorType(), i.GetValueType());
     }
     return TSplittedColumns(columnsBuilder.Finish(), othersBuilder.Finish());
 }
 
-TDictStats TDictStats::Merge(const std::vector<const TDictStats*>& stats, const TSettings& settings, const ui32 recordsCount) {
+TDictStats TDictStats::Merge(const std::vector<const TDictStats*>& stats, const TSettings& /*settings*/, const ui32 /*recordsCount*/) {
     std::map<std::string_view, TRTStats> resultMap;
     for (auto&& i : stats) {
         for (ui32 idx = 0; idx < i->GetColumnsCount(); ++idx) {
@@ -61,7 +61,7 @@ TDictStats TDictStats::Merge(const std::vector<const TDictStats*>& stats, const 
     auto builder = MakeBuilder();
     for (auto&& i : resultMap) {
         builder.Add(i.second.GetKeyName(), i.second.GetRecordsCount(), i.second.GetDataSize(),
-            i.second.GetAccessorType(settings, recordsCount), i.second.GetValueType());
+            i.second.GetAccessorType(), i.second.GetValueType());
     }
     return builder.Finish();
 }

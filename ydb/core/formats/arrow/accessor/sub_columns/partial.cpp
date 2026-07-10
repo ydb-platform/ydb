@@ -13,7 +13,7 @@ void TSubColumnsPartialArray::InitOthers(const TString& blob, const TChunkConstr
     auto container = NSubColumns::TConstructor::BuildOthersContainer(blob, Header.GetAddressesProto(), externalInfo, deserialize);
     OthersData = NSubColumns::TOthersData(Header.GetOtherStats(), container.DetachResult());
     if (applyFilter) {
-        OthersData = OthersData->ApplyFilter(*applyFilter, Settings);
+        OthersData = OthersData->ApplyFilter(*applyFilter);
     }
     StoreOthersString = blob;
 }

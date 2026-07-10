@@ -37,7 +37,6 @@ public:
         return Accessor;
     }
 
-    void BuildSparsedAccessor(const ui32 recordsCount, const EValueType valueType);
     void BuildPlainAccessor(const ui32 recordsCount, const EValueType valueType);
     void BuildDictionaryAccessor(const ui32 recordsCount, const EValueType valueType);
 
@@ -175,7 +174,7 @@ public:
     };
 
     TDictStats BuildStats(
-        const std::vector<TColumnElements*>& keys, const TSettings& settings, const ui32 recordsCount, const bool separateColumns) const {
+        const std::vector<TColumnElements*>& keys, const TSettings& settings, const bool separateColumns) const {
         auto builder = TDictStats::MakeBuilder();
         for (auto&& i : keys) {
             const ui32 presentCount = i->GetRecordIndexes().size();
@@ -193,10 +192,8 @@ public:
                 valueType = DetectValueTypeForArray(i->GetValues());
             }
             IChunkedArray::EType accessorType = IChunkedArray::EType::Array;
-            if (settings.IsSparsed(presentCount, recordsCount)) {
-                accessorType = IChunkedArray::EType::SparsedArray;
-            } else if (separateColumns && DictionaryApplicableForValueType(valueType) &&
-                       settings.IsDictionary(presentCount, enumerateValues)) {
+            if (separateColumns && DictionaryApplicableForValueType(valueType) &&
+                settings.IsDictionary(presentCount, enumerateValues)) {
                 accessorType = IChunkedArray::EType::Dictionary;
             }
             builder.Add(i->GetKeyName(), presentCount, i->GetDataSize(), accessorType, valueType);

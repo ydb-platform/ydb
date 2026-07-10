@@ -83,13 +83,6 @@ public:
         return result;
     }
 
-    bool IsSparsed(const ui32 /*keyUsageCount*/, const ui32 /*recordsCount*/) const {
-        // TODO: Return when sparsed is fixed
-        // AFL_VERIFY(recordsCount);
-        // return keyUsageCount * SparsedDetectorKff < recordsCount;
-        return false;
-    }
-
     // True once `enumerate` produces at least `count` distinct values; stops as early as possible.
     // `enumerate(consumer)` must call `consumer(TStringBuf)` per value and stop once `consumer` returns false.
     template <class TEnumerator>

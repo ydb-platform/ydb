@@ -49,7 +49,6 @@ private:
     const TSubColumnsHeader Header;
     TPartialColumnsData PartialColumnsData;
     std::optional<NSubColumns::TOthersData> OthersData;
-    NSubColumns::TSettings Settings;
     TString StoreOthersString;
 
     virtual void DoVisitValues(const TValuesSimpleVisitor& /*visitor*/) const override {
@@ -81,7 +80,7 @@ protected:
     virtual std::shared_ptr<IChunkedArray> DoApplyFilter(const TColumnFilter& filter) const override {
         std::optional<NSubColumns::TOthersData> others;
         if (OthersData) {
-            others = OthersData->ApplyFilter(filter, Settings);
+            others = OthersData->ApplyFilter(filter);
         }
         return std::make_shared<TSubColumnsPartialArray>(
             Header, PartialColumnsData.ApplyFilter(filter), std::move(others), GetDataType(), filter.GetFilteredCountVerified());
@@ -90,7 +89,7 @@ protected:
     virtual std::shared_ptr<IChunkedArray> DoISlice(const ui32 offset, const ui32 count) const override {
         std::optional<NSubColumns::TOthersData> others;
         if (OthersData) {
-            others = OthersData->Slice(offset, count, Settings);
+            others = OthersData->Slice(offset, count);
         }
         return std::make_shared<TSubColumnsPartialArray>(
             Header, PartialColumnsData.Slice(offset, count), std::move(others), GetDataType(), count);

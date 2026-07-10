@@ -6,7 +6,6 @@
 #include <ydb/core/formats/arrow/accessor/common/chunk_data.h>
 #include <ydb/core/formats/arrow/accessor/dictionary/constructor.h>
 #include <ydb/core/formats/arrow/accessor/plain/accessor.h>
-#include <ydb/core/formats/arrow/accessor/sparsed/accessor.h>
 #include <ydb/core/formats/arrow/serializer/abstract.h>
 
 #include <contrib/libs/simdjson/include/simdjson.h>
@@ -34,17 +33,6 @@ std::shared_ptr<IChunkedArray> BuildTypedPlain(const std::deque<NBinaryJson::TBi
     return builder.Finish(recordsCount);
 }
 }   // namespace
-
-void TColumnElements::BuildSparsedAccessor(const ui32 recordsCount, const EValueType valueType) {
-    AFL_VERIFY(!Accessor);
-    // Columns with non-binary encoding are not supported.
-    AFL_VERIFY(valueType == EValueType::BinaryJson || valueType == EValueType::String)("value_type", (ui32)valueType);
-    auto recordsBuilder = TSparsedArray::MakeBuilderBinary(RecordIndexes.size(), DataSize);
-    for (ui32 idx = 0; idx < RecordIndexes.size(); ++idx) {
-        recordsBuilder.AddRecord(RecordIndexes[idx], MakeStoredBytesView(Values[idx], valueType));
-    }
-    Accessor = recordsBuilder.Finish(recordsCount);
-}
 
 void TColumnElements::BuildPlainAccessor(const ui32 recordsCount, const EValueType valueType) {
     AFL_VERIFY(!Accessor);
@@ -103,7 +91,7 @@ std::shared_ptr<TSubColumnsArray> TDataBuilder::Finish() {
     };
     std::sort(columnElements.begin(), columnElements.end(), predSortElements);
     std::sort(otherElements.begin(), otherElements.end(), predSortElements);
-    TDictStats columnStats = BuildStats(columnElements, Settings, CurrentRecordIndex, true);
+    TDictStats columnStats = BuildStats(columnElements, CurrentRecordIndex, true);
     {
         ui32 columnIdx = 0;
         for (auto&& i : columnElements) {
@@ -112,12 +100,11 @@ std::shared_ptr<TSubColumnsArray> TDataBuilder::Finish() {
                 case IChunkedArray::EType::Array:
                     i->BuildPlainAccessor(CurrentRecordIndex, valueType);
                     break;
-                case IChunkedArray::EType::SparsedArray:
-                    i->BuildSparsedAccessor(CurrentRecordIndex, valueType);
-                    break;
                 case IChunkedArray::EType::Dictionary:
                     i->BuildDictionaryAccessor(CurrentRecordIndex, valueType);
                     break;
+                // Sparsed is disabled for subcolumns
+                case IChunkedArray::EType::SparsedArray:
                 case IChunkedArray::EType::Undefined:
                 case IChunkedArray::EType::SerializedChunkedArray:
                 case IChunkedArray::EType::CompositeChunkedArray:
@@ -162,7 +149,7 @@ TOthersData TDataBuilder::MergeOthers(const std::vector<TColumnElements*>& other
             std::push_heap(heap.begin(), heap.end());
         }
     }
-    return othersBuilder->Finish(TOthersData::TFinishContext(BuildStats(otherKeys, Settings, recordsCount, false)));
+    return othersBuilder->Finish(TOthersData::TFinishContext(BuildStats(otherKeys, recordsCount, false)));
 }
 
 std::string BuildString(const TStringBuf currentPrefix, const TStringBuf key) {

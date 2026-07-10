@@ -29,8 +29,8 @@ public:
         return result;
     }
 
-    TOthersData Slice(const ui32 offset, const ui32 count, const TSettings& settings) const;
-    TOthersData ApplyFilter(const TColumnFilter& filter, const TSettings& settings) const;
+    TOthersData Slice(const ui32 offset, const ui32 count) const;
+    TOthersData ApplyFilter(const TColumnFilter& filter) const;
 
     static TOthersData BuildEmpty();
 

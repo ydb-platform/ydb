@@ -120,10 +120,10 @@ public:
             DeducedValueType = MergeValueTypes(DeducedValueType, stats.GetValueType(idx));
         }
 
-        // Decides only the Array-vs-Sparsed axis and never returns Dictionary,
-        // because dictionary decision is deferred until the values are materialized.
-        IChunkedArray::EType GetAccessorType(const TSettings& settings, const ui32 recordsCount) const {
-            return settings.IsSparsed(RecordsCount, recordsCount) ? IChunkedArray::EType::SparsedArray : IChunkedArray::EType::Array;
+        // Separated columns are either plain or dictionary, and the dictionary decision is
+        // deferred until the values are materialized (MaybeDictionaryEncode).
+        IChunkedArray::EType GetAccessorType() const {
+            return IChunkedArray::EType::Array;
         }
     };
 
@@ -240,7 +240,6 @@ public:
         return result;
     }
 
-    bool IsSparsed(const ui32 columnIndex, const ui32 recordsCount, const TSettings& settings) const;
     TDictStats(const std::shared_ptr<arrow::RecordBatch>& original);
 };
 

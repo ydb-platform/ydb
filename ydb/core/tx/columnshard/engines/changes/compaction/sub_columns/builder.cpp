@@ -83,8 +83,6 @@ void TMergedBuilder::Initialize() {
                 ColumnBuilders.emplace_back(TPlainBuilder(0, 0));
                 break;
             case NArrow::NAccessor::IChunkedArray::EType::SparsedArray:
-                ColumnBuilders.emplace_back(TSparsedBuilder(nullptr, 0, 0));
-                break;
             case NArrow::NAccessor::IChunkedArray::EType::Undefined:
             case NArrow::NAccessor::IChunkedArray::EType::SerializedChunkedArray:
             case NArrow::NAccessor::IChunkedArray::EType::CompositeChunkedArray:

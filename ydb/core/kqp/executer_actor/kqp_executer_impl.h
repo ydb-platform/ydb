@@ -327,7 +327,7 @@ protected:
                     (trace_id, TraceId()));
             ExecuterStateSpan = NWilson::TSpan(TWilsonKqp::ExecuterShardsResolve, ExecuterSpan.GetTraceId(), "WaitForShardsResolve", NWilson::EFlags::AUTO_END);
 
-            auto kqpShardsResolver = CreateKqpShardsResolver(this->SelfId(), TxId, static_cast<TDerived*>(this)->GetSimplifiedUseFollowers(), std::move(shardIds));
+            auto kqpShardsResolver = CreateKqpShardsResolver(this->SelfId(), TxId, static_cast<TDerived*>(this)->GetUseFollowers(), std::move(shardIds));
 
             KqpShardsResolverId = this->RegisterWithSameMailbox(kqpShardsResolver);
             return WAIT_SHARDS;

@@ -64,7 +64,7 @@ public:
         YQL_ENSURE(Request.Snapshot.IsValid());
     }
 
-    bool GetSimplifiedUseFollowers() const {
+    bool GetUseFollowers() const {
         return false;
     }
 

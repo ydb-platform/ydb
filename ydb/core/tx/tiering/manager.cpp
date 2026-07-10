@@ -4,7 +4,6 @@
 #include <ydb/core/base/appdata.h>
 #include <ydb/services/scheme_secret/resolver.h>
 #include <ydb/core/protos/config.pb.h>
-#include <ydb/core/tx/columnshard/private_events/events.h>
 #include <ydb/core/tx/tiering/fetcher.h>
 #include <ydb/core/tx/tiering/tier/identifier.h>
 

@@ -24,6 +24,28 @@ int CompareUuidBytes(const TUuidBytes& lhs, const TUuidBytes& rhs) {
     return std::memcmp(lhs.data(), rhs.data(), rhs.size());
 }
 
+TString UuidBytesToDisplayString(const TUuidBytes& bytes) {
+    return NKikimr::NUuid::UuidBytesToString(TString(reinterpret_cast<const char*>(bytes.data()), bytes.size()));
+}
+
+void AssertUuidStringHasCanonicalDashes(TStringBuf uuidString) {
+    UNIT_ASSERT_C(uuidString.size() == 36, "Expected canonical UUID string length 36, got: " << uuidString);
+    UNIT_ASSERT_C(uuidString[8] == '-', "Expected dash at position 9, got: " << uuidString);
+    UNIT_ASSERT_C(uuidString[13] == '-', "Expected dash at position 14, got: " << uuidString);
+    UNIT_ASSERT_C(uuidString[18] == '-', "Expected dash at position 19, got: " << uuidString);
+    UNIT_ASSERT_C(uuidString[23] == '-', "Expected dash at position 24, got: " << uuidString);
+}
+
+void AssertUuidStringFormat(TStringBuf uuidString, char versionDigit) {
+    AssertUuidStringHasCanonicalDashes(uuidString);
+    UNIT_ASSERT_C(uuidString[14] == versionDigit,
+        "Expected version digit '" << versionDigit << "' at position 15, got '" << uuidString[14]
+        << "' in " << uuidString);
+    const char variantDigit = uuidString[19];
+    UNIT_ASSERT_C(variantDigit == '8' || variantDigit == '9' || variantDigit == 'a' || variantDigit == 'b',
+        "Expected RFC variant digit at position 20, got '" << variantDigit << "' in " << uuidString);
+}
+
 TString UuidBytesToHex(const TUuidBytes& bytes) {
     static const char hex[] = "0123456789abcdef";
     TString result;
@@ -228,5 +250,23 @@ Y_UNIT_TEST_SUITE(TUuidSortOrder) {
         }
 
         AssertAllDistinct(generated);
+    }
+
+    Y_UNIT_TEST(V7StringFormatShowsVersionDigit) {
+        SetRandomSeed(42);
+        const auto bytes = MakeV7Bytes(MilliSeconds());
+        AssertUuidStringFormat(UuidBytesToDisplayString(bytes), '7');
+    }
+
+    Y_UNIT_TEST(V7PrefixStringFormatShowsVersionDigit) {
+        SetRandomSeed(42);
+        const auto bytes = MakeV7Bytes(ApplyV7Prefix(MilliSeconds(), kTestV7Prefix));
+        AssertUuidStringFormat(UuidBytesToDisplayString(bytes), '7');
+    }
+
+    Y_UNIT_TEST(V8YqlCastStringHasCanonicalDashes) {
+        SetRandomSeed(42);
+        const auto bytes = MakeV8Bytes(kTestV8Prefix, MilliSeconds() / 1000, true);
+        AssertUuidStringHasCanonicalDashes(UuidBytesToDisplayString(bytes));
     }
 }

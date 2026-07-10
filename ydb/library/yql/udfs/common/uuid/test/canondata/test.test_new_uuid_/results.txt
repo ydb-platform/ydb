@@ -346,6 +346,110 @@
                         "StructType";
                         [
                             [
+                                "v7_string_format";
+                                [
+                                    "DataType";
+                                    "Bool"
+                                ]
+                            ]
+                        ]
+                    ]
+                ];
+                "Data" = [
+                    [
+                        %true
+                    ]
+                ]
+            }
+        ]
+    };
+    {
+        "Write" = [
+            {
+                "Type" = [
+                    "ListType";
+                    [
+                        "StructType";
+                        [
+                            [
+                                "v7_prefix_string_format";
+                                [
+                                    "DataType";
+                                    "Bool"
+                                ]
+                            ]
+                        ]
+                    ]
+                ];
+                "Data" = [
+                    [
+                        %true
+                    ]
+                ]
+            }
+        ]
+    };
+    {
+        "Write" = [
+            {
+                "Type" = [
+                    "ListType";
+                    [
+                        "StructType";
+                        [
+                            [
+                                "v8_string_has_dashes";
+                                [
+                                    "DataType";
+                                    "Bool"
+                                ]
+                            ]
+                        ]
+                    ]
+                ];
+                "Data" = [
+                    [
+                        %true
+                    ]
+                ]
+            }
+        ]
+    };
+    {
+        "Write" = [
+            {
+                "Type" = [
+                    "ListType";
+                    [
+                        "StructType";
+                        [
+                            [
+                                "v8_prefix_string_has_dashes";
+                                [
+                                    "DataType";
+                                    "Bool"
+                                ]
+                            ]
+                        ]
+                    ]
+                ];
+                "Data" = [
+                    [
+                        %true
+                    ]
+                ]
+            }
+        ]
+    };
+    {
+        "Write" = [
+            {
+                "Type" = [
+                    "ListType";
+                    [
+                        "StructType";
+                        [
+                            [
                                 "prefix_is_uint64";
                                 [
                                     "DataType";

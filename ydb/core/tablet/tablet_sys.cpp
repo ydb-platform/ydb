@@ -1321,7 +1321,6 @@ bool TTablet::HandleNext(TEvTablet::TEvCommit::TPtr &ev) {
     }
 
     const TLogoBlobID logid(TabletID(), StateStorageInfo.KnownGeneration, entry->Step, 0, 0, 0);
-    SeenBlobForCutHistory(logid);
 
     entry->StateStorageConfirmed = true; // todo: do real query against state-storage (optionally?)
     entry->Task = Register(

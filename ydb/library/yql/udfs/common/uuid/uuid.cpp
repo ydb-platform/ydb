@@ -129,8 +129,7 @@ TString BuildPrefixPolyArgs(TStringBuf errorMessage) {
     return sb;
 }
 
-// Returns a Uuid value as 16 raw bytes in the same layout YDB stores for external
-// client parameters (Java SDK: java.util.UUID -> hi128/low128 -> UuidHalfsToBytes).
+// Returns a Uuid value as 16 raw bytes in the internal format, which is Microsoft-style mixed endian GUID.
 TUnboxedValue MakeUuidValue(const IValueBuilder* valueBuilder, bool isV8, ui64 prefix, bool hasPrefix) {
     std::array<ui8, NKikimr::NUuid::UUID_LEN> bytes{};
     if (isV8) {
@@ -138,10 +137,7 @@ TUnboxedValue MakeUuidValue(const IValueBuilder* valueBuilder, bool isV8, ui64 p
         bytes = NUuidKeyGen::MakeV8Bytes(prefix, epochSeconds, hasPrefix);
     } else {
         ui64 timestampMs = MilliSeconds();
-        if (hasPrefix) {
-            timestampMs = NUuidKeyGen::ApplyV7Prefix(timestampMs, prefix);
-        }
-        bytes = NUuidKeyGen::MakeV7Bytes(timestampMs);
+        bytes = NUuidKeyGen::MakeV7Bytes(timestampMs, prefix, hasPrefix);
     }
 
     return valueBuilder->NewString(TStringRef(

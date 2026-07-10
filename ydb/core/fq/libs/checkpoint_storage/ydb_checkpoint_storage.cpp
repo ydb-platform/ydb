@@ -655,6 +655,8 @@ public:
     TFuture<ICheckpointStorage::TGetTotalCheckpointsStateSizeResult> GetTotalCheckpointsStateSize(const TString& graphId) override;
     TExecDataQuerySettings DefaultExecDataQuerySettings();
 
+    static NYdb::NRetry::TRetryOperationSettings GetRetryOperationSettings();
+
 private:
     TFuture<TCreateCheckpointResult> CreateCheckpointImpl(const TCoordinatorId& coordinator, const TCheckpointContextPtr& context);
 
@@ -750,7 +752,7 @@ TFuture<TIssues> TCheckpointStorage::RegisterGraphCoordinator(const TCoordinator
                 execDataQuerySettings);
 
             return RegisterCheckGeneration(context);
-        });
+        }, GetRetryOperationSettings());
 
     return StatusToIssues(future);
 }
@@ -776,7 +778,7 @@ TFuture<ICheckpointStorage::TGetCoordinatorsResult> TCheckpointStorage::GetCoord
                 [generationContext, getContext] (const TFuture<TDataQueryResult>& future) {
                     return ProcessCoordinators(future.GetValue(), generationContext, getContext);
                 });
-        });
+        }, GetRetryOperationSettings());
 
     return StatusToIssues(future).Apply(
         [getContext] (const TFuture<TIssues>& future) {
@@ -830,7 +832,7 @@ TFuture<ICheckpointStorage::TCreateCheckpointResult> TCheckpointStorage::CreateC
 
             auto future = CheckGeneration(generationContext);
             return CreateCheckpointWrapper(future, checkpointContext);
-        });
+        }, GetRetryOperationSettings());
 
     return StatusToIssues(future).Apply(
         [checkpointContext] (const TFuture<TIssues>& future) {
@@ -865,7 +867,7 @@ TFuture<TIssues> TCheckpointStorage::UpdateCheckpointStatus(
 
             auto future = CheckGeneration(generationContext);
             return UpdateCheckpointWithCheckWrapper(future, checkpointContext);
-        });
+        }, GetRetryOperationSettings());
 
     return StatusToIssues(future);
 }
@@ -892,7 +894,7 @@ TFuture<TIssues> TCheckpointStorage::AbortCheckpoint(
 
             auto future = CheckGeneration(generationContext);
             return UpdateCheckpointWithCheckWrapper(future, checkpointContext);
-        });
+        }, GetRetryOperationSettings());
 
     return StatusToIssues(future);
 }
@@ -924,7 +926,7 @@ TFuture<ICheckpointStorage::TGetCheckpointsResult> TCheckpointStorage::GetCheckp
                 [generationContext, getContext, loadGraphDescription] (const TFuture<TDataQueryResult>& future) {
                     return ProcessCheckpoints(future.GetValue(), generationContext, getContext, loadGraphDescription);
                 });
-        });
+        }, GetRetryOperationSettings());
 
     return StatusToIssues(future).Apply(
         [getContext] (const TFuture<TIssues>& future) {
@@ -970,7 +972,7 @@ TFuture<TIssues> TCheckpointStorage::DeleteGraph(const TString& graphId) {
                     TStatus status = future.GetValue();
                     return status;
             });
-        });
+        }, GetRetryOperationSettings());
 
     return StatusToIssues(future);
 }
@@ -1028,7 +1030,7 @@ TFuture<TIssues> TCheckpointStorage::MarkCheckpointsGC(
                     TStatus status = future.GetValue();
                     return status;
             });
-        });
+        }, GetRetryOperationSettings());
 
     return StatusToIssues(future);
 }
@@ -1106,7 +1108,7 @@ TFuture<TIssues> TCheckpointStorage::DeleteMarkedCheckpoints(
                     TStatus status = future.GetValue();
                     return status;
             });
-        });
+        }, GetRetryOperationSettings());
 
     return StatusToIssues(future);
 }
@@ -1156,12 +1158,18 @@ TFuture<ICheckpointStorage::TGetTotalCheckpointsStateSizeResult> TCheckpointStor
                         }
                         return status;
                     });
-        });
+        }, GetRetryOperationSettings());
 
     return StatusToIssues(future).Apply(
         [result] (const TFuture<TIssues>& future) {
             return std::make_pair(result->Size, future.GetValue());
         });
+}
+
+NYdb::NRetry::TRetryOperationSettings TCheckpointStorage::GetRetryOperationSettings() {
+    return NYdb::NRetry::TRetryOperationSettings()
+        .MaxRetries(30)
+        .MaxTimeout(TDuration::Seconds(30));
 }
 
 TExecDataQuerySettings TCheckpointStorage::DefaultExecDataQuerySettings() {

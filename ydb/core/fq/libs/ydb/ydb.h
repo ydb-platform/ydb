@@ -78,7 +78,8 @@ struct IYdbConnection : public TThrRefBase {
 
 IYdbConnection::TPtr CreateLocalYdbConnection(
     const TString& db,
-    const TString& tablePathPrefix);
+    const TString& tablePathPrefix,
+    ui64 maxActiveSessions);
 
 IYdbConnection::TPtr CreateSdkYdbConnection(
     const TExternalStorageSettings& config,

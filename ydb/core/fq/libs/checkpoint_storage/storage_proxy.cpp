@@ -221,7 +221,7 @@ void TStorageProxy::Bootstrap() {
         ydbConnection = CreateSdkYdbConnection(StorageConfig, CredentialsProviderFactory, Driver);
     } else {
         YDB_LOG_INFO("Create local ydb connection");
-        ydbConnection = CreateLocalYdbConnection(NKikimr::AppData()->TenantName, CHECKPOINTS_TABLE_PREFIX);
+        ydbConnection = CreateLocalYdbConnection(NKikimr::AppData()->TenantName, CHECKPOINTS_TABLE_PREFIX, StorageConfig.GetMaxActiveQuerySessions());
     }
     CheckpointStorage = NewYdbCheckpointStorage(StorageConfig, CreateEntityIdGenerator(IdsPrefix), ydbConnection);
     StateStorage = NewYdbStateStorage(Config, ydbConnection);

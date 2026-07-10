@@ -107,7 +107,7 @@ class TGcTestBase: public NUnitTest::TTestBase {
         if (UseYdbSdk) {
             return CreateSdkYdbConnection(storageConfig, NKikimr::CreateYdbCredentialsProviderFactory, driver);
         } else {
-            return CreateLocalYdbConnection(YdbDatabase, TablePrefix);
+            return CreateLocalYdbConnection(YdbDatabase, TablePrefix, 50);
         }
     }
 

@@ -12,9 +12,28 @@
 #include <ydb/library/actors/core/events.h>
 #include <ydb/library/actors/core/hfunc.h>
 
+#include <util/system/mutex.h>
+
 namespace NFq {
 
 namespace {
+
+struct TLocalYdbTableClient : public IYdbTableClient {
+    
+    TLocalYdbTableClient(ui64 maxActiveSessions);
+
+    NYdb::TAsyncStatus RetryOperation(
+        TOperationFunc&& operation,
+        const NYdb::NRetry::TRetryOperationSettings& settings = NYdb::NRetry::TRetryOperationSettings()) override;
+
+    ISession::TPtr GetSession();
+    void ReleaseSession();
+
+private:
+    ui64 MaxActiveSessions;
+    ui64 ActiveSessions = 0;
+    TMutex Mutex;
+};
 
 class TRetryOperationActor : public NActors::TActorBootstrapped<TRetryOperationActor> {
 
@@ -37,20 +56,28 @@ class TRetryOperationActor : public NActors::TActorBootstrapped<TRetryOperationA
 
 public:
     TRetryOperationActor(
+        TIntrusivePtr<TLocalYdbTableClient> tableClient,
         NThreading::TPromise<NYdb::TStatus> promise,
         TOperationFunc&& operation,
         const NYdb::NRetry::TRetryOperationSettings& settings)
-        : Promise(promise)
+        : TableClient(tableClient)
+        , Promise(promise)
         , RetryPolicy(IRetryPolicy::GetExponentialBackoffPolicy(
-            Retryable, TDuration::MilliSeconds(10), 
+            Retryable,
+            TDuration::MilliSeconds(100),
             TDuration::MilliSeconds(200),
             settings.MaxTimeout_,
-            settings.MaxRetries_, settings.MaxTimeout_
+            settings.MaxRetries_,
+            settings.MaxTimeout_
         ))
         , Operation(operation) {
     }
 
     ~TRetryOperationActor() override {
+        if (Session) {
+            TableClient->ReleaseSession();
+            Session = nullptr;
+        }
         if (!Promise.HasValue()) {
             auto status = NYdb::TStatus(NYdb::EStatus::INTERNAL_ERROR,
                 NYdb::NIssue::TIssues({NYdb::NIssue::TIssue("Destructor calling")}));
@@ -74,6 +101,10 @@ private:
     }
 
     void Handle(TEvPrivate::TEvResult::TPtr& ev) {
+        if (Session) {
+            TableClient->ReleaseSession();
+            Session = nullptr;
+        }
         const auto& status = ev->Get()->Status;
         if (!status.IsSuccess()) {
             ScheduleRetry(status);
@@ -83,10 +114,15 @@ private:
         }
     }
 
-    void StartOperation() {        
-        auto session = CreateLocalSession();
-        auto future = Operation(session);
-        future.Subscribe([selfId = SelfId(), actorSystem =  NActors::TActivationContext::ActorSystem()](const NYdb::TAsyncStatus& result){
+    void StartOperation() {
+        Session = TableClient->GetSession();
+        if (!Session) {
+            auto overloadedStatus = NYdb::TStatus(NYdb::EStatus::OVERLOADED, NYdb::NIssue::TIssues{NYdb::NIssue::TIssue{"no session available"}});
+            ScheduleRetry(overloadedStatus);
+            return;
+        }
+        auto future = Operation(Session);
+        future.Subscribe([selfId = SelfId(), actorSystem = NActors::TActivationContext::ActorSystem()](const NYdb::TAsyncStatus& result){
             actorSystem->Send(selfId, new TEvPrivate::TEvResult(result.GetValue()));
         });
     }
@@ -137,27 +173,49 @@ private:
     }
 
 private:
+    TIntrusivePtr<TLocalYdbTableClient> TableClient;
     NThreading::TPromise<NYdb::TStatus> Promise;
     const IRetryPolicy::TPtr RetryPolicy;
     IRetryPolicy::IRetryState::TPtr RetryState;
     TOperationFunc Operation;
+    ISession::TPtr Session;
 };
 
-struct TLocalYdbTableClient : public IYdbTableClient {
+TLocalYdbTableClient::TLocalYdbTableClient(ui64 maxActiveSessions)
+    : MaxActiveSessions(maxActiveSessions) {
+}
 
-    NYdb::TAsyncStatus RetryOperation(
-        TOperationFunc&& operation,
-        const NYdb::NRetry::TRetryOperationSettings& settings = NYdb::NRetry::TRetryOperationSettings()) override {
-        auto promise = NThreading::NewPromise<NYdb::TStatus>();
-        NActors::TActivationContext::Register(new TRetryOperationActor(promise, std::move(operation), settings));
-        return promise.GetFuture();
+NYdb::TAsyncStatus TLocalYdbTableClient::RetryOperation(
+    TOperationFunc&& operation,
+    const NYdb::NRetry::TRetryOperationSettings& settings) {
+    auto promise = NThreading::NewPromise<NYdb::TStatus>();
+    auto self = TIntrusivePtr<TLocalYdbTableClient>(this);
+    NActors::TActivationContext::Register(new TRetryOperationActor(self, promise, std::move(operation), settings));
+    return promise.GetFuture();
+}
+
+ISession::TPtr TLocalYdbTableClient::GetSession() {
+    {
+        TGuard<TMutex> guard(Mutex);
+        if (ActiveSessions >= MaxActiveSessions) {
+            return nullptr;
+        }
+        ++ActiveSessions;
     }
-};
+    return CreateLocalSession();
+}
+
+void TLocalYdbTableClient::ReleaseSession() {
+    TGuard<TMutex> guard(Mutex);
+    if (ActiveSessions > 0) {
+        --ActiveSessions;
+    }
+}
 
 } // namespace
 
-IYdbTableClient::TPtr CreateLocalTableClient() {
-    return MakeIntrusive<TLocalYdbTableClient>();
+IYdbTableClient::TPtr CreateLocalTableClient(ui64 maxActiveSessions) {
+    return MakeIntrusive<TLocalYdbTableClient>(maxActiveSessions);
 }
 
 } // namespace NFq

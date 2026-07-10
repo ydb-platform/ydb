@@ -1737,6 +1737,7 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
                     if (NLogin::IsOldFormatHash(targetUser.GetHashedPassword())) {
                         targetUser.SetHashedPassword(NLogin::ConvertOldFormatHash(targetUser.GetHashedPassword()));
                     }
+                    targetUser.ClearPassword();
                 } else {
                     RunPasswordHasher(ctx, targetUser.GetUser(), targetUser.GetPassword());
                     return;
@@ -1752,6 +1753,7 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
                     if (NLogin::IsOldFormatHash(targetUser.GetHashedPassword())) {
                         targetUser.SetHashedPassword(NLogin::ConvertOldFormatHash(targetUser.GetHashedPassword()));
                     }
+                    targetUser.ClearPassword();
                 } else if (targetUser.HasPassword()) {
                     RunPasswordHasher(ctx, targetUser.GetUser(), targetUser.GetPassword());
                     return;

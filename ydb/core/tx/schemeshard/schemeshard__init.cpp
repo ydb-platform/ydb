@@ -4483,7 +4483,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 TString fsSerializedSettings = std::get<11>(rec);
 
                 Y_ABORT_UNLESS(tableName.size() > 0);
-                
+
                 auto fillBackupSettings = [&](auto& tableInfo) {
                     tableInfo->BackupSettings.SetTableName(tableName);
                     tableInfo->BackupSettings.SetNeedToBill(needToBill);
@@ -4522,7 +4522,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                         }
                     }
                 };
-                
+
                 if (auto it = Self->Tables.find(pathId); it != Self->Tables.end()) {
                     fillBackupSettings(it->second);
                 } else if (Self->ColumnTables.contains(pathId)) {
@@ -4605,7 +4605,6 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 auto& sid = *securityState.AddSids();
                 sid.SetName(rowset.GetValue<Schema::LoginSids::SidName>());
                 sid.SetType(rowset.GetValue<Schema::LoginSids::SidType>());
-                sid.SetArgonHash(rowset.GetValue<Schema::LoginSids::SidHash>());
                 sid.SetPasswordHashes(rowset.GetValue<Schema::LoginSids::PasswordHashes>());
                 sid.SetCreatedAt(rowset.GetValueOrDefault<Schema::LoginSids::CreatedAt>());
                 sid.SetFailedLoginAttemptCount(rowset.GetValueOrDefault<Schema::LoginSids::FailedAttemptCount>());

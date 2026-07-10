@@ -124,7 +124,7 @@ class AccessServicer(access_service_pb2_grpc.AccessServiceServicer):
 
         for resource in request.resource_path:
             if resource.type != 'iam.serviceAccount':
-                context.set_code(grpc.StatusCode.UNAUTHORIZED)
+                context.set_code(grpc.StatusCode.PERMISSION_DENIED)
                 context.set_details("Don't know about this type: " + resource.type)
                 return access_service_pb2.AuthorizeResponse()
 
@@ -142,7 +142,7 @@ class AccessServicer(access_service_pb2_grpc.AccessServiceServicer):
                     return access_service_pb2.AuthorizeResponse()
 
             if resource.id == 'bad':
-                context.set_code(grpc.StatusCode.UNAUTHORIZED)
+                context.set_code(grpc.StatusCode.PERMISSION_DENIED)
                 context.set_details("This one is bad")
                 return access_service_pb2.AuthorizeResponse()
 

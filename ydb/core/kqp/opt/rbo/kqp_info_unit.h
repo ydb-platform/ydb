@@ -21,11 +21,23 @@ struct TInfoUnit {
     }
 
     TInfoUnit(const TString& name, bool subplanContext = false) : SubplanContext(subplanContext) {
-        if (auto idx = name.find('.'); idx != TString::npos) {
-            Alias = name.substr(0, idx);
-            if (Alias.StartsWith("_alias_")) {
-                Alias = Alias.substr(7);
+        if (name.StartsWith("_alias_")) {
+            TString alias;
+            size_t i = 7;
+            for (; i < name.size(); ++i) {
+                if (name[i] == '\\' && i + 1 < name.size()) {
+                    alias += name[++i];
+                    continue;
+                }
+                if (name[i] == '.') {
+                    break;
+                }
+                alias += name[i];
             }
+            Alias = alias;
+            ColumnName = (i < name.size()) ? name.substr(i + 1) : TString();
+        } else if (auto idx = name.rfind('.'); idx != TString::npos) {
+            Alias = name.substr(0, idx);
             ColumnName = name.substr(idx + 1);
         } else {
             Alias = "";

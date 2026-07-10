@@ -410,9 +410,22 @@ TExprNode::TPtr NormalizeMemberNames(TExprNode::TPtr node, TExprContext& ctx, TP
     for (const auto& member : members) {
         const TString colName(TCoMember(member).Name().StringValue());
         if (colName.StartsWith("_alias_")) {
-            auto it = colName.find(".");
-            Y_ENSURE(it != TString::npos, "Invalid _alias_ prefix");
-            const auto newMemberName = colName.substr(7);
+            const TStringBuf rest = TStringBuf(colName).SubStr(7);
+            TStringBuilder alias;
+            size_t i = 0;
+            for (; i < rest.size(); ++i) {
+                if (rest[i] == '\\') {
+                    Y_ENSURE(i + 1 < rest.size(), "Invalid escape in _alias_ prefix");
+                    alias << rest[++i];
+                    continue;
+                }
+                if (rest[i] == '.') {
+                    break;
+                }
+                alias << rest[i];
+            }
+            Y_ENSURE(i < rest.size(), "Invalid _alias_ prefix");
+            const TString newMemberName = TString(alias) + "." + TString(rest.SubStr(i + 1));
             // clang-format off
             auto newMember = Build<TCoMember>(ctx, pos)
                 .Struct(member->ChildPtr(0))

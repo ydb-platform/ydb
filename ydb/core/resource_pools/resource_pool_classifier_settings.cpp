@@ -1,5 +1,6 @@
 #include "resource_pool_classifier_settings.h"
 
+#include <util/generic/serialized_enum.h>
 #include <util/string/builder.h>
 #include <util/string/cast.h>
 
@@ -38,12 +39,11 @@ void TClassifierSettings::TParser::operator()(std::optional<EClassifierAction>* 
         setting->reset();
         return;
     }
-    const auto lowered = to_lower(Value);
-    if (lowered == "reject") {
-        *setting = EClassifierAction::Reject;
-        return;
+    EClassifierAction parsed;
+    if (!TryFromString(to_lower(Value), parsed)) {
+        throw yexception() << "Invalid action '" << Value << "', supported values: " << GetEnumAllNames<EClassifierAction>();
     }
-    throw yexception() << "Invalid action '" << Value << "', supported values: 'reject'";
+    *setting = parsed;
 }
 
 //// TClassifierSettings::TExtractor
@@ -71,11 +71,7 @@ TString TClassifierSettings::TExtractor::operator()(std::optional<EClassifierAct
     if (!*setting) {
         return TString{};
     }
-    switch (**setting) {
-        case EClassifierAction::Reject:
-            return "reject";
-    }
-    return TString{};
+    return ToString(**setting);
 }
 
 //// TClassifierSettings

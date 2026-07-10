@@ -82,6 +82,13 @@ NMetadata::NModifications::TOperationParsingResult TResourcePoolClassifierManage
             return TConclusionStatus::Fail(TStringBuilder()<< "Symbol '" << *brokenAt << "' is not allowed in the resource pool classifier name '" << name << "'");
         }
     }
+
+    if (resourcePoolClassifierSettings.Action == EClassifierAction::Reject) {
+        if (configJson.GetMap().contains("resource_pool")) {
+            return TConclusionStatus::Fail("Property resource_pool must not be set when action='reject'");
+        }
+        configJson.InsertValue("resource_pool", DEFAULT_POOL_ID);
+    }
     if (auto error = resourcePoolClassifierSettings.Validate()) {
         return TConclusionStatus::Fail(TStringBuilder() << "Invalid resource pool classifier settings: " << *error);
     }

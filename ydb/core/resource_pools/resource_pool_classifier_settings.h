@@ -12,7 +12,7 @@ inline constexpr i64 CLASSIFIER_RANK_OFFSET = 1000;
 inline constexpr i64 CLASSIFIER_COUNT_LIMIT = 1000;
 
 enum class EClassifierAction {
-    Reject,
+    Reject /* "reject" */,
 };
 
 struct TClassifierSettings : public TSettingsBase {

@@ -1,15 +1,20 @@
 UNITTEST_FOR(ydb/core/blobstorage/ut_blobstorage)
 
-    FORK_SUBTESTS()
+FORK_SUBTESTS()
+SPLIT_FACTOR(11)
 
-    SIZE(MEDIUM)
+SIZE(MEDIUM)
 
-    SRCS(
-        vdisk_internals.cpp
-    )
+IF (SANITIZER_TYPE)
+    REQUIREMENTS(cpu:4)
+ENDIF()
 
-    PEERDIR(
-        ydb/core/blobstorage/ut_blobstorage/lib
-    )
+SRCS(
+    vdisk_internals.cpp
+)
+
+PEERDIR(
+    ydb/core/blobstorage/ut_blobstorage/lib
+)
 
 END()

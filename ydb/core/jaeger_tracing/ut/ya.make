@@ -5,6 +5,10 @@ FORK_SUBTESTS()
 SIZE(MEDIUM)
 REQUIREMENTS(cpu:2)
 
+IF (SANITIZER_TYPE)
+    REQUIREMENTS(cpu:4)
+ENDIF()
+
 SRCS(
     sampler_ut.cpp
     throttler_ut.cpp

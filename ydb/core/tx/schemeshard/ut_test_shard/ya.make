@@ -9,6 +9,10 @@ ELSE()
     SIZE(MEDIUM)
 ENDIF()
 
+IF (SANITIZER_TYPE)
+    REQUIREMENTS(cpu:2)
+ENDIF()
+
 PEERDIR(
     ydb/core/protos/schemeshard
     ydb/core/testlib/default

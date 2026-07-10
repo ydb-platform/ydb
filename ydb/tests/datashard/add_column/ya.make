@@ -7,6 +7,10 @@ TEST_SRCS(
 
 SIZE(MEDIUM)
 
+IF (SANITIZER_TYPE)
+    REQUIREMENTS(cpu:2)
+ENDIF()
+
 PEERDIR(
     ydb/tests/datashard/lib
     ydb/tests/sql/lib

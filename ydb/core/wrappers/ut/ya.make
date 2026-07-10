@@ -4,6 +4,12 @@ FORK_SUBTESTS()
 
 SPLIT_FACTOR(20)
 
+IF (SANITIZER_TYPE)
+    TIMEOUT(600)
+    SIZE(MEDIUM)
+    REQUIREMENTS(cpu:4)
+ENDIF()
+
 IF (NOT OS_WINDOWS)
     PEERDIR(
         ydb/library/actors/core

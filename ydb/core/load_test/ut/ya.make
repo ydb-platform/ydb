@@ -1,8 +1,13 @@
 UNITTEST_FOR(ydb/core/load_test)
 
 FORK_SUBTESTS(MODULO)
+SPLIT_FACTOR(11)
 
 SIZE(MEDIUM)
+
+IF (SANITIZER_TYPE)
+    REQUIREMENTS(cpu:4)
+ENDIF()
 
 PEERDIR(
     ydb/core/blobstorage/ut_blobstorage/lib

@@ -1,16 +1,20 @@
 UNITTEST_FOR(ydb/core/blobstorage/ut_blobstorage)
 
-    SIZE(MEDIUM)
+FORK_SUBTESTS()
+SPLIT_FACTOR(11)
 
-    FORK_SUBTESTS()
+SIZE(MEDIUM)
 
-    SRCS(
-        bridge_get.cpp
-    )
+IF (SANITIZER_TYPE)
+    REQUIREMENTS(cpu:2)
+ENDIF()
 
-    PEERDIR(
-        ydb/core/blobstorage/ut_blobstorage/lib
-    )
+SRCS(
+    bridge_get.cpp
+)
+
+PEERDIR(
+    ydb/core/blobstorage/ut_blobstorage/lib
+)
 
 END()
-

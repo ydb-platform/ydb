@@ -7,7 +7,6 @@ SELECT Uuid::newPrefixV7($p) != Uuid::newPrefixV7($p) AS v7_prefix_unique;
 SELECT Uuid::newPrefixV8($p) != Uuid::newV8() AS v8_prefix_differs;
 
 SELECT Uuid::newPrefixV7(3) != Uuid::newV7() AS v7_small_prefix_differs;
-SELECT Uuid::newPrefixV8(3) != Uuid::newV8() AS v8_small_prefix_differs;
 
 SELECT Uuid::newV7(1) != Uuid::newV7(2) AS v7_dep_unique;
 SELECT Uuid::newPrefixV7($p, 1) != Uuid::newPrefixV7($p, 2) AS v7_prefix_dep_unique;

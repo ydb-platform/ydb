@@ -17,30 +17,35 @@ static constexpr ui32 TimestampBits = 30;
 static constexpr ui32 TimestampFieldLowBit = 33;
 static constexpr ui32 MaskPos = PrefixBits - 1;
 
-// Precomputed for the default 10-bit prefix (maskPos = 9).
+// Precomputed for the default 10-bit prefix (maskPos = 9), matching UuidKeyGen.java.
 static constexpr ui64 V8PrefixMask = 0xFFC0000000000000ULL;
 static constexpr ui64 V8TimestampMask = 0x003FFFFFFF000000ULL;
 
 static constexpr ui64 V7TimestampPrefixMask = static_cast<ui64>(PrefixMask10) << (48 - PrefixBits);
-static constexpr ui32 V8PrefixShift = 64 - PrefixBits;
 
-// UDFs return 16 raw bytes in YDB/YQL Uuid internal storage layout (Microsoft GUID
-// mixed-endian, the same representation as table cells and RandomUuid()).
-// YQL applies ParseUuidToArray when a UUID literal string is parsed; UDFs must emit
-// that internal layout directly.
+// UDFs return the same 16-byte Uuid value that YDB stores for parameters passed from
+// external clients (Java SDK: java.util.UUID -> PrimitiveValue.newUuid -> hi128/low128
+// via UuidHalfsToBytes). YQL string literals use ParseUuidToArray; for V7 RFC field
+// layout that path is equivalent to the SDK encoding below without MSB reorder.
 //
-// Field placement below uses RFC 4122 octet indices as a convenient intermediate
-// layout while embedding version, variant, prefix and timestamp. The final step
-// converts those octets to internal storage bytes via the same rules as
-// ParseUuidToArray. This is not the Java reorder() helper used for external
-// client-side UUID construction.
+// V8 additionally applies reorder() to the RFC MSB before SDK encoding, matching
+// external UuidKeyGen.java.
 
 inline ui64 NormalizePrefixBits(ui64 prefix) {
     return prefix & PrefixMask10;
 }
 
-inline ui64 PrefixBitsForV8Msb(ui64 prefix) {
-    return NormalizePrefixBits(prefix) << V8PrefixShift;
+inline ui64 ReorderMsb(ui64 v) {
+    const ui64 b0 = (v >> 56) & 0xff;
+    const ui64 b1 = (v >> 48) & 0xff;
+    const ui64 b2 = (v >> 40) & 0xff;
+    const ui64 b3 = (v >> 32) & 0xff;
+    const ui64 b4 = (v >> 24) & 0xff;
+    const ui64 b5 = (v >> 16) & 0xff;
+    const ui64 b6 = (v >> 8) & 0xff;
+    const ui64 b7 = v & 0xff;
+    return (b3 << 56) | (b2 << 48) | (b1 << 40) | (b0 << 32)
+        | (b5 << 24) | (b4 << 16) | (b7 << 8) | b6;
 }
 
 inline ui64 ReadBe64(const ui8* data) {
@@ -56,6 +61,20 @@ inline void WriteBe64(ui64 value, ui8* data) {
         data[i] = static_cast<ui8>(value & 0xff);
         value >>= 8;
     }
+}
+
+inline ui64 ByteSwap64(ui64 value) {
+    ui64 result = 0;
+    for (ui32 i = 0; i < 8; ++i) {
+        result = (result << 8) | ((value >> (8 * i)) & 0xff);
+    }
+    return result;
+}
+
+inline ui64 JavaUuidMsbToLow128(ui64 javaMsb) {
+    return ((javaMsb & 0xffffffff00000000ULL) >> 32)
+        | ((javaMsb & 0x00000000ffff0000ULL) << 16)
+        | ((javaMsb & 0x000000000000ffffULL) << 48);
 }
 
 inline void FillRandomBytes(ui8* data, size_t size) {
@@ -78,6 +97,16 @@ inline void RfcLayoutToYdbInternalBytes(const ui8* rfcLayout, ui8* internalBytes
         dw[i] = static_cast<ui16>(((dw[i] >> 8) & 0xff) | ((dw[i] & 0xff) << 8));
     }
     std::memcpy(internalBytes, dw.data(), NKikimr::NUuid::UUID_LEN);
+}
+
+inline void JavaUuidToYdbStorageBytes(ui64 javaMsb, ui64 javaLsb, ui8* internalBytes) {
+    const ui64 low128 = JavaUuidMsbToLow128(javaMsb);
+    const ui64 hi128 = ByteSwap64(javaLsb);
+    NKikimr::NUuid::UuidHalfsToBytes(
+        reinterpret_cast<char*>(internalBytes),
+        NKikimr::NUuid::UUID_LEN,
+        hi128,
+        low128);
 }
 
 inline ui64 GetPrefixMask() {
@@ -103,7 +132,7 @@ inline ui64 UpdateMsb(ui64 msb, ui64 prefix, ui64 epochSeconds, bool hasPrefix) 
         return (msb & ~tsMask) | (tsCode & tsMask);
     }
     return (msb & ~(prefixMask | tsMask))
-        | (PrefixBitsForV8Msb(prefix) | (tsCode & tsMask));
+        | ((prefix & prefixMask) | (tsCode & tsMask));
 }
 
 inline ui64 ApplyV7Prefix(ui64 timestampMs, ui64 prefix) {
@@ -125,7 +154,9 @@ inline std::array<ui8, NKikimr::NUuid::UUID_LEN> MakeV7Bytes(ui64 timestampMs) {
     rfcLayout[8] = static_cast<ui8>((rfcLayout[8] & 0x3f) | 0x80);
 
     std::array<ui8, NKikimr::NUuid::UUID_LEN> internalBytes{};
-    RfcLayoutToYdbInternalBytes(rfcLayout.data(), internalBytes.data());
+    const ui64 javaMsb = ReadBe64(rfcLayout.data());
+    const ui64 javaLsb = ReadBe64(rfcLayout.data() + 8);
+    JavaUuidToYdbStorageBytes(javaMsb, javaLsb, internalBytes.data());
     return internalBytes;
 }
 
@@ -137,11 +168,12 @@ inline std::array<ui8, NKikimr::NUuid::UUID_LEN> MakeV8Bytes(ui64 prefix, ui64 e
     rfcLayout[8] = static_cast<ui8>((rfcLayout[8] & 0x3f) | 0x80);
 
     ui64 msb = ReadBe64(rfcLayout.data());
+    const ui64 javaLsb = ReadBe64(rfcLayout.data() + 8);
     msb = UpdateMsb(msb, prefix, epochSeconds, hasPrefix);
-    WriteBe64(msb, rfcLayout.data());
+    const ui64 javaMsb = ReorderMsb(msb);
 
     std::array<ui8, NKikimr::NUuid::UUID_LEN> internalBytes{};
-    RfcLayoutToYdbInternalBytes(rfcLayout.data(), internalBytes.data());
+    JavaUuidToYdbStorageBytes(javaMsb, javaLsb, internalBytes.data());
     return internalBytes;
 }
 

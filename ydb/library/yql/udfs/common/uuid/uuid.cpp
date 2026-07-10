@@ -56,9 +56,8 @@ TString BuildPrefixPolyArgs(TStringBuf errorMessage) {
     return sb;
 }
 
-// Returns a Uuid value as 16 raw bytes in YDB internal storage layout (Microsoft GUID
-// mixed-endian). This is the same representation used by table cells, RandomUuid(),
-// and ParseUuidToArray for string literals; UDFs must not apply Java-style reorder().
+// Returns a Uuid value as 16 raw bytes in the same layout YDB stores for external
+// client parameters (Java SDK: java.util.UUID -> hi128/low128 -> UuidHalfsToBytes).
 TUnboxedValue MakeUuidValue(const IValueBuilder* valueBuilder, bool isV8, ui64 prefix, bool hasPrefix) {
     std::array<ui8, NKikimr::NUuid::UUID_LEN> bytes{};
     if (isV8) {

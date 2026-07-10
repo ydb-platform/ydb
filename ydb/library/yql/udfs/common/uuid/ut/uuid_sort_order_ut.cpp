@@ -16,7 +16,8 @@ namespace {
 
 using TUuidBytes = std::array<ui8, NKikimr::NUuid::UUID_LEN>;
 
-constexpr ui64 kTestPrefix = 0x2A5ULL;
+constexpr ui64 kTestV7Prefix = 0x2A5ULL;
+constexpr ui64 kTestV8Prefix = 0x00000A9400000000ULL;
 constexpr ui64 kSmallPrefix = 3ULL;
 
 int CompareUuidBytes(const TUuidBytes& lhs, const TUuidBytes& rhs) {
@@ -69,85 +70,90 @@ TUuidBytes GenerateV8WithFixedRandom(ui64 prefix, ui64 epochSeconds) {
     return MakeV8Bytes(prefix, epochSeconds, true);
 }
 
-TUuidBytes BuildV7ViaParseUuidToArray(ui64 timestampMs, ui32 seed) {
+TUuidBytes BuildV7ReferenceBytes(ui64 timestampMs, ui32 seed) {
     SetRandomSeed(seed);
-    std::array<ui8, NKikimr::NUuid::UUID_LEN> rfc{};
-    FillRandomBytes(rfc.data(), rfc.size());
+    std::array<ui8, NKikimr::NUuid::UUID_LEN> rfcLayout{};
+    FillRandomBytes(rfcLayout.data(), rfcLayout.size());
 
-    rfc[0] = static_cast<ui8>((timestampMs >> 40) & 0xff);
-    rfc[1] = static_cast<ui8>((timestampMs >> 32) & 0xff);
-    rfc[2] = static_cast<ui8>((timestampMs >> 24) & 0xff);
-    rfc[3] = static_cast<ui8>((timestampMs >> 16) & 0xff);
-    rfc[4] = static_cast<ui8>((timestampMs >> 8) & 0xff);
-    rfc[5] = static_cast<ui8>(timestampMs & 0xff);
-    rfc[6] = static_cast<ui8>((rfc[6] & 0x0f) | 0x70);
-    rfc[8] = static_cast<ui8>((rfc[8] & 0x3f) | 0x80);
+    rfcLayout[0] = static_cast<ui8>((timestampMs >> 40) & 0xff);
+    rfcLayout[1] = static_cast<ui8>((timestampMs >> 32) & 0xff);
+    rfcLayout[2] = static_cast<ui8>((timestampMs >> 24) & 0xff);
+    rfcLayout[3] = static_cast<ui8>((timestampMs >> 16) & 0xff);
+    rfcLayout[4] = static_cast<ui8>((timestampMs >> 8) & 0xff);
+    rfcLayout[5] = static_cast<ui8>(timestampMs & 0xff);
+    rfcLayout[6] = static_cast<ui8>((rfcLayout[6] & 0x0f) | 0x70);
+    rfcLayout[8] = static_cast<ui8>((rfcLayout[8] & 0x3f) | 0x80);
 
-    std::array<ui8, NKikimr::NUuid::UUID_LEN> ydb{};
-    RfcLayoutToYdbInternalBytes(rfc.data(), ydb.data());
-    return ydb;
+    TUuidBytes result{};
+    JavaUuidToYdbStorageBytes(
+        ReadBe64(rfcLayout.data()),
+        ReadBe64(rfcLayout.data() + 8),
+        result.data());
+    return result;
 }
 
-TUuidBytes BuildV8ViaParseUuidToArray(ui64 prefix, ui64 epochSeconds, ui32 seed) {
+TUuidBytes BuildV8JavaSdkReferenceBytes(ui64 prefix, ui64 epochSeconds, ui32 seed) {
     SetRandomSeed(seed);
-    std::array<ui8, NKikimr::NUuid::UUID_LEN> rfc{};
-    FillRandomBytes(rfc.data(), rfc.size());
-    rfc[6] = static_cast<ui8>((rfc[6] & 0x0f) | 0x80);
-    rfc[8] = static_cast<ui8>((rfc[8] & 0x3f) | 0x80);
+    std::array<ui8, NKikimr::NUuid::UUID_LEN> rfcLayout{};
+    FillRandomBytes(rfcLayout.data(), rfcLayout.size());
+    rfcLayout[6] = static_cast<ui8>((rfcLayout[6] & 0x0f) | 0x80);
+    rfcLayout[8] = static_cast<ui8>((rfcLayout[8] & 0x3f) | 0x80);
 
-    ui64 msb = ReadBe64(rfc.data());
+    ui64 msb = ReadBe64(rfcLayout.data());
+    const ui64 javaLsb = ReadBe64(rfcLayout.data() + 8);
     msb = UpdateMsb(msb, prefix, epochSeconds, true);
-    WriteBe64(msb, rfc.data());
 
-    std::array<ui8, NKikimr::NUuid::UUID_LEN> ydb{};
-    RfcLayoutToYdbInternalBytes(rfc.data(), ydb.data());
-    return ydb;
+    TUuidBytes result{};
+    JavaUuidToYdbStorageBytes(ReorderMsb(msb), javaLsb, result.data());
+    return result;
 }
 
 } // namespace
 
 Y_UNIT_TEST_SUITE(TUuidSortOrder) {
-    Y_UNIT_TEST(V7AndV8UseBottom10PrefixBits) {
+    Y_UNIT_TEST(V7UsesBottom10PrefixBits) {
         const ui64 rawPrefix = 0xAABBCCDDEEFF0011ULL;
         const ui64 timestampMs = 1'700'000'000'000ULL;
-        const ui64 epochSeconds = timestampMs / 1000;
 
         UNIT_ASSERT_VALUES_EQUAL(
             ApplyV7Prefix(timestampMs, rawPrefix),
             ApplyV7Prefix(timestampMs, rawPrefix & PrefixMask10));
+    }
+
+    Y_UNIT_TEST(V8UsesTop10PrefixBitsLikeJava) {
+        const ui64 rawPrefix = 0xAABBCCDDEEFF0011ULL;
+        const ui64 epochSeconds = 1'700'000'000ULL;
 
         SetRandomSeed(77);
         const auto v8FromRaw = MakeV8Bytes(rawPrefix, epochSeconds, true);
         SetRandomSeed(77);
-        const auto v8FromBottomBits = MakeV8Bytes(rawPrefix & PrefixMask10, epochSeconds, true);
-        UNIT_ASSERT_VALUES_EQUAL(v8FromRaw, v8FromBottomBits);
+        const auto v8FromTopBits = MakeV8Bytes(rawPrefix & V8PrefixMask, epochSeconds, true);
+        UNIT_ASSERT_VALUES_EQUAL(v8FromRaw, v8FromTopBits);
 
         SetRandomSeed(88);
         const auto v8WithSmallPrefix = MakeV8Bytes(kSmallPrefix, epochSeconds, true);
         SetRandomSeed(88);
         const auto v8WithoutPrefix = MakeV8Bytes(0, epochSeconds, true);
-        UNIT_ASSERT(CompareUuidBytes(v8WithSmallPrefix, v8WithoutPrefix) != 0);
+        UNIT_ASSERT_VALUES_EQUAL(v8WithSmallPrefix, v8WithoutPrefix);
     }
 
-    Y_UNIT_TEST(V7MatchesYdbInternalLayout) {
+    Y_UNIT_TEST(V7MatchesJavaSdkStorageLayout) {
         const ui64 timestampMs = 1'700'000'123'456ULL;
         SetRandomSeed(31415);
         const auto generated = MakeV7Bytes(timestampMs);
-        const auto viaParse = BuildV7ViaParseUuidToArray(timestampMs, 31415);
-        UNIT_ASSERT_VALUES_EQUAL(generated, viaParse);
+        const auto reference = BuildV7ReferenceBytes(timestampMs, 31415);
+        UNIT_ASSERT_VALUES_EQUAL(generated, reference);
     }
 
-    Y_UNIT_TEST(V8MatchesParseUuidToArrayInternalLayout) {
+    Y_UNIT_TEST(V8MatchesJavaSdkStorageLayout) {
         const ui64 epochSeconds = 1'700'000'000ULL;
         SetRandomSeed(27182);
-        const auto generated = MakeV8Bytes(kTestPrefix, epochSeconds, true);
-        const auto viaParse = BuildV8ViaParseUuidToArray(kTestPrefix, epochSeconds, 27182);
-        UNIT_ASSERT_VALUES_EQUAL(generated, viaParse);
+        const auto generated = MakeV8Bytes(kTestV8Prefix, epochSeconds, true);
+        const auto reference = BuildV8JavaSdkReferenceBytes(kTestV8Prefix, epochSeconds, 27182);
+        UNIT_ASSERT_VALUES_EQUAL(generated, reference);
     }
 
-    Y_UNIT_TEST(V7MixedEndianSortOrderMatchesParseUuidToArrayAtBoundary) {
-        // At this timestamp boundary RFC chronological order and YDB memcmp order diverge.
-        // Generators must follow ParseUuidToArray (mixed-endian), not RFC byte order.
+    Y_UNIT_TEST(V7SortOrderMatchesReferenceAtTimestampBoundary) {
         const ui64 earlierTimestampMs = 0x00FFFFFFULL;
         const ui64 laterTimestampMs = 0x01000000ULL;
 
@@ -157,35 +163,15 @@ Y_UNIT_TEST_SUITE(TUuidSortOrder) {
         const auto laterGenerated = MakeV7Bytes(laterTimestampMs);
 
         SetRandomSeed(16180);
-        const auto earlierViaParse = BuildV7ViaParseUuidToArray(earlierTimestampMs, 16180);
+        const auto earlierReference = BuildV7ReferenceBytes(earlierTimestampMs, 16180);
         SetRandomSeed(16180);
-        const auto laterViaParse = BuildV7ViaParseUuidToArray(laterTimestampMs, 16180);
+        const auto laterReference = BuildV7ReferenceBytes(laterTimestampMs, 16180);
 
-        UNIT_ASSERT_VALUES_EQUAL(earlierGenerated, earlierViaParse);
-        UNIT_ASSERT_VALUES_EQUAL(laterGenerated, laterViaParse);
+        UNIT_ASSERT_VALUES_EQUAL(earlierGenerated, earlierReference);
+        UNIT_ASSERT_VALUES_EQUAL(laterGenerated, laterReference);
         UNIT_ASSERT_VALUES_EQUAL(
             CompareUuidBytes(earlierGenerated, laterGenerated),
-            CompareUuidBytes(earlierViaParse, laterViaParse));
-    }
-
-    Y_UNIT_TEST(V8MatchesYdbInternalLayout) {
-        SetRandomSeed(4242);
-        const auto v8 = MakeV8Bytes(kTestPrefix, 1'700'000'000ULL, true);
-
-        SetRandomSeed(4242);
-        std::array<ui8, NKikimr::NUuid::UUID_LEN> rfcLayout{};
-        FillRandomBytes(rfcLayout.data(), rfcLayout.size());
-        rfcLayout[6] = static_cast<ui8>((rfcLayout[6] & 0x0f) | 0x80);
-        rfcLayout[8] = static_cast<ui8>((rfcLayout[8] & 0x3f) | 0x80);
-
-        ui64 msb = ReadBe64(rfcLayout.data());
-        msb = UpdateMsb(msb, kTestPrefix, 1'700'000'000ULL, true);
-        WriteBe64(msb, rfcLayout.data());
-
-        std::array<ui8, NKikimr::NUuid::UUID_LEN> expected{};
-        RfcLayoutToYdbInternalBytes(rfcLayout.data(), expected.data());
-
-        UNIT_ASSERT_VALUES_EQUAL(v8, expected);
+            CompareUuidBytes(earlierReference, laterReference));
     }
 
     Y_UNIT_TEST(V7SortOrderWithoutPrefixFixedRandom) {
@@ -206,7 +192,7 @@ Y_UNIT_TEST_SUITE(TUuidSortOrder) {
         generated.reserve(10);
 
         for (ui32 i = 0; i < 10; ++i) {
-            generated.push_back(GenerateV7WithPrefixAndFixedRandom(kTestPrefix, baseTimestampMs + i * 2));
+            generated.push_back(GenerateV7WithPrefixAndFixedRandom(kTestV7Prefix, baseTimestampMs + i * 2));
         }
 
         AssertGenerationOrderIsSortOrder(generated);
@@ -218,7 +204,7 @@ Y_UNIT_TEST_SUITE(TUuidSortOrder) {
         generated.reserve(3);
 
         for (ui32 i = 0; i < 3; ++i) {
-            generated.push_back(GenerateV8WithFixedRandom(kTestPrefix, baseEpochSeconds + i));
+            generated.push_back(GenerateV8WithFixedRandom(kTestV8Prefix, baseEpochSeconds + i));
         }
 
         AssertGenerationOrderIsSortOrder(generated);
@@ -245,7 +231,7 @@ Y_UNIT_TEST_SUITE(TUuidSortOrder) {
         generated.reserve(10);
 
         for (ui32 i = 0; i < 10; ++i) {
-            generated.push_back(MakeV7Bytes(ApplyV7Prefix(baseTimestampMs + i * 2, kTestPrefix)));
+            generated.push_back(MakeV7Bytes(ApplyV7Prefix(baseTimestampMs + i * 2, kTestV7Prefix)));
         }
 
         AssertGenerationOrderIsSortOrder(generated);
@@ -286,7 +272,7 @@ Y_UNIT_TEST_SUITE(TUuidSortOrder) {
         generated.reserve(10);
 
         for (ui32 i = 0; i < 10; ++i) {
-            generated.push_back(MakeV8Bytes(kTestPrefix, baseEpochSeconds + i, true));
+            generated.push_back(MakeV8Bytes(kTestV8Prefix, baseEpochSeconds + i, true));
         }
 
         AssertAllDistinct(generated);
@@ -299,7 +285,7 @@ Y_UNIT_TEST_SUITE(TUuidSortOrder) {
         generated.reserve(32);
 
         for (ui32 i = 0; i < 32; ++i) {
-            generated.push_back(MakeV8Bytes(kTestPrefix, epochSeconds, true));
+            generated.push_back(MakeV8Bytes(kTestV8Prefix, epochSeconds, true));
         }
 
         AssertAllDistinct(generated);

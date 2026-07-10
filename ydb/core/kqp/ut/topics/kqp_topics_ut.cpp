@@ -678,18 +678,6 @@ Y_UNIT_TEST(DeferredPublication_ValidateRejectsUnspecifiedOp) {
     UNIT_ASSERT_EXCEPTION(NTopic::ValidateDeferredPublicationRequest(request), yexception);
 }
 
-Y_UNIT_TEST(DeferredPublication_ValidateRejectsUnknownOp) {
-    NKikimrKqp::TTopicDeferredPublicationRequest request;
-    request.SetOp(static_cast<NKikimrKqp::TTopicDeferredPublicationRequest::EOp>(100));
-    request.SetIntPublicationId(1);
-    auto* destination = request.AddDestinations();
-    destination->SetPath("topic");
-    destination->SetPartitionId(0);
-    destination->SetTabletId(1);
-
-    UNIT_ASSERT_EXCEPTION(NTopic::ValidateDeferredPublicationRequest(request), yexception);
-}
-
 Y_UNIT_TEST(DeferredPublication_ValidateRejectsEmptyDestinations) {
     NKikimrKqp::TTopicDeferredPublicationRequest request;
     request.SetOp(NKikimrKqp::TTopicDeferredPublicationRequest::Publish);

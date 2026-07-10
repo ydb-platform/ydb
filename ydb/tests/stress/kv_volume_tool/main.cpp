@@ -966,7 +966,6 @@ struct TOptions {
     TVector<TString> ChannelMedia;
     TString Key;
     TString Value;
-    TString ValueFile;
     TString FilePath;
     ui64 ReadOffset = 0;
     ui64 ReadSize = 0;

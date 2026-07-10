@@ -3542,8 +3542,10 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
             NYdb::NQuery::TTxControl::BeginTx().CommitTx()
         ).ExtractValueSync();
 
-        UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::BAD_REQUEST, it.GetIssues().ToString());
-        UNIT_ASSERT_STRING_CONTAINS_C(it.GetIssues().ToString(), "PostgreSQL syntax is not supported", it.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::SUCCESS, it.GetIssues().ToString());
+        auto streamPart = it.ReadNext().GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(streamPart.GetStatus(), EStatus::BAD_REQUEST, streamPart.GetIssues().ToString());
+        UNIT_ASSERT_STRING_CONTAINS_C(streamPart.GetIssues().ToString(), "PostgreSQL syntax is not supported", streamPart.GetIssues().ToString());
     }
 
     Y_UNIT_TEST(RejectSyntaxPgProtoStream) {
@@ -3559,8 +3561,10 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
             settings
         ).ExtractValueSync();
 
-        UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::BAD_REQUEST, it.GetIssues().ToString());
-        UNIT_ASSERT_STRING_CONTAINS_C(it.GetIssues().ToString(), "PostgreSQL syntax is not supported", it.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::SUCCESS, it.GetIssues().ToString());
+        auto streamPart = it.ReadNext().GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(streamPart.GetStatus(), EStatus::BAD_REQUEST, streamPart.GetIssues().ToString());
+        UNIT_ASSERT_STRING_CONTAINS_C(streamPart.GetIssues().ToString(), "PostgreSQL syntax is not supported", streamPart.GetIssues().ToString());
     }
 }
 Y_UNIT_TEST_SUITE(KqpQueryDiscard) {

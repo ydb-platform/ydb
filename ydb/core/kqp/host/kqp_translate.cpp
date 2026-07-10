@@ -298,7 +298,7 @@ constexpr const char* PgSyntaxNotSupportedMessage = "PostgreSQL syntax is not su
 
 NYql::TAstParseResult MakeRejectedSyntaxResult(const TString& message) {
     NYql::TAstParseResult result;
-    result.Issues.AddIssue(NYql::YqlIssue(NYql::TPosition(0, 0), NYql::TIssuesIds::DEFAULT_ERROR, message));
+    result.Issues.AddIssue(NYql::YqlIssue(NYql::TPosition(0, 0), NYql::TIssuesIds::KIKIMR_BAD_REQUEST, message));
     return result;
 }
 

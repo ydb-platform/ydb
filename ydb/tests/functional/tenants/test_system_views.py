@@ -280,7 +280,7 @@ class TestSysViewsRegistry(BaseSystemViews):
         """Writes content to file for canonization."""
         output_path = os.path.join(yatest.common.output_path(), filename)
         with open(output_path, 'w') as f:
-            f.write(json.dumps(content, indent=2, sort_keys=True, ensure_ascii=False))
+            f.write(json.dumps(content, indent=2, sort_keys=True, ensure_ascii=False) + '\n')
         return output_path
 
     def validate_compatibility(self, canonical_sysviews, current_sysviews):

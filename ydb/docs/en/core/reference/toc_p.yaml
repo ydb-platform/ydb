@@ -63,3 +63,9 @@ items:
   include:
     mode: link
     path: docker/toc_p.yaml
+- name: PostgreSQL compatibility (removed)
+  href: ../postgresql/intro.md
+  hidden: true
+  include:
+    mode: link
+    path: ../postgresql/toc_p.yaml

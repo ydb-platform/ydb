@@ -1,0 +1,4 @@
+items:
+- name: Совместимость с PostgreSQL (удалена)
+  href: intro.md
+  hidden: true

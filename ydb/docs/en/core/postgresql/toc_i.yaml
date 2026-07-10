@@ -1,0 +1,4 @@
+items:
+- name: PostgreSQL compatibility (removed)
+  href: intro.md
+  hidden: true

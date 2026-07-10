@@ -16,6 +16,8 @@
 
 #include <format>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
+
 namespace std {
 
 // Inherit TString* formatters from std::string* ones.
@@ -202,8 +204,9 @@ bool IsSchemeShardDevUiAdminRequest(const TCgiParameters& cgi, const TActorConte
         return false;
     }
 
-    LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-        "SchemeShard DevUI request to unknown page: " << page << ", cgi: " << cgi.Print());
+    YDB_LOG_WARN_CTX(ctx, "SchemeShard DevUI request to unknown",
+        {"page", page},
+        {"cgi", cgi.Print()});
     return true;
 }
 
@@ -521,7 +524,7 @@ public:
 
         const TCgiParameters& cgi = Ev->Get()->Cgi();
 
-        LOG_DEBUG(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, TStringBuilder() << "TTxMonitoring.Execute: " << cgi.Print());
+        YDB_LOG_DEBUG_CTX(ctx, TStringBuilder() << "TTxMonitoring.Execute: " << cgi.Print());
 
         if (cgi.Has(TCgi::Action)) {
             NIceDb::TNiceDb db(txc.DB);
@@ -619,8 +622,8 @@ private:
             debug << "IsReadOnlyMode changed from " << ToString(Self->IsReadOnlyMode)
                   << " to " << valueStr;
 
-            LOG_EMERG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                        "TSchemeShard::TTxMonitoring AdminRequest " << debug);
+            YDB_LOG_EMERG_CTX(ctx, "TSchemeShard::TTxMonitoring AdminRequest",
+                {"debug", debug});
             str << debug;
 
             db.Table<Schema::SysParams>().Key(Schema::SysParam_IsReadOnlyMode).Update(
@@ -636,8 +639,8 @@ private:
             TStringBuilder debug;
             debug << "Triggered UpdateAccessDatabaseRights with DryRunVal: " << valueDryRunStr;
 
-            LOG_EMERG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                        "TSchemeShard::TTxMonitoring AdminRequest " << debug);
+            YDB_LOG_EMERG_CTX(ctx, "TSchemeShard::TTxMonitoring AdminRequest",
+                {"debug", debug});
             str << debug;
 
             TStringStream templateAnswer = str;
@@ -688,8 +691,8 @@ private:
             TStringBuilder debug;
             debug << "Triggered FixAccessDatabaseInheritance with DryRunVal: " << valueDryRunStr;
 
-            LOG_EMERG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                        "TSchemeShard::TTxMonitoring AdminRequest " << debug);
+            YDB_LOG_EMERG_CTX(ctx, "TSchemeShard::TTxMonitoring AdminRequest",
+                {"debug", debug});
             str << debug;
 
             TStringStream templateAnswer = str;
@@ -739,8 +742,8 @@ private:
             TStringBuilder debug;
             debug << "Triggered UpdateCoordinatorsConfig, dryRun = " << valueDryRun;
 
-            LOG_EMERG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                        "TSchemeShard::TTxMonitoring AdminRequest " << debug);
+            YDB_LOG_EMERG_CTX(ctx, "TSchemeShard::TTxMonitoring AdminRequest",
+                {"debug", debug});
             str << "<pre>";
             str << debug << Endl;
 
@@ -2104,7 +2107,8 @@ private:
                 // output an underlying number, not an associated string value
                 location << "&" << TCgi::SweepAlert.AsCgiParam(ToString(ui8(sweepAlert)));
             }
-            LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "TTxMonitoring.Execute: redirect to " << location);
+            YDB_LOG_DEBUG_CTX(ctx, "TTxMonitoring.Execute: redirect",
+                {"location", location});
             SendRedirect(location, ctx);
 
         } else {
@@ -2131,7 +2135,8 @@ bool TSchemeShard::OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev, const T
         return true;
     }
 
-    LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "Handle TEvRemoteHttpInfo: " << ev->Get()->Cgi().Print());
+    YDB_LOG_DEBUG_CTX(ctx, "Handle",
+        {"TEvRemoteHttpInfo", ev->Get()->Cgi().Print()});
     Execute(new TTxMonitoring(this, ev), ctx);
 
     return true;

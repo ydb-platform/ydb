@@ -2,6 +2,8 @@
 
 #include <ydb/core/base/appdata.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
+
 // Persist/resume helpers for full-backup tracking rows (FullBackups + FullBackupItems).
 
 namespace NKikimr::NSchemeShard {
@@ -92,9 +94,9 @@ void TSchemeShard::FinalizeFullBackupOnOpComplete(NIceDb::TNiceDb& db, ui64 id, 
 
 void TSchemeShard::ResumeFullBackups(const TVector<ui64>& ids, const TActorContext& ctx) {
     for (const ui64 id : ids) {
-        LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-            "TSchemeShard::ResumeFullBackups: rehydrated full-backup id# " << id
-            << ", at schemeshard: " << TabletID());
+        YDB_LOG_NOTICE_CTX(ctx, "TSchemeShard::ResumeFullBackups: rehydrated full-backup",
+            {"id", id},
+            {"schemeshard", TabletID()});
         // Re-subscribe after reboot: id == control op's TxId. If the op already
         // completed before the crash, TEvNotifyTxCompletion replies immediately,
         // so a non-terminal row is always finalized on resume.

@@ -6,6 +6,8 @@
 #include <ydb/core/mind/hive/hive.h>
 #include <ydb/core/tx/sequenceshard/public/events.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
+
 namespace NKikimr::NSchemeShard {
 
 namespace {
@@ -34,12 +36,11 @@ public:
         auto tabletId = TTabletId(ev->Get()->Record.GetOrigin());
         auto status = ev->Get()->Record.GetStatus();
 
-        LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                    "TCreateSequence TConfigureParts HandleReply TEvCreateSequenceResult"
-                    << " shardId# " << tabletId
-                    << " status# " << status
-                    << " operationId# " << OperationId
-                    << " at tablet " << ssId);
+        YDB_LOG_DEBUG_CTX(context.Ctx, "TCreateSequence TConfigureParts HandleReply TEvCreateSequenceResult at tablet",
+            {"shardId", tabletId},
+            {"status", status},
+            {"operationId", OperationId},
+            {"ssId", ssId});
 
         switch (status) {
             case NKikimrTxSequenceShard::TEvCreateSequenceResult::SUCCESS:
@@ -49,12 +50,11 @@ public:
 
             default:
                 // Treat all other replies as unexpected and spurious
-                LOG_WARN_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                    "TCreateSequence TConfigureParts HandleReply ignoring unexpected TEvCreateSequenceResult"
-                    << " shardId# " << tabletId
-                    << " status# " << status
-                    << " operationId# " << OperationId
-                    << " at tablet " << ssId);
+                YDB_LOG_WARN_CTX(context.Ctx, "TCreateSequence TConfigureParts HandleReply ignoring unexpected TEvCreateSequenceResult at tablet",
+                    {"shardId", tabletId},
+                    {"status", status},
+                    {"operationId", OperationId},
+                    {"ssId", ssId});
                 return false;
         }
 
@@ -65,12 +65,11 @@ public:
 
         auto shardIdx = context.SS->MustGetShardIdx(tabletId);
         if (!txState->ShardsInProgress.erase(shardIdx)) {
-            LOG_WARN_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                "TCreateSequence TConfigureParts HandleReply ignoring duplicate TEvCreateSequenceResult"
-                << " shardId# " << tabletId
-                << " status# " << status
-                << " operationId# " << OperationId
-                << " at tablet " << ssId);
+            YDB_LOG_WARN_CTX(context.Ctx, "TCreateSequence TConfigureParts HandleReply ignoring duplicate TEvCreateSequenceResult at tablet",
+                {"shardId", tabletId},
+                {"status", status},
+                {"operationId", OperationId},
+                {"ssId", ssId});
             return false;
         }
 
@@ -88,10 +87,9 @@ public:
 
     bool ProgressState(TOperationContext& context) override {
         auto ssId = context.SS->SelfTabletId();
-        LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                    "TCreateSequence TConfigureParts ProgressState"
-                    << " operationId# " << OperationId
-                    << " at tablet " << ssId);
+        YDB_LOG_DEBUG_CTX(context.Ctx, "TCreateSequence TConfigureParts ProgressState at tablet",
+            {"operationId", OperationId},
+            {"ssId", ssId});
 
         TTxState* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
@@ -112,11 +110,10 @@ public:
             Y_ABORT_UNLESS(shard.TabletType == ETabletType::SequenceShard);
 
             if (tabletId == InvalidTabletId) {
-                LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                            "TCreateSequence TConfigureParts ProgressState"
-                            << " shard " << shardIdx << " is not created yet, waiting"
-                            << " operationId# " << OperationId
-                            << " at tablet " << ssId);
+                YDB_LOG_DEBUG_CTX(context.Ctx, "TCreateSequence TConfigureParts ProgressState shard is not created yet, waiting at tablet",
+                    {"shardIdx", shardIdx},
+                    {"operationId", OperationId},
+                    {"ssId", ssId});
                 context.OnComplete.WaitShardCreated(shardIdx, OperationId);
                 txState->ShardsInProgress.insert(shardIdx);
                 return false;
@@ -148,11 +145,10 @@ public:
                 event->Record.MutableSetVal()->SetNextUsed(alterData->Description.GetSetVal().GetNextUsed());
             }
 
-            LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                        "TCreateSequence TConfigureParts ProgressState"
-                        << " sending TEvCreateSequence to tablet " << tabletId
-                        << " operationId# " << OperationId
-                        << " at tablet " << ssId);
+            YDB_LOG_DEBUG_CTX(context.Ctx, "TCreateSequence TConfigureParts ProgressState sending TEvCreateSequence to tablet at tablet",
+                {"tabletId", tabletId},
+                {"operationId", OperationId},
+                {"ssId", ssId});
 
             context.OnComplete.BindMsgToPipe(OperationId, tabletId, txState->TargetPathId, event.Release());
 
@@ -188,9 +184,9 @@ public:
         auto step = TStepId(ev->Get()->StepId);
         auto ssId = context.SS->SelfTabletId();
 
-        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                   DebugHint() << " HandleReply TEvOperationPlan"
-                               << ", at schemeshard: " << ssId);
+        YDB_LOG_INFO_CTX(context.Ctx, "HandleReply TEvOperationPlan",
+            {"debugHint", DebugHint()},
+            {"schemeshard", ssId});
 
         TTxState* txState = context.SS->FindTx(OperationId);
         if (!txState) {
@@ -234,9 +230,9 @@ public:
     bool ProgressState(TOperationContext& context) override {
         TTabletId ssId = context.SS->SelfTabletId();
 
-        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                   DebugHint() << " ProgressState"
-                               << ", at schemeshard: " << ssId);
+        YDB_LOG_INFO_CTX(context.Ctx, "ProgressState",
+            {"debugHint", DebugHint()},
+            {"schemeshard", ssId});
 
         TTxState* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
@@ -371,11 +367,11 @@ public:
         auto& descr = Transaction.GetSequence();
         const TString& name = descr.GetName();
 
-        LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                     "TCreateSequence Propose"
-                        << ", path: " << parentPathStr << "/" << name
-                        << ", opId: " << OperationId
-                        << ", at schemeshard: " << ssId);
+        YDB_LOG_NOTICE_CTX(context.Ctx, "TCreateSequence Propose ",
+            {"path", parentPathStr},
+            {"name", name},
+            {"opId", OperationId},
+            {"schemeshard", ssId});
 
         TEvSchemeShard::EStatus status = NKikimrScheme::StatusAccepted;
         auto result = MakeHolder<TProposeResponse>(status, ui64(OperationId.GetTxId()), ui64(ssId));
@@ -600,11 +596,10 @@ public:
     }
 
     void AbortUnsafe(TTxId forceDropTxId, TOperationContext& context) override {
-        LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                     "TCreateSequence AbortUnsafe"
-                         << ", opId: " << OperationId
-                         << ", forceDropId: " << forceDropTxId
-                         << ", at schemeshard: " << context.SS->TabletID());
+        YDB_LOG_NOTICE_CTX(context.Ctx, "TCreateSequence AbortUnsafe",
+            {"opId", OperationId},
+            {"forceDropId", forceDropTxId},
+            {"schemeshard", context.SS->TabletID()});
 
         context.OnComplete.DoneOperation(OperationId);
     }

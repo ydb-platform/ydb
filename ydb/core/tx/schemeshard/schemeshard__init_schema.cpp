@@ -1,5 +1,7 @@
 #include "schemeshard_impl.h"
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
+
 namespace NKikimr {
 namespace NSchemeShard {
 
@@ -11,13 +13,13 @@ struct TSchemeShard::TTxInitSchema : public TTransactionBase<TSchemeShard> {
     {}
 
     bool Execute(TTransactionContext &txc, const TActorContext &ctx) override {
-        LOG_DEBUG(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "TxInitSchema.Execute");
+        YDB_LOG_DEBUG_CTX(ctx, "TxInitSchema.Execute");
         NIceDb::TNiceDb(txc.DB).Materialize<Schema>();
         return true;
     }
 
     void Complete(const TActorContext &ctx) override {
-        LOG_DEBUG(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "TxInitSchema.Complete");
+        YDB_LOG_DEBUG_CTX(ctx, "TxInitSchema.Complete");
         Self->Execute(Self->CreateTxUpgradeSchema(), ctx);
     }
 };

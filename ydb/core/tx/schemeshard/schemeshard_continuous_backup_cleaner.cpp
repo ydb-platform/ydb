@@ -9,6 +9,8 @@
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
+
 namespace NKikimr::NSchemeShard {
 
 class TContinuousBackupCleaner : public TActorBootstrapped<TContinuousBackupCleaner> {
@@ -30,11 +32,10 @@ public:
     {}
 
     void Bootstrap() {
-        LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::FLAT_TX_SCHEMESHARD,
-            "Starting continuous backup cleaner:"
-            << " workingDir# " << WorkingDir
-            << " table# " << TableName
-            << " stream# " << StreamName);
+        YDB_LOG_DEBUG("Starting continuous backup cleaner",
+            {"workingDir", WorkingDir},
+            {"table", TableName},
+            {"stream", StreamName});
 
         AllocateTxId();
         Become(&TContinuousBackupCleaner::StateWork);

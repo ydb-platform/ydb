@@ -4,6 +4,8 @@
 
 #include <ydb/core/base/subdomain.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
+
 namespace {
 
 using namespace NKikimr;
@@ -41,10 +43,10 @@ public:
         TStepId step = TStepId(ev->Get()->StepId);
         TTabletId ssId = context.SS->SelfTabletId();
 
-        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                   DebugHint() << " HandleReply TEvOperationPlan"
-                               << ", step: " << step
-                               << ", at schemeshard: " << ssId);
+        YDB_LOG_INFO_CTX(context.Ctx, "HandleReply TEvOperationPlan",
+            {"debugHint", DebugHint()},
+            {"step", step},
+            {"schemeshard", ssId});
 
         TTxState* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState->TxType == TTxState::TxForceDropSubDomain);
@@ -76,9 +78,9 @@ public:
     bool ProgressState(TOperationContext& context) override {
         TTabletId ssId = context.SS->SelfTabletId();
 
-        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                   DebugHint() << " ProgressState"
-                               << ", at schemeshard: " << ssId);
+        YDB_LOG_INFO_CTX(context.Ctx, "ProgressState",
+            {"debugHint", DebugHint()},
+            {"schemeshard", ssId});
 
         TTxState* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
@@ -142,27 +144,20 @@ public:
         const TString& parentPathStr = Transaction.GetWorkingDir();
         const TString& name = drop.GetName();
 
-        LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                     "TDropForceUnsafe Propose"
-                         << ", path: " << parentPathStr << "/" << name
-                         << ", pathId: " << drop.GetId()
-                         << ", opId: " << OperationId
-                         << ", at schemeshard: " << ssId);
+        YDB_LOG_NOTICE_CTX(context.Ctx, "TDropForceUnsafe Propose ",
+            {"path", parentPathStr},
+            {"name", name},
+            {"pathId", drop.GetId()},
+            {"opId", OperationId},
+            {"schemeshard", ssId});
 
         if (ExpectedType == TPathElement::EPathType::EPathTypeInvalid) {
-            LOG_WARN_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                       " UNSAFE DELETION IS CALLED."
-                       " TDropForceUnsafe is UNSAFE operation."
-                       " Usually it is called for deleting user's DB (tenant)."
-                       " But it could be triggered by administrator for special emergency cases. And there is that case."
-                       " I hope you are aware of the problems with it."
-                       " 1: Shared transactions among the tables could be broken if one of the tables is force dropped. Dependent transactions on other tables could be blocked forever."
-                       " 2: Loans are going to be lost. Force dropped tablets are never return loans. Some tablets would be waiting for borrowed blocks forever."
-                       " Details"
-                             << ": path: " << parentPathStr << "/" << name
-                             << ", pathId: " << drop.GetId()
-                             << ", opId: " << OperationId
-                             << ", at schemeshard: " << ssId);
+            YDB_LOG_WARN_CTX(context.Ctx, "",
+                {"path", parentPathStr},
+                {"name", name},
+                {"pathId", drop.GetId()},
+                {"opId", OperationId},
+                {"schemeshard", ssId});
         }
 
         auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(ssId));
@@ -227,11 +222,10 @@ public:
                 continue;
             }
 
-            LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                         "TDropForceUnsafe Propose dependence has found"
-                             << ", dependent transaction: " << OperationId.GetTxId()
-                             << ", parent transaction: " << otherTxId
-                             << ", at schemeshard: " << ssId);
+            YDB_LOG_NOTICE_CTX(context.Ctx, "TDropForceUnsafe Propose dependence has found",
+                {"dependentTransaction", OperationId.GetTxId()},
+                {"parentTransaction", otherTxId},
+                {"schemeshard", ssId});
 
             context.OnComplete.Dependence(otherTxId, OperationId.GetTxId());
 

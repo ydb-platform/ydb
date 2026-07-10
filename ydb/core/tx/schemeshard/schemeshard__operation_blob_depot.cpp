@@ -5,6 +5,8 @@
 #include <ydb/core/blob_depot/events.h>
 #include <ydb/core/protos/blob_depot_config.pb.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
+
 namespace NKikimr::NSchemeShard {
 
     namespace {
@@ -48,9 +50,9 @@ namespace NKikimr::NSchemeShard {
                 using TSubOperationStateBase::TSubOperationStateBase;
 
                 bool ProgressState(TOperationContext& context) override {
-                    LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, DebugHint()
-                            << " TConfigureBlobDepotParts::ProgressState"
-                            << " at schemeshard# " << context.SS->SelfTabletId());
+                    YDB_LOG_DEBUG_CTX(context.Ctx, "TConfigureBlobDepotParts::ProgressState",
+                        {"debugHint", DebugHint()},
+                        {"schemeshard", context.SS->SelfTabletId()});
 
                     TTxState *txState = GetTxState(context);
                     txState->ClearShardsInProgress();
@@ -78,9 +80,9 @@ namespace NKikimr::NSchemeShard {
                 }
 
                 bool HandleReply(TEvBlobDepot::TEvApplyConfigResult::TPtr& ev, TOperationContext& context) override {
-                    LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, DebugHint()
-                            << " TConfigureBlobDepotParts::HandleReply"
-                            << " at schemeshard# " << context.SS->SelfTabletId());
+                    YDB_LOG_DEBUG_CTX(context.Ctx, "TConfigureBlobDepotParts::HandleReply",
+                        {"debugHint", DebugHint()},
+                        {"schemeshard", context.SS->SelfTabletId()});
 
                     TTxState *txState = GetTxState(context);
                     Y_ABORT_UNLESS(txState->ShardsInProgress);
@@ -104,9 +106,9 @@ namespace NKikimr::NSchemeShard {
                 using TSubOperationStateBase::TSubOperationStateBase;
 
                 bool ProgressState(TOperationContext& context) override {
-                    LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, DebugHint()
-                            << " TProposeBlobDepotCreate::ProgressState"
-                            << " at schemeshard# " << context.SS->SelfTabletId());
+                    YDB_LOG_DEBUG_CTX(context.Ctx, "TProposeBlobDepotCreate::ProgressState",
+                        {"debugHint", DebugHint()},
+                        {"schemeshard", context.SS->SelfTabletId()});
 
                     TTxState *txState = GetTxState(context);
                     context.OnComplete.ProposeToCoordinator(OperationId, txState->TargetPathId, TStepId(0));
@@ -114,9 +116,9 @@ namespace NKikimr::NSchemeShard {
                 }
 
                 bool HandleReply(TEvPrivate::TEvOperationPlan::TPtr& ev, TOperationContext& context) override {
-                    LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, DebugHint()
-                            << " TProposeBlobDepotCreate::HandleReply"
-                            << " at schemeshard# " << context.SS->SelfTabletId());
+                    YDB_LOG_DEBUG_CTX(context.Ctx, "TProposeBlobDepotCreate::HandleReply",
+                        {"debugHint", DebugHint()},
+                        {"schemeshard", context.SS->SelfTabletId()});
 
                     TStepId step = TStepId(ev->Get()->StepId);
 
@@ -152,9 +154,9 @@ namespace NKikimr::NSchemeShard {
             }
 
             THolder<TProposeResponse> Propose(const TString& owner, TOperationContext& context) override {
-                LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "TBlobDepot::Propose"
-                    << " OperationId# " << OperationId
-                    << " at schemeshard# " << context.SS->SelfTabletId());
+                YDB_LOG_DEBUG_CTX(context.Ctx, "TBlobDepot::Propose",
+                    {"operationId", OperationId},
+                    {"schemeshard", context.SS->SelfTabletId()});
 
                 switch (Action) {
                     case EAction::Create: return ProposeCreate(owner, context);
@@ -165,18 +167,18 @@ namespace NKikimr::NSchemeShard {
             }
 
             void AbortPropose(TOperationContext& context) override {
-                LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "TBlobDepot::AbortPropose"
-                    << " OperationId# " << OperationId
-                    << " at schemeshard# " << context.SS->SelfTabletId());
+                YDB_LOG_NOTICE_CTX(context.Ctx, "TBlobDepot::AbortPropose",
+                    {"operationId", OperationId},
+                    {"schemeshard", context.SS->SelfTabletId()});
 
                 Y_ABORT();
             }
 
             void AbortUnsafe(TTxId forceDropTxId, TOperationContext& context) override {
-                LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "TBlobDepot::AbortUnsafe"
-                    << " OperationId# " << OperationId
-                    << " forceDropId# " << forceDropTxId
-                    << " at schemeshard# " << context.SS->TabletID());
+                YDB_LOG_NOTICE_CTX(context.Ctx, "TBlobDepot::AbortUnsafe",
+                    {"operationId", OperationId},
+                    {"forceDropId", forceDropTxId},
+                    {"schemeshard", context.SS->TabletID()});
 
                 context.OnComplete.DoneOperation(OperationId);
             }
@@ -200,11 +202,11 @@ namespace NKikimr::NSchemeShard {
                 const auto it = stateMachine.find({Action, GetState()});
                 Y_ABORT_UNLESS(it != stateMachine.end());
 
-                LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "TBlobDepot::StateDone"
-                    << " OperationId# " << OperationId
-                    << " at schemeshard# " << context.SS->TabletID()
-                    << " State# " << TTxState::StateName(GetState())
-                    << " next State# " << TTxState::StateName(it->second));
+                YDB_LOG_DEBUG_CTX(context.Ctx, "TBlobDepot::StateDone at next",
+                    {"operationId", OperationId},
+                    {"schemeshard", context.SS->TabletID()},
+                    {"state", TTxState::StateName(GetState())},
+                    {"nextState", TTxState::StateName(it->second)});
 
                 if (it->second != TTxState::Invalid) {
                     NIceDb::TNiceDb db(context.GetDB());

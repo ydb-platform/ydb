@@ -11,6 +11,8 @@
 #include <util/generic/ptr.h>
 #include <util/generic/xrange.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::EXPORT
+
 namespace NKikimr {
 namespace NSchemeShard {
 
@@ -59,9 +61,8 @@ struct TSchemeShard::TExport::TTxCancel: public TSchemeShard::TXxport::TTxBase {
             return true;
         }
 
-        LOG_DEBUG_S((TlsActivationContext->AsActorContext()), NKikimrServices::EXPORT, "TExport::TTxCancel, cancelling manually"
-            << ", info: " << exportInfo->ToString()
-        );
+        YDB_LOG_DEBUG("TExport::TTxCancel, cancelling manually",
+            {"info", exportInfo->ToString()});
 
         exportInfo->Issue = "Cancelled manually";
 

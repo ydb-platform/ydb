@@ -91,6 +91,9 @@ public:
                 tabletInfo.SetTabletStorageVersion(tablet.TabletStorageInfo->Version);
                 tabletInfo.SetTabletBootMode(tablet.BootMode);
                 tablet.GetResourceValues().ToProto(tabletInfo.MutableResourceUsage());
+                if (tabletRowset.GetValueOrDefault<Schema::Tablet::IsBackup>()) {
+                    tabletInfo.SetIsBackup(true);
+                }
 
                 TSubDomainKey objectDomain = TSubDomainKey(tabletRowset.GetValueOrDefault<Schema::Tablet::ObjectDomain>());
                 tabletInfo.MutableObjectDomain()->CopyFrom(objectDomain);

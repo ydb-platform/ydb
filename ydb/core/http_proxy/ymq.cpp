@@ -195,7 +195,7 @@ namespace NKikimr::NHttpProxy {
             }
 
             void DoMetering(const THttpResponseData& data, THolder<THashMap<TString, TString>>&& queueTags, const TActorContext& ctx) {
-                if (IamAuthFailed_) {
+                if (!IamAuthenticated) {
                     YDB_LOG_DEBUG_CTX(ctx, "Skip metering event due to IAM auth failure");
                     return;
                 }
@@ -315,13 +315,15 @@ namespace NKikimr::NHttpProxy {
                     HttpContext.CloudId = CloudId = ev->Get()->CloudId;
                     UserSid = ev->Get()->Sid;
                     SendGrpcRequestNoDriver(ctx);
+                    IamAuthenticated = true;
                 } else {
                     YDB_LOG_DEBUG_CTX(ctx, "Got cloud auth response",
                         {"logPrefix", LogPrefix()},
                         {"httpStatusCode", ev->Get()->Error->HttpStatusCode},
                         {"errorCode", ev->Get()->Error->ErrorCode},
                         {"message", ev->Get()->Error->Message});
-                    IamAuthFailed_ = true;
+
+                    IamAuthenticated = false;
                     ReplyWithError(
                         ctx,
                         ev->Get()->Error->HttpStatusCode,
@@ -421,7 +423,7 @@ namespace NKikimr::NHttpProxy {
             TRetryCounter RetryCounter;
             TActorId AuthActor;
             bool InputCountersReported = false;
-            bool IamAuthFailed_ = false;
+            bool IamAuthenticated = false;
             TString FolderId;
             TString CloudId;
             TString ResourceId;

@@ -71,7 +71,7 @@ inline std::array<ui8, NKikimr::NUuid::UUID_LEN> MakeV7Bytes(ui64 prefix, ui64 t
     result[3] = static_cast<ui8>((timestampMs >> 16) & 0xff);
     result[4] = static_cast<ui8>((timestampMs >> 8) & 0xff);
     result[5] = static_cast<ui8>(timestampMs & 0xff);
-    result[6] = static_cast<ui8>((result[6] & 0x0f) | 0x70);
+    result[7] = static_cast<ui8>((result[7] & 0x0f) | 0x70);
     result[8] = static_cast<ui8>((result[8] & 0x3f) | 0x80);
 
     if (hasPrefix) {
@@ -86,7 +86,7 @@ inline std::array<ui8, NKikimr::NUuid::UUID_LEN> MakeV8Bytes(ui64 prefix, ui64 e
     std::array<ui8, NKikimr::NUuid::UUID_LEN> result{};
     FillRandomBytes(result.data(), result.size());
 
-    result[6] = static_cast<ui8>((result[6] & 0x0f) | 0x80);
+    result[7] = static_cast<ui8>((result[7] & 0x0f) | 0x80);
     result[8] = static_cast<ui8>((result[8] & 0x3f) | 0x80);
 
     ui64 msb = ReadBe64(result.data());

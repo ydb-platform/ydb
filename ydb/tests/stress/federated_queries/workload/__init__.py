@@ -60,13 +60,15 @@ class Workload:
         self.successful_inserts = 0
         self.attempted_inserts = 0
 
-        # Start the solomon emulator subprocess while this process is still single-threaded
-        self.start_solomon_emulator()
+        self.driver = None
+        self.pool = None
+        logger.info("FederatedQueriesWorkload::init")
 
-        self.driver = ydb.Driver(ydb.DriverConfig(endpoint, database))
+    def start_driver(self):
+        logger.info("Workload::start_driver")
+        self.driver = ydb.Driver(ydb.DriverConfig(self.endpoint, self.database))
         self.driver.wait(timeout=60)
         self.pool = InstrumentedQuerySessionPool(self.driver)
-        logger.info("FederatedQueriesWorkload::init")
 
     def start_solomon_emulator(self):
         logger.info("Workload::start_solomon_emulator")
@@ -216,6 +218,9 @@ class Workload:
 
     def loop(self):
         try:
+            # Start the solomon emulator subprocess while this process is still single-threaded
+            self.start_solomon_emulator()
+            self.start_driver()
             self.create_external_data_source()
             try:
                 self.write_to_solomon()

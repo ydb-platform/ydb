@@ -196,12 +196,18 @@ ui32 WaitWriteResult(TTestBasicRuntime& runtime, ui64 shardId, std::vector<ui64>
 }
 
 bool WriteDataImpl(TTestBasicRuntime& runtime, TActorId& sender, const ui64 shardId, const ui64 tableId, const ui64 writeId, const TString& data,
-    const std::shared_ptr<arrow::Schema>& schema, std::vector<ui64>* writeIds, const NEvWrite::EModificationType mType, const ui64 lockId) {
+    const std::shared_ptr<arrow::Schema>& schema, std::vector<ui64>* writeIds, const NEvWrite::EModificationType mType, const ui64 lockId,
+    const std::optional<TDuration>& timeout = std::nullopt) {
     const TString dedupId = ToString(writeId);
 
     auto write = std::make_unique<NEvents::TDataEvents::TEvWrite>(writeId, NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE);
     if (lockId) {
         write->SetLockId(lockId, 1);
+    }
+    if (timeout) {
+        // When the shard throttles the write (e.g. small-blobs/compaction overload), it holds the request in its
+        // queue until this timeout elapses and then rejects it with OVERLOADED; set it so a blocked write fails fast.
+        write->Record.SetTimeoutSeconds(timeout->Seconds());
     }
     auto& operation = write->AddOperation(TEnumOperator<NEvWrite::EModificationType>::SerializeToWriteProto(mType), TTableId(0, tableId, 1), {},
         0, NKikimrDataEvents::FORMAT_ARROW);
@@ -219,8 +225,8 @@ bool WriteDataImpl(TTestBasicRuntime& runtime, TActorId& sender, const ui64 shar
 
 bool WriteData(TTestBasicRuntime& runtime, TActorId& sender, const ui64 shardId, const ui64 writeId, const ui64 tableId, const TString& data,
     const std::vector<NArrow::NTest::TTestColumn>& ydbSchema, std::vector<ui64>* writeIds, const NEvWrite::EModificationType mType,
-    const ui64 lockId) {
-    return WriteDataImpl(runtime, sender, shardId, tableId, writeId, data, NArrow::MakeArrowSchema(ydbSchema), writeIds, mType, lockId);
+    const ui64 lockId, const std::optional<TDuration>& timeout) {
+    return WriteDataImpl(runtime, sender, shardId, tableId, writeId, data, NArrow::MakeArrowSchema(ydbSchema), writeIds, mType, lockId, timeout);
 }
 
 bool WriteData(TTestBasicRuntime& runtime, TActorId& sender, const ui64 writeId, const ui64 tableId, const TString& data,

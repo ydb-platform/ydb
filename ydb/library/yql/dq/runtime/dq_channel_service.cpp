@@ -1353,7 +1353,6 @@ void TNodeState::HandleUndelivered(NActors::TEvents::TEvUndelivered::TPtr& ev) {
                 LOG_D(LogPrefix << "UNDELIVERED/UNKNOWN UPDATE, PeerActorId " << PeerActorId << ", Sender=" << ev->Sender);
             } else {
                 LOG_W(LogPrefix << "UNDELIVERED/UNKNOWN, PeerActorId " << PeerActorId << ", Sender=" << ev->Sender);
-                PeerActorId = NActors::TActorId{};
                 StartReconciliation(true, 'U');
             }
         }
@@ -1611,12 +1610,12 @@ void TNodeState::HandleAck(TEvDqCompute::TEvChannelAckV2::TPtr& ev) {
             StartReconciliation(true, 'F');
             return;
         }
-/*
+
         if (PeerActorId == NActors::TActorId{}) {
             PeerActorId = ev->Sender;
             LOG_D(LogPrefix << "PEER/ACK, PeerActorId=" << ev->Sender);
         }
-*/
+
         if (seqNo > SeqNo) {
             LOG_W(LogPrefix << "SEQ/LARGE, SeqNo=" << SeqNo << ", ack.SeqNo=" << seqNo);
             StartReconciliation(true, 'L');
@@ -1990,6 +1989,7 @@ void TNodeState::StartReconciliation(bool major, char logSymbol) {
             GenMajor++;
             GenMinor = 1;
             SeqNo = 0;
+            PeerActorId = NActors::TActorId{};
         } else {
             GenMinor++;
         }

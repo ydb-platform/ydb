@@ -292,12 +292,34 @@ NSQLTranslation::TTranslationSettings TKqpTranslationSettingsBuilder::Build(NYql
     return settings;
 }
 
+namespace {
+
+constexpr const char* PgSyntaxNotSupportedMessage = "PostgreSQL syntax is not supported";
+
+NYql::TAstParseResult MakeRejectedSyntaxResult(const TString& message) {
+    NYql::TAstParseResult result;
+    result.Issues.AddIssue(NYql::YqlIssue(NYql::TPosition(0, 0), NYql::TIssuesIds::DEFAULT_ERROR, message));
+    return result;
+}
+
+bool QueryRequestsPgSyntax(const TString& queryText) {
+    NSQLTranslation::TTranslationSettings settings;
+    NYql::TIssues issues;
+    return ParseTranslationSettings(queryText, settings, issues) && settings.PgParser;
+}
+
+} // namespace
+
 NYql::TAstParseResult ParseQuery(const TString& queryText, bool isSql, TMaybe<ui16>& sqlVersion, bool& deprecatedSQL,
         NYql::TExprContext& ctx, TKqpTranslationSettingsBuilder& settingsBuilder, bool& keepInCache, TMaybe<TString>& commandTagName,
         NSQLTranslation::TTranslationSettings* effectiveSettings) {
     NYql::TAstParseResult astRes;
     settingsBuilder.SetSqlVersion(sqlVersion);
     if (isSql) {
+        if (QueryRequestsPgSyntax(queryText)) {
+            return MakeRejectedSyntaxResult(PgSyntaxNotSupportedMessage);
+        }
+
         auto settings = settingsBuilder.Build(ctx);
         TKqpAutoParamBuilderFactory autoParamBuilderFactory;
         settings.AutoParamBuilderFactory = &autoParamBuilderFactory;
@@ -331,19 +353,9 @@ NYql::TAstParseResult ParseQuery(const TString& queryText, bool isSql, TMaybe<ui
     }
 }
 
-namespace {
-
-NYql::TAstParseResult MakeRejectedSyntaxResult(const TString& message) {
-    NYql::TAstParseResult result;
-    result.Issues.AddIssue(NYql::YqlIssue(NYql::TPosition(0, 0), NYql::TIssuesIds::DEFAULT_ERROR, message));
-    return result;
-}
-
-} // namespace
-
 TQueryAst ParseQuery(const TString& queryText, const TMaybe<Ydb::Query::Syntax>& syntax, bool isSql, TKqpTranslationSettingsBuilder& settingsBuilder) {
     if (syntax && *syntax == Ydb::Query::Syntax::SYNTAX_PG) {
-        return TQueryAst(std::make_shared<NYql::TAstParseResult>(MakeRejectedSyntaxResult("PostgreSQL syntax is not supported")), {}, {}, false, {});
+        return TQueryAst(std::make_shared<NYql::TAstParseResult>(MakeRejectedSyntaxResult(PgSyntaxNotSupportedMessage)), {}, {}, false, {});
     }
 
     bool deprecatedSQL;
@@ -374,6 +386,10 @@ TVector<TQueryAst> ParseStatements(const TString& queryText, bool isSql, TMaybe<
     );
 
     if (isSql) {
+        if (QueryRequestsPgSyntax(queryText)) {
+            return {{std::make_shared<NYql::TAstParseResult>(MakeRejectedSyntaxResult(PgSyntaxNotSupportedMessage)), {}, {}, false, {}}};
+        }
+
         auto settings = settingsBuilder.Build(ctx);
         TKqpAutoParamBuilderFactory autoParamBuilderFactory;
         settings.AutoParamBuilderFactory = &autoParamBuilderFactory;
@@ -398,7 +414,7 @@ TVector<TQueryAst> ParseStatements(const TString& queryText, const TMaybe<Ydb::Q
         return {ParseQuery(queryText, syntax, isSql, settingsBuilder)};
     }
     if (syntax && *syntax == Ydb::Query::Syntax::SYNTAX_PG) {
-        return {{std::make_shared<NYql::TAstParseResult>(MakeRejectedSyntaxResult("PostgreSQL syntax is not supported")), {}, {}, false, {}}};
+        return {{std::make_shared<NYql::TAstParseResult>(MakeRejectedSyntaxResult(PgSyntaxNotSupportedMessage)), {}, {}, false, {}}};
     }
     bool deprecatedSQL;
     TMaybe<ui16> sqlVersion;

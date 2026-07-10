@@ -332,7 +332,6 @@ TODO format:
 ## C++ features
 
 - Use `nullptr`, not `0` or `NULL`.
-- Prefer `using` over `typedef` in new code; use `typedef` when `using` breaks
-  MSVC with variadic function types.
+- Prefer `using` over `typedef`.
 - In derived classes use `override` without repeating `virtual`.
 - Use trailing return type syntax (`auto f() -> T`) only when necessary.

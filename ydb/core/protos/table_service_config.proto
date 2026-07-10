@@ -522,7 +522,7 @@ message TTableServiceConfig {
 
     optional bool EnableCompileCacheWarmup = 131 [default = false, (InvalidateCompileCache) = false];
 
-    optional bool EnableChannelMemoryTracking = 132 [default = true];
+    optional bool EnableChannelMemoryTracking = 132 [default = false];
 
     message TDqChannelConfig {
         optional uint64 LocalChannelInflightBytes  = 1 [default = 8388608];

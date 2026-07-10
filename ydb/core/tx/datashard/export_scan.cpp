@@ -178,7 +178,6 @@ public:
         Driver = driver;
         Scheme = std::move(scheme);
         Spent = new TSpent(TAppData::TimeProvider.Get());
-        Buffer->ColumnsOrder(Scheme->Tags());
 
         return {EScan::Feed, {}};
     }

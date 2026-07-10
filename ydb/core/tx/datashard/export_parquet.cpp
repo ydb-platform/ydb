@@ -19,17 +19,17 @@ public:
     TCheckpointOutputStream() : Buffer_(), TotalWritten_(0), IsOpen_(true) {}
 
     arrow::Status Close() override {
-        IsOpen_ = false;
+        IsOpen = false;
         return arrow::Status::OK();
     }
 
-    bool closed() const override { return !IsOpen_; }
+    bool closed() const override { return !IsOpen; }
 
-    arrow::Result<int64_t> Tell() const override { return TotalWritten_; }
+    arrow::Result<int64_t> Tell() const override { return TotalWritten; }
 
     arrow::Status Write(const void* data, int64_t nbytes) override {
-        Buffer_.Append((const char *)(data), nbytes);
-        TotalWritten_ += nbytes;
+        Buffer.Append((const char *)(data), nbytes);
+        TotalWritten += nbytes;
         return arrow::Status::OK();
     }
 
@@ -37,16 +37,16 @@ public:
 
     TBuffer Checkpoint() {
         TBuffer buffer;
-        Buffer_.Swap(buffer);
+        Buffer.Swap(buffer);
         return buffer;
     }
 
-    size_t GetBufferSize() const { return Buffer_.Size(); }
+    size_t GetBufferSize() const { return Buffer.Size(); } // bytes since last Checkpoint()
 
 private:
-    TBuffer Buffer_;
-    int64_t TotalWritten_;
-    bool IsOpen_;
+    TBuffer Buffer;
+    int64_t TotalWritten;
+    bool IsOpen;
 };
 
 class TDataFormatParquet: public IExportDataFormat {
@@ -85,12 +85,14 @@ bool FlushRowGroup(bool last) {
             .ok()) {
 
             ErrorString = TStringBuilder() << "Failed to open parquet file writer: " << status.message();
+            ArrowWriter.reset();
             return false;
         }
     }
     
     if (!BatchBuilder) {
         ErrorString = "BatchBuilder not initialized";
+        ArrowWriter.reset();
         return false;
     }
 
@@ -101,12 +103,14 @@ bool FlushRowGroup(bool last) {
         auto tableResult = arrow::Table::FromRecordBatches(batches);
         if (!tableResult.ok()) {
             ErrorString = TStringBuilder() << "Failed to make table from batches: " << tableResult.status().message();
+            ArrowWriter.reset();
             return false;
         };
 
         auto table = tableResult.ValueOrDie();
         if (!(status = ArrowWriter->WriteTable(*table, table->num_rows())).ok()) {
             ErrorString = TStringBuilder() << "Failed to write table to parquet file: " << status.message();
+            ArrowWriter.reset();
             return false;
         }
     }
@@ -114,6 +118,7 @@ bool FlushRowGroup(bool last) {
     if (last) {
         if (!(status = ArrowWriter->Close()).ok()) {
             ErrorString = TStringBuilder() << "Failed to close parquet file writer: " << status.message();
+            ArrowWriter.reset();
             return false;
         }
     }

@@ -80,8 +80,12 @@ INormalizerTask::TPtr TCleanSubColumnsPortionsNormalizer::BuildTask(
         }
     }
     auto taskResult = std::make_shared<TNormalizerResult>(std::move(subColumnsPortions));
-    ACFL_WARN("normalizer", "TCleanSubColumnsPortionsNormalizer")("message", taskResult->DebugString());
-    ACFL_WARN("normalizer", "TCleanSubColumnsPortionsNormalizer")("all portions", portions.size());
+    YDB_LOG_WARN_COMP(NActors::NStructuredLog::TLogStack::GetComponent(), "",
+        {"normalizer", "TCleanSubColumnsPortionsNormalizer"},
+        {"message", taskResult->DebugString()});
+    YDB_LOG_WARN_COMP(NActors::NStructuredLog::TLogStack::GetComponent(), "",
+        {"normalizer", "TCleanSubColumnsPortionsNormalizer"},
+        {"allPortions", portions.size()});
     return std::make_shared<TTrivialNormalizerTask>(taskResult);
 }
 

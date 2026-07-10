@@ -87,29 +87,20 @@ TMaybe<TString> ArgonHashToOldFormat(const TStringBuf newArgonHash) {
     return NJson::WriteJson(json, false);
 }
 
-TMaybe<THashes> ConvertHashes(const TString& hash) {
-    if (IsBase64(hash)) { // new format
-        NJson::TJsonValue hashes;
-        if (!NJson::ReadJsonTree(Base64StrictDecode(hash), &hashes)) {
-            return Nothing();
-        }
+bool IsOldFormatHash(const TString& hash) {
+    return THashesChecker::OldFormatCheck(hash).Success;
+}
 
-        if (hashes.Has("argon2id") && hashes["argon2id"].GetType() == NJson::JSON_STRING) {
-            if (auto argonHash = ArgonHashToOldFormat(hashes["argon2id"].GetString())) {
-                return THashes(*argonHash, hash);
-            } else {
-                return Nothing();
-            }
-        }
+TString ConvertOldFormatHash(const TString& oldFormatHash) {
+    // oldFormatHash must be a validated old-format hash
+    NJson::TJsonValue json;
+    NJson::ReadJsonTree(oldFormatHash, &json);
 
-        return Nothing();
-    } else { // old format
-        if (auto argonHash = ArgonHashToNewFormat(hash)) {
-            return THashes(hash, HashedPasswordFromNewArgonHashFormat(*argonHash));
-        }
-
-        return Nothing();
-    }
+    // new-format password hashes: base64 of {"argon2id": "<salt>$<hash>", "version": N}
+    NJson::TJsonValue hashes;
+    hashes["argon2id"] = json["salt"].GetString() + "$" + json["hash"].GetString();
+    hashes["version"] = HASHES_JSON_SCHEMA_VERSION;
+    return Base64Encode(NJson::WriteJson(hashes, false));
 }
 
 TScramInitHashParams ParseScramHashInitParams(const TStringBuf hashInitParams) {

@@ -2054,7 +2054,10 @@ class StaticConfigGenerator(object):
     @property
     def dynamic_server_common_args(self):
         if self.__cluster_details.use_new_style_kikimr_cfg:
-            return dynamic_cfg_new_style(self._enable_cores, use_auth_token_file=self.__use_auth_token_file)
+            domain = ""
+            if len(self.__cluster_details.domains) == 1:
+                domain = "/" + self.__cluster_details.domains[0].domain_name
+            return dynamic_cfg_new_style(self._enable_cores, use_auth_token_file=self.__use_auth_token_file, domain=domain)
         return kikimr_cfg_for_dynamic_slot(
             self._enable_cores, cert_params=self.__cluster_details.ic_cert_params
         )

@@ -1710,6 +1710,16 @@ public:
             return false;
         }
 
+        if (txCtx.TxManager->BrokenLocks()) {
+            EmitVictimTliLog(
+                txCtx.TxManager->GetVictimQuerySpanId(),
+                std::nullopt,
+                txCtx.TxManager->GetBrokenLocksCount());
+            ReplyQueryError(Ydb::StatusIds::ABORTED, "transaction locks invalidated",
+                MessageFromIssues(std::vector<TIssue>{*txCtx.TxManager->GetLockIssue()}));
+            return false;
+        }
+
         return true;
     }
 

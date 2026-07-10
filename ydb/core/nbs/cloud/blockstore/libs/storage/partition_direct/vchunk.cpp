@@ -342,10 +342,7 @@ void TVChunk::OnBelatedWriteBlocksResponse(
         LogTitle.GetWithTime().c_str(),
         bundle->GetVChunkRange().Print().c_str());
 
-    BlocksDirtyMap.UpdateBelatedEraseQueue(
-        completedWrites,
-        bundle->GetLsn(),
-        bundle->GetVChunkRange());
+    BlocksDirtyMap.UpdateBelatedEraseQueue(completedWrites, bundle->GetLsn());
 
     DoErase(false, TBlocksDirtyMap::EEraseType::Belated);
     ScheduleCleaningUp();

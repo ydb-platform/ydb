@@ -81,7 +81,10 @@ namespace {
             size_t pings_received = 0;
             while (stream->Read(&request)) {
                 std::cerr << "Session request: " << request.ShortDebugString() << std::endl;
-                Y_ABORT_UNLESS(request.has_ping(), "Only ping requests are supported");
+                if (request.has_session_stop()) {
+                    return grpc::Status::OK;
+                }
+                Y_ABORT_UNLESS(request.has_ping(), "Only ping and stop requests are supported");
                 if (++pings_received <= 2) {
                     // Only reply to the first 2 ping requests
                     Ydb::Coordination::SessionResponse response;
@@ -293,6 +296,51 @@ Y_UNIT_TEST_SUITE(Coordination) {
         auto res2 = session.Close().ExtractValueSync();
         std::cerr << "Close: " << ToString(res2.GetStatus()) << ": " << res2.GetIssues().ToString() << std::endl;
         UNIT_ASSERT_VALUES_EQUAL_C(res2.GetStatus(), EStatus::CLIENT_CANCELLED, res2.GetIssues().ToString());
+    }
+
+    Y_UNIT_TEST(SessionDropsDriverFromStateCallback) {
+        TPortManager pm;
+
+        TMockCoordinationService coordinationService;
+        ui16 coordinationPort = pm.GetPort();
+        auto coordinationServer = StartGrpcServer(
+                TStringBuilder() << "0.0.0.0:" << coordinationPort,
+                coordinationService);
+
+        TMockDiscoveryService discoveryService;
+        {
+            auto& dbResult = discoveryService.MockResults["/Root/My/DB"];
+            auto* endpoint = dbResult.add_endpoints();
+            endpoint->set_address("localhost");
+            endpoint->set_port(coordinationPort);
+        }
+
+        ui16 discoveryPort = pm.GetPort();
+        auto discoveryServer = StartGrpcServer(
+                TStringBuilder() << "0.0.0.0:" << discoveryPort,
+                discoveryService);
+
+        auto config = TDriverConfig()
+            .SetEndpoint(TStringBuilder() << "localhost:" << discoveryPort)
+            .SetDatabase("/Root/My/DB");
+        std::optional<TDriver> driver(std::in_place, config);
+        std::optional<TClient> client(std::in_place, *driver);
+
+        auto droppedPromise = NThreading::NewPromise();
+        auto droppedFuture = droppedPromise.GetFuture();
+        auto settings = TSessionSettings()
+            .OnStateChanged([&](auto state) mutable {
+                if (state == ESessionState::ATTACHED) {
+                    client.reset();
+                    driver.reset();
+                    droppedPromise.SetValue();
+                }
+            })
+            .Timeout(TDuration::MilliSeconds(1000));
+
+        auto res = client->StartSession("/Some/Path", settings).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(res.GetStatus(), EStatus::SUCCESS, res.GetIssues().ToString());
+        UNIT_ASSERT(droppedFuture.Wait(TDuration::Seconds(10)));
     }
 
 }

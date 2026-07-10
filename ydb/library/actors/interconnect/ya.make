@@ -59,6 +59,8 @@ SRCS(
     subscription_manager.h
     types.cpp
     types.h
+    v2_event_serializer.cpp
+    v2_event_serializer.h
     watchdog_timer.h
 )
 

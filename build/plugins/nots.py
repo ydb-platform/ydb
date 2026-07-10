@@ -1364,13 +1364,16 @@ def __on_ts_files(unit: NotsUnitType, files_in: list[str], files_out: list[str])
     __set_append(unit, "_TS_FILES_INOUTS", new_items)
 
 
+@ymake.macro
 @_with_report_configure_error
-def on_ts_files(unit: NotsUnitType, *files: str) -> None:
+def _TS_FILES(unit: NotsUnitType, *files: tuple[str, ...]) -> None:
+    files = list(files)
     __on_ts_files(unit, files, files)
 
 
+@ymake.macro
 @_with_report_configure_error
-def on_ts_large_files(unit: NotsUnitType, destination: str, *files: list[str]) -> None:
+def _TS_LARGE_FILES(unit: NotsUnitType, destination: str, *files: tuple[str, ...]) -> None:
     if destination == REQUIRED_MISSING:
         ymake.report_configure_error(
             "Macro TS_LARGE_FILES() requires to use DESTINATION parameter.\n"

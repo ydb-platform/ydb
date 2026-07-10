@@ -208,7 +208,7 @@ TVector<ui64> TBlockHelper::MakeWideStreamColumnsFuzzers(TMultiType* multiType) 
     TVector<ui64> fuzzIds(width);
     for (ui32 i = 0; i + 1 < width; ++i) {
         fuzzIds[i] = FuzzerHolder_.ReserveFuzzer();
-        FuzzerHolder_.CreateFuzzers(TFuzzOptions::FuzzAll(), fuzzIds[i], multiType->GetElementType(i), Pb_.GetTypeEnvironment());
+        FuzzerHolder_.CreateFuzzers(TFuzzOptions::FuzzAll(), fuzzIds[i], multiType->GetElementType(i), Pb_.GetTypeEnvironment(), Setup_.RuntimeSettings->DatumValidation.Get());
     }
     fuzzIds[width - 1] = TFuzzerHolder::EmptyFuzzerId;
     return fuzzIds;

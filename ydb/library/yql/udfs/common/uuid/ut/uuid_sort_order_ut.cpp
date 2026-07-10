@@ -84,7 +84,7 @@ TUuidBytes BuildV7ViaParseUuidToArray(ui64 timestampMs, ui32 seed) {
     rfc[8] = static_cast<ui8>((rfc[8] & 0x3f) | 0x80);
 
     std::array<ui8, NKikimr::NUuid::UUID_LEN> ydb{};
-    RfcBytesToYdbInternal(rfc.data(), ydb.data());
+    RfcLayoutToYdbInternalBytes(rfc.data(), ydb.data());
     return ydb;
 }
 
@@ -100,7 +100,7 @@ TUuidBytes BuildV8ViaParseUuidToArray(ui64 prefix, ui64 epochSeconds, ui32 seed)
     WriteBe64(msb, rfc.data());
 
     std::array<ui8, NKikimr::NUuid::UUID_LEN> ydb{};
-    RfcBytesToYdbInternal(rfc.data(), ydb.data());
+    RfcLayoutToYdbInternalBytes(rfc.data(), ydb.data());
     return ydb;
 }
 
@@ -129,7 +129,7 @@ Y_UNIT_TEST_SUITE(TUuidSortOrder) {
         UNIT_ASSERT(CompareUuidBytes(v8WithSmallPrefix, v8WithoutPrefix) != 0);
     }
 
-    Y_UNIT_TEST(V7MatchesParseUuidToArrayInternalLayout) {
+    Y_UNIT_TEST(V7MatchesYdbInternalLayout) {
         const ui64 timestampMs = 1'700'000'123'456ULL;
         SetRandomSeed(31415);
         const auto generated = MakeV7Bytes(timestampMs);
@@ -168,22 +168,24 @@ Y_UNIT_TEST_SUITE(TUuidSortOrder) {
             CompareUuidBytes(earlierViaParse, laterViaParse));
     }
 
-    Y_UNIT_TEST(V8LsbMatchesRfcBytesToYdbInternal) {
+    Y_UNIT_TEST(V8MatchesYdbInternalLayout) {
         SetRandomSeed(4242);
         const auto v8 = MakeV8Bytes(kTestPrefix, 1'700'000'000ULL, true);
 
         SetRandomSeed(4242);
-        std::array<ui8, NKikimr::NUuid::UUID_LEN> rfc{};
-        FillRandomBytes(rfc.data(), rfc.size());
-        rfc[6] = static_cast<ui8>((rfc[6] & 0x0f) | 0x80);
-        rfc[8] = static_cast<ui8>((rfc[8] & 0x3f) | 0x80);
+        std::array<ui8, NKikimr::NUuid::UUID_LEN> rfcLayout{};
+        FillRandomBytes(rfcLayout.data(), rfcLayout.size());
+        rfcLayout[6] = static_cast<ui8>((rfcLayout[6] & 0x0f) | 0x80);
+        rfcLayout[8] = static_cast<ui8>((rfcLayout[8] & 0x3f) | 0x80);
 
-        std::array<ui8, NKikimr::NUuid::UUID_LEN> fromRfc{};
-        RfcBytesToYdbInternal(rfc.data(), fromRfc.data());
+        ui64 msb = ReadBe64(rfcLayout.data());
+        msb = UpdateMsb(msb, kTestPrefix, 1'700'000'000ULL, true);
+        WriteBe64(msb, rfcLayout.data());
 
-        UNIT_ASSERT_VALUES_EQUAL(
-            std::memcmp(v8.data() + 8, fromRfc.data() + 8, 8),
-            0);
+        std::array<ui8, NKikimr::NUuid::UUID_LEN> expected{};
+        RfcLayoutToYdbInternalBytes(rfcLayout.data(), expected.data());
+
+        UNIT_ASSERT_VALUES_EQUAL(v8, expected);
     }
 
     Y_UNIT_TEST(V7SortOrderWithoutPrefixFixedRandom) {

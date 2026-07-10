@@ -1,4 +1,5 @@
 #include "abstract.h"
+#include <ydb/core/base/appdata.h>
 #include <ydb/services/metadata/service.h>
 
 namespace NKikimr::NMetadata::NModifications {
@@ -92,6 +93,9 @@ IOperationsManager::TYqlConclusionStatus IOperationsManager::PrepareCreateObject
     const TExternalModificationContext& context) const {
     if (!NMetadata::NProvider::TServiceOperator::IsEnabled()) {
         return TYqlConclusionStatus::Fail("metadata provider service is disabled");
+    }
+    if (AppData()->FeatureFlags.GetDisableOldSecretCreation() && to_lower(settings.GetTypeId()) == "secret") {
+        return TYqlConclusionStatus::Fail("Old secrets creation syntax is disabled now. Please use the new one");
     }
     TInternalModificationContext internalContext(context);
     internalContext.SetActivityType(EActivityType::Create);

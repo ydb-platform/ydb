@@ -58,7 +58,7 @@ class TestIamAuth(StreamingTestBase):
     def test_read_topic_iam_auth(
         self,
         kikimr: Kikimr,
-        shared_reading,
+        shared_reading: bool,
         entity_name: Callable[[str], str],
     ) -> None:
         """Write a message to a local topic, process it through a CREATE STREAMING QUERY
@@ -70,7 +70,7 @@ class TestIamAuth(StreamingTestBase):
         query_name = entity_name(f"iam_query{shared_reading!s:.1}")
 
         # 1. Create the secret and set cloud_id on the database root.
-        secret_name = entity_name("iam_secret")
+        secret_name = entity_name(f"iam_secret{shared_reading!s:.1}")
         self.create_iam_secret(kikimr, secret_name)
         self.set_cloud_id(kikimr)
         time.sleep(1)

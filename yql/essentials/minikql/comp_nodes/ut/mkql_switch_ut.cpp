@@ -114,7 +114,7 @@ Y_UNIT_TEST_LLVM(TestFlowOfVariantsSwap) {
                                                                std::variant<ui32, TStringBuf>{std::in_place_index<1>, TStringBuf("789")},
                                                            });
 
-    const auto pgmReturn = pb.FromFlow(pb.Switch(pb.ToFlow(list),
+    const auto pgmReturn = pb.FromFlow(pb.Switch(pb.ToFlow(list, {}),
                                                  {{{0U}, pb.NewFlowType(intType), std::nullopt}, {{1U}, pb.NewFlowType(strType), std::nullopt}},
                                                  [&](ui32 index, TRuntimeNode stream) {
                                                      switch (index) {
@@ -158,7 +158,7 @@ Y_UNIT_TEST_LLVM(TestFlowOfVariantsTwoInOne) {
                                                                std::variant<ui32, TStringBuf>{std::in_place_index<1>, TStringBuf("789")},
                                                            });
 
-    const auto pgmReturn = pb.FromFlow(pb.Switch(pb.ToFlow(list),
+    const auto pgmReturn = pb.FromFlow(pb.Switch(pb.ToFlow(list, {}),
                                                  {{{0U}, pb.NewFlowType(intType), 1U}, {{1U}, pb.NewFlowType(strType), std::nullopt}},
                                                  [&](ui32 index, TRuntimeNode stream) {
                                                      switch (index) {

@@ -3233,6 +3233,30 @@ Y_UNIT_TEST_F(DeferredPublication_Publish_Before_Write_Ack, TPQTabletFixture) {
     Ctx->Runtime->SetObserverFunc(prev);
 }
 
+Y_UNIT_TEST_F(DeferredPublication_Publish_Deleting_WriteId, TPQTabletFixture) {
+    using TDeferredPublicationApi = NKikimrPQ::TPartitionOperation::TWriteOp::TDeferredPublicationApi;
+    const TWriteId writeId = NHelpers::MakeDeferredWriteId(46, "ext-46");
+    const ui64 firstTxId = 70005;
+    const ui64 secondTxId = 70006;
+
+    PQTabletPrepare({.partitions=1}, {}, *Ctx);
+    EnsurePipeExist();
+
+    const TString ownerCookie = CreateSupportivePartitionForDeferredPublication(writeId);
+    SendDeferredPublicationWriteRequest(writeId, ownerCookie);
+    WaitForExactTxWritesCount(1);
+
+    CommitDeferredPublicationFinalize(writeId, firstTxId, TDeferredPublicationApi::Publish);
+
+    SendProposeTransactionRequest({.TxId=secondTxId,
+                                  .Senders={Ctx->TabletId},
+                                  .Receivers={Ctx->TabletId},
+                                  .TxOps={{.Partition=0, .Path="/topic", .DeferredPublicationOp=TDeferredPublicationApi::Publish}},
+                                  .WriteId=writeId});
+    WaitProposeTransactionResponse({.TxId=secondTxId,
+                                   .Status=NKikimrPQ::TEvProposeTransactionResult::ABORTED});
+}
+
 Y_UNIT_TEST_F(DeferredPublication_Publish_Unknown_WriteId, TPQTabletFixture) {
     using TDeferredPublicationApi = NKikimrPQ::TPartitionOperation::TWriteOp::TDeferredPublicationApi;
     const TWriteId writeId = NHelpers::MakeDeferredWriteId(44, "ext-44");

@@ -3169,6 +3169,9 @@ Y_UNIT_TEST_F(DeferredPublication_Cancel_Successful_Commit, TPQTabletFixture) {
     WaitForExactTxWritesCount(1);
 
     CommitDeferredPublicationFinalize(writeId, txId, TDeferredPublicationApi::Cancel);
+
+    const auto messages = ReadMainPartitionMessages();
+    UNIT_ASSERT_VALUES_EQUAL(messages.size(), 0u);
 }
 
 Y_UNIT_TEST_F(DeferredPublication_Publish_Unknown_WriteId, TPQTabletFixture) {

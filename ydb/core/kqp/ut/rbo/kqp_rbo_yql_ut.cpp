@@ -3986,6 +3986,60 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         UNIT_ASSERT(read->OutputIUs.front() == TInfoUnit("a"));
     }
 
+    Y_UNIT_TEST(DuplicateStageConnectionsKeepAllRequirementsLive) {
+        const auto pos = NYql::TPositionHandle();
+
+        auto read = MakeTestRead({TInfoUnit("a"), TInfoUnit("b"), TInfoUnit("c")}, pos);
+        auto producer = MakeIntrusive<TOpMap>(read, pos, TVector<TMapElement>{});
+        auto unionAll = MakeIntrusive<TOpUnionAll>(
+            producer,
+            producer,
+            pos,
+            TVector<TInfoUnit>{TInfoUnit("a"), TInfoUnit("b"), TInfoUnit("c")}
+        );
+        TOpRoot root(unionAll, pos, {"a"});
+
+        auto& stageGraph = root.PlanProps.StageGraph;
+        const auto producerStage = stageGraph.AddStage();
+        const auto unionStage = stageGraph.AddStage();
+
+        read->Props.StageId = producerStage;
+        producer->Props.StageId = producerStage;
+        unionAll->Props.StageId = unionStage;
+
+        stageGraph.Connect(
+            producerStage,
+            unionStage,
+            MakeIntrusive<TMergeConnection>(
+                TVector<TSortElement>{TSortElement(TInfoUnit("b"), true, true)},
+                stageGraph.GetOutputIndex(producerStage)
+            )
+        );
+        stageGraph.Connect(
+            producerStage,
+            unionStage,
+            MakeIntrusive<TShuffleConnection>(
+                TVector<TInfoUnit>{TInfoUnit("c")},
+                stageGraph.GetOutputIndex(producerStage)
+            )
+        );
+
+        root.ComputeParents();
+        ComputePlanLiveness(root);
+
+        const auto& producerLiveOut = GetLiveOut(producer.get());
+        UNIT_ASSERT_VALUES_EQUAL(producerLiveOut.size(), 3);
+        UNIT_ASSERT(producerLiveOut.contains(TInfoUnit("a")));
+        UNIT_ASSERT(producerLiveOut.contains(TInfoUnit("b")));
+        UNIT_ASSERT(producerLiveOut.contains(TInfoUnit("c")));
+
+        const auto& readLiveOut = GetLiveOut(read.get());
+        UNIT_ASSERT_VALUES_EQUAL(readLiveOut.size(), 3);
+        UNIT_ASSERT(readLiveOut.contains(TInfoUnit("a")));
+        UNIT_ASSERT(readLiveOut.contains(TInfoUnit("b")));
+        UNIT_ASSERT(readLiveOut.contains(TInfoUnit("c")));
+    }
+
     Y_UNIT_TEST(NarrowByLivenessPrunesReadColumnsAfterDeadAggregateTraits) {
         TMapRuleTestContext testContext;
         const auto pos = NYql::TPositionHandle();

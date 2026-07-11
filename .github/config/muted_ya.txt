@@ -24,6 +24,7 @@ ydb/core/transfer/ut/column_table Transfer_ColumnTable.BigBatchSize_Local
 ydb/core/transfer/ut/column_table Transfer_ColumnTable.BigBatchSize_Remote
 ydb/core/transfer/ut/functional Transfer.CheckCommittedOffset_Remote
 ydb/core/transfer/ut/functional Transfer.CreateAndDropConsumer
+ydb/core/transfer/ut/functional Transfer.CustomConsumer_NotExists_Remote
 ydb/core/tx/replication/controller/ut_assign_tx_id AssignTxId.Basic
 ydb/core/tx/schemeshard/ut_base_reboots TTablesWithReboots.CopyIndexedTableWithReboots
 ydb/core/tx/schemeshard/ut_base_reboots unittest.[*/*] chunk

@@ -694,7 +694,7 @@ public:
 
     void Bootstrap() {
         YDB_LOG_CREATE_CONTEXT(
-            {"marker", "sentinel"});
+            {"subsystem", "sentinel"});
         RequestBSConfig();
         RequestCMSClusterState();
         Become(&TThis::StateWork);
@@ -708,7 +708,7 @@ public:
 
     STATEFN(StateWork) {
         YDB_LOG_CREATE_CONTEXT(
-            {"marker", "sentinel"});
+            {"subsystem", "sentinel"});
         switch (ev->GetTypeRewrite()) {
             sFunc(TEvSentinel::TEvBSCPipeDisconnected, OnPipeDisconnected);
 
@@ -744,7 +744,7 @@ class TStateUpdater: public TUpdaterBase<TEvSentinel::TEvStateUpdated, TStateUpd
             case NKikimrBlobStorage::TPDiskState::Stopped:
                 return state;
             default:
-                YDB_LOG_CRIT("Unknown pdisk",
+                YDB_LOG_CRIT("Unknown pdisk state",
                     {"name", Name()},
                     {"state", (ui32)state});
                 return NKikimrBlobStorage::TPDiskState::Unknown;
@@ -931,7 +931,7 @@ public:
 
     void Bootstrap() {
         YDB_LOG_CREATE_CONTEXT(
-            {"marker", "sentinel"});
+            {"subsystem", "sentinel"});
         for (const auto& [nodeId, _] : SentinelState->Nodes) {
             if (SentinelState->StateUpdaterWaitNodes.insert(nodeId).second) {
                 RequestPDiskState(nodeId);
@@ -948,7 +948,7 @@ public:
 
     STATEFN(StateWork) {
         YDB_LOG_CREATE_CONTEXT(
-            {"marker", "sentinel"});
+            {"subsystem", "sentinel"});
         switch (ev->GetTypeRewrite()) {
             sFunc(TEvSentinel::TEvTimeout, TimedOut);
 
@@ -1025,13 +1025,13 @@ class TSentinel: public TActorBootstrapped<TSentinel> {
     template <typename TUpdater>
     void StartUpdater(TUpdaterInfo& updater) {
         if (ConfigUpdater.Id || StateUpdater.Id) {
-            YDB_LOG_INFO("was delayed",
+            YDB_LOG_INFO(TStringBuilder() << TUpdater::Name() << " was delayed",
                 {"name", Name()});
             updater.Delayed = true;
             return;
         }
 
-        YDB_LOG_DEBUG("Start",
+        YDB_LOG_DEBUG(TStringBuilder() << "Start " << TUpdater::Name(),
             {"name", Name()});
         updater.Start(RegisterWithSameMailbox(new TUpdater(SelfId(), CmsState, SentinelState)), Now());
     }
@@ -1533,7 +1533,7 @@ public:
 
     void Bootstrap() {
         YDB_LOG_CREATE_CONTEXT(
-            {"marker", "sentinel"});
+            {"subsystem", "sentinel"});
         auto counters = GetServiceCounters(AppData()->Counters, "tablets")->GetSubgroup("subsystem", "sentinel");
         Counters.Reset(new TCounters(counters));
 
@@ -1545,7 +1545,7 @@ public:
 
     STATEFN(StateWork) {
         YDB_LOG_CREATE_CONTEXT(
-            {"marker", "sentinel"});
+            {"subsystem", "sentinel"});
         switch (ev->GetTypeRewrite()) {
             sFunc(TEvSentinel::TEvUpdateConfig, UpdateConfig);
             sFunc(TEvSentinel::TEvConfigUpdated, OnConfigUpdated);

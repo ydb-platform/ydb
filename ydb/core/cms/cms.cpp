@@ -1176,7 +1176,7 @@ void TCms::AcceptPermissions(TPermissionResponse &resp, const TString &requestId
         permission.SetId(owner + "-p-" + ToString(State->NextPermissionId++));
         State->Permissions.emplace(permission.GetId(), TPermissionInfo(permission, requestId, owner, priority));
         YDB_LOG_DEBUG("Accepting permission",
-            {"id", permission.GetId()},
+            {"permissionId", permission.GetId()},
             {"requestId", requestId},
             {"owner", owner},
             {"priority", priority});

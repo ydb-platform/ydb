@@ -442,7 +442,6 @@ ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxyXml.TestSetQueueAttribu
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxyXml.TestSetQueueAttributesRetentionPeriod
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxyXml.TestSetQueueAttributesUnknownAttribute
 ydb/core/http_proxy/ut/sqs_topic_ut unittest.[*/*] chunk
-ydb/core/kafka_proxy/ut KafkaProtocol.TopicsCompactionGapFromRetention
 ydb/core/kqp/executer_actor/ut KqpExecuter.OversizedTaskReturnsLimitExceeded
 ydb/core/kqp/executer_actor/ut TKqpTasksGraphBuild.TpchQuery04
 ydb/core/kqp/executer_actor/ut TKqpTasksGraphBuild.TpchQuery05
@@ -734,7 +733,6 @@ ydb/tests/compatibility/indexes test_bloom_filter_index.py.TestBloomFilterIndex.
 ydb/tests/compatibility/indexes test_bloom_filter_index.py.TestBloomFilterIndex.test_bloom_filter_survives_version_change[restart_stable-26-2-1_to_stable-26-2-1]
 ydb/tests/compatibility/olap test_encoding.py.TestEncoding.test_encoding[rolling_stable-26-2-1_to_prestable-26-3]
 ydb/tests/compatibility/result_set_format py3test.[test_result_set_arrow.py */*] chunk
-ydb/tests/compatibility/streaming test_scalar_topic_write.py.TestScalarTopicWriteRollingUpgradeAndDowngrade.test_rolling_upgrade[rolling_stable-26-2-1_to_prestable-26-3-False]
 ydb/tests/compatibility/streaming test_streaming.py.TestStreamingMixedCluster.test_mixed_cluster[mixed_prestable-26-3_and_stable-26-2-1-False]
 ydb/tests/compatibility/streaming test_streaming.py.TestStreamingRestartToAnotherVersion.test_restart_to_another_version[restart_prestable-26-3_to_stable-26-2-1-False]
 ydb/tests/compatibility/streaming test_streaming.py.TestStreamingRestartToAnotherVersion.test_restart_to_another_version[restart_prestable-26-3_to_stable-26-2-1-True]
@@ -949,7 +947,6 @@ ydb/tests/functional/tpc/large test_tpch_spilling.py.TestTpchSpillingS10.test_tp
 ydb/tests/functional/tpc/large test_tpch_spilling.py.TestTpchSpillingS10.test_tpch[8]
 ydb/tests/functional/tpc/large test_tpch_spilling.py.TestTpchSpillingS10.test_tpch[9]
 ydb/tests/functional/ydb_cli test_ydb_impex.py.TestImpex.test_big_dataset[csv-additional_args0-row]
-ydb/tests/functional/ydb_cli test_ydb_impex.py.TestImpex.test_big_dataset[csv-additional_args1-row]
 ydb/tests/functional/ydb_cli test_ydb_impex.py.TestImpex.test_big_dataset[tsv-additional_args2-row]
 ydb/tests/functional/ydb_cli test_ydb_impex.py.TestImpex.test_big_dataset[tsv-additional_args3-row]
 ydb/tests/functional/ydb_cli test_ydb_interactive_ai.py.TestToolsAnthropic.test_docs_search_find_action

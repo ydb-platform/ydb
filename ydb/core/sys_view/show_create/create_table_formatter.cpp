@@ -1839,11 +1839,18 @@ void TCreateTableFormatter::FormatAlterColumn(const TString& fullPath, const NKi
                         EscapeValue(settings.GetOthersAllowedFraction(), paramsStr);
                         del = ", ";
                     }
-                    if (settings.HasDictionaryUniqueFraction() && settings.GetDictionaryUniqueFraction()) {
+                    if (settings.HasDictionaryUniqueFraction()) {
                         paramsStr << del;
                         EscapeName("DICTIONARY_UNIQUE_FRACTION", paramsStr);
                         paramsStr << "=";
                         EscapeValue(settings.GetDictionaryUniqueFraction(), paramsStr);
+                        del = ", ";
+                    }
+                    if (settings.HasEnableNativeColumns()) {
+                        paramsStr << del;
+                        EscapeName("ENABLE_NATIVE_COLUMNS", paramsStr);
+                        paramsStr << "=";
+                        EscapeValue(settings.GetEnableNativeColumns(), paramsStr);
                         del = ", ";
                     }
                     if (settings.HasDataExtractor()) {

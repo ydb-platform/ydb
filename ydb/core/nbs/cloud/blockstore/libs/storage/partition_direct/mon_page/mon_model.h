@@ -48,11 +48,23 @@ struct THostSnapshot
     ui64 PBufferUsedSize = 0;
 };
 
+struct TConnectionSnapshot
+{
+    THostIndex HostIndex = InvalidHostIndex;
+    TString DDiskId;
+    TString DDiskPageUrl;
+    TString PBufferId;
+    TString PBufferPageUrl;
+    TString DDiskSession;
+    bool PBufferConnected = false;
+};
+
 struct TDbgSnapshot
 {
     size_t Index = 0;
     size_t VChunkCount = 0;
     TVector<THostSnapshot> Hosts;
+    TVector<TConnectionSnapshot> Connections;
 };
 
 // Persisted tablet state (local DB). Protos are pre-dumped to text; an absent

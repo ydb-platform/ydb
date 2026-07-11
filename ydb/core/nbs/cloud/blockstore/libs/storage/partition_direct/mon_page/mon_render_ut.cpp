@@ -44,10 +44,24 @@ Y_UNIT_TEST_SUITE(TMonRenderTest)
             .Index = 1,
             .Health = EHostHealth::Sufferer,
         };
+        TConnectionSnapshot locked{
+            .HostIndex = 0,
+            .DDiskId = "1:1000:17",
+            .DDiskPageUrl = "/ddisk-page",
+            .PBufferId = "1:1000:18",
+            .PBufferPageUrl = "/pbuffer-page",
+            .DDiskSession = "Locked",
+            .PBufferConnected = true,
+        };
+        TConnectionSnapshot notLocked{
+            .HostIndex = 1,
+            .DDiskSession = "NotLocked",
+        };
         return {
             .Index = index,
             .VChunkCount = 32,
             .Hosts = {online, sufferer},
+            .Connections = {locked, notLocked},
         };
     }
 
@@ -133,6 +147,16 @@ Y_UNIT_TEST_SUITE(TMonRenderTest)
             html,
             "<input type='hidden' name='action' value='addhost'/>");
         UNIT_ASSERT_STRING_CONTAINS(html, "Add host");
+        UNIT_ASSERT_STRING_CONTAINS(html, "Connections");
+        UNIT_ASSERT_STRING_CONTAINS(html, "DDisk session");
+        UNIT_ASSERT_STRING_CONTAINS(
+            html,
+            "<a href='/ddisk-page'>1:1000:17</a>");
+        UNIT_ASSERT_STRING_CONTAINS(
+            html,
+            "<a href='/pbuffer-page'>1:1000:18</a>");
+        UNIT_ASSERT_STRING_CONTAINS(html, "Locked");
+        UNIT_ASSERT_STRING_CONTAINS(html, "yes");
     }
 
     Y_UNIT_TEST(DbgDetailNotFound)

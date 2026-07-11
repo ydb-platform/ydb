@@ -50,6 +50,18 @@ const char* PageTitle(EMonPage page)
     return "";
 }
 
+void RenderDDiskIdCell(
+    IOutputStream& str,
+    const TString& ddiskId,
+    const TString& pageUrl)
+{
+    if (pageUrl.empty()) {
+        str << HtmlEscape(ddiskId);
+        return;
+    }
+    str << "<a href='" << pageUrl << "'>" << HtmlEscape(ddiskId) << "</a>";
+}
+
 // "6 Online" or "4 Online / 2 Sufferer".
 TString HealthRollup(const TMap<EHostHealth, size_t>& counts)
 {
@@ -340,6 +352,57 @@ void RenderDbgDetail(
                             TABLED () {
                                 str << host.InflightByOperation[operation];
                             }
+                        }
+                    }
+                }
+            }
+        }
+        TAG (TH4) {
+            str << "Connections";
+        }
+        TABLE_CLASS ("table table-condensed") {
+            TABLEHEAD () {
+                TABLER () {
+                    TABLEH () {
+                        str << "Host";
+                    }
+                    TABLEH () {
+                        str << "DDisk id";
+                    }
+                    TABLEH () {
+                        str << "PBuffer id";
+                    }
+                    TABLEH () {
+                        str << "DDisk session";
+                    }
+                    TABLEH () {
+                        str << "PBuffer connected";
+                    }
+                }
+            }
+            TABLEBODY () {
+                for (const auto& connection: dbg.Connections) {
+                    TABLER () {
+                        TABLED () {
+                            str << (int)connection.HostIndex;
+                        }
+                        TABLED () {
+                            RenderDDiskIdCell(
+                                str,
+                                connection.DDiskId,
+                                connection.DDiskPageUrl);
+                        }
+                        TABLED () {
+                            RenderDDiskIdCell(
+                                str,
+                                connection.PBufferId,
+                                connection.PBufferPageUrl);
+                        }
+                        TABLED () {
+                            str << connection.DDiskSession;
+                        }
+                        TABLED () {
+                            str << (connection.PBufferConnected ? "yes" : "no");
                         }
                     }
                 }

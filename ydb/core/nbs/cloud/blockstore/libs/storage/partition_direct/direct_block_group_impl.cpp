@@ -13,8 +13,14 @@
 #include <ydb/core/nbs/cloud/storage/core/libs/common/timer.h>
 #include <ydb/core/nbs/cloud/storage/core/libs/coroutine/executor.h>
 
+#include <ydb/core/base/services/blobstorage_service_id.h>
+
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/services/services.pb.h>
+
+#include <library/cpp/string_utils/quote/quote.h>
+
+#include <util/string/printf.h>
 
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
@@ -74,6 +80,33 @@ THostSnapshot MakeHostSnapshot(const TOracleHostStat& stat)
         .Errors = stat.Errors,
         .PBufferUsedSize = stat.PBufferUsedSize,
     };
+}
+
+// Mon page of the DDisk actor behind the id; the "/node/<id>" prefix makes the
+// link work from any node's mon. The path format mirrors
+// TDDiskActor::RegisterMonPage.
+TString MakeDDiskMonPageUrl(const NBsController::TDDiskId& ddiskId)
+{
+    return TStringBuilder()
+           << "/node/" << ddiskId.NodeId
+           << Sprintf(
+                  "/actors/ddisks/ddisk_p%09" PRIu32 "_s%09" PRIu32,
+                  ddiskId.PDiskId,
+                  ddiskId.DDiskSlotId);
+}
+
+// Mon page of the persistent buffer behind the id: the node's "Persistent
+// Buffer" page filtered to this pbuffer's service actor (its "pb" filter
+// matches ToString of the well-known service id).
+TString MakePBufferMonPageUrl(const NBsController::TDDiskId& pbufferId)
+{
+    const auto serviceId = MakeBlobStoragePersistentBufferId(
+        pbufferId.NodeId,
+        pbufferId.PDiskId,
+        pbufferId.DDiskSlotId);
+    return TStringBuilder()
+           << "/node/" << pbufferId.NodeId << "/actors/persistent_buffer?pb="
+           << CGIEscapeRet(serviceId.ToString());
 }
 
 }   // namespace
@@ -1754,10 +1787,38 @@ TDbgSnapshot TDirectBlockGroup::DoBuildMonSnapshot()
         hosts.push_back(MakeHostSnapshot(stat));
     }
 
+    TVector<TConnectionSnapshot> connections;
+    connections.reserve(DDiskConnections.size());
+    for (size_t host = 0; host < DDiskConnections.size(); ++host) {
+        connections.push_back(MakeConnectionSnapshot(host));
+    }
+
     return {
         .Index = DirectBlockGroupIndex,
         .VChunkCount = VChunks.size(),
         .Hosts = std::move(hosts),
+        .Connections = std::move(connections),
+    };
+}
+
+TConnectionSnapshot TDirectBlockGroup::MakeConnectionSnapshot(
+    size_t hostIndex) const
+{
+    const auto& ddisk = DDiskConnections[hostIndex];
+    const bool hasPBuffer = hostIndex < PBufferConnections.size();
+    const auto* pbuffer = hasPBuffer ? &PBufferConnections[hostIndex] : nullptr;
+
+    return {
+        .HostIndex = static_cast<THostIndex>(hostIndex),
+        .DDiskId = ddisk.HostConnection.DDiskId.ToString(),
+        .DDiskPageUrl = MakeDDiskMonPageUrl(ddisk.HostConnection.DDiskId),
+        .PBufferId =
+            pbuffer ? pbuffer->HostConnection.DDiskId.ToString() : TString(),
+        .PBufferPageUrl =
+            pbuffer ? MakePBufferMonPageUrl(pbuffer->HostConnection.DDiskId)
+                    : TString(),
+        .DDiskSession = ToString(ddisk.SessionState),
+        .PBufferConnected = pbuffer && pbuffer->ConnectPromise.HasValue(),
     };
 }
 

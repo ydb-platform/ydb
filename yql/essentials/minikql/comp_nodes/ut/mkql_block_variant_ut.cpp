@@ -1,8 +1,8 @@
+#include "mkql_block_serializer_test_utils.h"
 #include "mkql_block_test_helper.h"
 #include "mkql_computation_node_ut.h"
 
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
-#include <yql/essentials/minikql/computation/mkql_datum_validate.h>
 #include <yql/essentials/minikql/computation/mkql_block_transport.h>
 #include <yql/essentials/minikql/computation/mkql_block_reader.h>
 #include <yql/essentials/minikql/computation/mkql_block_trimmer.h>
@@ -177,33 +177,6 @@ Y_UNIT_TEST(TypeBuilderRejectsTooManyAlternatives) {
     bool ok = ConvertArrowType(varType, arrowType);
     UNIT_ASSERT_C(!ok, "Expected ConvertArrowType to fail for >127 alternatives");
 }
-
-namespace {
-
-std::shared_ptr<arrow::ArrayData> DoSerializerRoundtrip(
-    const std::shared_ptr<arrow::ArrayData>& arrayData, TType* itemType, TType* blockType)
-{
-    const ui64 blockLen = static_cast<ui64>(arrayData->length);
-    auto* pool = arrow::default_memory_pool();
-    TBlockSerializerParams params(pool, Nothing(), /*shouldSerializeOffset=*/true);
-    auto serializer = MakeBlockSerializer(TTypeInfoHelper(), itemType, params);
-    auto deserializer = MakeBlockDeserializer(TTypeInfoHelper(), itemType, params);
-
-    TVector<ui64> metadata;
-    serializer->StoreMetadata(*arrayData, [&](ui64 meta) { metadata.push_back(meta); });
-    NYql::TChunkedBuffer buffer;
-    serializer->StoreArray(*arrayData, buffer);
-
-    size_t metaIdx = 0;
-    deserializer->LoadMetadata([&]() -> ui64 { return metadata[metaIdx++]; });
-    auto restored = deserializer->LoadArray(buffer, blockLen, TMaybe<size_t>(0));
-
-    TBlockHelper().ValidateDatum(restored, Nothing(), blockType);
-    UNIT_ASSERT_VALUES_EQUAL(restored->length, arrayData->length);
-    return restored;
-}
-
-} // namespace
 
 Y_UNIT_TEST(SerializerRoundtrip) {
     using TVar = std::variant<ui32, ui64>;

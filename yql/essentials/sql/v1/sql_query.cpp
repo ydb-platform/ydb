@@ -2368,8 +2368,8 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
 
             TString service = Ctx_.Scoped->CurrService;
             TDeferredAtom cluster = Ctx_.Scoped->CurrCluster;
-            if (rule.HasBlock3()) {
-                if (!ClusterExpr(rule.GetBlock3().GetRule_cluster_expr2(), /*allowWildcard=*/false, service, cluster)) {
+            if (rule.HasBlock5()) {
+                if (!ClusterExpr(rule.GetBlock5().GetRule_cluster_expr2(), /*allowWildcard=*/false, service, cluster)) {
                     return false;
                 }
             }
@@ -2380,8 +2380,8 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             TNodePtr clusterNode = Ctx_.Scoped->WrapCluster(cluster, Ctx_);
 
             TTableHints hints;
-            if (rule.HasBlock4()) {
-                auto tmp = TableHintsImpl(rule.GetBlock4().GetRule_table_hints1(), service, "");
+            if (rule.HasBlock6()) {
+                auto tmp = TableHintsImpl(rule.GetBlock6().GetRule_table_hints1(), service, "");
                 if (!tmp) {
                     return false;
                 }
@@ -2390,7 +2390,7 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
 
             TString varName;
             TPosition intoPos = Ctx_.Pos();
-            if (!NamedNodeImpl(rule.GetRule_bind_parameter6(), varName, *this)) {
+            if (!NamedNodeImpl(rule.GetRule_bind_parameter4(), varName, *this)) {
                 return false;
             }
 

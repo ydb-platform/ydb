@@ -6,6 +6,7 @@ RECURSE(
     functional
     library
     library/sqs
+    local_ydb_smoke
     olap
     oss
     solomon

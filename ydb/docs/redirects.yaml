@@ -1,4 +1,8 @@
 common:
+  - from: /concepts/architecture.md
+    to: /concepts/architecture/index.md
+  - from: /concepts/metadata-distribution.md
+    to: /concepts/architecture/metadata-services.md
   - from: /reference/ydb-cli/table-ttl-drop.md
     to: /reference/ydb-cli/table-ttl-reset.md
   - from: changelog.md

@@ -9,20 +9,20 @@
 - **Horizontal scaling and automatic sharding**: data and workload are dynamically distributed across available hardware resources as data volume or query intensity grows.
 - **Fault tolerance**: automatic recovery from failures of nodes, racks, or availability zones.
 - **Data high availability and durability**: ensured through automatic synchronous data replication within the cluster.
-- **Strong consistency and ACID transactions**: the system provides [distributed transactions](transactions.md) with *serializable* isolation. Consistency and isolation levels can be relaxed when higher performance is required.
-- [**YQL**](../yql/reference/index.md): a SQL dialect optimized for large-scale data and complex processing scenarios.
-- **Relational data model**: supports both [row-oriented](datamodel/table.md#row-oriented-tables) and [column-oriented](datamodel/table.md#column-oriented-tables) tables, enabling efficient handling of both transactional (OLTP) and analytical (OLAP) workloads within a single system.
-- **Hierarchical namespace**: tables, topics, and other [objects](datamodel/index.md) are organized in a hierarchical namespace, similar to a filesystem.
-- [**Asynchronous replication**](async-replication.md): near real-time data synchronization between {{ ydb-short-name }} databases — both within a single cluster and across different clusters.
+- **Strong consistency and ACID transactions**: the system provides [distributed transactions](../transactions.md) with *serializable* isolation. Consistency and isolation levels can be relaxed when higher performance is required.
+- [**YQL**](../../yql/reference/index.md): a SQL dialect optimized for large-scale data and complex processing scenarios.
+- **Relational data model**: supports both [row-oriented](../datamodel/table.md#row-oriented-tables) and [column-oriented](../datamodel/table.md#column-oriented-tables) tables, enabling efficient handling of both transactional (OLTP) and analytical (OLAP) workloads within a single system.
+- **Hierarchical namespace**: tables, topics, and other [objects](../datamodel/index.md) are organized in a hierarchical namespace, similar to a filesystem.
+- [**Asynchronous replication**](../async-replication.md): near real-time data synchronization between {{ ydb-short-name }} databases — both within a single cluster and across different clusters.
 - **Streaming data processing and distribution**:
-  - **Topics**: storage and streaming delivery of unstructured messages to multiple subscribers. Supports the [Kafka protocol](../reference/kafka-api/index.md).
-  - [**Change Data Capture (CDC)**](cdc.md): built-in stream of table data changes published as a topic.
+  - **Topics**: storage and streaming delivery of unstructured messages to multiple subscribers. Supports the [Kafka protocol](../../reference/kafka-api/index.md).
+  - [**Change Data Capture (CDC)**](../cdc.md): built-in stream of table data changes published as a topic.
   - **Transfers**: automated data delivery from topics to tables.
-- [**Federated queries**](query_execution/federated_query/index.md): execute queries against external data sources (e.g., S3) as part of YQL queries, without prior data import to {{ ydb-short-name }} storage.
-- [**Vector indexes**](query_execution/vector_search.md): support for storing and searching vector embeddings — ideal for semantic search, similarity matching, and ML use cases.
-- [**Observability**](../reference/observability/index.md): built-in metrics, logs, and dashboards.
-- **Security and audit**: data encryption (at-rest and in-transit), operation auditing, and support for authentication and authorization — see [Security](../security/index.md).
-- **Tools, integrations, and APIs**: [{{ ydb-short-name }} CLI](../reference/ydb-cli/index.md) for running queries, administration, and debugging. [SDKs](../reference/ydb-sdk/index.md) for C++, C#, Go, Java, JavaScript, PHP, Python, and Rust. Integrations with various third-party systems. Learn more in [{#T}](../integrations/index.md) and [{#T}](../reference/languages-and-apis/index.md).
+- [**Federated queries**](../query_execution/federated_query/index.md): execute queries against external data sources (e.g., S3) as part of YQL queries, without prior data import to {{ ydb-short-name }} storage.
+- [**Vector indexes**](../query_execution/vector_search.md): support for storing and searching vector embeddings — ideal for semantic search, similarity matching, and ML use cases.
+- [**Observability**](../../reference/observability/index.md): built-in metrics, logs, and dashboards.
+- **Security and audit**: data encryption (at-rest and in-transit), operation auditing, and support for authentication and authorization — see [Security](../../security/index.md).
+- **Tools, integrations, and APIs**: [{{ ydb-short-name }} CLI](../../reference/ydb-cli/index.md) for running queries, administration, and debugging. [SDKs](../../reference/ydb-sdk/index.md) for C++, C#, Go, Java, JavaScript, PHP, Python, and Rust. Integrations with various third-party systems. Learn more in [{#T}](../../integrations/index.md) and [{#T}](../../reference/languages-and-apis/index.md).
 - **Open architecture**: [source code](https://github.com/ydb-platform/ydb) is available under the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). The system uses the open [gRPC](https://grpc.io/) protocol, enabling client implementations in any programming language.
 
 ### Key Use Cases
@@ -47,7 +47,7 @@ Fully explaining how YDB works in detail takes quite a while. Below you can revi
 
 One of the key building blocks of {{ ydb-short-name }}'s compute layer is called a *tablet*. Tablets are stateful logical components implementing various aspects of {{ ydb-short-name }}.
 
-The next level of detail of the overall {{ ydb-short-name }} architecture is explained in the [{#T}](../contributor/general-schema.md) article.
+The next level of detail of the overall {{ ydb-short-name }} architecture is explained in the [{#T}](../../contributor/general-schema.md) article.
 
 ### Hierarchy {#ydb-hierarchy}
 
@@ -61,8 +61,8 @@ From the user's perspective, everything inside {{ ydb-short-name }} is organized
 
 {{ ydb-short-name }} provides users with a well-known abstraction — tables. In {{ ydb-short-name }}, there are two main types of tables:
 
-* [Row-oriented tables](datamodel/table.md#row-tables) are designed for OLTP workloads.
-* [Column-oriented tables](datamodel/table.md#column-tables) are designed for OLAP workloads.
+* [Row-oriented tables](../datamodel/table.md#row-tables) are designed for OLTP workloads.
+* [Column-oriented tables](../datamodel/table.md#column-tables) are designed for OLAP workloads.
 
 Logically, from the user's perspective, both types of tables look the same. The main difference between row-oriented and column-oriented tables lies in how the data is physically stored. In row-oriented tables, the values of all columns in each row are stored together. In contrast, in column-oriented tables, each column is stored separately, meaning that cells from different rows are stored next to each other within the same column.
 
@@ -73,7 +73,7 @@ Partitioning works differently in row-oriented and column-oriented tables:
 * Row-oriented tables are automatically partitioned by primary key ranges, depending on the data volume.
 * Column-oriented tables are partitioned by the hash of the partitioning columns.
 
-Each partition of a table is processed by a specific [tablet](glossary.md#tablets), called a [data shard](glossary.md#datashard) for row-oriented tables and a [column shard](glossary.md#columnshard) for column-oriented tables.
+Each partition of a table is processed by a specific [tablet](../glossary.md#tablets), called a [data shard](../glossary.md#datashard) for row-oriented tables and a [column shard](../glossary.md#columnshard) for column-oriented tables.
 
 #### Split by Load {#split-by-load}
 
@@ -107,4 +107,4 @@ A common fault-tolerant setup of {{ ydb-short-name }} spans three datacenters or
 
 ## What's Next?
 
-If you are interested in more specifics about various aspects of YDB, check out neighboring articles in this documentation section. If you are ready to jump into more practical content, you can continue to the [quick start](../quickstart.md) or [YQL](../dev/yql-tutorial/index.md) tutorials.
+If you are interested in more specifics about various aspects of YDB, check out neighboring articles in this documentation section. If you are ready to jump into more practical content, you can continue to the [quick start](../../quickstart.md) or [YQL](../../dev/yql-tutorial/index.md) tutorials.

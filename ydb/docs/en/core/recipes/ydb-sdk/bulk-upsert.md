@@ -12,6 +12,90 @@ Below are examples of using the {{ ydb-short-name }} SDK built-in tools for bulk
 
 {% list tabs %}
 
+- C++
+
+  {% list tabs %}
+
+  - Native SDK
+
+    ```cpp
+    #include <ydb-cpp-sdk/client/table/table.h>
+
+    void BulkUpsertLogs(const NYdb::TDriver& driver) {
+      NYdb::NTable::TTableClient client(driver);
+
+      constexpr int kBatchSize = 1000;
+      NYdb::TValueBuilder rowsBuilder;
+      rowsBuilder.BeginList();
+      for (int i = 0; i < kBatchSize; ++i) {
+          rowsBuilder.AddListItem()
+              .BeginStruct()
+              .AddMember("App").Utf8("App_" + std::to_string(i / 256))
+              .AddMember("Host").Utf8("192.168.0." + std::to_string(i % 256))
+              .AddMember("Timestamp")
+                  .Timestamp(TInstant::Now() + TDuration::Seconds(i))
+              .AddMember("HttpCode").Uint32(static_cast<uint32_t>(i % 113 == 0 ? 404 : 200))
+              .AddMember("Message")
+                  .Utf8(i % 3 == 0 ? "GET / HTTP/1.1" : "GET /images/logo.png HTTP/1.1")
+              .EndStruct();
+      }
+      rowsBuilder.EndList();
+
+      NYdb::TValue rows = rowsBuilder.Build();
+
+      NYdb::NStatusHelpers::ThrowOnError(client.RetryOperationSync(
+          [&rows](NYdb::NTable::TTableClient& client) {
+              return client.BulkUpsert("/local/bulk_upsert_example", NYdb::TValue{rows}).GetValueSync();
+          },
+          NYdb::NTable::TRetryOperationSettings()
+              .Idempotent(true)
+      ));
+    }
+    ```
+
+  - userver
+
+    ```cpp
+    #include <userver/ydb/io/supported_types.hpp>
+    #include <userver/ydb/table.hpp>
+
+    struct LogMessage final {
+        ydb::Utf8 App;
+        ydb::Utf8 Host;
+        std::chrono::system_clock::time_point Timestamp;
+        std::uint32_t HttpCode;
+        ydb::Utf8 Message;
+    };
+
+    void BulkUpsertLogs(ydb::TableClient& client) {
+        constexpr int kBatchSize = 1000;
+        std::vector<LogMessage> rows;
+        rows.reserve(kBatchSize);
+
+        for (int i = 0; i < kBatchSize; ++i) {
+            rows.push_back({
+                .App = ydb::Utf8{"App_" + std::to_string(i / 256)},
+                .Host = ydb::Utf8{"192.168.0." + std::to_string(i % 256)},
+                .Timestamp = std::chrono::system_clock::now() + std::chrono::seconds{i},
+                .HttpCode = static_cast<std::uint32_t>(i % 113 == 0 ? 404 : 200),
+                .Message = ydb::Utf8{
+                    i % 3 == 0 ? "GET / HTTP/1.1" : "GET /images/logo.png HTTP/1.1"
+                },
+            });
+        }
+
+        client.BulkUpsert(
+            "/local/bulk_upsert_example",
+            rows,
+            ydb::OperationSettings{
+                .is_idempotent = true,
+            }
+        );
+    }
+    ```
+
+  {% endlist %}
+
 - Go
 
   {% list tabs %}
@@ -223,6 +307,7 @@ Below are examples of using the {{ ydb-short-name }} SDK built-in tools for bulk
         fmt.Printf("unexpected error: %v", err)
       }
     }
+
     ```
 
     {% endcut %}
@@ -245,50 +330,50 @@ Below are examples of using the {{ ydb-short-name }} SDK built-in tools for bulk
     private static final int BATCH_SIZE = 1000;
 
     public static void main(String[] args) {
-        String connectionString = args[0];
+      String connectionString = args[0];
 
-        try (GrpcTransport transport = GrpcTransport.forConnectionString(connectionString)
-                .withAuthProvider(NopAuthProvider.INSTANCE) // use anonymous credentials
-                .build()) {
+      try (GrpcTransport transport = GrpcTransport.forConnectionString(connectionString)
+              .withAuthProvider(NopAuthProvider.INSTANCE) // use anonymous credentials
+              .build()) {
 
-            // For bulk upsert, the full table path needs to be specified
-            String tablePath = transport.getDatabase() + "/" + TABLE_NAME;
-            try (TableClient tableClient = TableClient.newClient(transport).build()) {
-                SessionRetryContext retryCtx = SessionRetryContext.create(tableClient).build();
-                execute(retryCtx, tablePath);
-            }
-        }
+          // For bulk upsert, the full table path needs to be specified
+          String tablePath = transport.getDatabase() + "/" + TABLE_NAME;
+          try (TableClient tableClient = TableClient.newClient(transport).build()) {
+              SessionRetryContext retryCtx = SessionRetryContext.create(tableClient).build();
+              execute(retryCtx, tablePath);
+          }
+      }
     }
 
     public static void execute(SessionRetryContext retryCtx, String tablePath) {
-        // table description
-        StructType structType = StructType.of(
-            "app", PrimitiveType.Text,
-            "timestamp", PrimitiveType.Timestamp,
-            "host", PrimitiveType.Text,
-            "http_code", PrimitiveType.Uint32,
-            "message", PrimitiveType.Text
-        );
+      // table description
+      StructType structType = StructType.of(
+          "app", PrimitiveType.Text,
+          "timestamp", PrimitiveType.Timestamp,
+          "host", PrimitiveType.Text,
+          "http_code", PrimitiveType.Uint32,
+          "message", PrimitiveType.Text
+      );
 
-        // generate batch of records
-        List<Value<?>> list = new ArrayList<>(50);
-        for (int i = 0; i < BATCH_SIZE; i += 1) {
-            // add a new row as a struct value
-            list.add(structType.newValue(
-                "app", PrimitiveValue.newText("App_" + String.valueOf(i / 256)),
-                "timestamp", PrimitiveValue.newTimestamp(Instant.now().plusSeconds(i)),
-                "host", PrimitiveValue.newText("192.168.0." + i % 256),
-                "http_code", PrimitiveValue.newUint32(i % 113 == 0 ? 404 : 200),
-                "message", PrimitiveValue.newText(i % 3 == 0 ? "GET / HTTP/1.1" : "GET /images/logo.png HTTP/1.1")
-            ));
-        }
+      // generate batch of records
+      List<Value<?>> list = new ArrayList<>(50);
+      for (int i = 0; i < BATCH_SIZE; i += 1) {
+          // add a new row as a struct value
+          list.add(structType.newValue(
+              "app", PrimitiveValue.newText("App_" + i / 256),
+              "timestamp", PrimitiveValue.newTimestamp(Instant.now().plusSeconds(i)),
+              "host", PrimitiveValue.newText("192.168.0." + i % 256),
+              "http_code", PrimitiveValue.newUint32(i % 113 == 0 ? 404 : 200),
+              "message", PrimitiveValue.newText(i % 3 == 0 ? "GET / HTTP/1.1" : "GET /images/logo.png HTTP/1.1")
+          ));
+      }
 
-        // Create list of structs
-        ListValue rows = ListType.of(structType).newValue(list);
-        // Do retry operation on errors with best effort
-        retryCtx.supplyStatus(
-            session -> session.executeBulkUpsert(tablePath, rows, new BulkUpsertSettings())
-        ).join().expectSuccess("bulk upsert problem");
+      // Create list of structs
+      ListValue rows = ListType.of(structType).newValue(list);
+      // Do retry operation on errors with best effort
+      retryCtx.supplyStatus(
+          session -> session.executeBulkUpsert(tablePath, rows, new BulkUpsertSettings())
+      ).join().expectSuccess("bulk upsert problem");
     }
     ```
 

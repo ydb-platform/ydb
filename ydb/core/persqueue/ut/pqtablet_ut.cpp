@@ -62,6 +62,7 @@ struct TProposeTransactionParams {
     TVector<TTxOperation> TxOps;
     TMaybe<TConfigParams> Configs;
     TMaybe<TWriteId> WriteId;
+    TMaybe<bool> Immediate;
 };
 
 struct TPlanStepParams {
@@ -288,6 +289,11 @@ protected:
         ui64 txId,
         NKikimrPQ::TPartitionOperation::TWriteOp::TDeferredPublicationApi::EOp op,
         const std::vector<ui32>& partitionIds = {0});
+    void AbortDeferredPublicationFinalize(
+        const TWriteId& writeId,
+        ui64 txId,
+        NKikimrPQ::TPartitionOperation::TWriteOp::TDeferredPublicationApi::EOp op,
+        const std::vector<ui32>& partitionIds = {0});
 
     std::unique_ptr<TEvPersQueue::TEvRequest> MakeGetOwnershipRequest(const TGetOwnershipRequestParams& params,
                                                                       const TActorId& pipe) const;
@@ -466,7 +472,11 @@ void TPQTabletFixture::SendProposeTransactionRequest(const TProposeTransactionPa
         if (params.WriteId) {
             SetWriteId(*body, *params.WriteId);
         }
-        body->SetImmediate(params.Senders.empty() && params.Receivers.empty() && (partitions.size() == 1) && !params.WriteId.Defined());
+        if (params.Immediate.Defined()) {
+            body->SetImmediate(*params.Immediate);
+        } else {
+            body->SetImmediate(params.Senders.empty() && params.Receivers.empty() && (partitions.size() == 1) && !params.WriteId.Defined());
+        }
     }
 
     SendToPipe(Ctx->Edge,
@@ -1081,6 +1091,30 @@ void TPQTabletFixture::CommitDeferredPublicationFinalize(
                                    .Status=NKikimrPQ::TEvProposeTransactionResult::COMPLETE});
     WaitPlanStepAck({.Step=100, .TxIds={txId}});
     WaitPlanStepAccepted({.Step=100});
+}
+
+void TPQTabletFixture::AbortDeferredPublicationFinalize(
+    const TWriteId& writeId,
+    ui64 txId,
+    NKikimrPQ::TPartitionOperation::TWriteOp::TDeferredPublicationApi::EOp op,
+    const std::vector<ui32>& partitionIds)
+{
+    EnsurePipeExist();
+
+    TProposeTransactionParams params;
+    params.TxId = txId;
+    params.Senders = {Ctx->TabletId};
+    params.Receivers = {Ctx->TabletId};
+    params.WriteId = writeId;
+    for (const ui32& partitionId : partitionIds) {
+        params.TxOps.push_back({.Partition=partitionId, .Path="/topic", .DeferredPublicationOp=op});
+    }
+    SendProposeTransactionRequest(params);
+    WaitProposeTransactionResponse({.TxId=txId,
+                                   .Status=NKikimrPQ::TEvProposeTransactionResult::PREPARED});
+    SendPlanStep({.Step=100, .TxIds={txId}});
+    WaitProposeTransactionResponse({.TxId=txId,
+                                   .Status=NKikimrPQ::TEvProposeTransactionResult::ABORTED});
 }
 
 void TPQTabletFixture::WaitWriteResponse(const TWriteResponseMatcher& matcher)
@@ -3172,6 +3206,31 @@ Y_UNIT_TEST_F(DeferredPublication_Cancel_Successful_Commit, TPQTabletFixture) {
 
     const auto messages = ReadMainPartitionMessages();
     UNIT_ASSERT_VALUES_EQUAL(messages.size(), 0u);
+}
+
+Y_UNIT_TEST_F(DeferredPublication_Publish_Before_Write_Ack, TPQTabletFixture) {
+    using TDeferredPublicationApi = NKikimrPQ::TPartitionOperation::TWriteOp::TDeferredPublicationApi;
+    const TWriteId writeId = NHelpers::MakeDeferredWriteId(45, "ext-45");
+    const ui64 txId = 70004;
+
+    PQTabletPrepare({.partitions=1}, {}, *Ctx);
+    EnsurePipeExist();
+
+    const TString ownerCookie = CreateSupportivePartitionForDeferredPublication(writeId);
+
+    bool blockWriteQuota = true;
+    auto observer = [&blockWriteQuota](TAutoPtr<IEventHandle>& input) {
+        if (blockWriteQuota && input->CastAsLocal<TEvPQ::TEvApproveWriteQuota>()) {
+            return TTestActorRuntimeBase::EEventAction::DROP;
+        }
+        return TTestActorRuntimeBase::EEventAction::PROCESS;
+    };
+    auto prev = Ctx->Runtime->SetObserverFunc(observer);
+
+    SendDeferredPublicationWriteRequestWithoutWait(writeId, ownerCookie);
+    AbortDeferredPublicationFinalize(writeId, txId, TDeferredPublicationApi::Publish);
+
+    Ctx->Runtime->SetObserverFunc(prev);
 }
 
 Y_UNIT_TEST_F(DeferredPublication_Publish_Unknown_WriteId, TPQTabletFixture) {

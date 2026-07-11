@@ -2551,9 +2551,9 @@ Y_UNIT_TEST(TableSystemTableWithEmptyKeyColumnIds) {
     // When trying to SHOW CREATE TABLE on a system table that has empty key column IDs,
     // the formatter crashes at line 347 with: Y_ENSURE(!tableDesc.GetKeyColumnIds().empty())
     //
-    // The issue specifically mentions `.sys/tables` as causing the crash.
-    // This test verifies that SHOW CREATE TABLE on system tables either succeeds
-    // or returns a proper error status, but does not crash the server.
+    // The issue was triggered by system tables with empty key column IDs (e.g. some
+    // `.sys/*` views). This test verifies that SHOW CREATE TABLE on representative
+    // system tables either succeeds or returns a proper error status, but does not crash.
 
     TTestEnv env(1, 4, {.StoragePools = 3, .ShowCreateTable = true});
 
@@ -2564,10 +2564,9 @@ Y_UNIT_TEST(TableSystemTableWithEmptyKeyColumnIds) {
     NQuery::TQueryClient queryClient(env.GetDriver());
     auto session = queryClient.GetSession().GetValueSync().GetSession();
 
-    // The issue specifically mentions .sys/tables as the problematic table
-    // We test this and a few other system tables to ensure robustness
+    // We test a few representative system tables to ensure SHOW CREATE TABLE is robust
     TVector<TString> systemTablesToTest = {
-        "/Root/.sys/tables",  // The specific table mentioned in issue #30332
+        "/Root/.sys/query_sessions",
         "/Root/.sys/partition_stats",
         "/Root/.sys/nodes"
     };

@@ -93,8 +93,6 @@
 
 #include <ydb/core/load_test/service_actor.h>
 
-#include <ydb/core/pgproxy/pg_proxy.h>
-#include <ydb/core/local_pgwire/local_pgwire.h>
 
 #include <ydb/core/metering/metering.h>
 
@@ -3219,42 +3217,6 @@ void TReplicationServiceInitializer::InitializeServices(NActors::TActorSystemSet
     setup->LocalServices.emplace_back(
         NReplication::MakeReplicationServiceId(NodeId),
         TActorSetupCmd(NReplication::CreateReplicationService(), TMailboxType::HTSwap, appData->UserPoolId)
-    );
-}
-
-TLocalPgWireServiceInitializer::TLocalPgWireServiceInitializer(const TKikimrRunConfig& runConfig)
-    : IKikimrServicesInitializer(runConfig)
-{
-}
-
-void TLocalPgWireServiceInitializer::InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) {
-    if (!Config.GetLocalPgWireConfig().GetEnableLocalPgWire()) {
-        return;
-    }
-
-    setup->LocalServices.emplace_back(
-        NLocalPgWire::CreateLocalPgWireProxyId(),
-        TActorSetupCmd(NLocalPgWire::CreateLocalPgWireProxy(), TMailboxType::HTSwap, appData->UserPoolId)
-    );
-
-    NPG::TListenerSettings settings;
-    settings.Port = Config.GetLocalPgWireConfig().GetListeningPort();
-    if (Config.GetLocalPgWireConfig().HasSslCertificate()) {
-        settings.SslCertificatePem = Config.GetLocalPgWireConfig().GetSslCertificate();
-    }
-
-    if (Config.GetLocalPgWireConfig().HasAddress()) {
-        settings.Address = Config.GetLocalPgWireConfig().GetAddress();
-    }
-
-    if (Config.GetLocalPgWireConfig().HasTcpNotDelay()) {
-        settings.TcpNotDelay = Config.GetLocalPgWireConfig().GetTcpNotDelay();
-    }
-
-    setup->LocalServices.emplace_back(
-        TActorId(),
-        TActorSetupCmd(NPG::CreatePGListener(MakePollerActorId(), NLocalPgWire::CreateLocalPgWireProxyId(), settings),
-            TMailboxType::HTSwap, appData->UserPoolId)
     );
 }
 

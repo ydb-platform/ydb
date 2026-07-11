@@ -2231,10 +2231,6 @@ TIntrusivePtr<TServiceInitializersList> TKikimrRunner::CreateServiceInitializers
         sil->AddServiceInitializer(new TReplicationServiceInitializer(runConfig));
     }
 
-    if (serviceMask.EnableLocalPgWire) {
-        sil->AddServiceInitializer(new TLocalPgWireServiceInitializer(runConfig));
-    }
-
     if (serviceMask.EnableKafkaProxy) {
         sil->AddServiceInitializer(new TKafkaProxyServiceInitializer(runConfig));
     }

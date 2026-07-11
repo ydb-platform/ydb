@@ -401,7 +401,7 @@ message TSessionInfo {
     optional int64 QueryStartAt = 12;
     optional int64 StateChangeAt = 13;
     optional string UserSID = 14;
-    optional bool PgWire = 15 [default = false];
+    reserved 15; // PgWire
     optional string UserName = 16;
     optional string WmPoolId = 17;
     optional string WmState = 18;
@@ -471,7 +471,7 @@ message TEvCreateSessionRequest {
     // if flag is false, in this case proxy will create session locally.
     optional bool CanCreateRemoteSession = 4 [default = false];
     optional bool SupportsBalancing = 5 [default = false];
-    optional bool PgWire = 6 [default = false];
+    reserved 6; // PgWire
 
     optional string ClientAddress = 7;
     optional string ClientPID = 8;

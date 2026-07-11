@@ -225,15 +225,16 @@ void TPartition::FailStaleSessionReadRequests(const TString& user, const TActorC
         response->Record.SetSessionInvalidated(true);
         ctx.Send(it->Sender, response.Release());
 
-        for (auto dlIt = HasDataDeadlines.begin(); dlIt != HasDataDeadlines.end(); ++dlIt) {
-            if (dlIt->Request.Num == it->Num && dlIt->Request.Offset == it->Offset) {
-                HasDataDeadlines.erase(dlIt);
-                break;
-            }
-        }
-
         forgetSubscription(it->ClientId);
         it = HasDataRequests.erase(it);
+    }
+
+    for (auto dlIt = HasDataDeadlines.begin(); dlIt != HasDataDeadlines.end();) {
+        if (dlIt->Request.ClientId == user) {
+            dlIt = HasDataDeadlines.erase(dlIt);
+        } else {
+            ++dlIt;
+        }
     }
 }
 

@@ -1525,6 +1525,8 @@ void TPartitionActor::Handle(TEvPersQueue::TEvHasDataInfoResponse::TPtr& ev, con
         YDB_LOG_DEBUG_CTX(ctx, "Session invalidated while waiting for data, unlock partition for next read",
             {"PQLOGPREFIX", PQ_LOG_PREFIX},
             {"partition", Partition});
+        EndOffset = record.GetEndOffset();
+        SizeLag = record.GetSizeLag();
         WaitForData = false;
         WaitDataInfly.clear();
         SendPartitionReady(ctx);

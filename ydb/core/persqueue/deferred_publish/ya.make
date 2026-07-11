@@ -1,7 +1,10 @@
 LIBRARY()
 
 SRCS(
+    describe_publication_query.cpp
     insert_publication_query.cpp
+    list_publications_query.cpp
+    query_utils.cpp
     registry_actor.cpp
     tables_creator.cpp
 )

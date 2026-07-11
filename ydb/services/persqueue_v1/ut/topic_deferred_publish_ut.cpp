@@ -113,6 +113,50 @@ ui64 BeginPublicationIntId(const TBeginPublicationOutcome& outcome) {
     return result.int_publication_id();
 }
 
+struct TListPublicationsOutcome {
+    grpc::Status RpcStatus;
+    Ydb::Operations::Operation Operation;
+};
+
+TListPublicationsOutcome CallListPublications(
+    Ydb::Topic::DeferredPublish::V1::TopicDeferredPublishService::Stub& stub,
+    const TString& database,
+    const TMaybe<TString>& writerIdentity = Nothing())
+{
+    grpc::ClientContext context;
+    FillClientContext(context, database);
+
+    Ydb::Topic::DeferredPublish::ListPublicationsRequest request;
+    if (writerIdentity.Defined()) {
+        request.set_writer_identity(*writerIdentity);
+    }
+
+    Ydb::Topic::DeferredPublish::ListPublicationsResponse response;
+    const auto rpcStatus = stub.ListPublications(&context, request, &response);
+    return {rpcStatus, response.operation()};
+}
+
+struct TDescribePublicationOutcome {
+    grpc::Status RpcStatus;
+    Ydb::Operations::Operation Operation;
+};
+
+TDescribePublicationOutcome CallDescribePublication(
+    Ydb::Topic::DeferredPublish::V1::TopicDeferredPublishService::Stub& stub,
+    const TString& database,
+    ui64 intPublicationId)
+{
+    grpc::ClientContext context;
+    FillClientContext(context, database);
+
+    Ydb::Topic::DeferredPublish::DescribePublicationRequest request;
+    request.set_int_publication_id(intPublicationId);
+
+    Ydb::Topic::DeferredPublish::DescribePublicationResponse response;
+    const auto rpcStatus = stub.DescribePublication(&context, request, &response);
+    return {rpcStatus, response.operation()};
+}
+
 bool SchemePathExists(NPersQueue::TTestServer& server, const TString& path) {
     const auto response = server.AnnoyingClient->Ls(path);
     return response && response->Record.GetSchemeStatus() == NKikimrScheme::StatusSuccess;
@@ -134,6 +178,50 @@ void GrantPublicationTableRead(NPersQueue::TTestServer& server, const TString& s
         "topic_deferred_publication_destinations",
         subject,
         NACLib::EAccessRights::GenericRead);
+}
+
+void GrantPublicationTableWrite(NPersQueue::TTestServer& server, const TString& subject) {
+    GrantPublicationTableRead(server, subject);
+    server.AnnoyingClient->TestGrant(
+        "/Root/.metadata",
+        "topic_deferred_publication_destinations",
+        subject,
+        NACLib::EAccessRights::GenericWrite);
+}
+
+void InsertDestinationRow(
+    NPersQueue::TTestServer& server,
+    const TString& authTicket,
+    ui64 intPublicationId,
+    const TString& path)
+{
+    GrantPublicationTableWrite(server, authTicket);
+
+    NYdb::NTable::TTableClient client(
+        server.GetDriver(),
+        NYdb::NTable::TClientSettings().AuthToken(authTicket));
+
+    NYdb::TParamsBuilder params;
+    params
+        .AddParam("$int_publication_id").Uint64(intPublicationId).Build()
+        .AddParam("$path").Utf8(path).Build()
+        .AddParam("$destination_blob").String(TString()).Build();
+
+    const auto query = TStringBuilder()
+        << "DECLARE $int_publication_id AS Uint64; "
+        << "DECLARE $path AS Text; "
+        << "DECLARE $destination_blob AS String; "
+        << "UPSERT INTO `" << DestinationsTableRelativePath << "` ("
+        << "`int_publication_id`, `path`, `destination_blob`) "
+        << "VALUES ($int_publication_id, $path, $destination_blob);";
+
+    const auto status = client.RetryOperationSync([&](NYdb::NTable::TSession session) {
+        return session.ExecuteDataQuery(
+            query,
+            NYdb::NTable::TTxControl::BeginTx().CommitTx(),
+            params.Build()).GetValueSync();
+    });
+    UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
 }
 
 void AssertPublicationRow(
@@ -839,24 +927,140 @@ Y_UNIT_TEST(OtherMethodsReturnNotImplemented) {
         UNIT_ASSERT(stub->CancelPublication(&context, request, &response).ok());
         AssertNotImplemented(response.operation());
     }
+}
 
-    {
-        grpc::ClientContext context;
-        FillClientContext(context, "/Root");
-        Ydb::Topic::DeferredPublish::ListPublicationsRequest request;
-        Ydb::Topic::DeferredPublish::ListPublicationsResponse response;
-        UNIT_ASSERT(stub->ListPublications(&context, request, &response).ok());
-        AssertNotImplemented(response.operation());
-    }
+Y_UNIT_TEST(ListPublicationsDisabledByDefault) {
+    NPersQueue::TTestServer server;
+    server.AnnoyingClient->GrantConnect("root@builtin");
 
-    {
-        grpc::ClientContext context;
-        FillClientContext(context, "/Root");
-        Ydb::Topic::DeferredPublish::DescribePublicationRequest request;
-        Ydb::Topic::DeferredPublish::DescribePublicationResponse response;
-        UNIT_ASSERT(stub->DescribePublication(&context, request, &response).ok());
-        AssertNotImplemented(response.operation());
+    const auto outcome = CallListPublications(*MakeStub(server), "/Root");
+    UNIT_ASSERT(outcome.RpcStatus.ok());
+    AssertUnsupported(outcome.Operation, DisabledMessage);
+}
+
+Y_UNIT_TEST(DescribePublicationDisabledByDefault) {
+    NPersQueue::TTestServer server;
+    server.AnnoyingClient->GrantConnect("root@builtin");
+
+    const auto outcome = CallDescribePublication(*MakeStub(server), "/Root", 1);
+    UNIT_ASSERT(outcome.RpcStatus.ok());
+    AssertUnsupported(outcome.Operation, DisabledMessage);
+}
+
+Y_UNIT_TEST(ListPublicationsReturnsEmptyBeforeBegin) {
+    auto server = MakeServerWithDeferredPublishEnabled();
+    server.AnnoyingClient->GrantConnect("root@builtin");
+
+    const auto outcome = CallListPublications(*MakeStub(server), "/Root");
+    UNIT_ASSERT(outcome.RpcStatus.ok());
+    UNIT_ASSERT_VALUES_EQUAL(outcome.Operation.status(), Ydb::StatusIds::SUCCESS);
+    UNIT_ASSERT(outcome.Operation.ready());
+
+    Ydb::Topic::DeferredPublish::ListPublicationsResult result;
+    UNIT_ASSERT(outcome.Operation.result().UnpackTo(&result));
+    UNIT_ASSERT_VALUES_EQUAL(result.publications_size(), 0);
+}
+
+Y_UNIT_TEST(ListPublicationsReturnsActivePublications) {
+    auto server = MakeServerWithDeferredPublishEnabled();
+    server.AnnoyingClient->GrantConnect("root@builtin");
+
+    auto stub = MakeStub(server);
+    const ui64 firstIntId = BeginPublicationIntId(
+        CallBeginPublication(*stub, "/Root", "pub-a", "writer-a"));
+    const ui64 secondIntId = BeginPublicationIntId(
+        CallBeginPublication(*stub, "/Root", "pub-b", "writer-b"));
+
+    const auto outcome = CallListPublications(*stub, "/Root");
+    UNIT_ASSERT(outcome.RpcStatus.ok());
+    UNIT_ASSERT_VALUES_EQUAL(outcome.Operation.status(), Ydb::StatusIds::SUCCESS);
+
+    Ydb::Topic::DeferredPublish::ListPublicationsResult result;
+    UNIT_ASSERT(outcome.Operation.result().UnpackTo(&result));
+    UNIT_ASSERT_VALUES_EQUAL(result.publications_size(), 2);
+    UNIT_ASSERT_VALUES_EQUAL(result.publications(0).int_publication_id(), firstIntId);
+    UNIT_ASSERT_VALUES_EQUAL(result.publications(0).ext_publication_id(), "pub-a");
+    UNIT_ASSERT_VALUES_EQUAL(result.publications(0).writer_identity(), "writer-a");
+    UNIT_ASSERT_VALUES_EQUAL(result.publications(1).int_publication_id(), secondIntId);
+    UNIT_ASSERT_VALUES_EQUAL(result.publications(1).ext_publication_id(), "pub-b");
+    UNIT_ASSERT_VALUES_EQUAL(result.publications(1).writer_identity(), "writer-b");
+}
+
+Y_UNIT_TEST(ListPublicationsFiltersByWriterIdentity) {
+    auto server = MakeServerWithDeferredPublishEnabled();
+    server.AnnoyingClient->GrantConnect("root@builtin");
+
+    auto stub = MakeStub(server);
+    const ui64 targetIntId = BeginPublicationIntId(
+        CallBeginPublication(*stub, "/Root", "pub-filtered", "writer-target"));
+    BeginPublicationIntId(CallBeginPublication(*stub, "/Root", "pub-other", "writer-other"));
+
+    const auto outcome = CallListPublications(*stub, "/Root", "writer-target");
+    UNIT_ASSERT(outcome.RpcStatus.ok());
+    UNIT_ASSERT_VALUES_EQUAL(outcome.Operation.status(), Ydb::StatusIds::SUCCESS);
+
+    Ydb::Topic::DeferredPublish::ListPublicationsResult result;
+    UNIT_ASSERT(outcome.Operation.result().UnpackTo(&result));
+    UNIT_ASSERT_VALUES_EQUAL(result.publications_size(), 1);
+    UNIT_ASSERT_VALUES_EQUAL(result.publications(0).int_publication_id(), targetIntId);
+    UNIT_ASSERT_VALUES_EQUAL(result.publications(0).ext_publication_id(), "pub-filtered");
+}
+
+Y_UNIT_TEST(DescribePublicationReturnsNotFoundForUnknownInt) {
+    auto server = MakeServerWithDeferredPublishEnabled();
+    server.AnnoyingClient->GrantConnect("root@builtin");
+
+    auto stub = MakeStub(server);
+    BeginPublicationIntId(CallBeginPublication(*stub, "/Root", "warmup-describe"));
+
+    for (const ui64 intPublicationId : {0u, 999999u}) {
+        const auto outcome = CallDescribePublication(*stub, "/Root", intPublicationId);
+        UNIT_ASSERT(outcome.RpcStatus.ok());
+        UNIT_ASSERT_VALUES_EQUAL(outcome.Operation.status(), Ydb::StatusIds::NOT_FOUND);
+        UNIT_ASSERT(outcome.Operation.ready());
     }
+}
+
+Y_UNIT_TEST(DescribePublicationReturnsMetadataWithoutDestinations) {
+    auto server = MakeServerWithDeferredPublishEnabled();
+    server.AnnoyingClient->GrantConnect("root@builtin");
+
+    auto stub = MakeStub(server);
+    const ui64 intPublicationId = BeginPublicationIntId(
+        CallBeginPublication(*stub, "/Root", "describe-no-dest", "writer-1"));
+
+    const auto outcome = CallDescribePublication(*stub, "/Root", intPublicationId);
+    UNIT_ASSERT(outcome.RpcStatus.ok());
+    UNIT_ASSERT_VALUES_EQUAL(outcome.Operation.status(), Ydb::StatusIds::SUCCESS);
+    UNIT_ASSERT(outcome.Operation.ready());
+
+    Ydb::Topic::DeferredPublish::DescribePublicationResult result;
+    UNIT_ASSERT(outcome.Operation.result().UnpackTo(&result));
+    UNIT_ASSERT_VALUES_EQUAL(result.ext_publication_id(), "describe-no-dest");
+    UNIT_ASSERT_VALUES_EQUAL(result.writer_identity(), "writer-1");
+    UNIT_ASSERT_VALUES_EQUAL(result.created_by(), "root@builtin");
+    UNIT_ASSERT_GT(result.created_at().seconds(), 0);
+    UNIT_ASSERT_VALUES_EQUAL(result.destinations_size(), 0);
+}
+
+Y_UNIT_TEST(DescribePublicationReturnsDestinations) {
+    auto server = MakeServerWithDeferredPublishEnabled();
+    server.AnnoyingClient->GrantConnect("root@builtin");
+
+    auto stub = MakeStub(server);
+    const ui64 intPublicationId = BeginPublicationIntId(
+        CallBeginPublication(*stub, "/Root", "describe-with-dest", "writer-1"));
+    InsertDestinationRow(server, "root@builtin", intPublicationId, "/Root/topic-a");
+
+    const auto outcome = CallDescribePublication(*stub, "/Root", intPublicationId);
+    UNIT_ASSERT(outcome.RpcStatus.ok());
+    UNIT_ASSERT_VALUES_EQUAL(outcome.Operation.status(), Ydb::StatusIds::SUCCESS);
+
+    Ydb::Topic::DeferredPublish::DescribePublicationResult result;
+    UNIT_ASSERT(outcome.Operation.result().UnpackTo(&result));
+    UNIT_ASSERT_VALUES_EQUAL(result.destinations_size(), 1);
+    UNIT_ASSERT_VALUES_EQUAL(result.destinations(0).topic_path(), "/Root/topic-a");
+    UNIT_ASSERT_VALUES_EQUAL(result.destinations(0).partition_ids_size(), 0);
 }
 
 } // Y_UNIT_TEST_SUITE

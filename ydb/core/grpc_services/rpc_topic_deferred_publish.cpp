@@ -3,11 +3,15 @@
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/grpc_services/base/base.h>
+#include <ydb/core/persqueue/deferred_publish/describe_publication_query.h>
 #include <ydb/core/persqueue/deferred_publish/events.h>
+#include <ydb/core/persqueue/deferred_publish/list_publications_query.h>
 #include <ydb/core/persqueue/deferred_publish/registry_actor.h>
 #include <ydb/library/aclib/aclib.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
+
+#include <google/protobuf/timestamp.pb.h>
 
 namespace NKikimr::NGRpcService {
 
@@ -23,6 +27,20 @@ TString GetUserSID(const IRequestOpCtx* request) {
     return (request->GetInternalToken() != nullptr)
         ? request->GetInternalToken()->GetUserSID()
         : TString(BUILTIN_ACL_NO_USER_SID);
+}
+
+void SetTimestamp(google::protobuf::Timestamp* timestamp, TInstant value) {
+    timestamp->set_seconds(value.Seconds());
+    timestamp->set_nanos(value.NanoSecondsOfSecond());
+}
+
+void RaiseIssues(IRequestOpCtx* request, const NYql::TIssues& issues, const TString& fallbackMessage) {
+    for (const auto& issue : issues) {
+        request->RaiseIssue(issue);
+    }
+    if (issues.Empty()) {
+        request->RaiseIssue(NYql::TIssue(fallbackMessage));
+    }
 }
 
 template <typename TEvRequest, typename TResult>
@@ -72,12 +90,23 @@ private:
 };
 
 template <typename TEvRequest, typename TResult>
-void RegisterDeferredPublishRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f) {
+void RegisterDeferredPublishNotImplementedRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f) {
     if (!AppData()->FeatureFlags.GetEnableTopicDeferredPublish()) {
         f.RegisterActor(new TTopicDeferredPublishDisabledRPC<TEvRequest, TResult>(p.release()));
         return;
     }
     f.RegisterActor(new TTopicDeferredPublishNotImplementedRPC<TEvRequest, TResult>(p.release()));
+}
+
+bool ValidateDeferredPublishDatabase(
+    IRequestOpCtx* request,
+    const TMaybe<TString>& database)
+{
+    if (!database || database->empty()) {
+        request->RaiseIssue(NYql::TIssue("Database name is not set"));
+        return false;
+    }
+    return true;
 }
 
 class TBeginPublicationRequestActor
@@ -101,8 +130,7 @@ public:
         }
 
         const auto database = Request->GetDatabaseName();
-        if (!database || database->empty()) {
-            Request->RaiseIssue(NYql::TIssue("Database name is not set"));
+        if (!ValidateDeferredPublishDatabase(Request.get(), database)) {
             Ydb::Topic::DeferredPublish::BeginPublicationResult result;
             Request->SendResult(result, Ydb::StatusIds::BAD_REQUEST);
             PassAway();
@@ -137,12 +165,7 @@ public:
 
     void Handle(NPQ::NDeferredPublish::TEvBeginPublicationResponse::TPtr& ev) {
         if (ev->Get()->Status != Ydb::StatusIds::SUCCESS) {
-            for (const auto& issue : ev->Get()->Issues) {
-                Request->RaiseIssue(issue);
-            }
-            if (ev->Get()->Issues.Empty()) {
-                Request->RaiseIssue(NYql::TIssue("BeginPublication failed"));
-            }
+            RaiseIssues(Request.get(), ev->Get()->Issues, "BeginPublication failed");
         }
 
         Ydb::Topic::DeferredPublish::BeginPublicationResult result;
@@ -163,6 +186,151 @@ private:
     std::unique_ptr<IRequestOpCtx> Request;
 };
 
+class TListPublicationsRequestActor
+    : public NActors::TActorBootstrapped<TListPublicationsRequestActor> {
+public:
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
+        return NKikimrServices::TActivity::GRPC_REQ;
+    }
+
+    explicit TListPublicationsRequestActor(IRequestOpCtx* request)
+        : Request(request)
+    {}
+
+    void Bootstrap() {
+        if (!AppData()->FeatureFlags.GetEnableTopicDeferredPublish()) {
+            Request->RaiseIssue(NYql::TIssue(TString(DisabledMessage)));
+            Ydb::Topic::DeferredPublish::ListPublicationsResult result;
+            Request->SendResult(result, Ydb::StatusIds::UNSUPPORTED);
+            PassAway();
+            return;
+        }
+
+        const auto database = Request->GetDatabaseName();
+        if (!ValidateDeferredPublishDatabase(Request.get(), database)) {
+            Ydb::Topic::DeferredPublish::ListPublicationsResult result;
+            Request->SendResult(result, Ydb::StatusIds::BAD_REQUEST);
+            PassAway();
+            return;
+        }
+
+        const auto* protoRequest = TEvListPublicationsRequest::GetProtoRequest(Request);
+        TMaybe<TString> writerIdentityFilter;
+        if (protoRequest->has_writer_identity()) {
+            writerIdentityFilter = protoRequest->writer_identity();
+        }
+
+        Register(NPQ::NDeferredPublish::CreateListPublicationsQueryActor(
+            SelfId(), *database, writerIdentityFilter));
+        Become(&TListPublicationsRequestActor::StateFunc);
+    }
+
+    void Handle(NPQ::NDeferredPublish::TEvListPublicationsResponse::TPtr& ev) {
+        if (ev->Get()->Status != Ydb::StatusIds::SUCCESS) {
+            RaiseIssues(Request.get(), ev->Get()->Issues, "ListPublications failed");
+        }
+
+        Ydb::Topic::DeferredPublish::ListPublicationsResult result;
+        for (const auto& publication : ev->Get()->Publications) {
+            auto* summary = result.add_publications();
+            summary->set_int_publication_id(publication.IntPublicationId);
+            summary->set_ext_publication_id(publication.ExtPublicationId);
+            if (publication.WriterIdentity) {
+                summary->set_writer_identity(*publication.WriterIdentity);
+            }
+        }
+
+        Request->SendResult(result, ev->Get()->Status);
+        PassAway();
+    }
+
+    STFUNC(StateFunc) {
+        switch (ev->GetTypeRewrite()) {
+            hFunc(NPQ::NDeferredPublish::TEvListPublicationsResponse, Handle);
+            default:
+                break;
+        }
+    }
+
+private:
+    std::unique_ptr<IRequestOpCtx> Request;
+};
+
+class TDescribePublicationRequestActor
+    : public NActors::TActorBootstrapped<TDescribePublicationRequestActor> {
+public:
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
+        return NKikimrServices::TActivity::GRPC_REQ;
+    }
+
+    explicit TDescribePublicationRequestActor(IRequestOpCtx* request)
+        : Request(request)
+    {}
+
+    void Bootstrap() {
+        if (!AppData()->FeatureFlags.GetEnableTopicDeferredPublish()) {
+            Request->RaiseIssue(NYql::TIssue(TString(DisabledMessage)));
+            Ydb::Topic::DeferredPublish::DescribePublicationResult result;
+            Request->SendResult(result, Ydb::StatusIds::UNSUPPORTED);
+            PassAway();
+            return;
+        }
+
+        const auto database = Request->GetDatabaseName();
+        if (!ValidateDeferredPublishDatabase(Request.get(), database)) {
+            Ydb::Topic::DeferredPublish::DescribePublicationResult result;
+            Request->SendResult(result, Ydb::StatusIds::BAD_REQUEST);
+            PassAway();
+            return;
+        }
+
+        const auto* protoRequest = TEvDescribePublicationRequest::GetProtoRequest(Request);
+        Register(NPQ::NDeferredPublish::CreateDescribePublicationQueryActor(
+            SelfId(), *database, protoRequest->int_publication_id()));
+        Become(&TDescribePublicationRequestActor::StateFunc);
+    }
+
+    void Handle(NPQ::NDeferredPublish::TEvDescribePublicationResponse::TPtr& ev) {
+        if (ev->Get()->Status != Ydb::StatusIds::SUCCESS) {
+            RaiseIssues(Request.get(), ev->Get()->Issues, "DescribePublication failed");
+        }
+
+        Ydb::Topic::DeferredPublish::DescribePublicationResult result;
+        if (ev->Get()->Publication) {
+            const auto& publication = *ev->Get()->Publication;
+            result.set_ext_publication_id(publication.ExtPublicationId);
+            if (publication.WriterIdentity) {
+                result.set_writer_identity(*publication.WriterIdentity);
+            }
+            SetTimestamp(result.mutable_created_at(), publication.CreatedAt);
+            if (publication.CreatedBy) {
+                result.set_created_by(*publication.CreatedBy);
+            }
+            for (const auto& destination : publication.Destinations) {
+                auto* protoDestination = result.add_destinations();
+                protoDestination->set_topic_path(destination.TopicPath);
+                for (const i64 partitionId : destination.PartitionIds) {
+                    protoDestination->add_partition_ids(partitionId);
+                }
+            }
+        }
+
+        Request->SendResult(result, ev->Get()->Status);
+        PassAway();
+    }
+
+    STFUNC(StateFunc) {
+        switch (ev->GetTypeRewrite()) {
+            hFunc(NPQ::NDeferredPublish::TEvDescribePublicationResponse, Handle);
+            default:
+                break;
+        }
+    }
+
+private:
+    std::unique_ptr<IRequestOpCtx> Request;
+};
+
 } // namespace
 
 void DoBeginPublicationRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f) {
@@ -170,19 +338,19 @@ void DoBeginPublicationRequest(std::unique_ptr<IRequestOpCtx> p, const IFacility
 }
 
 void DoPublishRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f) {
-    RegisterDeferredPublishRequest<TEvPublishRequest, Ydb::Topic::DeferredPublish::PublishResult>(std::move(p), f);
+    RegisterDeferredPublishNotImplementedRequest<TEvPublishRequest, Ydb::Topic::DeferredPublish::PublishResult>(std::move(p), f);
 }
 
 void DoCancelPublicationRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f) {
-    RegisterDeferredPublishRequest<TEvCancelPublicationRequest, Ydb::Topic::DeferredPublish::CancelPublicationResult>(std::move(p), f);
+    RegisterDeferredPublishNotImplementedRequest<TEvCancelPublicationRequest, Ydb::Topic::DeferredPublish::CancelPublicationResult>(std::move(p), f);
 }
 
 void DoListPublicationsRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f) {
-    RegisterDeferredPublishRequest<TEvListPublicationsRequest, Ydb::Topic::DeferredPublish::ListPublicationsResult>(std::move(p), f);
+    f.RegisterActor(new TListPublicationsRequestActor(p.release()));
 }
 
 void DoDescribePublicationRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f) {
-    RegisterDeferredPublishRequest<TEvDescribePublicationRequest, Ydb::Topic::DeferredPublish::DescribePublicationResult>(std::move(p), f);
+    f.RegisterActor(new TDescribePublicationRequestActor(p.release()));
 }
 
 }

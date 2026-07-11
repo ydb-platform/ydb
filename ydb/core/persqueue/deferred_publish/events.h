@@ -6,7 +6,28 @@
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
 #include <yql/essentials/public/issue/yql_issue.h>
 
+#include <util/datetime/base.h>
+
 namespace NKikimr::NPQ::NDeferredPublish {
+
+struct TPublicationSummary {
+    ui64 IntPublicationId = 0;
+    TString ExtPublicationId;
+    TMaybe<TString> WriterIdentity;
+};
+
+struct TDescribeDestination {
+    TString TopicPath;
+    TVector<i64> PartitionIds;
+};
+
+struct TDescribePublicationData {
+    TString ExtPublicationId;
+    TMaybe<TString> WriterIdentity;
+    TInstant CreatedAt;
+    TMaybe<TString> CreatedBy;
+    TVector<TDescribeDestination> Destinations;
+};
 
 struct TEvDeferredPublish {
     enum EEv : ui32 {
@@ -14,6 +35,8 @@ struct TEvDeferredPublish {
         EvBeginPublicationResponse,
         EvTablesCreationFinished,
         EvInsertPublicationFinished,
+        EvListPublicationsResponse,
+        EvDescribePublicationResponse,
     };
 
     struct TEvBeginPublicationRequest : public NActors::TEventLocal<TEvBeginPublicationRequest, EvBeginPublicationRequest> {
@@ -41,11 +64,25 @@ struct TEvDeferredPublish {
         NYql::TIssues Issues;
         ui64 IntPublicationId = 0;
     };
+
+    struct TEvListPublicationsResponse : public NActors::TEventLocal<TEvListPublicationsResponse, EvListPublicationsResponse> {
+        Ydb::StatusIds::StatusCode Status = Ydb::StatusIds::SUCCESS;
+        NYql::TIssues Issues;
+        TVector<TPublicationSummary> Publications;
+    };
+
+    struct TEvDescribePublicationResponse : public NActors::TEventLocal<TEvDescribePublicationResponse, EvDescribePublicationResponse> {
+        Ydb::StatusIds::StatusCode Status = Ydb::StatusIds::SUCCESS;
+        NYql::TIssues Issues;
+        TMaybe<TDescribePublicationData> Publication;
+    };
 };
 
 using TEvBeginPublicationRequest = TEvDeferredPublish::TEvBeginPublicationRequest;
 using TEvBeginPublicationResponse = TEvDeferredPublish::TEvBeginPublicationResponse;
 using TEvTablesCreationFinished = TEvDeferredPublish::TEvTablesCreationFinished;
 using TEvInsertPublicationFinished = TEvDeferredPublish::TEvInsertPublicationFinished;
+using TEvListPublicationsResponse = TEvDeferredPublish::TEvListPublicationsResponse;
+using TEvDescribePublicationResponse = TEvDeferredPublish::TEvDescribePublicationResponse;
 
 } // namespace NKikimr::NPQ::NDeferredPublish

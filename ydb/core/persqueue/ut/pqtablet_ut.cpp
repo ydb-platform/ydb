@@ -280,6 +280,9 @@ protected:
 
     TString CreateSupportivePartitionForDeferredPublication(const TWriteId& writeId, ui32 partitionId = 0);
     void SendDeferredPublicationWriteRequest(const TWriteId& writeId, const TString& ownerCookie, ui32 partitionId = 0);
+    void SendDeferredPublicationWriteRequestWithoutWait(const TWriteId& writeId, const TString& ownerCookie, ui32 partitionId = 0);
+    void WaitDeferredPublicationWriteResponse();
+    TVector<TString> ReadMainPartitionMessages(ui32 partitionId = 0, ui32 count = 10);
     void CommitDeferredPublicationFinalize(
         const TWriteId& writeId,
         ui64 txId,
@@ -961,20 +964,12 @@ TString TPQTabletFixture::CreateSupportivePartitionForDeferredPublication(const 
     return WaitGetOwnershipResponse({.Cookie=4, .Status=NMsgBusProxy::MSTATUS_OK});
 }
 
-void TPQTabletFixture::SendDeferredPublicationWriteRequest(const TWriteId& writeId, const TString& ownerCookie, const ui32 partitionId) {
+void TPQTabletFixture::SendDeferredPublicationWriteRequestWithoutWait(
+    const TWriteId& writeId,
+    const TString& ownerCookie,
+    const ui32 partitionId)
+{
     EnsurePipeExist();
-
-    bool found = false;
-    auto observer = [&found](TAutoPtr<IEventHandle>& event) {
-        if (auto* msg = event->CastAsLocal<TEvPersQueue::TEvResponse>()) {
-            const auto& partitionResponse = msg->Record.GetPartitionResponse();
-            if (partitionResponse.HasCookie() && partitionResponse.GetCookie() == 123) {
-                found = true;
-            }
-        }
-        return TTestActorRuntimeBase::EEventAction::PROCESS;
-    };
-    auto prev = Ctx->Runtime->SetObserverFunc(observer);
 
     auto event = MakeHolder<TEvPersQueue::TEvRequest>();
     auto* request = event->Record.MutablePartitionRequest();
@@ -999,6 +994,20 @@ void TPQTabletFixture::SendDeferredPublicationWriteRequest(const TWriteId& write
     cmdWrite->SetExternalOperation(true);
 
     SendToPipe(Ctx->Edge, event.Release());
+}
+
+void TPQTabletFixture::WaitDeferredPublicationWriteResponse() {
+    bool found = false;
+    auto observer = [&found](TAutoPtr<IEventHandle>& event) {
+        if (auto* msg = event->CastAsLocal<TEvPersQueue::TEvResponse>()) {
+            const auto& partitionResponse = msg->Record.GetPartitionResponse();
+            if (partitionResponse.HasCookie() && partitionResponse.GetCookie() == 123) {
+                found = true;
+            }
+        }
+        return TTestActorRuntimeBase::EEventAction::PROCESS;
+    };
+    auto prev = Ctx->Runtime->SetObserverFunc(observer);
 
     TDispatchOptions options;
     options.CustomFinalCondition = [&found]() {
@@ -1006,6 +1015,46 @@ void TPQTabletFixture::SendDeferredPublicationWriteRequest(const TWriteId& write
     };
     UNIT_ASSERT(Ctx->Runtime->DispatchEvents(options));
     Ctx->Runtime->SetObserverFunc(prev);
+}
+
+void TPQTabletFixture::SendDeferredPublicationWriteRequest(const TWriteId& writeId, const TString& ownerCookie, const ui32 partitionId) {
+    SendDeferredPublicationWriteRequestWithoutWait(writeId, ownerCookie, partitionId);
+    WaitDeferredPublicationWriteResponse();
+}
+
+TVector<TString> TPQTabletFixture::ReadMainPartitionMessages(const ui32 partitionId, const ui32 count) {
+    TPQCmdReadSettings readSettings{"", partitionId, 0, count, 16_MB, 0};
+
+    bool found = false;
+    NKikimrClient::TCmdReadResult readResult;
+    auto observer = [&found, &readResult](TAutoPtr<IEventHandle>& event) {
+        if (auto* msg = event->CastAsLocal<TEvPersQueue::TEvResponse>()) {
+            const auto& partitionResponse = msg->Record.GetPartitionResponse();
+            if (partitionResponse.HasCookie() && partitionResponse.GetCookie() == 123
+                && partitionResponse.HasCmdReadResult()) {
+                readResult = partitionResponse.GetCmdReadResult();
+                found = true;
+            }
+        }
+        return TTestActorRuntimeBase::EEventAction::PROCESS;
+    };
+    auto prev = Ctx->Runtime->SetObserverFunc(observer);
+
+    BeginCmdRead(readSettings, *Ctx);
+
+    TDispatchOptions options;
+    options.CustomFinalCondition = [&found]() {
+        return found;
+    };
+    UNIT_ASSERT(Ctx->Runtime->DispatchEvents(options));
+    Ctx->Runtime->SetObserverFunc(prev);
+
+    TVector<TString> payloads;
+    payloads.reserve(readResult.ResultSize());
+    for (ui32 i = 0; i < readResult.ResultSize(); ++i) {
+        payloads.push_back(readResult.GetResult(i).GetData());
+    }
+    return payloads;
 }
 
 void TPQTabletFixture::CommitDeferredPublicationFinalize(
@@ -3101,6 +3150,10 @@ Y_UNIT_TEST_F(DeferredPublication_Publish_Successful_Commit, TPQTabletFixture) {
     WaitForExactTxWritesCount(1);
 
     CommitDeferredPublicationFinalize(writeId, txId, TDeferredPublicationApi::Publish);
+
+    const auto messages = ReadMainPartitionMessages();
+    UNIT_ASSERT_VALUES_EQUAL(messages.size(), 1u);
+    UNIT_ASSERT_VALUES_EQUAL(messages[0], "deferred-publish-payload");
 }
 
 Y_UNIT_TEST_F(DeferredPublication_Cancel_Successful_Commit, TPQTabletFixture) {

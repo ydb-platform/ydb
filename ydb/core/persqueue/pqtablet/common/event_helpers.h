@@ -30,7 +30,7 @@ void ReplyPersQueueError(
 inline
 bool IsDeferredPublicationTxOperation(const NKikimrPQ::TPartitionOperation& operation)
 {
-    return operation.HasWrite() && operation.GetWrite().HasDeferredPublication();
+    return IsDeferredPublicationFinalizeOperation(operation);
 }
 
 template <class C>

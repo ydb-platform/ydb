@@ -23,6 +23,9 @@ void DowngradeToLegacy(NKikimrPQ::TDataTransaction& tx);
 bool IsReadTxOperation(const NKikimrPQ::TPartitionOperation& operation);
 bool IsWriteTxOperation(const NKikimrPQ::TPartitionOperation& operation);
 bool IsKafkaWriteOperation(const NKikimrPQ::TPartitionOperation& operation);
+bool IsDeferredPublicationFinalizeOperation(const NKikimrPQ::TPartitionOperation& operation);
+TMaybe<NKikimrPQ::TPartitionOperation::TWriteOp::TDeferredPublicationApi::EOp> GetDeferredPublicationFinalizeOp(
+    const NKikimrPQ::TPartitionOperation& operation);
 
 bool HasTopicReadCommit(const NKikimrPQ::TPartitionOperation& operation);
 bool HasKafkaReadCommit(const NKikimrPQ::TPartitionOperation& operation);

@@ -1871,16 +1871,25 @@ void TPartition::WriteInfoResponseHandler(
 
     tx.WriteInfoResponseTimestamp = Now();
 
-    std::visit(TOverloaded{
-        [&tx](TAutoPtr<TEvPQ::TEvGetWriteInfoResponse>& msg) {
-            tx.WriteInfo.Reset(msg.Release());
-        },
-        [&tx](TAutoPtr<TEvPQ::TEvGetWriteInfoError>& err) {
-            tx.Predicate = false;
-            tx.WriteInfoApplied = true;
-            tx.Message = err->Message;
+    if (auto* msg = std::get_if<TAutoPtr<TEvPQ::TEvGetWriteInfoResponse>>(&ev)) {
+        tx.WriteInfo.Reset(msg->Release());
+        using TDeferredPublicationApi = NKikimrPQ::TPartitionOperation::TWriteOp::TDeferredPublicationApi;
+        if (tx.DeferredFinalizeOp == TDeferredPublicationApi::Cancel) {
+            tx.WriteInfo->Discard = true;
         }
-    }, ev);
+    } else if (auto* err = std::get_if<TAutoPtr<TEvPQ::TEvGetWriteInfoError>>(&ev)) {
+        using TDeferredPublicationApi = NKikimrPQ::TPartitionOperation::TWriteOp::TDeferredPublicationApi;
+        if (tx.DeferredFinalizeOp == TDeferredPublicationApi::Publish
+            || tx.DeferredFinalizeOp == TDeferredPublicationApi::Cancel) {
+            PQ_LOG_TX_W("deferred publication finalize failed while getting write info for TxId "
+                        << tx.GetTxId() << ": " << (*err)->Message);
+        }
+        tx.Predicate = false;
+        tx.WriteInfoApplied = true;
+        tx.Message = (*err)->Message;
+    } else {
+        PQ_ENSURE(false);
+    }
 
     WriteInfosToTx.erase(txIter);
     ProcessTxsAndUserActs(ctx);
@@ -1959,6 +1968,15 @@ TPartition::EProcessResult TPartition::ApplyWriteInfoResponse(TTransaction& tx,
     }
 
     if (ret == EProcessResult::Continue && tx.Predicate.GetOrElse(true)) {
+        using TDeferredPublicationApi = NKikimrPQ::TPartitionOperation::TWriteOp::TDeferredPublicationApi;
+        if (tx.DeferredFinalizeOp == TDeferredPublicationApi::Publish && tx.WriteInfo->BodyKeys.empty()) {
+            PQ_LOG_TX_W("deferred publication publish failed: staging is empty for TxId " << tx.GetTxId());
+            tx.Predicate = false;
+            tx.Message = "deferred publication staging is empty";
+            tx.WriteInfoApplied = true;
+            return EProcessResult::Continue;
+        }
+
         auto& sourceIds =
             (isImmediate ? affectedSourceIdsAndConsumers.WriteSourcesIds : affectedSourceIdsAndConsumers.TxWriteSourcesIds);
         sourceIds = std::move(txSourceIds);
@@ -2628,7 +2646,12 @@ void TPartition::RequestWriteInfoIfRequired(bool skipSrcIdInfo)
     auto supportId = tx->SupportivePartitionActor;
     if (supportId) {
         PQ_LOG_TX_D("Send TEvGetWriteInfoRequest for TxId " << tx->GetTxId());
-        Send(supportId, new TEvPQ::TEvGetWriteInfoRequest(skipSrcIdInfo),
+        auto* request = new TEvPQ::TEvGetWriteInfoRequest(skipSrcIdInfo);
+        using TDeferredPublicationApi = NKikimrPQ::TPartitionOperation::TWriteOp::TDeferredPublicationApi;
+        if (tx->DeferredFinalizeOp == TDeferredPublicationApi::Cancel) {
+            request->SetDiscard(true);
+        }
+        Send(supportId, request,
              0, 0,
              tx->CalcPredicateSpan.GetTraceId());
         WriteInfosToTx.insert(std::make_pair(supportId, tx));
@@ -3016,6 +3039,16 @@ void TPartition::RunPersist() {
 
         // Apply counters
         for (const auto& writeInfo : WriteInfosApplied) {
+            if (writeInfo->Discard) {
+                if (writeInfo->MessagesWrittenTotal > 0) {
+                    MsgsDiscarded.Inc(writeInfo->MessagesWrittenTotal);
+                }
+                if (writeInfo->BytesWrittenTotal > 0) {
+                    BytesDiscarded.Inc(writeInfo->BytesWrittenTotal);
+                }
+                continue;
+            }
+
             // writeTimeLag
             if (InputTimeLag && writeInfo->InputLags) {
                 writeInfo->InputLags->UpdateTimestamp(ctx.Now().MilliSeconds());
@@ -3563,84 +3596,95 @@ void TPartition::CommitWriteOperations(TTransaction& t)
     if (!t.WriteInfo) {
         return;
     }
-    for (const auto& s : t.WriteInfo->SrcIdInfo) {
-        auto pair = TSeqNoProducerEpoch{s.second.SeqNo, s.second.ProducerEpoch};
-        auto [iter, ins] = TxInflightMaxSeqNoPerSourceId.emplace(s.first, pair);
-        if (!ins) {
-            bool ok = !SeqnoViolation(iter->second.KafkaProducerEpoch, iter->second.SeqNo, s.second.ProducerEpoch, s.second.SeqNo);
-            PQ_ENSURE(ok);
-            iter->second = pair;
+
+    using TDeferredPublicationApi = NKikimrPQ::TPartitionOperation::TWriteOp::TDeferredPublicationApi;
+    const bool discardStaging = t.WriteInfo->Discard
+        || t.DeferredFinalizeOp == TDeferredPublicationApi::Cancel;
+
+    if (!discardStaging) {
+        for (const auto& s : t.WriteInfo->SrcIdInfo) {
+            auto pair = TSeqNoProducerEpoch{s.second.SeqNo, s.second.ProducerEpoch};
+            auto [iter, ins] = TxInflightMaxSeqNoPerSourceId.emplace(s.first, pair);
+            if (!ins) {
+                bool ok = !SeqnoViolation(iter->second.KafkaProducerEpoch, iter->second.SeqNo, s.second.ProducerEpoch, s.second.SeqNo);
+                PQ_ENSURE(ok);
+                iter->second = pair;
+            }
         }
     }
     const auto& ctx = ActorContext();
 
-    if (!HaveWriteMsg) {
-        BeginHandleRequests(PersistRequest.Get(), ctx);
-        if (!DiskIsFull) {
-            BeginProcessWrites(ctx);
-            BeginAppendHeadWithNewWrites(ctx);
-        }
-        HaveWriteMsg = true;
-    }
-
-    LOG_D("Head=" << BlobEncoder.Head << ", NewHead=" << BlobEncoder.NewHead);
-
-    auto oldHeadOffset = BlobEncoder.NewHead.Offset;
-
-    if (!t.WriteInfo->BodyKeys.empty()) {
-        bool needCompactHead =
-            (Parameters->FirstCommitWriteOperations ? BlobEncoder.Head : BlobEncoder.NewHead).PackedSize != 0;
-
-        BlobEncoder.NewPartitionedBlob(Partition,
-                                       BlobEncoder.NewHead.Offset,
-                                       "", // SourceId
-                                       0,  // SeqNo
-                                       0,  // TotalParts
-                                       0,  // TotalSize
-                                       Parameters->HeadCleared,  // headCleared
-                                       needCompactHead,          // needCompactHead
-                                       MaxBlobSize);
-
-        for (auto& k : t.WriteInfo->BodyKeys) {
-            LOG_D("add key " << k.Key.ToString());
-            auto write = BlobEncoder.PartitionedBlob.Add(k.Key, k.Size, ctx.Now(), true);
-            if (write && !write->Value.empty()) {
-                AddCmdWriteWithDeferredTimestamp(write, PersistRequest.Get(), ctx);
-                BlobEncoder.CompactedKeys.emplace_back(write->Key, write->Value.size());
+    if (!discardStaging) {
+        if (!HaveWriteMsg) {
+            BeginHandleRequests(PersistRequest.Get(), ctx);
+            if (!DiskIsFull) {
+                BeginProcessWrites(ctx);
+                BeginAppendHeadWithNewWrites(ctx);
             }
-            Parameters->CurOffset += k.Key.GetCount();
-            // The key does not need to be deleted, as it will be renamed
-            k.BlobKeyToken->NeedDelete = false;
+            HaveWriteMsg = true;
         }
 
-        LOG_D("PartitionedBlob.GetFormedBlobs().size=" << BlobEncoder.PartitionedBlob.GetFormedBlobs().size());
-        if (const auto& formedBlobs = BlobEncoder.PartitionedBlob.GetFormedBlobs(); !formedBlobs.empty()) {
-            ui32 curWrites = RenameTmpCmdWrites(PersistRequest.Get());
-            RenameFormedBlobs(formedBlobs,
-                              *Parameters,
-                              curWrites,
-                              PersistRequest.Get(),
-                              BlobEncoder,
-                              ctx);
+        LOG_D("Head=" << BlobEncoder.Head << ", NewHead=" << BlobEncoder.NewHead);
+
+        auto oldHeadOffset = BlobEncoder.NewHead.Offset;
+
+        if (!t.WriteInfo->BodyKeys.empty()) {
+            bool needCompactHead =
+                (Parameters->FirstCommitWriteOperations ? BlobEncoder.Head : BlobEncoder.NewHead).PackedSize != 0;
+
+            BlobEncoder.NewPartitionedBlob(Partition,
+                                           BlobEncoder.NewHead.Offset,
+                                           "", // SourceId
+                                           0,  // SeqNo
+                                           0,  // TotalParts
+                                           0,  // TotalSize
+                                           Parameters->HeadCleared,  // headCleared
+                                           needCompactHead,          // needCompactHead
+                                           MaxBlobSize);
+
+            for (auto& k : t.WriteInfo->BodyKeys) {
+                LOG_D("add key " << k.Key.ToString());
+                auto write = BlobEncoder.PartitionedBlob.Add(k.Key, k.Size, ctx.Now(), true);
+                if (write && !write->Value.empty()) {
+                    AddCmdWriteWithDeferredTimestamp(write, PersistRequest.Get(), ctx);
+                    BlobEncoder.CompactedKeys.emplace_back(write->Key, write->Value.size());
+                }
+                Parameters->CurOffset += k.Key.GetCount();
+                // The key does not need to be deleted, as it will be renamed
+                k.BlobKeyToken->NeedDelete = false;
+            }
+
+            LOG_D("PartitionedBlob.GetFormedBlobs().size=" << BlobEncoder.PartitionedBlob.GetFormedBlobs().size());
+            if (const auto& formedBlobs = BlobEncoder.PartitionedBlob.GetFormedBlobs(); !formedBlobs.empty()) {
+                ui32 curWrites = RenameTmpCmdWrites(PersistRequest.Get());
+                RenameFormedBlobs(formedBlobs,
+                                  *Parameters,
+                                  curWrites,
+                                  PersistRequest.Get(),
+                                  BlobEncoder,
+                                  ctx);
+            }
+
+            BlobEncoder.ClearPartitionedBlob(Partition, MaxBlobSize);
+
+            BlobEncoder.NewHead.Clear();
+            BlobEncoder.NewHead.Offset = Parameters->CurOffset;
         }
 
-        BlobEncoder.ClearPartitionedBlob(Partition, MaxBlobSize);
+        for (const auto& [srcId, info] : t.WriteInfo->SrcIdInfo) {
+            auto& sourceIdBatch = Parameters->SourceIdBatch;
+            auto sourceId = sourceIdBatch.GetSource(srcId);
+            sourceId.Update(info.SeqNo, info.Offset + oldHeadOffset, CurrentTimestamp, info.ProducerEpoch);
+            auto& persistInfo = TxSourceIdForPostPersist[srcId];
+            persistInfo.SeqNo = info.SeqNo;
+            persistInfo.Offset = info.Offset + oldHeadOffset;
+            persistInfo.KafkaProducerEpoch = info.ProducerEpoch;
+        }
 
-        BlobEncoder.NewHead.Clear();
-        BlobEncoder.NewHead.Offset = Parameters->CurOffset;
+        Parameters->FirstCommitWriteOperations = false;
+    } else if (t.WriteInfo->BytesWrittenTotal > 0 || t.WriteInfo->MessagesWrittenTotal > 0) {
+        t.WriteInfo->Discard = true;
     }
-
-    for (const auto& [srcId, info] : t.WriteInfo->SrcIdInfo) {
-        auto& sourceIdBatch = Parameters->SourceIdBatch;
-        auto sourceId = sourceIdBatch.GetSource(srcId);
-        sourceId.Update(info.SeqNo, info.Offset + oldHeadOffset, CurrentTimestamp, info.ProducerEpoch);
-        auto& persistInfo = TxSourceIdForPostPersist[srcId];
-        persistInfo.SeqNo = info.SeqNo;
-        persistInfo.Offset = info.Offset + oldHeadOffset;
-        persistInfo.KafkaProducerEpoch = info.ProducerEpoch;
-    }
-
-    Parameters->FirstCommitWriteOperations = false;
 
     WriteInfosApplied.emplace_back(std::move(t.WriteInfo));
 }

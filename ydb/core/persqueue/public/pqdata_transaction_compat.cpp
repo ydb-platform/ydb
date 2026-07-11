@@ -1,5 +1,7 @@
 #include "pqdata_transaction_compat.h"
 
+#include <util/generic/maybe.h>
+
 namespace NKikimr::NPQ {
 
 namespace {
@@ -356,6 +358,27 @@ bool IsKafkaWriteOperation(const NKikimrPQ::TPartitionOperation& operation)
 {
     return IsWriteTxOperation(operation)
         && operation.GetWrite().Api_case() == NKikimrPQ::TPartitionOperation::TWriteOp::kKafka;
+}
+
+bool IsDeferredPublicationFinalizeOperation(const NKikimrPQ::TPartitionOperation& operation)
+{
+    if (!IsWriteTxOperation(operation)
+        || operation.GetWrite().Api_case() != NKikimrPQ::TPartitionOperation::TWriteOp::kDeferredPublication) {
+        return false;
+    }
+
+    using TDeferredPublicationApi = NKikimrPQ::TPartitionOperation::TWriteOp::TDeferredPublicationApi;
+    const auto op = operation.GetWrite().GetDeferredPublication().GetOp();
+    return op == TDeferredPublicationApi::Publish || op == TDeferredPublicationApi::Cancel;
+}
+
+TMaybe<NKikimrPQ::TPartitionOperation::TWriteOp::TDeferredPublicationApi::EOp> GetDeferredPublicationFinalizeOp(
+    const NKikimrPQ::TPartitionOperation& operation)
+{
+    if (!IsDeferredPublicationFinalizeOperation(operation)) {
+        return Nothing();
+    }
+    return operation.GetWrite().GetDeferredPublication().GetOp();
 }
 
 bool HasTopicReadCommit(const NKikimrPQ::TPartitionOperation& operation)

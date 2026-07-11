@@ -6,6 +6,7 @@
 #include <ydb/core/persqueue/common/actor.h>
 #include <ydb/core/persqueue/pqtablet/common/logging.h>
 #include <ydb/core/persqueue/pqtablet/common/event_helpers.h>
+#include <ydb/core/persqueue/public/pqdata_transaction_compat.h>
 #include <ydb/core/persqueue/pqtablet/cache/read.h>
 #include <ydb/core/persqueue/pqtablet/readproxy/readproxy.h>
 #include <ydb/core/persqueue/pqtablet/batching/batch_processor.h>
@@ -3331,7 +3332,7 @@ bool TPersQueue::CheckTxWriteOperation(const NKikimrPQ::TPartitionOperation& ope
                                        const TWriteId& writeId) const
 {
     TPartitionId partitionId;
-    if (IsKafkaWriteOperation(operation)) {
+    if (IsKafkaWriteOperation(operation) || IsDeferredPublicationFinalizeOperation(operation)) {
         auto txWriteInfoIt = TxWrites.find(writeId);
         if (txWriteInfoIt == TxWrites.end()) {
             return false;
@@ -3370,6 +3371,38 @@ bool TPersQueue::CheckTxWriteOperations(const NKikimrPQ::TDataTransaction& txBod
     return true;
 }
 
+namespace {
+
+using EDeferredFinalizeOp = NKikimrPQ::TPartitionOperation::TWriteOp::TDeferredPublicationApi::EOp;
+
+bool HasDeferredPublicationFinalizeOperation(const NKikimrPQ::TDataTransaction& txBody)
+{
+    for (const auto& operation : txBody.GetOperations()) {
+        if (IsDeferredPublicationFinalizeOperation(operation)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+TMaybe<EDeferredFinalizeOp> GetSingleDeferredPublicationFinalizeOp(const NKikimrPQ::TDataTransaction& txBody)
+{
+    TMaybe<EDeferredFinalizeOp> result;
+    for (const auto& operation : txBody.GetOperations()) {
+        if (!IsDeferredPublicationFinalizeOperation(operation)) {
+            continue;
+        }
+        const auto op = operation.GetWrite().GetDeferredPublication().GetOp();
+        if (result.Defined() && *result != op) {
+            return Nothing();
+        }
+        result = op;
+    }
+    return result;
+}
+
+} // namespace
+
 void TPersQueue::HandleDataTransaction(TAutoPtr<TEvPersQueue::TEvProposeTransaction> ev,
                                        const TActorContext& ctx)
 {
@@ -3404,25 +3437,67 @@ void TPersQueue::HandleDataTransaction(TAutoPtr<TEvPersQueue::TEvProposeTransact
 
     EnsureCanonical(txBody);
 
-    if (txBody.HasWriteId() && GetWriteId(txBody).IsDeferredPublicationApiTransaction()) {
-        PQ_LOG_TX_W("TxId " << event.GetTxId() << " deferred publication is not supported");
-        SendProposeTransactionAbort(ActorIdFromProto(event.GetSourceActor()),
-                                    event.GetTxId(),
-                                    NKikimrPQ::TError::BAD_REQUEST,
-                                    "deferred publication is not supported",
-                                    ctx);
-        return;
-    }
-
-    for (const auto& operation : txBody.GetOperations()) {
-        if (IsDeferredPublicationTxOperation(operation)) {
-            PQ_LOG_TX_W("TxId " << event.GetTxId() << " deferred publication is not supported");
+    const bool hasDeferredFinalize = HasDeferredPublicationFinalizeOperation(txBody);
+    if (hasDeferredFinalize) {
+        if (txBody.GetImmediate()) {
+            PQ_LOG_TX_W("TxId " << event.GetTxId() << " immediate transaction is not supported for deferred publication finalize");
             SendProposeTransactionAbort(ActorIdFromProto(event.GetSourceActor()),
                                         event.GetTxId(),
                                         NKikimrPQ::TError::BAD_REQUEST,
-                                        "deferred publication is not supported",
+                                        "immediate transaction is not supported for deferred publication finalize",
                                         ctx);
             return;
+        }
+
+        if (!txBody.HasWriteId() || !GetWriteId(txBody).IsDeferredPublicationApiTransaction()) {
+            PQ_LOG_TX_W("TxId " << event.GetTxId() << " invalid WriteId for deferred publication finalize");
+            SendProposeTransactionAbort(ActorIdFromProto(event.GetSourceActor()),
+                                        event.GetTxId(),
+                                        NKikimrPQ::TError::BAD_REQUEST,
+                                        "invalid WriteId",
+                                        ctx);
+            return;
+        }
+
+        if (txBody.GetOperations().size() != 1) {
+            PQ_LOG_TX_W("TxId " << event.GetTxId() << " deferred publication finalize expects exactly one operation");
+            SendProposeTransactionAbort(ActorIdFromProto(event.GetSourceActor()),
+                                        event.GetTxId(),
+                                        NKikimrPQ::TError::BAD_REQUEST,
+                                        "deferred publication finalize expects exactly one operation",
+                                        ctx);
+            return;
+        }
+
+        const auto finalizeOp = GetSingleDeferredPublicationFinalizeOp(txBody);
+        if (!finalizeOp.Defined()) {
+            PQ_LOG_TX_W("TxId " << event.GetTxId() << " invalid deferred publication finalize operation");
+            SendProposeTransactionAbort(ActorIdFromProto(event.GetSourceActor()),
+                                        event.GetTxId(),
+                                        NKikimrPQ::TError::BAD_REQUEST,
+                                        "invalid deferred publication finalize operation",
+                                        ctx);
+            return;
+        }
+    } else if (txBody.HasWriteId() && GetWriteId(txBody).IsDeferredPublicationApiTransaction()) {
+        PQ_LOG_TX_W("TxId " << event.GetTxId() << " deferred publication WriteId requires finalize operation");
+        SendProposeTransactionAbort(ActorIdFromProto(event.GetSourceActor()),
+                                    event.GetTxId(),
+                                    NKikimrPQ::TError::BAD_REQUEST,
+                                    "deferred publication WriteId requires finalize operation",
+                                    ctx);
+        return;
+    } else {
+        for (const auto& operation : txBody.GetOperations()) {
+            if (IsDeferredPublicationFinalizeOperation(operation)) {
+                PQ_LOG_TX_W("TxId " << event.GetTxId() << " deferred publication finalize requires deferred WriteId");
+                SendProposeTransactionAbort(ActorIdFromProto(event.GetSourceActor()),
+                                            event.GetTxId(),
+                                            NKikimrPQ::TError::BAD_REQUEST,
+                                            "deferred publication finalize requires deferred WriteId",
+                                            ctx);
+                return;
+            }
         }
     }
 
@@ -4272,6 +4347,9 @@ void TPersQueue::SendEvTxCalcPredicateToPartitions(const TActorContext& ctx,
             Y_VALIDATE(operation.GetRead().GetKafka().HasCommitOffsetsEnd(),
                 "kafka read commit operation without CommitOffsetsEnd");
             event->AddKafkaOffsetCommitOperation(GetReadConsumer(operation), GetReadCommitOffsetsEnd(operation));
+        }
+        if (IsDeferredPublicationFinalizeOperation(operation)) {
+            event->DeferredFinalizeOp = operation.GetWrite().GetDeferredPublication().GetOp();
         }
     }
 

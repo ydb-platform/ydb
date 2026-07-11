@@ -39,7 +39,16 @@ struct TTxOperation {
     TString Path;
     TMaybe<ui32> SupportivePartition;
     bool KafkaTransaction = false;
+    TMaybe<NKikimrPQ::TPartitionOperation::TWriteOp::TDeferredPublicationApi::EOp> DeferredPublicationOp;
 };
+
+TWriteId MakeDeferredWriteId(ui64 intPublicationId, const TString& extPublicationId = "ext-publication")
+{
+    NKikimrPQ::TWriteId proto;
+    proto.MutableDeferredPublicationApi()->SetIntPublicationId(intPublicationId);
+    proto.MutableDeferredPublicationApi()->SetExtPublicationId(extPublicationId);
+    return TWriteId(std::move(proto));
+}
 
 struct TConfigParams {
     TMaybe<NKikimrPQ::TPQTabletConfig> Tablet;
@@ -269,6 +278,14 @@ protected:
     void SendKafkaTxnWriteRequest(const NKafka::TProducerInstanceId& producerInstanceId, const TString& ownerCookie, const ui32 partitionId = 0);
     void CommitKafkaTransaction(NKafka::TProducerInstanceId producerInstanceId, ui64 txId, const std::vector<ui32>& partitionIds = {0});
 
+    TString CreateSupportivePartitionForDeferredPublication(const TWriteId& writeId, ui32 partitionId = 0);
+    void SendDeferredPublicationWriteRequest(const TWriteId& writeId, const TString& ownerCookie, ui32 partitionId = 0);
+    void CommitDeferredPublicationFinalize(
+        const TWriteId& writeId,
+        ui64 txId,
+        NKikimrPQ::TPartitionOperation::TWriteOp::TDeferredPublicationApi::EOp op,
+        const std::vector<ui32>& partitionIds = {0});
+
     std::unique_ptr<TEvPersQueue::TEvRequest> MakeGetOwnershipRequest(const TGetOwnershipRequestParams& params,
                                                                       const TActorId& pipe) const;
 
@@ -430,6 +447,9 @@ void TPQTabletFixture::SendProposeTransactionRequest(const TProposeTransactionPa
             }
             if (txOp.KafkaTransaction) {
                 operation->SetKafkaTransaction(true);
+            }
+            if (txOp.DeferredPublicationOp.Defined()) {
+                operation->MutableWrite()->MutableDeferredPublication()->SetOp(*txOp.DeferredPublicationOp);
             }
 
             partitions.insert(txOp.Partition);
@@ -922,6 +942,95 @@ void TPQTabletFixture::CommitKafkaTransaction(NKafka::TProducerInstanceId produc
     WaitProposeTransactionResponse({.TxId=txId,
                                    .Status=NKikimrPQ::TEvProposeTransactionResult::COMPLETE});
     WaitPlanStepAck({.Step=100, .TxIds={txId}}); // TEvPlanStepAck для координатора
+    WaitPlanStepAccepted({.Step=100});
+}
+
+TString TPQTabletFixture::CreateSupportivePartitionForDeferredPublication(const TWriteId& writeId, const ui32 partitionId) {
+    EnsurePipeExist();
+
+    auto request = MakeGetOwnershipRequest({.Partition=partitionId,
+                     .WriteId=writeId,
+                     .NeedSupportivePartition=true,
+                     .Owner=DEFAULT_OWNER,
+                     .Cookie=4}, Pipe);
+    Ctx->Runtime->SendToPipe(Pipe,
+                             Ctx->Edge,
+                             request.release(),
+                             0, 0);
+
+    return WaitGetOwnershipResponse({.Cookie=4, .Status=NMsgBusProxy::MSTATUS_OK});
+}
+
+void TPQTabletFixture::SendDeferredPublicationWriteRequest(const TWriteId& writeId, const TString& ownerCookie, const ui32 partitionId) {
+    EnsurePipeExist();
+
+    bool found = false;
+    auto observer = [&found](TAutoPtr<IEventHandle>& event) {
+        if (auto* msg = event->CastAsLocal<TEvPersQueue::TEvResponse>()) {
+            const auto& partitionResponse = msg->Record.GetPartitionResponse();
+            if (partitionResponse.HasCookie() && partitionResponse.GetCookie() == 123) {
+                found = true;
+            }
+        }
+        return TTestActorRuntimeBase::EEventAction::PROCESS;
+    };
+    auto prev = Ctx->Runtime->SetObserverFunc(observer);
+
+    auto event = MakeHolder<TEvPersQueue::TEvRequest>();
+    auto* request = event->Record.MutablePartitionRequest();
+    request->SetTopic("/topic");
+    request->SetPartition(partitionId);
+    request->SetCookie(123);
+    request->SetOwnerCookie(ownerCookie);
+    request->SetMessageNo(0);
+    SetWriteId(*request, writeId);
+
+    ActorIdToProto(Pipe, request->MutablePipeClient());
+
+    auto* cmdWrite = request->AddCmdWrite();
+    cmdWrite->SetSourceId("deferred-source");
+    cmdWrite->SetSeqNo(0);
+    const TString data = "deferred-publish-payload";
+    cmdWrite->SetData(data);
+    cmdWrite->SetCreateTimeMS(TInstant::Now().MilliSeconds());
+    cmdWrite->SetDisableDeduplication(true);
+    cmdWrite->SetUncompressedSize(data.size());
+    cmdWrite->SetIgnoreQuotaDeadline(true);
+    cmdWrite->SetExternalOperation(true);
+
+    SendToPipe(Ctx->Edge, event.Release());
+
+    TDispatchOptions options;
+    options.CustomFinalCondition = [&found]() {
+        return found;
+    };
+    UNIT_ASSERT(Ctx->Runtime->DispatchEvents(options));
+    Ctx->Runtime->SetObserverFunc(prev);
+}
+
+void TPQTabletFixture::CommitDeferredPublicationFinalize(
+    const TWriteId& writeId,
+    ui64 txId,
+    NKikimrPQ::TPartitionOperation::TWriteOp::TDeferredPublicationApi::EOp op,
+    const std::vector<ui32>& partitionIds)
+{
+    EnsurePipeExist();
+
+    TProposeTransactionParams params;
+    params.TxId = txId;
+    params.Senders = {Ctx->TabletId};
+    params.Receivers = {Ctx->TabletId};
+    params.WriteId = writeId;
+    for (const ui32& partitionId : partitionIds) {
+        params.TxOps.push_back({.Partition=partitionId, .Path="/topic", .DeferredPublicationOp=op});
+    }
+    SendProposeTransactionRequest(params);
+    WaitProposeTransactionResponse({.TxId=txId,
+                                   .Status=NKikimrPQ::TEvProposeTransactionResult::PREPARED});
+    SendPlanStep({.Step=100, .TxIds={txId}});
+    WaitProposeTransactionResponse({.TxId=txId,
+                                   .Status=NKikimrPQ::TEvProposeTransactionResult::COMPLETE});
+    WaitPlanStepAck({.Step=100, .TxIds={txId}});
     WaitPlanStepAccepted({.Step=100});
 }
 
@@ -2977,6 +3086,53 @@ Y_UNIT_TEST_F(Kafka_Transaction_Incoming_Before_Previous_Is_In_DELETED_State_Sho
     // wait for a deferred response for last GetOwnership request we sent
     TString ownerCookie2 = WaitGetOwnershipResponse({.Cookie=5, .Status=NMsgBusProxy::MSTATUS_OK});
     UNIT_ASSERT_VALUES_UNEQUAL(ownerCookie2, ownerCookie);
+}
+
+Y_UNIT_TEST_F(DeferredPublication_Publish_Successful_Commit, TPQTabletFixture) {
+    using TDeferredPublicationApi = NKikimrPQ::TPartitionOperation::TWriteOp::TDeferredPublicationApi;
+    const TWriteId writeId = NHelpers::MakeDeferredWriteId(42, "ext-42");
+    const ui64 txId = 70001;
+
+    PQTabletPrepare({.partitions=1}, {}, *Ctx);
+    EnsurePipeExist();
+
+    const TString ownerCookie = CreateSupportivePartitionForDeferredPublication(writeId);
+    SendDeferredPublicationWriteRequest(writeId, ownerCookie);
+    WaitForExactTxWritesCount(1);
+
+    CommitDeferredPublicationFinalize(writeId, txId, TDeferredPublicationApi::Publish);
+}
+
+Y_UNIT_TEST_F(DeferredPublication_Cancel_Successful_Commit, TPQTabletFixture) {
+    using TDeferredPublicationApi = NKikimrPQ::TPartitionOperation::TWriteOp::TDeferredPublicationApi;
+    const TWriteId writeId = NHelpers::MakeDeferredWriteId(43, "ext-43");
+    const ui64 txId = 70002;
+
+    PQTabletPrepare({.partitions=1}, {}, *Ctx);
+    EnsurePipeExist();
+
+    const TString ownerCookie = CreateSupportivePartitionForDeferredPublication(writeId);
+    SendDeferredPublicationWriteRequest(writeId, ownerCookie);
+    WaitForExactTxWritesCount(1);
+
+    CommitDeferredPublicationFinalize(writeId, txId, TDeferredPublicationApi::Cancel);
+}
+
+Y_UNIT_TEST_F(DeferredPublication_Publish_Unknown_WriteId, TPQTabletFixture) {
+    using TDeferredPublicationApi = NKikimrPQ::TPartitionOperation::TWriteOp::TDeferredPublicationApi;
+    const TWriteId writeId = NHelpers::MakeDeferredWriteId(44, "ext-44");
+    const ui64 txId = 70003;
+
+    PQTabletPrepare({.partitions=1}, {}, *Ctx);
+    EnsurePipeExist();
+
+    SendProposeTransactionRequest({.TxId=txId,
+                                  .Senders={Ctx->TabletId},
+                                  .Receivers={Ctx->TabletId},
+                                  .TxOps={{.Partition=0, .Path="/topic", .DeferredPublicationOp=TDeferredPublicationApi::Publish}},
+                                  .WriteId=writeId});
+    WaitProposeTransactionResponse({.TxId=txId,
+                                   .Status=NKikimrPQ::TEvProposeTransactionResult::ABORTED});
 }
 
 void TPQTabletFixture::TestSendingTEvReadSetViaApp(const TSendReadSetViaAppTestParams& params)

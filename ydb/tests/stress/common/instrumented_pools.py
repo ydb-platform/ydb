@@ -23,7 +23,7 @@ class InstrumentedQuerySessionPool(ydb.QuerySessionPool):
         assert isinstance(pool, ydb.QuerySessionPool)  # True!
     """
 
-    def __init__(self, driver, size: Optional[int] = None, enable_metrics: bool = True):
+    def __init__(self, driver, size: Optional[int] = None, enable_metrics: bool = True, unique_suffix: str = None):
         """
         Initialize instrumented pool.
 
@@ -39,7 +39,7 @@ class InstrumentedQuerySessionPool(ydb.QuerySessionPool):
         stack = inspect.stack()
         caller_frame = stack[1]
         try:
-            self.full_name = os.path.dirname(caller_frame.filename).replace('/', '.')
+            self.full_name = os.path.dirname(caller_frame.filename).replace('/', '.') + (f'.{unique_suffix}'if unique_suffix else '')
         finally:
             del caller_frame
 
@@ -128,7 +128,7 @@ class InstrumentedSessionPool(ydb.SessionPool):
         assert isinstance(pool, ydb.SessionPool)  # True!
     """
 
-    def __init__(self, driver, size: Optional[int] = None, enable_metrics: bool = True):
+    def __init__(self, driver, size: Optional[int] = None, enable_metrics: bool = True, unique_suffix: str = None):
         """
         Initialize instrumented pool.
 
@@ -144,7 +144,7 @@ class InstrumentedSessionPool(ydb.SessionPool):
         stack = inspect.stack()
         caller_frame = stack[1]
         try:
-            self.full_name = os.path.dirname(caller_frame.filename).replace('/', '.')
+            self.full_name = os.path.dirname(caller_frame.filename).replace('/', '.') + (f'.{unique_suffix}'if unique_suffix else '')
         finally:
             del caller_frame
 

@@ -3271,6 +3271,25 @@ Y_UNIT_TEST_F(DeferredPublication_Publish_Empty_Staging, TPQTabletFixture) {
     AbortDeferredPublicationFinalize(writeId, txId, TDeferredPublicationApi::Publish);
 }
 
+Y_UNIT_TEST_F(DeferredPublication_Publish_Immediate_Tx, TPQTabletFixture) {
+    using TDeferredPublicationApi = NKikimrPQ::TPartitionOperation::TWriteOp::TDeferredPublicationApi;
+    const TWriteId writeId = NHelpers::MakeDeferredWriteId(48, "ext-48");
+    const ui64 txId = 70008;
+
+    PQTabletPrepare({.partitions=1}, {}, *Ctx);
+    EnsurePipeExist();
+
+    CreateSupportivePartitionForDeferredPublication(writeId);
+    WaitForExactTxWritesCount(1);
+
+    SendProposeTransactionRequest({.TxId=txId,
+                                  .TxOps={{.Partition=0, .Path="/topic", .DeferredPublicationOp=TDeferredPublicationApi::Publish}},
+                                  .WriteId=writeId,
+                                  .Immediate=true});
+    WaitProposeTransactionResponse({.TxId=txId,
+                                   .Status=NKikimrPQ::TEvProposeTransactionResult::ABORTED});
+}
+
 Y_UNIT_TEST_F(DeferredPublication_Publish_Unknown_WriteId, TPQTabletFixture) {
     using TDeferredPublicationApi = NKikimrPQ::TPartitionOperation::TWriteOp::TDeferredPublicationApi;
     const TWriteId writeId = NHelpers::MakeDeferredWriteId(44, "ext-44");

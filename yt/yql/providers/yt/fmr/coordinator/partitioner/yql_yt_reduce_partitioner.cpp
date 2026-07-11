@@ -115,7 +115,11 @@ void TReducePartitioner::ChangeLeftKeyBoundaryIfNeeded(
     isLeftInclusive = true;
 }
 
-void TReducePartitioner::ChangeRightKeyBoundaryIfNeeded(TFmrTableKeysBoundary& rightKey, const TFmrTableKeysBoundary& taskRangeLastKey) {
+void TReducePartitioner::ChangeRightKeyBoundaryIfNeeded(
+    TFmrTableKeysBoundary& rightKey,
+    bool& /*isRightInclusive*/,
+    const TFmrTableKeysBoundary& taskRangeLastKey
+) {
     rightKey = taskRangeLastKey;
 }
 

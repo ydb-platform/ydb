@@ -101,6 +101,14 @@
        "members":{
 --- contrib/python/botocore/py3/botocore/handlers.py	(5718cbe7c8ad633beee9e1eac79e295dea4b8966)
 +++ contrib/python/botocore/py3/botocore/handlers.py	(0f7e89156b6ce9f3947ef47273baefe09dd0c1ad)
+@@ -64,6 +64,7 @@ from botocore.utils import (
+     ArnParser,
+     percent_encode,
+     switch_host_with_param,
++    conditionally_calculate_md5,
+ )
+
+ # Keep these imported.  There's pre-existing code that uses them.
 @@ -1173,6 +1194,11 @@ BUILTIN_HANDLERS = [
          convert_body_to_file_like_object,
          REGISTER_LAST,
@@ -114,13 +122,13 @@
      ('creating-client-class.s3', add_generate_presigned_post),
      ('creating-client-class.iot-data', check_openssl_supports_tls_version_1_2),
 @@ -1213,6 +1239,7 @@ BUILTIN_HANDLERS = [
+     ('before-call.s3', add_expect_header),
      ('before-call.glacier', add_glacier_version),
      ('before-call.apigateway', add_accept_header),
-     ('before-call.s3.PutObject', conditionally_calculate_checksum),
 +    ('before-call.s3.PatchObject', conditionally_calculate_md5),
-     ('before-call.s3.UploadPart', conditionally_calculate_md5),
      ('before-call.s3.DeleteObjects', escape_xml_payload),
-     ('before-call.s3.DeleteObjects', conditionally_calculate_checksum),
+     ('before-call.s3.PutBucketLifecycleConfiguration', escape_xml_payload),
+     ('before-call.glacier.UploadArchive', add_glacier_checksums),
 @@ -1242,6 +1269,7 @@ BUILTIN_HANDLERS = [
      ('before-parameter-build.s3.HeadObject', sse_md5),
      ('before-parameter-build.s3.GetObject', sse_md5),

@@ -582,6 +582,7 @@ ydb/core/persqueue/ut/ut_with_sdk CommitOffset.Commit_WithSession_ToPastParentPa
 ydb/core/quoter/ut QuoterWithKesusTest.AllocationStatistics
 ydb/core/statistics/service/ut ColumnStatistics.ManyColumns
 ydb/core/statistics/service/ut unittest.[*/*] chunk
+ydb/core/tablet_flat/ut TLegacy.StatsIter
 ydb/core/tablet_flat/ut TPageHandleTest.HandleRef
 ydb/core/tablet_flat/ut TPageHandleTest.PinnedRef
 ydb/core/transfer/ut/column_table Transfer_ColumnTable.BigBatchSize_Local

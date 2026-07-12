@@ -525,7 +525,8 @@ public:
         }
 
         Send(MakeQuoterServiceID(),
-            new TEvQuota::TEvRequest(TEvQuota::EResourceOperator::And, { leaf }, deadline), 0, 0);
+            new TEvQuota::TEvRequest(TEvQuota::EResourceOperator::And, { leaf }, deadline),
+            0, 0, Span_.GetTraceId());
     }
 
     void Handle(TEvQuota::TEvClearance::TPtr& ev) {

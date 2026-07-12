@@ -10,6 +10,7 @@
 #include <ydb/core/kesus/tablet/quoter_constants.h>
 
 #include <ydb/library/time_series_vec/time_series_vec.h>
+#include <ydb/library/wilson_ids/wilson.h>
 #include <yql/essentials/public/issue/yql_issue_message.h>
 
 #include <ydb/library/actors/core/hfunc.h>
@@ -43,6 +44,7 @@ class TKesusQuoterProxy : public TActorBootstrapped<TKesusQuoterProxy> {
         double ResourceBucketMinSize = 0;
         bool SessionIsActive = false;
         bool ProxySessionWasSent = false;
+        NWilson::TSpan ProxyRequestSpan;
         TInstant LastAllocated = TInstant::Zero();
         double LastAllocAmount = 0.0; // Last allocation from Kesus, used for sustained rate
         std::pair<TDuration, double> AverageAllocationParams = {TDuration::Zero(), 0.0};
@@ -387,6 +389,33 @@ private:
         return issues.ToString();
     }
 
+    NWilson::TSpan MakeProxyRequestSpan(NWilson::TTraceId traceId, const TString& resourcePath) const {
+        NWilson::TSpan span(TWilsonQuoter::QuoterProxy, std::move(traceId), "KesusQuoterProxy.ProxyRequest");
+        if (span) {
+            span.Attribute("quoter_id", static_cast<i64>(QuoterId));
+            span.Attribute("resource", resourcePath);
+        }
+        return span;
+    }
+
+    void EnsureProxyRequestSpan(TResourceState& resState, NWilson::TTraceId traceId) const {
+        if (traceId && !resState.ProxyRequestSpan) {
+            resState.ProxyRequestSpan = MakeProxyRequestSpan(std::move(traceId), resState.Resource);
+        }
+    }
+
+    void EndProxyRequestSpan(TResourceState& resState, TEvQuota::TEvProxySession::EResult result) {
+        if (resState.ProxyRequestSpan) {
+            resState.ProxyRequestSpan.Attribute("proxy_session_result", static_cast<int>(result));
+            resState.ProxyRequestSpan.Attribute("proxy_session_result_name", ToString(result));
+            if (result == TEvQuota::TEvProxySession::Success) {
+                resState.ProxyRequestSpan.EndOk();
+            } else {
+                resState.ProxyRequestSpan.EndError(ToString(result));
+            }
+        }
+    }
+
     void SendProxySessionError(TEvQuota::TEvProxySession::EResult code, const TString& resourcePath) {
         YDB_LOG_TRACE("ProxySession",
             {"logPrefix", LogPrefix},
@@ -408,6 +437,7 @@ private:
             resState->ProxySessionWasSent = true;
             const TEvQuota::TEvProxySession::EResult sessionCode = code == Ydb::StatusIds::NOT_FOUND ? TEvQuota::TEvProxySession::UnknownResource : TEvQuota::TEvProxySession::GenericError;
             SendProxySessionError(sessionCode, resState->Resource);
+            EndProxyRequestSpan(*resState, sessionCode);
             DeleteResourceInfo(resState->Resource, resState->ResId);
         } else {
             BreakResource(*resState, GetProxyUpdateEv());
@@ -430,6 +460,7 @@ private:
                     TDuration::MilliSeconds(100),
                     TEvQuota::EStatUpdatePolicy::EveryActiveTick
                 ));
+            EndProxyRequestSpan(*resState, TEvQuota::TEvProxySession::Success);
         }
     }
 
@@ -554,7 +585,11 @@ private:
                 YDB_LOG_WARN("Resource has incorrect name. Maybe this was some error on client side",
                     {"logPrefix", LogPrefix},
                     {"resource", msg->Resource});
+                auto span = MakeProxyRequestSpan(NWilson::TTraceId(ev->TraceId), msg->Resource);
                 SendProxySessionError(TEvQuota::TEvProxySession::GenericError, msg->Resource);
+                if (span) {
+                    span.EndError(ToString(TEvQuota::TEvProxySession::GenericError));
+                }
                 return;
             }
 
@@ -565,8 +600,9 @@ private:
         Y_ASSERT(resourceIt != Resources.end());
 
         TResourceState* const resState = resourceIt->second.Get();
+        EnsureProxyRequestSpan(*resState, NWilson::TTraceId(ev->TraceId));
         if (resState->ResId == Max<ui64>()) {
-            InitiateNewSessionToResource(resState->Resource);
+            InitiateNewSessionToResource(*resState);
         } else {
             // Already. Resend result.
             resState->ProxySessionWasSent = false;
@@ -575,8 +611,9 @@ private:
         }
     }
 
-    void InitiateNewSessionToResource(const TString& resourcePath) {
+    void InitiateNewSessionToResource(TResourceState& resState) {
         if (Connected) {
+            const TString& resourcePath = resState.Resource;
             YDB_LOG_DEBUG("Subscribe on resource",
                 {"logPrefix", LogPrefix},
                 {"resourcePath", resourcePath});
@@ -585,7 +622,7 @@ private:
             ActorIdToProto(SelfId(), ev->Record.MutableActorID());
             auto* res = ev->Record.AddResources();
             res->SetResourcePath(resourcePath);
-            NTabletPipe::SendData(SelfId(), KesusPipeClient, ev.release(), NewCookieForRequest(resourcePath));
+            NTabletPipe::SendData(SelfId(), KesusPipeClient, ev.release(), NewCookieForRequest(resourcePath), resState.ProxyRequestSpan.GetTraceId());
         }
     }
 
@@ -864,6 +901,9 @@ private:
             auto resIt = indexIt->second;
             if (resIt != Resources.end()) { // else it is already new resource with same path.
                 TResourceState& res = *resIt->second;
+                if (res.ProxyRequestSpan) {
+                    res.ProxyRequestSpan.EndError("Deleted");
+                }
                 if (res.SessionIsActive) {
                     ActivateSession(res, false);
                 }
@@ -876,6 +916,9 @@ private:
         auto resIt = Resources.find(resource);
         if (resIt != Resources.end()) {
             TResourceState& res = *resIt->second;
+            if (res.ProxyRequestSpan) {
+                res.ProxyRequestSpan.EndError("Deleted");
+            }
             if (res.SessionIsActive) {
                 ActivateSession(res, false);
             }

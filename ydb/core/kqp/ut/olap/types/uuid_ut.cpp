@@ -31,7 +31,7 @@ Y_UNIT_TEST_SUITE(KqpUuidColumnShard) {
     struct TRow {
         i32 Id;
         i64 IntVal;
-        std::optional<TString> Uid;  // UUID string form like "550e8400-e29b-41d4-a716-446655440000"
+        std::optional<TString> Uid;
     };
 
     void CreateDataShardTable(TTestHelper& helper, const TString& name) {
@@ -134,6 +134,7 @@ Y_UNIT_TEST_SUITE(KqpUuidColumnShard) {
                 Y_ABORT_UNLESS(builder.AppendNull().ok());
             }
         }
+
         std::shared_ptr<arrow::Array> out;
         Y_ABORT_UNLESS(builder.Finish(&out).ok());
         return out;
@@ -281,10 +282,6 @@ Y_UNIT_TEST_SUITE(KqpUuidColumnShard) {
         }
     }
 
-    // Helper: UUID string literal for use in SQL
-    // UUID in YQL: Uuid("550e8400-e29b-41d4-a716-446655440000")
-    // Also works: CAST("..." AS Uuid)
-
     static const TString UUID1 = "550e8400-e29b-41d4-a716-446655440000";
     static const TString UUID2 = "550e8400-e29b-41d4-a716-446655440001";
     static const TString UUID3 = "550e8400-e29b-41d4-a716-446655440002";
@@ -296,7 +293,8 @@ Y_UNIT_TEST_SUITE(KqpUuidColumnShard) {
     static const TString UUID_C = "33333333-3333-3333-3333-333333333333";
     static const TString UUID_D = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa";
     static const TString UUID_E = "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb";
-    }   // namespace
+
+}   // namespace
 
     Y_UNIT_TEST(TestSimpleQueries, EQueryMode, ETableKind, ELoadKind) {
         const auto Scan = Arg<0>();
@@ -387,22 +385,18 @@ Y_UNIT_TEST_SUITE(KqpUuidColumnShard) {
         LoadData(helper, Table, Load, tableName,
             { { 1, 0, UUID_A }, { 2, 0, UUID_B }, { 3, 0, UUID_C }, { 4, 0, UUID_D } }, &col, &schema);
 
-        // Less than
         CheckOrExec(helper,
             R"(SELECT id FROM `/Root/Table1` WHERE uid < CAST("33333333-3333-3333-3333-333333333333" AS Uuid) ORDER BY id)",
             "[[1];[2]]", Scan);
 
-        // Greater than
         CheckOrExec(helper,
             R"(SELECT id FROM `/Root/Table1` WHERE uid > CAST("22222222-2222-2222-2222-222222222222" AS Uuid) ORDER BY id)",
             "[[3];[4]]", Scan);
 
-        // Less than or equal
         CheckOrExec(helper,
             R"(SELECT id FROM `/Root/Table1` WHERE uid <= CAST("22222222-2222-2222-2222-222222222222" AS Uuid) ORDER BY id)",
             "[[1];[2]]", Scan);
 
-        // Greater than or equal
         CheckOrExec(helper,
             R"(SELECT id FROM `/Root/Table1` WHERE uid >= CAST("33333333-3333-3333-3333-333333333333" AS Uuid) ORDER BY id)",
             "[[3];[4]]", Scan);
@@ -423,12 +417,10 @@ Y_UNIT_TEST_SUITE(KqpUuidColumnShard) {
         LoadData(helper, Table, Load, tableName,
             { { 1, 10, UUID_C }, { 2, 20, UUID_A }, { 3, 30, UUID_B } }, &col, &schema);
 
-        // ASC order
         CheckOrExec(helper,
             "SELECT uid, id FROM `/Root/Table1` ORDER BY uid",
             R"([[["11111111-1111-1111-1111-111111111111"];2];[["22222222-2222-2222-2222-222222222222"];3];[["33333333-3333-3333-3333-333333333333"];1]])", Scan);
 
-        // DESC order
         CheckOrExec(helper,
             "SELECT uid, id FROM `/Root/Table1` ORDER BY uid DESC",
             R"([[["33333333-3333-3333-3333-333333333333"];1];[["22222222-2222-2222-2222-222222222222"];3];[["11111111-1111-1111-1111-111111111111"];2]])", Scan);
@@ -599,17 +591,14 @@ Y_UNIT_TEST_SUITE(KqpUuidColumnShard) {
         LoadData(helper, Table, Load, tableName,
             { { 1, 0, UUID_C }, { 2, 0, UUID_A }, { 3, 0, UUID_B }, { 4, 0, UUID_D } }, &col, &schema);
 
-        // ASC LIMIT 2
         CheckOrExec(helper,
             "SELECT uid, id FROM `/Root/Table1` ORDER BY uid LIMIT 2",
             R"([[["11111111-1111-1111-1111-111111111111"];2];[["22222222-2222-2222-2222-222222222222"];3]])", Scan);
 
-        // DESC LIMIT 1
         CheckOrExec(helper,
             "SELECT uid, id FROM `/Root/Table1` ORDER BY uid DESC LIMIT 1",
             R"([[["aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"];4]])", Scan);
 
-        // ASC LIMIT 3
         CheckOrExec(helper,
             "SELECT uid, id FROM `/Root/Table1` ORDER BY uid LIMIT 3",
             R"([[["11111111-1111-1111-1111-111111111111"];2];[["22222222-2222-2222-2222-222222222222"];3];[["33333333-3333-3333-3333-333333333333"];1]])", Scan);
@@ -725,6 +714,7 @@ Y_UNIT_TEST_SUITE(KqpUuidColumnShard) {
                   arrow::field("val", arrow::int64()) },
                 { idArr, uuidArr, valArr }
             );
+
             helper.BulkUpsert(col, batch);
         } else if (Load == ELoadKind::YDB_VALUE) {
             TValueBuilder builder;
@@ -759,7 +749,6 @@ Y_UNIT_TEST_SUITE(KqpUuidColumnShard) {
         CheckOrExec(helper, "SELECT uid, id, val FROM `" + cs + "` ORDER BY id",
             R"([[["550e8400-e29b-41d4-a716-446655440000"];1;[10]];[["660e8400-e29b-41d4-a716-446655440000"];2;[20]];[["770e8400-e29b-41d4-a716-446655440000"];3;[30]]])", Scan);
 
-        // UPDATE
         helper.ExecuteQuery(
             R"(UPDATE `)" + cs + R"(` SET uid = CAST("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa" AS Uuid) WHERE id = 2)");
 
@@ -767,7 +756,6 @@ Y_UNIT_TEST_SUITE(KqpUuidColumnShard) {
             "SELECT uid, id FROM `" + cs + "` WHERE id = 2",
             R"([[["aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"];2]])", Scan);
 
-        // DELETE
         helper.ExecuteQuery(
             "DELETE FROM `" + cs + "` WHERE id = 3");
 
@@ -775,7 +763,6 @@ Y_UNIT_TEST_SUITE(KqpUuidColumnShard) {
             "SELECT id FROM `" + cs + "` ORDER BY id",
             "[[1];[2]]", Scan);
 
-        // UPSERT additional row
         helper.ExecuteQuery(
             R"(UPSERT INTO `)" + cs + R"(` (id, uid, val) VALUES
                 (4, CAST("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb" AS Uuid), 40))");

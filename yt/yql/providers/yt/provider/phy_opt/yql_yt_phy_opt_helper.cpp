@@ -61,7 +61,7 @@ TYtSectionList ConvertInputTable(TExprBase input, TExprContext& ctx, const TConv
                 mergedSettings = NYql::RemoveSetting(*mergedSettings, EYtSettingType::Unordered, ctx);
                 makeUnordered = false;
             }
-            if (!opts.KeepDirecRead_) {
+            if (!opts.KeepDirectRead_) {
                 mergedSettings = NYql::RemoveSetting(*mergedSettings, EYtSettingType::DirectRead, ctx);
             }
             if (opts.Settings_) {
@@ -775,7 +775,7 @@ TExprBase GetWorld(TExprBase input, TMaybeNode<TExprBase> main, TExprContext& ct
 }
 
 TConvertInputOpts::TConvertInputOpts()
-            : KeepDirecRead_(false)
+            : KeepDirectRead_(false)
             , MakeUnordered_(false)
             , ClearUnordered_(false)
 {
@@ -817,8 +817,8 @@ TConvertInputOpts::ExplicitFields(const TStructExprType& type, TPositionHandle p
 }
 
 TConvertInputOpts&
-TConvertInputOpts::KeepDirecRead(bool keepDirecRead) {
-    KeepDirecRead_ = keepDirecRead;
+TConvertInputOpts::KeepDirectRead(bool keepDirectRead) {
+    KeepDirectRead_ = keepDirectRead;
     return *this;
 }
 

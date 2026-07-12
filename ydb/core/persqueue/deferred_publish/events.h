@@ -37,6 +37,8 @@ struct TEvDeferredPublish {
         EvInsertPublicationFinished,
         EvListPublicationsResponse,
         EvDescribePublicationResponse,
+        EvUpsertDestinationResponse,
+        EvDeletePublicationResponse,
     };
 
     struct TEvBeginPublicationRequest : public NActors::TEventLocal<TEvBeginPublicationRequest, EvBeginPublicationRequest> {
@@ -76,6 +78,16 @@ struct TEvDeferredPublish {
         NYql::TIssues Issues;
         TMaybe<TDescribePublicationData> Publication;
     };
+
+    struct TEvUpsertDestinationResponse : public NActors::TEventLocal<TEvUpsertDestinationResponse, EvUpsertDestinationResponse> {
+        Ydb::StatusIds::StatusCode Status = Ydb::StatusIds::SUCCESS;
+        NYql::TIssues Issues;
+    };
+
+    struct TEvDeletePublicationResponse : public NActors::TEventLocal<TEvDeletePublicationResponse, EvDeletePublicationResponse> {
+        Ydb::StatusIds::StatusCode Status = Ydb::StatusIds::SUCCESS;
+        NYql::TIssues Issues;
+    };
 };
 
 using TEvBeginPublicationRequest = TEvDeferredPublish::TEvBeginPublicationRequest;
@@ -84,5 +96,7 @@ using TEvTablesCreationFinished = TEvDeferredPublish::TEvTablesCreationFinished;
 using TEvInsertPublicationFinished = TEvDeferredPublish::TEvInsertPublicationFinished;
 using TEvListPublicationsResponse = TEvDeferredPublish::TEvListPublicationsResponse;
 using TEvDescribePublicationResponse = TEvDeferredPublish::TEvDescribePublicationResponse;
+using TEvUpsertDestinationResponse = TEvDeferredPublish::TEvUpsertDestinationResponse;
+using TEvDeletePublicationResponse = TEvDeferredPublish::TEvDeletePublicationResponse;
 
 } // namespace NKikimr::NPQ::NDeferredPublish

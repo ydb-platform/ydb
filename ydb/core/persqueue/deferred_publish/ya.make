@@ -1,12 +1,15 @@
 LIBRARY()
 
 SRCS(
+    delete_publication_query.cpp
     describe_publication_query.cpp
+    destination_blob.cpp
     insert_publication_query.cpp
     list_publications_query.cpp
     query_utils.cpp
     registry_actor.cpp
     tables_creator.cpp
+    upsert_destination_query.cpp
 )
 
 PEERDIR(

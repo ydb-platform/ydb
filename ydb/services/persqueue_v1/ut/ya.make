@@ -49,6 +49,7 @@ PEERDIR(
     library/cpp/digest/md5
     ydb/core/testlib/default
     ydb/library/aclib
+    ydb/core/persqueue/deferred_publish
     ydb/library/persqueue/tests
     ydb/library/persqueue/topic_parser
     ydb/public/api/grpc

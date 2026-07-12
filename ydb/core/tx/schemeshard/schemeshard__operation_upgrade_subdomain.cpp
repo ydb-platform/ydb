@@ -231,6 +231,7 @@ public:
             colDescr->SetDeleteVersion(column.DeleteVersion);
             colDescr->SetFamily(column.Family);
             colDescr->SetNotNull(column.NotNull);
+            colDescr->SetSetNotNullInProgress(column.SetNotNullInProgress);
             colDescr->SetIsBuildInProgress(column.IsBuildInProgress);
             if (column.DefaultKind != ETableColumnDefaultKind::None) {
                 colDescr->SetDefaultKind(ui32(column.DefaultKind));
@@ -368,6 +369,7 @@ public:
             case NKikimrSchemeOp::EPathType::EPathTypeTransfer:
             case NKikimrSchemeOp::EPathType::EPathTypeBlobDepot:
             case NKikimrSchemeOp::EPathType::EPathTypeBackupCollection:
+            case NKikimrSchemeOp::EPathType::EPathTypeTestShardSet:
                 Y_ABORT("UNIMPLEMENTED");
             case NKikimrSchemeOp::EPathType::EPathTypeInvalid:
                 Y_UNREACHABLE();

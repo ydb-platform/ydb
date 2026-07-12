@@ -115,6 +115,25 @@ message TKafkaApiOperationsRequest {
     }
 }
 
+message TTopicDeferredPublicationRequest {
+    enum EOp {
+        Unspecified = 0;
+        Publish = 1;
+        Cancel = 2;
+    }
+
+    message TDestination {
+        optional string Path = 1;
+        optional uint32 PartitionId = 2;
+        optional uint64 TabletId = 3;
+    }
+
+    optional EOp Op = 1;
+    optional uint64 IntPublicationId = 2;
+    optional string ExtPublicationId = 3;
+    repeated TDestination Destinations = 4;
+}
+
 message TTopicOperationsResponse {
     message TWriteId {
         message TKafkaProducerInstanceId {
@@ -154,7 +173,13 @@ message TQueryRequest {
     reserved 19; // (deprecated) StatsMode
     optional NYql.NDqProto.EDqStatsMode StatsMode = 20; // deprecated
     optional Ydb.Table.QueryStatsCollection.Mode CollectStats = 21;
-    optional TTopicOperationsRequest TopicOperations = 22;
+    // QUERY_ACTION_TOPIC carries exactly one topic API per request: Topic, Kafka, or DeferredPublication.
+    // Breaking change: fields 22 and 37 were independent optionals; oneof keeps the last tag on wire if both are set.
+    oneof TopicRequestOperations {
+        TTopicOperationsRequest TopicOperations = 22;
+        TKafkaApiOperationsRequest KafkaApiOperations = 37;
+        TTopicDeferredPublicationRequest DeferredPublication = 42;
+    }
     optional bool UsePublicResponseDataFormat = 23;
     map<string, Ydb.TypedValue> YdbParameters = 24;
     optional bool IsInternalCall = 25;
@@ -169,7 +194,6 @@ message TQueryRequest {
     optional uint64 OutputChunkMaxSize = 34;
     optional string PoolId = 35;
     optional string DatabaseId = 36;
-    optional TKafkaApiOperationsRequest KafkaApiOperations = 37;
     optional Ydb.Query.SchemaInclusionMode SchemaInclusionMode = 38;
     optional Ydb.ResultSet.Format ResultSetFormat = 39;
     optional Ydb.Formats.ArrowFormatSettings ArrowFormatSettings = 40;
@@ -193,6 +217,8 @@ message TIndexDescriptionProto {
     oneof SpecializedIndexDescription {
         TVectorIndexKmeansTreeDescription VectorIndexKmeansTreeDescription = 9;
         NKikimrSchemeOp.TFulltextIndexDescription FulltextIndexDescription = 10;
+        NKikimrSchemeOp.TBloomFilter BloomFilterDescription = 11;
+        NKikimrSchemeOp.TBloomNGrammFilter BloomNGrammFilterDescription = 12;
     }
 };
 
@@ -375,12 +401,13 @@ message TSessionInfo {
     optional int64 QueryStartAt = 12;
     optional int64 StateChangeAt = 13;
     optional string UserSID = 14;
-    optional bool PgWire = 15 [default = false];
+    reserved 15; // PgWire
     optional string UserName = 16;
     optional string WmPoolId = 17;
     optional string WmState = 18;
     optional int64 WmEnterTime = 19;
     optional int64 WmExitTime = 20;
+    optional string TraceId = 21;
 }
 
 message TEvListSessionsRequest {
@@ -444,7 +471,7 @@ message TEvCreateSessionRequest {
     // if flag is false, in this case proxy will create session locally.
     optional bool CanCreateRemoteSession = 4 [default = false];
     optional bool SupportsBalancing = 5 [default = false];
-    optional bool PgWire = 6 [default = false];
+    reserved 6; // PgWire
 
     optional string ClientAddress = 7;
     optional string ClientPID = 8;
@@ -841,6 +868,20 @@ message TKqpTableSinkIndexSettings {
     optional TKqpTableSinkSettings.EType OperationType = 7;
     optional bool NeedDeleteOldRows = 8;
     optional string IndexName = 9;
+    optional NKqpProto.EKqpFullTextIndexType IndexType = 10;
+    optional Ydb.Table.FulltextIndexSettings FulltextSettings = 11;
+    repeated TKqpColumnMetadataProto ImplColumns = 12;
+    optional NKqpProto.TKqpPhyTableId DocsTable = 13;
+    repeated TKqpColumnMetadataProto DocsColumns = 14;
+    optional NKqpProto.TKqpPhyTableId DictTable = 15;
+    repeated TKqpColumnMetadataProto DictColumns = 16;
+    optional NKqpProto.TKqpPhyTableId StatsTable = 17;
+    repeated TKqpColumnMetadataProto StatsColumns = 18;
+}
+
+enum EInputRowFormat {
+    INPUT_ROW_FORMAT_FLAT = 0;
+    INPUT_ROW_FORMAT_STRUCT_OF_ROWS = 1;
 }
 
 message TKqpTableSinkSettings {
@@ -881,6 +922,7 @@ message TKqpTableSinkSettings {
     optional string UserSID = 26;
     optional bool NeedLookup = 27;
     optional bool SkipMissingRows = 28;
+    optional EInputRowFormat InputRowFormat = 29 [default = INPUT_ROW_FORMAT_FLAT];
 }
 
 message TReadVectorTopK {
@@ -915,6 +957,10 @@ message TKqpStreamLookupSettings {
     optional string PoolId = 21;
     optional TReadVectorTopK VectorTopK = 19;
     optional uint64 QuerySpanId = 20;
+    // RowSeqNo cookie wire format version (0 = legacy, 1 = fixed bit budget).
+    // Gated by the EnableStreamLookupJoinCookieV2 feature flag so the new format
+    // is only emitted once every node in the cluster understands it.
+    optional uint32 CookieFormatVersion = 23 [default = 0];
 }
 
 message TKqpFullTextSourceSettings {
@@ -923,6 +969,14 @@ message TKqpFullTextSourceSettings {
         optional string Query = 2;
         // Pre-compiled tokens extracted from jsonpath at query compile time (JSON index only)
         repeated bytes Tokens = 3;
+
+        // Resolved equality bindings for the index prefix columns (KeyColumnNames[0..n-2]).
+        // Value is a single TCell serialized with TSerializedCellVec, typed as Column.
+        message TPrefixColumn {
+            optional TKqpColumnMetadataProto Column = 1;
+            optional bytes Value = 2;
+        }
+        repeated TPrefixColumn PrefixColumns = 4;
     }
 
     message TIndexTable {
@@ -939,6 +993,10 @@ message TKqpFullTextSourceSettings {
     repeated TKqpColumnMetadataProto Columns = 5;
 
     repeated TIndexTable IndexTables = 6;
+
+    // When fulltext index uses __ydb_row_id as doc_id, this is the unique secondary index impl table
+    // (keyed by __ydb_row_id, value = main-table PK columns) used to resolve __ydb_row_id -> PK at read time.
+    optional TIndexTable UniqueIndexImplTable = 19;
 
     optional uint64 SkipLimit = 7;
     optional uint64 Limit = 8;
@@ -996,6 +1054,8 @@ message TEvCancelScriptExecutionRequest {
 message TEvCancelScriptExecutionResponse {
     optional Ydb.StatusIds.StatusCode Status = 1;
     repeated Ydb.Issue.IssueMessage Issues = 2;
+    optional bool AlreadyFinished = 3;
+    optional bool ExecutionEntryExists = 4 [default = true];
 }
 
 // Request that is sent to run script actor to check his existence.

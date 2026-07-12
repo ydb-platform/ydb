@@ -1,3 +1,4 @@
+#include "helpers.h"
 #include "notify_manager.h"
 #include "private.h"
 
@@ -105,19 +106,36 @@ void TNotifyManager::Wait(NThreading::TEventCount::TCookie cookie, std::function
         return;
     }
 
+    // Reclaim hazard pointers retired by this thread before parking. If some
+    // remain pending (they are currently protected and could not be reclaimed
+    // yet), the thread must not block indefinitely: it wakes up periodically and
+    // retries, otherwise such retired objects (and the memory they pin) could be
+    // stranded on this idle thread until it happens to run again.
+    bool hasPendingHazardPointers = ReclaimHazardPointersPeriodically(GetCpuInstant(), /*force*/ true);
+
 #ifdef PERIODIC_POLLING
     // One waiter makes periodic polling.
     bool firstWaiter = !PollingWaiterLock_.exchange(true);
     if (firstWaiter) {
         while (true) {
-            bool notified = EventCount_->Wait(cookie, PollingPeriod_.load());
+            auto pollingPeriod = PollingPeriod_.load(std::memory_order::relaxed);
+            if (hasPendingHazardPointers && HazardPointerReclaimPeriod < pollingPeriod) {
+                pollingPeriod = HazardPointerReclaimPeriod;
+            }
+
+            bool notified = EventCount_->Wait(cookie, pollingPeriod);
             if (notified) {
                 break;
             }
 
+            auto cpuInstant = GetCpuInstant();
+
+            // Periodically retry reclamation (throttled internally) so that the sole
+            // polling waiter never strands retired hazard pointers on this thread.
+            hasPendingHazardPointers = ReclaimHazardPointersPeriodically(cpuInstant, /*force*/ false);
+
             // Check wait time.
             auto minEnqueuedAt = GetMinEnqueuedAt();
-            auto cpuInstant = GetCpuInstant();
             auto waitTime = CpuDurationToDuration(cpuInstant - minEnqueuedAt);
 
             if (waitTime > WaitLimit) {
@@ -142,13 +160,22 @@ void TNotifyManager::Wait(NThreading::TEventCount::TCookie cookie, std::function
         }
 
         PollingWaiterLock_.store(false);
+    } else if (hasPendingHazardPointers) {
+        // A non-polling waiter with pending hazard pointers must also wake up by
+        // timeout to retry reclamation (via the surrounding execution loop) rather
+        // than blocking until the next notification.
+        EventCount_->Wait(cookie, HazardPointerReclaimPeriod);
     } else {
         EventCount_->Wait(cookie);
     }
 #else
     Y_UNUSED(isStopping);
     Y_UNUSED(PollingPeriod);
-    EventCount_->Wait(cookie);
+    if (hasPendingHazardPointers) {
+        EventCount_->Wait(cookie, HazardPointerReclaimPeriod);
+    } else {
+        EventCount_->Wait(cookie);
+    }
 #endif
 
     UnlockNotifies();

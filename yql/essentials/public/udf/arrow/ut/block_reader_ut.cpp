@@ -19,7 +19,7 @@ class TBlockReaderFixture: public NUnitTest::TBaseFixture {
         using TPtr = TIntrusivePtr<TArrayHelpers>;
 
         explicit TArrayHelpers(const NMiniKQL::TType* type, arrow::MemoryPool* const arrowPool)
-            : Builder(MakeArrayBuilder(NMiniKQL::TTypeInfoHelper(), type, *arrowPool, NMiniKQL::CalcBlockLen(CalcMaxBlockItemSize(type)), nullptr))
+            : Builder(MakeArrayBuilder(NMiniKQL::TTypeInfoHelper(), type, *arrowPool, NMiniKQL::CalcBlockLen(CalcMaxBlockItemSize(type)), /*pgBuilder=*/nullptr))
             , Reader(MakeBlockReader(NMiniKQL::TTypeInfoHelper(), type))
         {
         }
@@ -124,7 +124,7 @@ Y_UNIT_TEST_F(TestLogicalDataSize, TBlockReaderFixture) {
 
     // Test GetDataWeight after slize
     for (ui32 i = 0; i < arrayHelpers.size(); ++i) {
-        const auto slice = DeepSlice(arrays[i], offset, len);
+        const auto slice = DeepSlice(*arrays[i], offset, len);
         UNIT_ASSERT_VALUES_EQUAL_C(arrayHelpers[i]->Reader->GetDataWeight(*slice), expectedLogicalSize[i], "sliced array: " << i);
     }
 }

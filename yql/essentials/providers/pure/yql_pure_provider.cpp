@@ -92,7 +92,7 @@ public:
                         .Build();
 
         bool hasNonDeterministicFunctions;
-        auto status = PeepHoleOptimizeNode(optimized, optimized, ctx, *State_->Types, nullptr, hasNonDeterministicFunctions);
+        auto status = PeepHoleOptimizeNode(optimized, optimized, ctx, *State_->Types, /*typeAnnotator=*/nullptr, hasNonDeterministicFunctions);
         if (status.Level == IGraphTransformer::TStatus::Error) {
             return SyncStatus(status);
         }
@@ -110,7 +110,7 @@ public:
         }
 
         TStringStream out;
-        NYson::TYsonWriter writer(&out, NCommon::GetYsonFormat(fillSettings), ::NYson::EYsonType::Node, false);
+        NYson::TYsonWriter writer(&out, NCommon::GetYsonFormat(fillSettings), ::NYson::EYsonType::Node, /*enableRaw=*/false);
         writer.OnBeginMap();
         if (NCommon::HasResOrPullOption(*input, "type")) {
             writer.OnKeyedItem("Type");
@@ -119,7 +119,7 @@ public:
 
         TScopedAlloc alloc(__LOCATION__, TAlignedPagePoolCounters(), State_->FunctionRegistry->SupportsSizedAllocators());
         TTypeEnvironment env(alloc);
-        TProgramBuilder pgmBuilder(env, *State_->FunctionRegistry, false, State_->Types->LangVer);
+        TProgramBuilder pgmBuilder(env, *State_->FunctionRegistry, /*voidWithEffects=*/false, State_->Types->LangVer);
         NCommon::TMkqlCommonCallableCompiler compiler;
 
         NCommon::TMkqlBuildContext mkqlCtx(compiler, pgmBuilder, ctx);
@@ -138,7 +138,11 @@ public:
             },
             State_->Types->RuntimeLogLevel);
 
-        auto secureParamsProvider = NKikimr::NMiniKQL::MakeSimpleSecureParamsProvider(State_->Setting.SecureParams);
+        THashMap<TString, TString> secureParams;
+        State_->Types->Credentials->ForEach([&secureParams](const TString& name, const TCredential& cred) {
+            secureParams[TString("token:") + name] = cred.Content;
+        });
+        auto secureParamsProvider = NKikimr::NMiniKQL::MakeSimpleSecureParamsProvider(secureParams);
 
         TComputationPatternOpts patternOpts(alloc.Ref(),
                                             env,
@@ -148,8 +152,8 @@ public:
                                             NUdf::EValidatePolicy::Exception,
                                             State_->Types->OptLLVM.GetOrElse(TString()),
                                             EGraphPerProcess::Multi,
-                                            nullptr,
-                                            nullptr,
+                                            /*stats=*/nullptr,
+                                            /*countersProvider=*/nullptr,
                                             secureParamsProvider.get(),
                                             logProvider.Get(),
                                             State_->Types->LangVer,
@@ -157,14 +161,14 @@ public:
 
         auto pattern = MakeComputationPattern(explorer, root, {}, patternOpts);
 
-        const TComputationOptsFull computeOpts(nullptr,
+        const TComputationOptsFull computeOpts(/*stats=*/nullptr,
                                                alloc.Ref(),
                                                env,
                                                *State_->Types->RandomProvider,
                                                *State_->Types->TimeProvider,
                                                NUdf::EValidatePolicy::Exception,
                                                secureParamsProvider.get(),
-                                               nullptr,
+                                               /*countersProvider=*/nullptr,
                                                logProvider.Get(),
                                                State_->Types->LangVer,
                                                State_->Types->RuntimeSettings);
@@ -178,7 +182,7 @@ public:
         TString data;
         TStringOutput dataOut(data);
         TCountingOutput dataCountingOut(&dataOut);
-        NYson::TYsonWriter dataWriter(&dataCountingOut, NCommon::GetYsonFormat(fillSettings), ::NYson::EYsonType::Node, false);
+        NYson::TYsonWriter dataWriter(&dataCountingOut, NCommon::GetYsonFormat(fillSettings), ::NYson::EYsonType::Node, /*enableRaw=*/false);
         YQL_ENSURE(type->IsStream());
         auto itemType = AS_TYPE(TStreamType, type)->GetItemType();
         if (isList) {
@@ -208,7 +212,7 @@ public:
         } else {
             NUdf::TUnboxedValue item;
             YQL_ENSURE(value.Fetch(item) == NUdf::EFetchStatus::Ok);
-            NCommon::WriteYsonValue(dataWriter, item, itemType, nullptr);
+            NCommon::WriteYsonValue(dataWriter, item, itemType, /*structPositions=*/nullptr);
             YQL_ENSURE(value.Fetch(item) == NUdf::EFetchStatus::Finish);
         }
 
@@ -238,8 +242,8 @@ private:
         explorer.Walk(root.GetNode(), env.GetNodeStack());
         bool wereChanges = false;
         TRuntimeNode program = SinglePassVisitCallables(root, explorer,
-                                                        TSimpleFileTransformProvider(State_->FunctionRegistry, files), env, true, wereChanges);
-        program = LiteralPropagationOptimization(program, env, true);
+                                                        TSimpleFileTransformProvider(State_->FunctionRegistry, files), env, /*inPlace=*/true, wereChanges);
+        program = LiteralPropagationOptimization(program, env, /*inPlace=*/true);
         return program;
     }
 
@@ -278,8 +282,8 @@ TIntrusivePtr<IDataProvider> CreatePureProvider(const TPureState::TPtr& state) {
     return MakeIntrusive<TPureProvider>(state);
 }
 
-TDataProviderInitializer GetPureDataProviderInitializer(TPureProviderSettings settings) {
-    return [settings = std::move(settings)](
+TDataProviderInitializer GetPureDataProviderInitializer() {
+    return [](
                const TString& userName,
                const TString& sessionId,
                const TGatewaysConfig* gatewaysConfig,
@@ -306,7 +310,6 @@ TDataProviderInitializer GetPureDataProviderInitializer(TPureProviderSettings se
         auto state = MakeIntrusive<TPureState>();
         state->Types = typeCtx.Get();
         state->FunctionRegistry = functionRegistry;
-        state->Setting = std::move(settings);
 
         info.Source = CreatePureProvider(state);
         info.OpenSession = [state](

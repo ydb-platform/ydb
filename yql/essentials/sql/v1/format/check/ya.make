@@ -1,6 +1,7 @@
 LIBRARY()
 
 SRCS(
+    ast.cpp
     check_format.cpp
 )
 

@@ -1,6 +1,8 @@
 #include "blocks.h"
 #include "schema.h"
 
+#define YDB_LOG_THIS_FILE_COMPONENT BLOB_DEPOT
+
 namespace NKikimr::NBlobDepot {
 
     class TBlobDepot::TBlocksManager::TTxUpdateBlock : public NTabletFlatExecutor::TTransactionBase<TBlobDepot> {
@@ -206,15 +208,25 @@ namespace NKikimr::NBlobDepot {
         }
 
         void SendBlock(ui32 groupId) {
-            STLOG(PRI_DEBUG, BLOB_DEPOT, BDT08, "issing TEvBlock", (Id, Self->GetLogId()), (BlockedTabletId,
-                TabletId), (BlockedGeneration, BlockedGeneration), (GroupId, groupId), (IssuerGuid, IssuerGuid));
+            YDB_LOG_DEBUG("Issing TEvBlock",
+                {"marker", "BDT08"},
+                {"id", Self->GetLogId()},
+                {"blockedTabletId", TabletId},
+                {"blockedGeneration", BlockedGeneration},
+                {"groupId", groupId},
+                {"issuerGuid", IssuerGuid});
             SendToBSProxy(SelfId(), groupId, new TEvBlobStorage::TEvBlock(TabletId, BlockedGeneration, TInstant::Max(),
-                IssuerGuid), groupId);
+                IssuerGuid, TWriteSource::BlobDepotBlock), groupId);
         }
 
         void Handle(TEvBlobStorage::TEvBlockResult::TPtr ev) {
-            STLOG(PRI_DEBUG, BLOB_DEPOT, BDT09, "TEvBlockResult", (Id, Self->GetLogId()), (Msg, ev->Get()->ToString()),
-                (BlockedTabletId, TabletId), (BlockedGeneration, BlockedGeneration), (GroupId, ev->Cookie));
+            YDB_LOG_DEBUG("TEvBlockResult",
+                {"marker", "BDT09"},
+                {"id", Self->GetLogId()},
+                {"msg", ev->Get()->ToString()},
+                {"blockedTabletId", TabletId},
+                {"blockedGeneration", BlockedGeneration},
+                {"groupId", ev->Cookie});
             switch (ev->Get()->Status) {
                 case NKikimrProto::OK:
                     if (!--BlocksPending) {
@@ -279,7 +291,10 @@ namespace NKikimr::NBlobDepot {
             NIceDb::TUpdate<Schema::Blocks::IssuerGuid>(0)
         );
 
-        STLOG(PRI_DEBUG, BLOB_DEPOT, BDT44, "adding block through decommission", (Id, Self->GetLogId()), (Block, block));
+        YDB_LOG_DEBUG("Adding block through decommission",
+            {"marker", "BDT44"},
+            {"id", Self->GetLogId()},
+            {"block", block});
     }
 
     void TBlobDepot::TBlocksManager::OnBlockCommitted(ui64 tabletId, ui32 blockedGeneration, ui32 nodeId, ui64 issuerGuid,

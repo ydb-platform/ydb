@@ -200,7 +200,8 @@ bool TKqpQueryState::TryGetFromCache(
     const TGUCSettings::TPtr& gUCSettingsPtr,
     TIntrusivePtr<TKqpCounters>& counters,
     const TActorId& sender,
-    TKqpTransactionContext* txCtx)
+    TKqpTransactionContext* txCtx,
+    EWarmupAttributionMode warmupAttribution)
 {
     if (QueryPhysicalGraph) {
         YQL_ENSURE(QueryType == NKikimrKqp::EQueryType::QUERY_TYPE_SQL_GENERIC_SCRIPT);
@@ -262,7 +263,8 @@ bool TKqpQueryState::TryGetFromCache(
         counters,
         DbCounters,
         sender,
-        TlsActivationContext->AsActorContext());
+        TlsActivationContext->AsActorContext(),
+        warmupAttribution);
 
     if (compileResult) {
         if (SaveAndCheckCompileResult(compileResult)) {
@@ -463,6 +465,28 @@ bool TKqpQueryState::PrepareNextStatementPart() {
     return true;
 }
 
+void TKqpQueryState::FillDeferredPublicationOperations() {
+    YQL_ENSURE(HasDeferredPublication());
+
+    const auto& request = GetDeferredPublicationFromRequest();
+    NTopic::ValidateDeferredPublicationRequest(request);
+
+    TopicOperations = NTopic::TTopicOperations();
+    // Same default as Kafka in FillTopicOperations: conflict check stays enabled on wire.
+    TopicOperations.SetTrackProducerId(true);
+
+    for (const auto& destination : request.GetDestinations()) {
+        auto path = CanonizePath(NPersQueue::GetFullTopicPath(GetDatabase(), destination.GetPath()));
+        TopicOperations.AddDeferredPublicationOperation(
+            path,
+            destination.GetPartitionId(),
+            destination.GetTabletId(),
+            request.GetOp(),
+            request.GetIntPublicationId(),
+            request.GetExtPublicationId());
+    }
+}
+
 void TKqpQueryState::FillTopicOperations() {
     YQL_ENSURE(HasTopicOperations() || HasKafkaApiOperations());
 
@@ -623,6 +647,9 @@ NKqpProto::EIsolationLevel TKqpQueryState::GetIsolationLevel(TKqpTransactionCont
         switch (txSettings.tx_mode_case()) {
             case Ydb::Table::TransactionSettings::kSerializableReadWrite:
                 isolationLevel = NKqpProto::ISOLATION_LEVEL_SERIALIZABLE;
+                break;
+            case Ydb::Table::TransactionSettings::kStrictSerializableReadWrite:
+                isolationLevel = NKqpProto::ISOLATION_LEVEL_STRICT_SERIALIZABLE;
                 break;
             case Ydb::Table::TransactionSettings::kOnlineReadOnly:
                 if (AppData()->FeatureFlags.GetDisableOnlineRO()) {

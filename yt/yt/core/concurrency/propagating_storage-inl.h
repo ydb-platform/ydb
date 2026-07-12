@@ -3,7 +3,6 @@
 // For the sake of sane code completion.
 #include "propagating_storage.h"
 #endif
-#undef PROPAGATING_STORAGE_INL_H_
 
 #include <library/cpp/yt/compact_containers/compact_flat_map.h>
 

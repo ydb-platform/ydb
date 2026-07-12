@@ -198,14 +198,30 @@ Y_UNIT_TEST(TestBatchPacking) {
     Y_ABORT_UNLESS(batch2.Blobs.size() == 100);
 
     TBatch batch3;
+    TString value;
+    value.reserve(64_KB);
+    ui32 rnd = 0x12345678;
+    for (ui32 i = 0; i < 64_KB; ++i) {
+        rnd ^= rnd << 13;
+        rnd ^= rnd >> 17;
+        rnd ^= rnd << 5;
+        value.push_back(static_cast<char>(rnd));
+    }
+    const TString expectedValue = value;
     batch3.AddBlob(TClientBlob(
-        "sourceId", 999'999'999'999'999ll, "abacaba", TPartData{33, 66, 4'000'000'000u},
+        "sourceId", 999'999'999'999'999ll, std::move(value), TPartData{33, 66, 4'000'000'000u},
         TInstant::MilliSeconds(999'999'999'999ll), TInstant::MilliSeconds(1000), 0, "", ""
     ));
     batch3.Pack();
-    UNIT_ASSERT(batch3.Header.GetFormat() == NKikimrPQ::TBatchHeader::EUncompressed);
     batch3.Unpack();
     Y_ABORT_UNLESS(batch3.Blobs.size() == 1);
+    UNIT_ASSERT_VALUES_EQUAL(batch3.Blobs[0].SourceId, "sourceId");
+    UNIT_ASSERT_VALUES_EQUAL(batch3.Blobs[0].SeqNo, 999'999'999'999'999ull);
+    UNIT_ASSERT(batch3.Blobs[0].PartData.Defined());
+    UNIT_ASSERT_VALUES_EQUAL(batch3.Blobs[0].PartData->PartNo, 33u);
+    UNIT_ASSERT_VALUES_EQUAL(batch3.Blobs[0].PartData->TotalParts, 66u);
+    UNIT_ASSERT_VALUES_EQUAL(batch3.Blobs[0].PartData->TotalSize, 4'000'000'000u);
+    UNIT_ASSERT_VALUES_EQUAL(batch3.Blobs[0].Data, expectedValue);
 }
 
 const TString ToHex(const TString& value) {
@@ -363,7 +379,70 @@ Y_UNIT_TEST(RestoreKeys) {
         auto key = TKey::FromString("d0000000002_00000000000000000013_00007_0000000006_00005|", TPartitionId{8});
         UNIT_ASSERT_VALUES_EQUAL(key.GetPartition().InternalPartitionId, 8);
         UNIT_ASSERT(key.HasSuffix());
+        UNIT_ASSERT(!key.GetOffsetDelta().Defined());
     }
+}
+
+Y_UNIT_TEST(StoreKeysWithOffsetDelta) {
+    auto key = TKey::ForBody(TKeyPrefix::TypeData, TPartitionId{9}, 8, 7, 6, 5);
+    key.SetOffsetDelta(42);
+    UNIT_ASSERT(key.HasOffsetDelta());
+    UNIT_ASSERT_VALUES_EQUAL(*key.GetOffsetDelta(), 42u);
+    UNIT_ASSERT_VALUES_EQUAL(key.ToString(), "d0000000009_00000000000000000008_00007_0000000006_00005_0000000042");
+
+    auto keyHead = TKey::ForHead(TKeyPrefix::TypeData, TPartitionId{9}, 8, 7, 6, 5);
+    keyHead.SetOffsetDelta(3);
+    UNIT_ASSERT_VALUES_EQUAL(keyHead.ToString(), "d0000000009_00000000000000000008_00007_0000000006_00005_0000000003|");
+
+    key.SetOffsetDelta(Nothing());
+    UNIT_ASSERT(!key.HasOffsetDelta());
+    UNIT_ASSERT_VALUES_EQUAL(key.ToString(), "d0000000009_00000000000000000008_00007_0000000006_00005");
+}
+
+Y_UNIT_TEST(RestoreKeysWithOffsetDelta) {
+    {
+        auto key = TKey::FromString("d0000000002_00000000000000000013_00007_0000000006_00005_0000000042", TPartitionId{4});
+        UNIT_ASSERT(key.HasOffsetDelta());
+        UNIT_ASSERT_VALUES_EQUAL(*key.GetOffsetDelta(), 42u);
+        UNIT_ASSERT(!key.HasSuffix());
+    }
+
+    {
+        auto key = TKey::FromString("d0000000002_00000000000000000013_00007_0000000006_00005_0000000003?", TPartitionId{4});
+        UNIT_ASSERT(key.HasOffsetDelta());
+        UNIT_ASSERT_VALUES_EQUAL(*key.GetOffsetDelta(), 3u);
+        UNIT_ASSERT(key.IsFastWrite());
+    }
+
+    {
+        auto key = TKey::FromString("d0000000002_00000000000000000013_00007_0000000006_00005", TPartitionId{4});
+        UNIT_ASSERT(!key.GetOffsetDelta().Defined());
+    }
+}
+
+Y_UNIT_TEST(LegacyKeysBackwardCompatible) {
+    // Keys in DS without OffsetDelta (body size == KeySize()) must keep parsing after format extension.
+    const TString legacyBody = "d0000000009_00000000000000000008_00007_0000000006_00005";
+    const TString legacyHead = legacyBody + "|";
+    const TString legacyFastWrite = legacyBody + "?";
+
+    UNIT_ASSERT(!TKey::FromString(legacyBody).HasOffsetDelta());
+    UNIT_ASSERT(!TKey::FromString(legacyHead).HasOffsetDelta());
+    UNIT_ASSERT(!TKey::FromString(legacyFastWrite).HasOffsetDelta());
+
+    const auto key = TKey::ForBody(TKeyPrefix::TypeData, TPartitionId{9}, 8, 7, 6, 5);
+    UNIT_ASSERT_VALUES_EQUAL(key.ToString(), legacyBody);
+    UNIT_ASSERT_EQUAL(TKey::FromString(key.ToString()), key);
+
+    const auto fromLegacy = TKey::FromKey(key, TKeyPrefix::TypeData, TPartitionId{10}, 11);
+    UNIT_ASSERT(!fromLegacy.GetOffsetDelta().Defined());
+    UNIT_ASSERT_VALUES_EQUAL(fromLegacy.ToString(), "d0000000010_00000000000000000011_00007_0000000006_00005");
+
+    auto withDelta = TKey::ForBody(TKeyPrefix::TypeData, TPartitionId{9}, 8, 7, 6, 5);
+    withDelta.SetOffsetDelta(99);
+    const auto fromWithDelta = TKey::FromKey(withDelta, TKeyPrefix::TypeData, TPartitionId{10}, 11);
+    UNIT_ASSERT_VALUES_EQUAL(*fromWithDelta.GetOffsetDelta(), 99u);
+    UNIT_ASSERT_VALUES_EQUAL(fromWithDelta.ToString(), "d0000000010_00000000000000000011_00007_0000000006_00005_0000000099");
 }
 
 } //Y_UNIT_TEST_SUITE

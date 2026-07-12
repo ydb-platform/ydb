@@ -6,6 +6,8 @@
 #include <ydb/library/yaml_json/yaml_to_json.h>
 #include <library/cpp/streams/zstd/zstd.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT BS_NODE
+
 namespace NKikimr::NStorage {
 
     std::optional<TString> TDistributedConfigKeeper::GenerateFirstConfig(NKikimrBlobStorage::TStorageConfig *config,
@@ -42,7 +44,9 @@ namespace NKikimr::NStorage {
 
                     const auto& groups = config->GetBlobStorageConfig().GetServiceSet().GetGroups();
                     const auto& allocatedGroup = groups.at(groups.size() - 1);
-                    STLOG(PRI_DEBUG, BS_NODE, NWDC33, "Allocated static group", (Group, allocatedGroup));
+                    YDB_LOG_DEBUG("Allocated static group",
+                        {"marker", "NWDC33"},
+                        {"group", allocatedGroup});
                 };
 
                 if (const auto& bridge = Cfg->BridgeConfig) {
@@ -142,7 +146,8 @@ namespace NKikimr::NStorage {
             THashMap<TVDiskIdShort, NBsController::TPDiskId> replacedDisks,
             const NBsController::TGroupMapper::TForbiddenPDisks& forbid, i64 requiredSpace,
             NKikimrBlobStorage::TBaseConfig *baseConfig, bool convertToDonor, bool ignoreVSlotQuotaCheck,
-            bool isSelfHealReasonDecommit, TBridgePileId bridgePileId, std::optional<TGroupId> bridgeProxyGroupId) {
+            bool isSelfHealReasonDecommit, TBridgePileId bridgePileId, std::optional<TGroupId> bridgeProxyGroupId,
+            const NProtoBuf::RepeatedField<ui32>& selfHealAllowedNodes, bool applyNodeAllowList) {
         using TPDiskId = NBsController::TPDiskId;
 
         NKikimrConfig::TBlobStorageConfig *bsConfig = config->MutableBlobStorageConfig();
@@ -157,6 +162,12 @@ namespace NKikimr::NStorage {
                 allowedNodeIds.insert(node.GetNodeId());
             }
         }
+
+        // when restricting self-heal targets, only these node ids may host relocated vdisks
+        const bool restrictSelfHealNodes = applyNodeAllowList && !selfHealAllowedNodes.empty();
+        const THashSet<ui32> selfHealAllowedNodeSet = restrictSelfHealNodes
+                                                      ? THashSet<ui32>(selfHealAllowedNodes.begin(), selfHealAllowedNodes.end())
+                                                      : THashSet<ui32>{};
 
         struct TPDiskInfo {
             NKikimrBlobStorage::TNodeWardenServiceSet::TPDisk Record;
@@ -450,11 +461,17 @@ namespace NKikimr::NStorage {
             }
 
             const bool pileFilter = !bridgePileId || allowedNodeIds.contains(pdiskId.NodeId);
+            const bool nodeAllowFilter = !restrictSelfHealNodes || selfHealAllowedNodeSet.contains(pdiskId.NodeId);
+
+            TString whyUnusable = item.WhyUnusable;
+            if (!nodeAllowFilter) {
+                whyUnusable += 'H'; // node is not in the self-heal allow-list
+            }
 
             mapper.RegisterPDisk({
                 .PDiskId = pdiskId,
                 .Location = it->second,
-                .Usable = item.Usable && pileFilter,
+                .Usable = item.Usable && pileFilter && nodeAllowFilter,
                 .NumSlots = item.UsedSlots,
                 .MaxSlots = maxSlots,
                 .SlotSizeInUnits = slotSizeInUnits,
@@ -462,7 +479,7 @@ namespace NKikimr::NStorage {
                 .SpaceAvailable = item.SpaceAvailable,
                 .Operational = true,
                 .Decommitted = false,
-                .WhyUnusable = item.WhyUnusable,
+                .WhyUnusable = whyUnusable,
             });
         }
 

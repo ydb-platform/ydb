@@ -2,12 +2,17 @@ RECURSE(
     backup
     cdc
     common
+    compare_index_performance
     ctas
+    federated_queries
+    fulltext_workload
     kafka
     kafka_serverless
     kv
     kv_volume
+    kv_volume_tool
     log
+    min_max_workload
     mixedpy
     nfs_backups
     node_broker
@@ -27,6 +32,7 @@ RECURSE(
     topic_kafka
     topic_sqs
     transfer
+    vector_workload
     viewer
     streaming
 )

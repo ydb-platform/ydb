@@ -38,6 +38,7 @@ protected:
     const ui32                       NodeId;
     const TKikimrScopeId             ScopeId;
     const bool                       TinyMode;
+    const TBasicKikimrServicesMask   ServicesMask;
 
 public:
     IKikimrServicesInitializer(const TKikimrRunConfig& runConfig);
@@ -370,6 +371,13 @@ public:
     void InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) override;
 };
 
+class TTopicDeferredPublishRegistryInitializer : public IKikimrServicesInitializer {
+public:
+    TTopicDeferredPublishRegistryInitializer(const TKikimrRunConfig& runConfig);
+
+    void InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) override;
+};
+
 class TMemProfMonitorInitializer : public IKikimrServicesInitializer {
     TIntrusiveConstPtr<NMemory::IProcessMemoryInfoProvider> ProcessMemoryInfoProvider;
 public:
@@ -628,13 +636,6 @@ public:
     void InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) override;
 };
 
-class TLocalPgWireServiceInitializer : public IKikimrServicesInitializer {
-public:
-    TLocalPgWireServiceInitializer(const TKikimrRunConfig& runConfig);
-
-    void InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) override;
-};
-
 class TKafkaProxyServiceInitializer : public IKikimrServicesInitializer {
 public:
     template<typename T>
@@ -681,7 +682,7 @@ public:
     void InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) override;
 };
 
-#if defined(OS_LINUX)
+#if defined(YDB_EMBEDDED_NBS_ENABLED)
 class TNbsServiceInitializer: public IKikimrServicesInitializer {
 public:
     TNbsServiceInitializer(const TKikimrRunConfig &runConfig);

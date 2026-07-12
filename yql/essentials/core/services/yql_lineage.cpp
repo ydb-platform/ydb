@@ -19,6 +19,7 @@ namespace {
 
 enum class ETransformsType {
     Copy,
+    Math,
     None
 };
 
@@ -335,7 +336,7 @@ private:
         for (const auto& r : Reads_) {
             TVector<TPinInfo> inputs;
             auto& formatter = r.second->GetPlanFormatter();
-            formatter.GetInputs(*r.first, inputs, false);
+            formatter.GetInputs(*r.first, inputs, /*withLimits=*/false);
             for (const auto& i : inputs) {
                 const TStringBuf& tableName = AppendString(i.DisplayName);
                 readTables.emplace_back(tableName, r.first);
@@ -440,7 +441,7 @@ private:
                 writer.OnKeyedItem("Id");
                 writer.OnInt64Scalar(ind - 1);
                 writer.OnKeyedItem("Schema");
-                WriteSchema(writer, *value, nullptr);
+                WriteSchema(writer, *value, /*formatter=*/nullptr);
                 writer.OnEndMap();
             }
             writer.OnEndList();
@@ -596,6 +597,9 @@ private:
                 case ETransformsType::Copy:
                     writer.OnStringScalar("Copy");
                     break;
+                case ETransformsType::Math:
+                    writer.OnStringScalar("Math");
+                    break;
                 default:
                     writer.OnEntity();
             }
@@ -611,7 +615,7 @@ private:
             writer.OnInt64Scalar(SchemaSets_[schema] - 1);
         } else {
             writer.OnKeyedItem("Schema");
-            WriteSchema(writer, *schema, nullptr);
+            WriteSchema(writer, *schema, /*formatter=*/nullptr);
         }
     }
 
@@ -648,8 +652,22 @@ private:
         writer.OnEndMap();
     }
 
+    static bool IsMathCallable(const TExprNode& node) {
+        if (node.IsCallable({"+", "-", "*", "/", "%",
+                             "Add", "Sub", "Mul", "Div", "Mod",
+                             "Plus", "Minus", "Abs", "Increment", "Decrement",
+                             "BitAnd", "BitOr", "BitXor", "BitNot", "ShiftLeft", "ShiftRight", "CountBits"})) {
+            return true;
+        }
+        return node.IsCallable("Apply") && node.Head().IsCallable("Udf") &&
+               node.Head().Head().Content().StartsWith("Math.");
+    }
+
     static TFieldLineage ReplaceTransforms(const TFieldLineage& src, ETransformsType newTransforms) {
-        return {.Field = src.Field, .InputIndex = src.InputIndex, .Transforms = (src.Transforms == ETransformsType::Copy && newTransforms == ETransformsType::Copy) ? newTransforms : ETransformsType::None};
+        const ETransformsType result = (newTransforms == ETransformsType::Copy)
+                                           ? src.Transforms
+                                           : newTransforms;
+        return {.Field = src.Field, .InputIndex = src.InputIndex, .Transforms = result};
     }
 
     static TFieldLineageSet ReplaceTransforms(const TFieldLineageSet& src, ETransformsType newTransforms, IAllocator* allocator) {
@@ -725,8 +743,9 @@ private:
                              "Take",
                              "Sort",
                              "TopSort",
-                             "AssumeSorted",
-                             "SkipNullMembers"})) {
+                             "AssumeSorted", "AssumeUnique", "AssumeDistinct", "AssumeUniqueHint", "AssumeDistinctHint",
+                             "AssumeChopped", "AssumeConstraints", "AssumeStrict", "AssumeNonStrict",
+                             "SkipNullMembers", "FilterNullMembers"})) {
             lineage = *CollectLineage(node.Head());
             return &lineage;
         } else if (node.IsCallable("ExtractMembers")) {
@@ -799,6 +818,9 @@ private:
 
         if (node.IsCallable("Member")) {
             if (&node.Head() == arg && src) {
+                if (node.Tail().Content().StartsWith(YqlSysPrefix)) {
+                    return it->second = TFieldsLineage(Allocator_.get());
+                }
                 return it->second = (*src->Fields).at(node.Tail().Content());
             }
 
@@ -820,6 +842,9 @@ private:
             }
 
             if (inner->StructItems) {
+                if (node.Tail().Content().StartsWith(YqlSysPrefix)) {
+                    return it->second = TFieldsLineage(Allocator_.get());
+                }
                 TFieldsLineage result(Allocator_.get());
                 result.Items = (*inner->StructItems).at(node.Tail().Content());
                 return it->second = result;
@@ -924,8 +949,9 @@ private:
                 }
             } else if (root->IsCallable("Member") && &root->Head() == &arg) {
                 auto fieldName = root->Tail().Content();
-                const auto& in = (*src.Fields).at(fieldName);
-                dst.StructItems = in.StructItems;
+                if (!fieldName.StartsWith(YqlSysPrefix)) {
+                    dst.StructItems = (*src.Fields).at(fieldName).StructItems;
+                }
             }
         }
 
@@ -936,18 +962,20 @@ private:
                            const TTypeAnnotationNode* extType, const TFieldsLineageMap& flattenColumns) {
         TMaybe<TStringBuf> oneField;
         if (value && value->IsCallable("Member") && &value->Head() == &arg) {
-            auto& f = innerLineage.Fields->at(value->Tail().Content());
-            if (f.StructItems) {
-                for (const auto& x : *f.StructItems) {
-                    auto& res = (*lineage.Fields).try_emplace(x.first, TFieldsLineage(Allocator_.get())).first->second;
-                    res.Items = x.second;
+            const auto fieldName = value->Tail().Content();
+            if (!fieldName.StartsWith(YqlSysPrefix)) {
+                auto& f = innerLineage.Fields->at(fieldName);
+                if (f.StructItems) {
+                    for (const auto& x : *f.StructItems) {
+                        auto& res = (*lineage.Fields).try_emplace(x.first, TFieldsLineage(Allocator_.get())).first->second;
+                        res.Items = x.second;
+                    }
+                    return;
                 }
-
-                return;
             }
 
             // fallback
-            oneField = value->Tail().Content();
+            oneField = fieldName;
         }
 
         if (value && value->IsCallable("If")) {
@@ -982,9 +1010,11 @@ private:
 
                 if (root->IsCallable("Member") && &root->Head() == &arg) {
                     newTransforms = ETransformsType::Copy;
+                } else if (IsMathCallable(*root)) {
+                    newTransforms = ETransformsType::Math;
                 }
 
-                MergeLineageFromUsedFields(expr, arg, innerLineage, res, true, flattenColumns, newTransforms);
+                MergeLineageFromUsedFields(expr, arg, innerLineage, res, /*produceStruct=*/true, flattenColumns, newTransforms);
             }
 
             return;
@@ -1029,9 +1059,15 @@ private:
                 value = &body;
                 while (value->IsCallable({"FlatMap", "OrderedFlatMap"})) {
                     TNodeMap<TMaybe<TFieldsLineage>> visited;
-                    if (auto res = ScanExprLineage(value->Head(), &arg, &innerLineage, visited, TFieldsLineageMap(Allocator_.get()))) {
-                        flattenColumns.emplace(value->Tail().Head().HeadPtr().Get(), res);
+                    auto res = ScanExprLineage(value->Head(), &arg, &innerLineage, visited, TFieldsLineageMap(Allocator_.get()));
+                    if (!res) {
+                        TFieldsLineage all(Allocator_.get());
+                        for (const auto& f : *innerLineage.Fields) {
+                            all.Items.insert(f.second.Items.begin(), f.second.Items.end());
+                        }
+                        res = std::move(all);
                     }
+                    flattenColumns.emplace(value->Tail().Head().HeadPtr().Get(), res);
                     value = &value->Tail().Tail();
                 }
                 if (value->IsCallable("Just")) {
@@ -1098,13 +1134,13 @@ private:
                                                initHandler->Head().Head(),
                                                innerLineage,
                                                source,
-                                               false,
+                                               /*produceStruct=*/false,
                                                TFieldsLineageMap(Allocator_.get()));
                     MergeLineageFromUsedFields(updateHandler->Tail(),
                                                updateHandler->Head().Head(),
                                                innerLineage,
                                                source,
-                                               false,
+                                               /*produceStruct=*/false,
                                                TFieldsLineageMap(Allocator_.get()));
                 } else if (payload->Child(1)->IsCallable("AggApply")) {
                     auto extractHandler = payload->Child(1)->Child(2);
@@ -1155,7 +1191,7 @@ private:
 
         lineage.Fields.ConstructInPlace(Allocator_.get());
         FillStructLineage(lineage,
-                          nullptr,
+                          /*value=*/nullptr,
                           arg,
                           innerLineage,
                           GetSeqItemType(body.GetTypeAnn()),
@@ -1178,7 +1214,7 @@ private:
 
         lineage.Fields.ConstructInPlace(Allocator_.get());
         FillStructLineage(lineage,
-                          nullptr,
+                          /*value=*/nullptr,
                           arg,
                           innerLineage,
                           GetSeqItemType(body.GetTypeAnn()),
@@ -1201,11 +1237,11 @@ private:
                         res.Items.insert(x);
                     }
 
-                    if (f->StructItems || f->Items.empty()) {
+                    if (f->StructItems) {
                         if (!hasStructItems) {
                             hasStructItems = true;
                         }
-                    } else {
+                    } else if (!f->Items.empty()) {
                         hasStructItems = false;
                     }
                 }
@@ -1240,6 +1276,35 @@ private:
         MergeLineages(lineage, inners);
     }
 
+    bool HandleSessionColumns(TLineage& lineage, const TLineage& innerLineage,
+                              const TExprNode& sessionSpec, const TExprNode& sessionColumns) {
+        if (sessionColumns.ChildrenSize() == 0) {
+            return true;
+        }
+        if (!sessionSpec.IsCallable("SessionWindowTraits")) {
+            lineage.Fields.Clear();
+            return false;
+        }
+        const auto& initHandler = sessionSpec.Child(2);
+        const auto& updateHandler = sessionSpec.Child(3);
+        for (const auto& sessionColumn : sessionColumns.Children()) {
+            auto& res = (*lineage.Fields).try_emplace(sessionColumn->Content(), TFieldsLineage(Allocator_.get())).first->second;
+            MergeLineageFromUsedFields(initHandler->Tail(),
+                                       initHandler->Head().Head(),
+                                       innerLineage,
+                                       res,
+                                       /*produceStruct=*/false,
+                                       TFieldsLineageMap(Allocator_.get()));
+            MergeLineageFromUsedFields(updateHandler->Tail(),
+                                       updateHandler->Head().Head(),
+                                       innerLineage,
+                                       res,
+                                       /*produceStruct=*/false,
+                                       TFieldsLineageMap(Allocator_.get()));
+        }
+        return true;
+    }
+
     void HandleWindow(TLineage& lineage, const TExprNode& node) {
         auto innerLineage = *CollectLineage(node.Head());
         if (!innerLineage.Fields.Defined()) {
@@ -1257,32 +1322,23 @@ private:
 
         lineage.Fields = *innerLineage.Fields;
         if (node.IsCallable("CalcOverSessionWindow")) {
-            if (node.Child(5)->ChildrenSize() && !node.Child(4)->IsCallable("SessionWindowTraits")) {
-                lineage.Fields.Clear();
+            if (!HandleSessionColumns(lineage, innerLineage, *node.Child(4), *node.Child(5))) {
                 return;
             }
-
-            for (const auto& sessionColumn : node.Child(5)->Children()) {
-                auto& res = (*lineage.Fields).try_emplace(sessionColumn->Content(), TFieldsLineage(Allocator_.get())).first->second;
-                const auto& initHandler = node.Child(4)->Child(2);
-                const auto& updateHandler = node.Child(4)->Child(2);
-                MergeLineageFromUsedFields(initHandler->Tail(),
-                                           initHandler->Head().Head(),
-                                           innerLineage,
-                                           res,
-                                           false,
-                                           TFieldsLineageMap(Allocator_.get()));
-                MergeLineageFromUsedFields(updateHandler->Tail(),
-                                           updateHandler->Head().Head(),
-                                           innerLineage,
-                                           res,
-                                           false,
-                                           TFieldsLineageMap(Allocator_.get()));
+        } else if (node.IsCallable("CalcOverWindowGroup")) {
+            for (const auto& g : node.Child(1)->Children()) {
+                if (!HandleSessionColumns(lineage, innerLineage, *g->Child(3), *g->Child(4))) {
+                    return;
+                }
             }
         }
 
         for (const auto& g : frameGroups) {
             for (const auto& f : g->Children()) {
+                if (f->IsCallable("WinFilter")) {
+                    continue;
+                }
+
                 if (!f->IsCallable("WinOnRows")) {
                     lineage.Fields.Clear();
                     return;
@@ -1310,13 +1366,13 @@ private:
                                                    initHandler->Head().Head(),
                                                    innerLineage,
                                                    res,
-                                                   false,
+                                                   /*produceStruct=*/false,
                                                    TFieldsLineageMap(Allocator_.get()));
                         MergeLineageFromUsedFields(updateHandler->Tail(),
                                                    updateHandler->Head().Head(),
                                                    innerLineage,
                                                    res,
-                                                   false,
+                                                   /*produceStruct=*/false,
                                                    TFieldsLineageMap(Allocator_.get()));
                     } else {
                         lineage.Fields.Clear();
@@ -1378,11 +1434,11 @@ private:
             }
 
             auto& h = hasStructItems[field->GetName()];
-            if (f.StructItems || f.Items.empty()) {
+            if (f.StructItems) {
                 if (!h) {
                     h = true;
                 }
-            } else {
+            } else if (!f.Items.empty()) {
                 h = false;
             }
         }
@@ -1435,8 +1491,8 @@ private:
                 for (const auto& f : child->Children()) {
                     TNodeMap<TMaybe<TFieldsLineage>> visited;
                     auto res = ScanExprLineage(f->Tail(),
-                                               nullptr,
-                                               nullptr,
+                                               /*arg=*/nullptr,
+                                               /*src=*/nullptr,
                                                visited,
                                                TFieldsLineageMap(Allocator_.get()));
                     if (res) {
@@ -1447,8 +1503,8 @@ private:
             } else {
                 TNodeMap<TMaybe<TFieldsLineage>> visited;
                 auto res = ScanExprLineage(*child,
-                                           nullptr,
-                                           nullptr,
+                                           /*arg=*/nullptr,
+                                           /*src=*/nullptr,
                                            visited,
                                            TFieldsLineageMap(Allocator_.get()));
                 if (res) {

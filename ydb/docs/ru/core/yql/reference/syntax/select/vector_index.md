@@ -40,7 +40,7 @@ SELECT ...
 
 {% endnote %}
 
-## KMeansTreeSearchTopSize
+## KMeansTreeSearchTopSize {#KMeansTreeSearchTopSize}
 
 Векторный поиск по индексу основан на приближённом алгоритме (ANN, Approximate Nearest Neighbors). Это значит, что результат поиска по векторному индексу может отличаться от результата поиска при полном сканировании таблицы.
 

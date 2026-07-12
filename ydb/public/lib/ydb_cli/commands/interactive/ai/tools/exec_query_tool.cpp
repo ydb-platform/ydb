@@ -110,9 +110,17 @@ class TExecQueryTool final : public TToolBase, public TInterruptableCommand {
     using TBase = TToolBase;
 
     static constexpr char DESCRIPTION[] = R"(
-Execute query in Yandex Data Base (YDB) on YQL (SQL dialect). Use cases:
+Execute a YQL (SQL dialect) query in Yandex Data Base (YDB). EVERY call shows the query to the user and prompts for approval, so each `exec_query` call has a real interaction cost — minimize failed attempts.
+
+>>> MANDATORY PREFLIGHT — READ FIRST <<<
+Before calling `exec_query`, you MUST have eliminated every reasonable doubt about the query's validity:
+1. If unsure about ANY YQL syntax, built-in function, type, recipe, or YDB-specific feature in the query — call `docs_search` FIRST. The documentation is authoritative; your prior knowledge of YDB/YQL may be outdated or wrong.
+2. If unsure the resulting query is syntactically and semantically valid YQL (unfamiliar built-in, unusual cast/JOIN/window, complex multi-statement script, first use of an idiom in this session, anything you only "think" works) — call `explain_query` with the SAME query FIRST. `explain_query` does NOT execute the query, does NOT modify data, and does NOT prompt the user, so you can iterate on errors silently until the query is correct. Only call `exec_query` after `explain_query` succeeds.
+Failure mode to avoid: blindly running `exec_query` -> error -> the user is forced to approve another broken attempt -> error -> ... — this is a bad experience and easily preventable by using `explain_query` first.
+
+Use cases:
 - Execute data query to fetch or modify data in database tables
-- Execute DDL query to create new scheme entities e. g. tablas, topics e. t. c.
+- Execute DDL query to create new scheme entities e. g. tables, topics e. t. c.
 
 IMPORTANT:
 - NEVER guess column names, types or keys. If you do not know the exact schema of a table, use the `describe` tool FIRST.

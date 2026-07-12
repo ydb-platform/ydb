@@ -222,6 +222,8 @@ public:
 
                 if (operationType == NKikimrDataEvents::TEvWrite::TOperation::OPERATION_INSERT ||
                     operationType == NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPDATE ||
+                    operationType == NKikimrDataEvents::TEvWrite::TOperation::OPERATION_INCREMENT ||
+                    operationType == NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT_INCREMENT ||
                     userDb.NeedToReadBeforeWrite(fullTableId))
                 {
                     for (ui32 rowIdx = 0; rowIdx < matrix.GetRowCount(); ++rowIdx) {
@@ -284,6 +286,7 @@ public:
 
         // Main update cycle
 
+        bool notReady = false;
         for (ui32 rowIdx = 0; rowIdx < matrix.GetRowCount(); ++rowIdx)
         {
             FillKey(scheme, userTable, tableInfo, validatedOperation, rowIdx, key);
@@ -327,6 +330,9 @@ public:
                     // Checked before in TWriteOperation
                     Y_ENSURE(false, operationType << " operation is not supported now");
             }
+        }
+        if (notReady) {
+            throw TNotReadyTabletException();
         }
 
         // Counters

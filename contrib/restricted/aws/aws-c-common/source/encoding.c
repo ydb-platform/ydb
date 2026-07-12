@@ -440,6 +440,7 @@ int aws_base64_decode(const struct aws_byte_cursor *AWS_RESTRICT to_decode, stru
     }
 
     int64_t block_count = (int64_t)(to_decode->len + 3) / 4;
+
     size_t remainder = to_decode->len % 4;
     size_t string_index = 0;
     uint8_t value1 = 0, value2 = 0, value3 = 0, value4 = 0;
@@ -480,16 +481,29 @@ int aws_base64_decode(const struct aws_byte_cursor *AWS_RESTRICT to_decode, stru
             return aws_raise_error(AWS_ERROR_INVALID_BASE64_STR);
         }
 
+        /* Reject interior '=' followed by non-'=' (e.g. "AB=D") per RFC 4648:
+         * '=' is only valid at the end of encoded data. */
+        if (value3 == BASE64_SENTINEL_VALUE && value4 != BASE64_SENTINEL_VALUE) {
+            return aws_raise_error(AWS_ERROR_INVALID_BASE64_STR);
+        }
+
         output->buffer[buffer_index++] = (uint8_t)((value1 << 2) | ((value2 >> 4) & 0x03));
 
         if (value3 != BASE64_SENTINEL_VALUE) {
             output->buffer[buffer_index++] = (uint8_t)(((value2 << 4) & 0xF0) | ((value3 >> 2) & 0x0F));
             if (value4 != BASE64_SENTINEL_VALUE) {
-                output->buffer[buffer_index] = (uint8_t)((value3 & 0x03) << 6 | value4);
+                output->buffer[buffer_index++] = (uint8_t)((value3 & 0x03) << 6 | value4);
             }
         }
     }
     output->len = decoded_length;
+
+    /* Sanity check: bytes written must match the precomputed decoded length */
+    if (buffer_index >= 0 && (size_t)buffer_index != decoded_length) {
+        output->len = 0;
+        return aws_raise_error(AWS_ERROR_INVALID_BASE64_STR);
+    }
+
     return AWS_OP_SUCCESS;
 }
 

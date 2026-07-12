@@ -1,6 +1,7 @@
 #pragma once
 
 #include "public.h"
+#include "index_info.h"
 
 #include <yt/yt/client/hive/public.h>
 
@@ -62,26 +63,6 @@ struct TTableReplicaInfo final
 };
 
 DEFINE_REFCOUNTED_TYPE(TTableReplicaInfo)
-
-////////////////////////////////////////////////////////////////////////////////
-
-struct TUnfoldedColumns
-{
-    std::string TableColumn;
-    std::string IndexColumn;
-
-    void Persist(const TStreamPersistenceContext& context);
-};
-
-struct TIndexInfo
-{
-    NObjectClient::TObjectId TableId;
-    ESecondaryIndexKind Kind;
-    std::optional<std::string> Predicate;
-    std::optional<TUnfoldedColumns> UnfoldedColumns;
-    ETableToIndexCorrespondence Correspondence;
-    NTableClient::TTableSchemaPtr EvaluatedColumnsSchema;
-};
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -158,7 +139,7 @@ struct TTableMountInfo final
     bool IsChaosReplica() const;
     bool IsHunkStorage() const;
 
-    TTabletInfoPtr GetTabletByIndexOrThrow(int tabletIndex) const;
+    TTabletInfoPtr GetTabletByIndexOrThrow(i64 tabletIndex) const;
     int GetTabletIndexForKey(NTableClient::TUnversionedValueRange key) const;
     int GetTabletIndexForKey(NTableClient::TLegacyKey key) const;
     TTabletInfoPtr GetTabletForKey(NTableClient::TUnversionedValueRange key) const;
@@ -259,7 +240,8 @@ struct ITableMountCache
     //! case |TableInfoUpdatedFromError| flag will be set.
     virtual TInvalidationResult InvalidateOnError(
         const TError& error,
-        bool forceRetry) = 0;
+        bool forceRetry,
+        TTabletId tabletIdHint = {}) = 0;
 
     virtual void Clear() = 0;
 

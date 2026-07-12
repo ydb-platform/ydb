@@ -31,6 +31,7 @@ namespace NKikimr::NHttpProxy {
             EvDiscoverDatabaseEndpointRequest = EventSpaceBegin(TKikimrEvents::ES_HTTP_PROXY),
             EvDiscoverDatabaseEndpointResult,
             EvGrpcRequestResult,
+            EvUpdateDatabasesEvent,
             EvListEndpointsRequest,
             EvListEndpointsResponse,
             EvErrorWithIssue,
@@ -46,8 +47,15 @@ namespace NKikimr::NHttpProxy {
             THolder<THashMap<TString, TString>> QueueTags;
         };
 
+        // Used in serverless proxy. Do not remove it.
+        struct TEvUpdateDatabasesEvent : public TEventLocal<TEvUpdateDatabasesEvent, EvUpdateDatabasesEvent> {
+            std::vector<TDatabase> Databases;
+            std::unique_ptr<NYdbGrpc::TGrpcStatus> Status;
+        };
+
         struct TEvDiscoverDatabaseEndpointRequest : public TEventLocal<TEvDiscoverDatabaseEndpointRequest, EvDiscoverDatabaseEndpointRequest> {
             TString DatabasePath;
+            TString DatabaseId; // Used in serverless proxy. Do not remove it.
         };
 
         struct TEvDiscoverDatabaseEndpointResult : public TEventLocal<TEvDiscoverDatabaseEndpointResult, EvDiscoverDatabaseEndpointResult> {
@@ -201,11 +209,5 @@ namespace NKikimr::NHttpProxy {
         static const char x[12] = "http_proxy ";
         return TActorId(0, TStringBuf(x, 12));
     }
-
-#define LOG_SP_ERROR_S(actorCtxOrSystem, component, stream) LOG_ERROR_S(actorCtxOrSystem, component, LogPrefix() << " " << stream)
-#define LOG_SP_WARN_S(actorCtxOrSystem, component, stream) LOG_WARN_S(actorCtxOrSystem, component, LogPrefix() << " " << stream)
-#define LOG_SP_INFO_S(actorCtxOrSystem, component, stream) LOG_INFO_S(actorCtxOrSystem, component, LogPrefix() << " " << stream)
-#define LOG_SP_DEBUG_S(actorCtxOrSystem, component, stream) LOG_DEBUG_S(actorCtxOrSystem, component, LogPrefix() << " " << stream)
-
 
 } // namespace NKikimr::NHttpProxy

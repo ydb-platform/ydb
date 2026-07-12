@@ -1,10 +1,91 @@
 # Список изменений {{ ydb-short-name }} Server
 
+## Версия 26.1 {#26-1}
+
+### Версия 26.1.1.20 {#26-1-1-20}
+
+Дата выхода: уточняется.
+
+#### Функциональность
+
+* Доступны YQL-запросы [`SHOW CREATE TABLE`](./yql/reference/syntax/show_create.md?version=v26.1) и [`SHOW CREATE VIEW`](./yql/reference/syntax/show_create.md?version=v26.1) для получения DDL-выражений, необходимых для воссоздания структуры таблицы или представления.
+* В `ALTER TABLE` добавлена поддержка значений по умолчанию при [`ADD COLUMN`](./yql/reference/syntax/alter_table/columns.md?version=v26.1) (`DEFAULT`).
+* [Shuffle Elimination](./concepts/query_execution/optimizer.md?version=v26.1) включён в продакшене: оптимизатор может устранять лишние перераспределения данных при соединениях.
+* Реализовано [резервное копирование и восстановление](./reference/ydb-cli/export-import/file-structure.md?version=v26.1) схемных объектов: [асинхронных репликаций](./concepts/async-replication.md?version=v26.1), [внешних источников данных](./concepts/datamodel/external_data_source.md?version=v26.1), [внешних таблиц](./concepts/datamodel/external_table.md?version=v26.1) и [трансферов](./concepts/transfer.md?version=v26.1).
+* Кластер сохраняет работоспособность при недоступности [CMS](./concepts/glossary.md?version=v26.1#cms).
+* Добавлена возможность [регистрации динамических узлов](./devops/configuration-management/configuration-v1/node-authorization.md?version=v26.1) по клиентским TLS-сертификатам.
+* Для [LDAP-аутентификации](./security/authentication.md?version=v26.1) сервисного аккаунта поддерживается протокол SASL с механизмом EXTERNAL — см. [`enable_sasl_external_bind`](./reference/configuration/auth_config.md?version=v26.1#ldap-auth-config).
+* В [асинхронной репликации](./concepts/async-replication.md?version=v26.1) поддержано зеркалирование [автопартиционированных топиков](./concepts/datamodel/topic.md?version=v26.1#autopartitioning); см. также [партиции топиков в CDC](./concepts/cdc.md?version=v26.1#topic-partitions).
+* Расширена [диагностика TLI](./reference/configuration/tli_config.md?version=v26.1) (Transaction Lock Invalidation): конфигурация `tli_config`, [логирование](./troubleshooting/performance/queries/tli-logging.md?version=v26.1) и [системные представления](./dev/system-views.md?version=v26.1#top-tli-partitions).
+* При [автопартиционировании по нагрузке](./concepts/datamodel/table.md?version=v26.1#auto_partitioning_by_load) учитывается CPU-нагрузка на лидера партиции и на все её реплики.
+* [Потоковые запросы](./dev/streaming-query/index.md?version=v26.1) поддерживают [запись результатов в локальные таблицы](./dev/streaming-query/table-writing.md?version=v26.1).
+* В [потоках изменений (CDC)](./concepts/cdc.md?version=v26.1) доступна выгрузка идентификаторов безопасности пользователя (`USER_SIDS`) — см. [`ALTER TABLE` `CHANGEFEED`](./yql/reference/syntax/alter_table/changefeed.md?version=v26.1).
+* Для [внешних источников данных](./concepts/datamodel/external_data_source.md?version=v26.1) добавлен `AUTH_METHOD=IAM`.
+* В CLI поддерживается аутентификация по файлу токена (`--token-file`).
+* Оптимизирована работа транзакций между топиками и таблицами.
+
+#### Исправления ошибок
+
+* [Исправлено](https://github.com/ydb-platform/ydb/pull/34906) `RETURNING` в потоковых `UPDATE` и интерактивных запросах.
+* [Исправлено](https://github.com/ydb-platform/ydb/pull/34915) `SET DEFAULT` и `DROP DEFAULT` в `ALTER TABLE`.
+* [Исправлено](https://github.com/ydb-platform/ydb/pull/34958) обработка срока действия токенов аутентификации в ticket parser.
+* [Исправлено](https://github.com/ydb-platform/ydb/pull/35003) выполнение запросов в Workload Manager после пересоздания tenant.
+* [Исправлено](https://github.com/ydb-platform/ydb/pull/35187) use-after-free в gRPC-сервисе.
+* [Исправлено](https://github.com/ydb-platform/ydb/pull/35663) инкрементальное восстановление при перезапусках SchemeShard и сбоях шардов.
+* [Исправлено](https://github.com/ydb-platform/ydb/pull/35787) отсутствие метаданных потокового запроса сразу после создания.
+* [Исправлено](https://github.com/ydb-platform/ydb/pull/35793) зависание async checkpointing при полном входе и пустом checkpoint.
+* [Исправлено](https://github.com/ydb-platform/ydb/pull/36217) взаимное влияние квот разных баз в Kesus quoter proxy.
+* [Исправлено](https://github.com/ydb-platform/ydb/pull/36220) зависания в PQ read session.
+* [Исправлено](https://github.com/ydb-platform/ydb/pull/36292) зависание scan executor на `SELECT … LIMIT` по пустым таблицам.
+* [Исправлено](https://github.com/ydb-platform/ydb/pull/36692) отложенный сброс TLI `LOCKS_BROKEN`.
+* [Исправлено](https://github.com/ydb-platform/ydb/pull/37130) переполнение таймаута потокового запроса.
+* [Исправлено](https://github.com/ydb-platform/ydb/pull/37145) потокобезопасность и разбор срока действия токена в IAM credentials provider.
+* [Исправлено](https://github.com/ydb-platform/ydb/pull/37285) ошибки в HTTP gateway.
+* [Исправлено](https://github.com/ydb-platform/ydb/pull/37668) переполнение при обработке пустого пароля.
+* [Исправлено](https://github.com/ydb-platform/ydb/pull/38033) сбор CDC для колонок `IsBuildInProgress` отключён.
+* [Исправлено](https://github.com/ydb-platform/ydb/pull/38490) segfault при обновлении.
+* [Исправлено](https://github.com/ydb-platform/ydb/pull/38544) Shuffle Elimination с прагмой `HashJoinMode`.
+* [Исправлено](https://github.com/ydb-platform/ydb/pull/39337) дублирование строк в scan query при проблемах доставки.
+* [Исправлено](https://github.com/ydb-platform/ydb/pull/39687) доступ к HTTP-эндпоинтам viewer: только viewer/admin SID; scope базы для database-only токенов.
+* [Исправлено](https://github.com/ydb-platform/ydb/pull/39798) OOM при загрузке trash на blob depot.
+* [Исправлено](https://github.com/ydb-platform/ydb/pull/41681) падение `TQueryBase` после отмены потокового запроса.
+* [Исправлено](https://github.com/ydb-platform/ydb/pull/43068) локальное чтение CDC из YQL.
+* [Исправлено](https://github.com/ydb-platform/ydb/pull/44340) быстрая удалённая отмена запросов в query service.
+
+## Версия 25.4 {#25-4}
+
+### Версия 25.4.1.15 {#25-4-1-15}
+
+Дата выхода: 5 июня 2026.
+
+#### Функциональность
+
+* Доступны инструкции YQL [`BATCH UPDATE`](./yql/reference/syntax/batch-update.md?version=v25.4) и [`BATCH DELETE FROM`](./yql/reference/syntax/batch-delete.md?version=v25.4) для массового обновления и удаления данных в таблицах.
+* Механизм выполнения операций записи существенно изменился -- теперь запись выполняется в потоковом режиме без полной материализации данных на стороне Query Processor перед отправкой в даташарды, что повышает производительность при крупных операциях записи. Изменение распространяется на часть сценариев; в отдельных случаях (например, таблицы со вторичными индексами) по-прежнему используется прежний подход. Общие сведения о конвейере выполнения см. в разделе [Выполнение запросов](./concepts/query_execution/index.md?version=v25.4).
+* Оптимизировано выполнение Lookup Join: используется потоковый режим без материализации одной из сторон соединения, что снижает пиковое потребление памяти, ускоряет выполнение на больших наборах данных и снимает прежние ограничения на размер сторон соединения. См. описание [Index lookup Join](./faq/yql.md?version=v25.4#index-lookup-join) и синтаксис [оператора `JOIN`](./yql/reference/syntax/select/join.md?version=v25.4).
+* Добавлена возможность выставлять права доступа для [системных представлений](./devops/observability/system-views.md?version=v25.4) кластера и баз данных.
+* Для строковых таблиц доступна настройка [режимов кэширования](./concepts/datamodel/table.md?version=v25.4#cache-modes) и новый режим `in_memory`, который позволяет предзагружать данные таблицы в оперативную память при условии наличия необходимых объемов оперативной памяти.
+* Для читателей топиков добавлен параметр [`availability-period`](./reference/ydb-cli/topic-consumer-add.md?version=v25.4), позволяющий продлить хранение неподтверждённых сообщений сверх retention-period
+* Доступны [попартиционные метрики топиков и выгрузка в пользовательские шард-квоты](./reference/observability/metrics/index.md?version=v25.4#topics_partitions) для учёта и наблюдаемости.
+* Ускорение запросов с `LIMIT` в колоночных таблицах за счёт раннего ограничения выборки на узлах хранения (для запросов без сортировки или с сортировкой по первичному ключу). Общий синтаксис [`LIMIT` и `OFFSET`](./yql/reference/syntax/select/limit_offset.md?version=v25.4) в YQL.
+* Колоночные таблицы поддерживают тип `Bool` в схеме и запросах — см. [примитивные типы YQL](./yql/reference/types/primitive.md?version=v25.4#numeric).
+* [Фильтруемый векторный индекс](./dev/vector-indexes.md?version=v25.4#filtered) корректно находит вставленные в таблицу после создания индекса строки с новыми значениями колонок фильтров.
+* Потоковая обработка и поставка данных теснее интегрированы в ядро: [трансфер «топик → таблица»](./concepts/transfer.md?version=v25.4), [потоковые запросы](./dev/streaming-query/index.md?version=v25.4) стали доступны пользователям при включении 'EnableStreamingQueries'.
+* Добавлена опция `overlap_clusters` для существенного улучшения качества векторного поиска за счёт помещения векторов в несколько кластеров индекса (настройки индекса) — см. [векторные индексы](./dev/vector-indexes.md?version=v25.4).
+* Значительно ускорен поиск по всем видам векторных индексов за счёт подсчёта расстояний локально на каждом даташарде до передачи по сети — см. [VIEW (векторный индекс)](./yql/reference/syntax/select/vector_index.md?version=v25.4) и [векторные индексы](./dev/vector-indexes.md?version=v25.4).
+* Ускорен полный векторный поиск без ANN-индекса за счёт pushdown (векторный поиск, KNN UDF) — см. [векторный поиск](./concepts/query_execution/vector_search.md?version=v25.4) и [модуль KNN](./yql/reference/udf/list/knn.md?version=v25.4).
+* Полноценно поддержан механизм работы с секретами, хранимыми в базе данных: создание, изменение, удаление и использование — см. [Секреты](./concepts/datamodel/secrets.md?version=v25.4). Обратите внимание, что [старый синтаксис](./concepts/datamodel/secrets.md?version=v25.3) объявлен устаревшим.
+* Улучшено выполнение [`UNION ALL`](./yql/reference/syntax/select/union.md?version=main#union-all): теперь поддерживается параллельное выполнение, что повышает производительность аналитических запросов.
+
+#### Исправления ошибок
+
+* [Исправлена](https://github.com/ydb-platform/ydb/pull/38425) уязвимость [LDAP-аутентификации](./security/authentication.md): зная логин и пароль любого LDAP-пользователя (в том числе не входящего в группу с доступом к {{ ydb-short-name }}), можно было обойти проверку членства в группе и получить доступ к кластеру (инъекция в LDAP-фильтр поиска пользователя; добавлено экранирование спецсимволов по RFC 2254).
+
 ## Версия 25.3 {#25-3}
 
-### Версия 25.3.1.25 {#25-3-1-25}
+### Версия 25.3.1.27 {#25-3-1-27}
 
-Дата выхода: 3 апреля 2026.
+Дата выхода: 20 мая 2026.
 
 #### Функциональность
 
@@ -17,6 +98,9 @@
 
 #### Исправления ошибок
 
+* [Исправлена](https://github.com/ydb-platform/ydb/pull/38425) уязвимость [LDAP-аутентификации](./security/authentication.md): зная логин и пароль любого LDAP-пользователя (в том числе не входящего в группу с доступом к {{ ydb-short-name }}), можно было обойти проверку членства в группе и получить доступ к кластеру (инъекция в LDAP-фильтр поиска пользователя; добавлено экранирование спецсимволов по RFC 2254).
+* [Исправлена](https://github.com/ydb-platform/ydb/pull/33758) ошибка, приводившая к утечке сессии на серверной стороне.
+* [Исправлена](https://github.com/ydb-platform/ydb/pull/36926) ошибка, из-за которой в редких случаях чтения из таблицы могли заблокировать её удаление.
 * [Исправлено](https://github.com/ydb-platform/ydb/pull/20238) состояние гонки при обновлении soft-лимита CPU.
 * [Исправлено поведение](https://github.com/ydb-platform/ydb/pull/18121), при котором `ALTER TABLE` мог завершаться с ошибкой для таблиц с векторным индексом.
 * [Исправлены](https://github.com/ydb-platform/ydb/pull/18088) неконсистентные результаты в некоторых read-write транзакциях — конфликтующие записи больше не затирают незакоммиченные изменения.
@@ -33,12 +117,13 @@
 
 ## Версия 25.2 {#25-2}
 
-### Версия 25.2.1.24 {#25-2-1-24}
+### Версия 25.2.1.26 {#25-2-1-26}
 
-Дата выхода: 28 января 2026.
+Дата выхода: 12 мая 2026.
 
 #### Исправления ошибок
 
+* [Исправлена](https://github.com/ydb-platform/ydb/pull/38425) уязвимость [LDAP-аутентификации](./security/authentication.md): зная логин и пароль любого LDAP-пользователя (в том числе не входящего в группу с доступом к {{ ydb-short-name }}), можно было обойти проверку членства в группе и получить доступ к кластеру (инъекция в LDAP-фильтр поиска пользователя; добавлено экранирование спецсимволов по RFC 2254).
 * [Исправлена](https://github.com/ydb-platform/ydb/pull/25112) [проблема](https://github.com/ydb-platform/ydb/issues/23858), из-за которой удаление [таблетки](./concepts/glossary.md#tablet) могло зависать
 * [Исправлена](https://github.com/ydb-platform/ydb/pull/25145) [ошибка](https://github.com/ydb-platform/ydb/issues/20866) вызывающая ошибку, при изменении follower'a таблицы
 * Исправлен ряд ошибок, связанных с [changefeed](./concepts/glossary.md#changefeed):
@@ -65,8 +150,11 @@
 * [Стоимостной оптимизатор](./concepts/query_execution/optimizer.md) работает по умолчанию для запросов, использующих хотя бы одну колоночную таблицу, но может быть включён принудительно и для остальных запросов. Стоимостной оптимизатор улучшает производительность выполнения запросов, вычисляя оптимальный порядок и тип соединений на основе статистики таблиц; поддерживаемые [hints](./dev/query-execution-optimization/query-hints.md) позволяют тонко настраивать планы выполнения для сложных аналитических запросов.
 * Реализован [трансфер данных](./concepts/transfer.md) – асинхронный механизм переноса данных из топика в таблицу. [Создание](./yql/reference/syntax/create-transfer.md) экземпляра трансфера, его [изменение](./yql/reference/syntax/alter-transfer.md) и [удаление](./yql/reference/syntax/drop-transfer.md) осуществляется с использованием YQL. Для быстрого старта воспользуйтесь [инструкцией с примером](./recipes/transfer/quickstart.md).
 * Добавлен [спиллинг](./concepts/query_execution/spilling.md), механизм управления памятью, при котором промежуточные данные, возникающие в результате выполнения запросов и превышающие доступный объём оперативной памяти узла, временно выгружаются во внешнее хранилище. Спиллинг обеспечивает выполнение пользовательских запросов, которые требуют обработки больших объёмов данных, превышающих доступную память узла.
-* Увеличено [максимальное время на выполнение одного запроса](./concepts/limits-ydb) с 30 минут до 2 часов.
-* Добавлена поддержка Certificate Authority (CA) и [Yandex Cloud Identity and Access Management (IAM)](https://yandex.cloud/ru/docs/iam) аутентификации в [асинхронной репликации](./yql/reference/syntax/create-async-replication.md).
+* Увеличено [максимальное время на выполнение одного запроса](./concepts/limits-ydb?version=v25.2) с 30 минут до 2 часов.
+* Добавлена поддержка Certificate Authority (CA) и [Yandex Cloud Identity and Access Management (IAM)](https://yandex.cloud/ru/docs/iam) аутентификации в [асинхронной репликации](./yql/reference/syntax/create-async-replication.md?version=v25.2).
+* Обязательно к настройке:
+
+  * [Аутентификация и авторизация узлов](./devops/configuration-management/configuration-v1/node-authorization.md) для регистрации узлов в кластере.
 * Включены по умолчанию:
 
   * [векторный индекс](./dev/vector-indexes.md) для приближённого векторного поиска;
@@ -86,9 +174,9 @@
 
 ## Версия 25.1 {#25-1}
 
-### Версия 25.1.4.7 {#25-1-4-7}
+### Версия 25.1.4.18 {#25-1-4-18}
 
-Дата выхода: 15 сентября 2025.
+Дата выхода: 12 мая 2026.
 
 #### Функциональность
 
@@ -111,6 +199,7 @@
 
 #### Исправления ошибок
 
+* [Исправлена](https://github.com/ydb-platform/ydb/pull/38425) уязвимость [LDAP-аутентификации](./security/authentication.md): зная логин и пароль любого LDAP-пользователя (в том числе не входящего в группу с доступом к {{ ydb-short-name }}), можно было обойти проверку членства в группе и получить доступ к кластеру (инъекция в LDAP-фильтр поиска пользователя; добавлено экранирование спецсимволов по RFC 2254).
 * [Добавлена](https://github.com/ydb-platform/ydb/pull/21918) поддержка в асинхронной репликации нового типа записи об изменениях — `reset`-записи (в дополнение к `update`- и `erase`-записям).
 * [Исправлена](https://github.com/ydb-platform/ydb/pull/21836) [ошибка](https://github.com/ydb-platform/ydb/issues/21814), из-за которой экземпляр репликации с неуказанным параметром `COMMIT_INTERVAL` приводил к сбою процесса.
 * [Исправлены](https://github.com/ydb-platform/ydb/pull/21652) редкие ошибки при чтении из топика во время балансировки партиций.
@@ -514,7 +603,7 @@
 * Добавлена возможность логгировать DML-операции в аудитном логе.
 * **_(Экспериментально)_** При записи сообщений в топик теперь можно передавать метаданные. Для включения этой функциональности добавьте `enable_topic_message_meta: true` в [конфигурационный файл](reference/configuration/index.md).
 * **_(Экспериментально)_** Добавлена возможность [чтения из топиков](reference/ydb-sdk/topic.md#read-tx) и запись в таблицу в рамках одной транзакции. Новая возможность упрощает сценарий переноса данных из топика в таблицу. Для её включения добавьте `enable_topic_service_tx: true` в конфигурационный файл.
-* **_(Экспериментально)_** Добавлена поддержка [совместимости с PostgreSQL](postgresql/intro.md). Новый механизм позволяет выполнять SQL запросы в PostgreSQL диалекте на инфраструктуре YDB с использованием сетевого протокола PostgreSQL. Можно использовать привычные инструменты работы с PostgreSQL, такие, как psql и драйверы (pq для Golang и psycopg2 для Python), а также разрабатывать запросы на привычном PostgreSQL синтаксисе с горизонтальной масштабируемостью и отказоустойчивость YDB.
+* **_(Экспериментально)_** Добавлена поддержка совместимости с PostgreSQL. Новый механизм позволяет выполнять SQL запросы в PostgreSQL диалекте на инфраструктуре YDB с использованием сетевого протокола PostgreSQL. Можно использовать привычные инструменты работы с PostgreSQL, такие, как psql и драйверы (pq для Golang и psycopg2 для Python), а также разрабатывать запросы на привычном PostgreSQL синтаксисе с горизонтальной масштабируемостью и отказоустойчивостью YDB.
 * **_(Экспериментально)_** Добавлена поддержка [федеративных запросов](concepts/query_execution/federated_query/index.md). Она позволяет получать информацию из различных источников данных без их переноса в YDB. Поддерживается взаимодействие с ClickHouse, PostgreSQL, S3 через YQL-запросы без дублирования данных между системами.
 
 ### Встроенный UI

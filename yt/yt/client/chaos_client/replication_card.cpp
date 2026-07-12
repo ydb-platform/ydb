@@ -186,7 +186,8 @@ void FormatValue(
     TStringBuf /*spec*/,
     std::optional<TReplicationProgressProjection> replicationProgressProjection)
 {
-    builder->AppendFormat("{Era: %v, Replicas: %v, CoordinatorCellIds: %v, TableId: %v, TablePath: %v, TableClusterName: %v, CurrentTimestamp: %v, CollocationId: %v}",
+    builder->AppendFormat("{Era: %v, Replicas: %v, CoordinatorCellIds: %v, TableId: %v, TablePath: %v, "
+        "TableClusterName: %v, CurrentTimestamp: %v, CollocationId: %v, SecondaryIndices: %v}",
         replicationCard.Era,
         MakeFormattableView(
             replicationCard.Replicas,
@@ -203,10 +204,11 @@ void FormatValue(
         replicationCard.TablePath,
         replicationCard.TableClusterName,
         replicationCard.CurrentTimestamp,
-        replicationCard.ReplicationCardCollocationId);
+        replicationCard.ReplicationCardCollocationId,
+        ConvertToYsonString(replicationCard.SecondaryIndices, NYson::EYsonFormat::Text));
 }
 
-TString ToString(
+std::string ToString(
     const TReplicationCard& replicationCard,
     std::optional<TReplicationProgressProjection> replicationProgressProjection)
 {
@@ -597,6 +599,16 @@ TTimestamp GetReplicationProgressMaxTimestamp(const TReplicationProgress& progre
         maxTimestamp = std::max(segment.Timestamp, maxTimestamp);
     }
     return maxTimestamp;
+}
+
+std::pair<TTimestamp, TTimestamp> GetReplicationProgressMinMaxTimestamp(const TReplicationProgress& progress)
+{
+    auto result = std::make_pair(MaxTimestamp, MinTimestamp);
+    for (const auto& segment : progress.Segments) {
+        result.first = std::min(segment.Timestamp, result.first);
+        result.second = std::max(segment.Timestamp, result.second);
+    }
+    return result;
 }
 
 std::optional<TTimestamp> FindReplicationProgressTimestampForKey(

@@ -53,7 +53,7 @@ void FillRequestFrom(IKqpGateway::TExecPhysicalRequest& request, const IKqpGatew
     request.IsolationLevel = from.IsolationLevel;
     request.RlPath = from.RlPath;
     request.NeedTxId = from.NeedTxId;
-    request.UseImmediateEffects = from.UseImmediateEffects;
+    request.FlushEffects = from.FlushEffects;
     request.UserTraceId = from.UserTraceId;
     request.OutputChunkMaxSize = from.OutputChunkMaxSize;
 }
@@ -460,6 +460,7 @@ private:
 
         for (const auto& tx : PreparedQuery->GetTransactions()) {
             for (const auto& stage : tx->GetStages()) {
+                AFL_ENSURE(stage.OutputTransformsSize() == 0);
                 for (const auto& sink : stage.GetSinks()) {
                     if (sink.GetTypeCase() == NKqpProto::TKqpSink::kInternalSink && sink.GetInternalSink().GetSettings().Is<NKikimrKqp::TKqpTableSinkSettings>()) {
                         YQL_ENSURE(sink.GetInternalSink().GetSettings().UnpackTo(&settings), "Failed to unpack settings");
@@ -635,10 +636,10 @@ private:
 
         auto batchSettings = NBatchOperations::TSettings(partInfo->LimitSize, Settings.MinBatchSize);
         const auto executerConfig = TExecuterConfig(MutableExecuterConfig, TableServiceConfig, TliConfig, UserCtx);
-        auto executerActor = CreateKqpExecuter(std::move(newRequest), Database, UserToken, NFormats::TFormatsSettings{}, RequestCounters,
+        auto* executerActor = CreateKqpExecuter(std::move(newRequest), Database, UserToken, NFormats::TFormatsSettings{}, RequestCounters,
             executerConfig, AsyncIoFactory, SelfId(), UserRequestContext, StatementResultIndex,
             FederatedQuerySetup, GUCSettings, prunerConfig, /* tableIdsForSnapshot */ {}, ShardIdToTableInfo, txManager, bufferActorId, std::move(batchSettings),
-            llvmSettings, /* queryServiceConfig */ {}, 0, ChannelService);
+            llvmSettings, /* queryServiceConfig */ {}, 0, ChannelService, PreparedQuery->GetUseKqpTasksGraphV2());
         auto exId = RegisterWithSameMailbox(executerActor);
 
         partInfo->ExecuterId = exId;

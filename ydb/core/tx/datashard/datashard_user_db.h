@@ -13,6 +13,10 @@ namespace NACLib {
     class TUserContext;
 }
 
+namespace NKikimr::NFulltext {
+    class IDeltaReader;
+};
+
 namespace NKikimr::NMiniKQL {
     struct TEngineHostCounters;
 }
@@ -95,6 +99,8 @@ class IDataShardConflictChecker {
 protected:
     ~IDataShardConflictChecker() = default;
 public:
+    virtual void AddInvisibleRowSkip() = 0;
+
     virtual void AddReadConflict(ui64 txId) = 0;
     virtual void CheckReadConflict(const TRowVersion& rowVersion) = 0;
     virtual void CheckReadDependency(ui64 txId) = 0;
@@ -209,6 +215,8 @@ public:
 
 //IDataShardConflictChecker
 public:
+    void AddInvisibleRowSkip() override;
+
     void AddReadConflict(ui64 txId) override;
     void CheckReadConflict(const TRowVersion& rowVersion) override;
     void CheckReadDependency(ui64 txId) override;
@@ -253,6 +261,7 @@ private:
 
     void IncreaseUpdateCounters(const TArrayRef<const TRawTypeValue> key, const TArrayRef<const NIceDb::TUpdateOp> ops);
     void IncreaseSelectCounters(const TArrayRef<const TRawTypeValue> key);
+    void IncreaseSelectCounters(const TArrayRef<const TCell> key);
 
     TArrayRef<const NIceDb::TUpdateOp> RemoveDefaultColumnsIfNeeded(const TTableId& tableId, const TArrayRef<const TRawTypeValue> key, const TArrayRef<const NIceDb::TUpdateOp> ops, const ui32 defaultFilledColumnCount);
 
@@ -271,6 +280,7 @@ private:
     TDataShardChangeGroupProvider ChangeGroupProvider;
 
     absl::flat_hash_map<TPathId, THolder<IDataShardChangeCollector>> ChangeCollectors;
+    ui64 InvisibleRowSkips = 0;
 
     YDB_READONLY_DEF(ui64, GlobalTxId);
     YDB_ACCESSOR_DEF(ui64, LockTxId);

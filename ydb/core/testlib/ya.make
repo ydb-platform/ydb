@@ -24,6 +24,7 @@ SRCS(
 
 PEERDIR(
     ydb/apps/version
+    ydb/core/audit/audit_config
     ydb/library/actors/core
     ydb/library/actors/interconnect
     ydb/public/sdk/cpp/src/library/grpc/client
@@ -52,9 +53,10 @@ PEERDIR(
     ydb/core/kesus/proxy
     ydb/core/kesus/tablet
     ydb/core/keyvalue
+    ydb/core/test_tablet
     ydb/core/kqp
     ydb/core/kqp/federated_query
-    ydb/core/kqp/federated_query/actors
+    ydb/services/scheme_secret
     ydb/core/kqp/finalize_script_service
     ydb/core/kqp/proxy_service
     ydb/core/metering
@@ -64,6 +66,7 @@ PEERDIR(
     ydb/core/mind/hive
     ydb/core/node_whiteboard
     ydb/core/persqueue
+    ydb/core/persqueue/deferred_publish
     ydb/core/protos
     ydb/core/security
     ydb/core/security/ldap_auth_provider

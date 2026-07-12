@@ -833,6 +833,116 @@ Y_UNIT_TEST_SUITE(KqpStreamIndexes) {
         }
     }
 
+    Y_UNIT_TEST_TWIN(UpdateDeleteReturningOnlyKey, StreamIndex) {
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableIndexStreamWrite(StreamIndex);
+
+        TKikimrRunner kikimr(settings);
+        Tests::NCommon::TLoggerInit(kikimr).Initialize();
+
+        auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+
+        const TString createQuery = Sprintf(R"(
+            CREATE TABLE `/Root/DataShard` (
+                c0 Int64, c1 Int64, c2 Int64,
+                PRIMARY KEY (c0, c1),
+                INDEX idx0 GLOBAL SYNC ON (c1)
+            );
+        )");
+
+        auto result = session.ExecuteSchemeQuery(createQuery).GetValueSync();
+        UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+
+        auto client = kikimr.GetQueryClient();
+
+        auto it = client.ExecuteQuery(
+            R"(
+                INSERT INTO `/Root/DataShard` (c0, c1, c2) VALUES (0, 0, 0);
+            )",
+            NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+
+        {
+            auto it = client.StreamExecuteQuery(
+                R"(
+                    UPDATE `/Root/DataShard` ON (c0, c1, c2) VALUES (0, 0, 1)
+                    RETURNING c1;
+                )",
+                NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+            TString output = StreamResultToYson(it);
+            CompareYson(output, R"([[[0]]])");
+        }
+
+        {
+            auto it = client.StreamExecuteQuery(
+                R"(
+                    DELETE FROM `/Root/DataShard` ON (c0, c1) VALUES (0, 0)
+                    RETURNING c1;
+                )",
+                NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+            TString output = StreamResultToYson(it);
+            CompareYson(output, R"([[[0]]])");
+        }
+    }
+
+    Y_UNIT_TEST_TWIN(ManyEmptyReturningClauses, StreamIndex) {
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableIndexStreamWrite(StreamIndex);
+
+        TKikimrRunner kikimr(settings);
+        Tests::NCommon::TLoggerInit(kikimr).Initialize();
+
+        auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+
+        const TString createQuery = R"(
+            CREATE TABLE `/Root/DataShard` (
+                c1 Bool, c2 Utf8 NOT NULL, c3 Int8 NOT NULL, c4 Uint32 NOT NULL, c5 Int8, c6 Uint8 NOT NULL,
+                PRIMARY KEY (c5),
+            );
+        )";
+
+        auto result = session.ExecuteSchemeQuery(createQuery).GetValueSync();
+        UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+
+        auto client = kikimr.GetQueryClient();
+
+        {
+            auto params = TParamsBuilder()
+                .AddParam("$p0_rows")
+                    .BeginList()
+                    .AddListItem()
+                        .BeginStruct()
+                        .AddMember("c5").Int8(0)
+                        .EndStruct()
+                    .EndList()
+                    .Build()
+                .AddParam("$p1_rows")
+                    .BeginList()
+                    .AddListItem()
+                        .BeginStruct()
+                        .AddMember("c5").Int8(1)
+                        .EndStruct()
+                    .EndList()
+                    .Build()
+                .Build();
+
+            auto it = client.ExecuteQuery(
+                R"(
+                    DELETE FROM `/Root/DataShard` ON
+                    SELECT * FROM AS_TABLE($p0_rows)
+                    RETURNING c6, c1, c2, c5, c4, c3;
+
+                    DELETE FROM `/Root/DataShard` ON
+                    SELECT * FROM AS_TABLE($p1_rows)
+                    RETURNING c5;
+                )",
+                NYdb::NQuery::TTxControl::BeginTx().CommitTx(), params).ExtractValueSync();
+            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+        }
+    }
+
     Y_UNIT_TEST_TWIN(SecondaryIndexInsertDuplicates, StreamIndex) {
         auto settings = TKikimrSettings().SetWithSampleTables(false);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableIndexStreamWrite(StreamIndex);
@@ -881,6 +991,592 @@ Y_UNIT_TEST_SUITE(KqpStreamIndexes) {
             }
         }
 
+    }
+
+    Y_UNIT_TEST_TWIN(UpsertUniqIndexNullKeys, StreamIndex) {
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableIndexStreamWrite(StreamIndex);
+
+        TKikimrRunner kikimr(settings);
+        Tests::NCommon::TLoggerInit(kikimr).Initialize();
+
+        auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+        const TString createQuery = R"(
+            CREATE TABLE `/Root/T` (
+                pk Int64,
+                u Int64,
+                PRIMARY KEY (pk),
+                INDEX idx GLOBAL UNIQUE SYNC ON (u)
+            );
+        )";
+        auto result = session.ExecuteSchemeQuery(createQuery).GetValueSync();
+        UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+
+        auto client = kikimr.GetQueryClient();
+
+        {
+            auto it = client.ExecuteQuery(R"(
+                UPSERT INTO `/Root/T` (pk, u) VALUES
+                    (1, NULL),
+                    (2, NULL),
+                    (3, 100),
+                    (4, NULL);
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+        }
+
+        {
+            auto it = client.StreamExecuteQuery(
+                "SELECT * FROM `/Root/T` ORDER BY pk;",
+                NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::SUCCESS, it.GetIssues().ToString());
+            CompareYson(R"([[[1];#];[[2];#];[[3];[100]];[[4];#]])", StreamResultToYson(it));
+        }
+
+        {
+            auto it = client.ExecuteQuery(
+                "UPSERT INTO `/Root/T` (pk, u) VALUES (5, NULL);",
+                NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+        }
+
+        {
+            auto it = client.StreamExecuteQuery(
+                "SELECT * FROM `/Root/T` ORDER BY pk;",
+                NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::SUCCESS, it.GetIssues().ToString());
+            CompareYson(R"([[[1];#];[[2];#];[[3];[100]];[[4];#];[[5];#]])", StreamResultToYson(it));
+        }
+
+        {
+            auto it = client.ExecuteQuery(
+                "UPSERT INTO `/Root/T` (pk, u) VALUES (6, 100);",
+                NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::PRECONDITION_FAILED, it.GetIssues().ToString());
+        }
+    }
+
+    Y_UNIT_TEST_TWIN(UpsertUniqIndexCompositePartialNull, StreamIndex) {
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableIndexStreamWrite(StreamIndex);
+
+        TKikimrRunner kikimr(settings);
+        Tests::NCommon::TLoggerInit(kikimr).Initialize();
+
+        auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+        const TString createQuery = R"(
+            CREATE TABLE `/Root/T` (
+                pk Int64,
+                a Int64,
+                b Int64,
+                PRIMARY KEY (pk),
+                INDEX idx GLOBAL UNIQUE SYNC ON (a, b)
+            );
+        )";
+        auto result = session.ExecuteSchemeQuery(createQuery).GetValueSync();
+        UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+
+        auto client = kikimr.GetQueryClient();
+
+        {
+            auto it = client.ExecuteQuery(R"(
+                UPSERT INTO `/Root/T` (pk, a, b) VALUES
+                    (1, 1, NULL),
+                    (2, 1, NULL),
+                    (3, NULL, 1),
+                    (4, NULL, 1),
+                    (5, 7, 8);
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+        }
+
+        {
+            auto it = client.StreamExecuteQuery(
+                "SELECT * FROM `/Root/T` ORDER BY pk;",
+                NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::SUCCESS, it.GetIssues().ToString());
+            CompareYson(
+                R"([[[1];#;[1]];[[1];#;[2]];[#;[1];[3]];[#;[1];[4]];[[7];[8];[5]]])",
+                StreamResultToYson(it));
+        }
+
+        {
+            auto it = client.ExecuteQuery(
+                "UPSERT INTO `/Root/T` (pk, a, b) VALUES (6, 7, 8);",
+                NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::PRECONDITION_FAILED, it.GetIssues().ToString());
+        }
+    }
+
+    Y_UNIT_TEST_TWIN(InsertUniqIndexConflictMessages, StreamIndex) {
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableIndexStreamWrite(StreamIndex);
+
+        TKikimrRunner kikimr(settings);
+        Tests::NCommon::TLoggerInit(kikimr).Initialize();
+
+        auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+        const TString createQuery = R"(
+            CREATE TABLE `/Root/T` (
+                pk Int64,
+                u Int64,
+                PRIMARY KEY (pk),
+                INDEX idx GLOBAL UNIQUE SYNC ON (u)
+            );
+        )";
+        auto result = session.ExecuteSchemeQuery(createQuery).GetValueSync();
+        UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+
+        auto client = kikimr.GetQueryClient();
+
+        {
+            auto it = client.ExecuteQuery(
+                "INSERT INTO `/Root/T` (pk, u) VALUES (1, 100);",
+                NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+        }
+
+        {
+            auto it = client.ExecuteQuery(
+                "INSERT INTO `/Root/T` (pk, u) VALUES (2, 100);",
+                NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::PRECONDITION_FAILED, it.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(it.GetIssues().ToString(), "Conflict with existing key.");
+        }
+
+        {
+            auto it = client.ExecuteQuery(R"(
+                INSERT INTO `/Root/T` (pk, u) VALUES
+                    (3, 200),
+                    (4, 200);
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::PRECONDITION_FAILED, it.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(it.GetIssues().ToString(), "Duplicated keys found.");
+        }
+
+        {
+            auto it = client.StreamExecuteQuery(
+                "SELECT * FROM `/Root/T` ORDER BY pk;",
+                NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::SUCCESS, it.GetIssues().ToString());
+            CompareYson(R"([[[1];[100]]])", StreamResultToYson(it));
+        }
+    }
+
+    Y_UNIT_TEST_TWIN(UniqIndexPkSubsetEnforced, StreamIndex) {
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableIndexStreamWrite(StreamIndex);
+
+        TKikimrRunner kikimr(settings);
+        Tests::NCommon::TLoggerInit(kikimr).Initialize();
+
+        auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+        const TString createQuery = R"(
+            CREATE TABLE `/Root/T` (
+                a Int64,
+                b Int64,
+                v Int64,
+                PRIMARY KEY (a, b),
+                INDEX idx GLOBAL UNIQUE SYNC ON (a)
+            );
+        )";
+        auto result = session.ExecuteSchemeQuery(createQuery).GetValueSync();
+        UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+
+        auto client = kikimr.GetQueryClient();
+
+        {
+            auto it = client.ExecuteQuery(
+                "UPSERT INTO `/Root/T` (a, b, v) VALUES (1, 1, 10);",
+                NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+        }
+
+        {
+            auto it = client.ExecuteQuery(
+                "UPSERT INTO `/Root/T` (a, b, v) VALUES (1, 2, 20);",
+                NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::PRECONDITION_FAILED, it.GetIssues().ToString());
+        }
+
+        {
+            auto it = client.ExecuteQuery(
+                "UPSERT INTO `/Root/T` (a, b, v) VALUES (1, 1, 11);",
+                NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+        }
+
+        {
+            auto it = client.StreamExecuteQuery(
+                "SELECT * FROM `/Root/T` ORDER BY a, b;",
+                NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::SUCCESS, it.GetIssues().ToString());
+            CompareYson(R"([[[1];[1];[11]]])", StreamResultToYson(it));
+        }
+    }
+
+    Y_UNIT_TEST_TWIN(ReplaceMultipleIndexesEquivalence, StreamIndex) {
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableIndexStreamWrite(StreamIndex);
+
+        TKikimrRunner kikimr(settings);
+        Tests::NCommon::TLoggerInit(kikimr).Initialize();
+
+        auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+        const TString createQuery = R"(
+            CREATE TABLE `/Root/T` (
+                pk Int64,
+                s1 Int64,
+                s2 Int64,
+                u Int64,
+                data Int64,
+                PRIMARY KEY (pk),
+                INDEX i1 GLOBAL SYNC ON (s1),
+                INDEX i2 GLOBAL SYNC ON (s2) COVER (data),
+                INDEX iu GLOBAL UNIQUE SYNC ON (u)
+            );
+        )";
+        auto result = session.ExecuteSchemeQuery(createQuery).GetValueSync();
+        UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+
+        auto client = kikimr.GetQueryClient();
+
+        {
+            auto it = client.ExecuteQuery(R"(
+                REPLACE INTO `/Root/T` (pk, s1, s2, u, data) VALUES
+                    (1, 10, 20, 1000, 111),
+                    (2, 11, 21, 1001, 222);
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+        }
+        {
+            auto it = client.ExecuteQuery(R"(
+                REPLACE INTO `/Root/T` (pk, s1, s2, u, data) VALUES
+                    (1, 99, 98, 9000, 999),
+                    (3, 12, 22, 1002, 333);
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+        }
+
+        const TString mainExpected =
+            R"([[[999];[1];[99];[98];[9000]];[[222];[2];[11];[21];[1001]];[[333];[3];[12];[22];[1002]]])";
+
+        {
+            auto it = client.StreamExecuteQuery(
+                "SELECT * FROM `/Root/T` ORDER BY pk;",
+                NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::SUCCESS, it.GetIssues().ToString());
+            CompareYson(mainExpected, StreamResultToYson(it));
+        }
+        {
+            auto it = client.StreamExecuteQuery(
+                "SELECT * FROM `/Root/T/i2/indexImplTable` ORDER BY pk;",
+                NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::SUCCESS, it.GetIssues().ToString());
+            CompareYson(
+                R"([[[999];[1];[98]];[[222];[2];[21]];[[333];[3];[22]]])",
+                StreamResultToYson(it));
+        }
+        {
+            auto it = client.StreamExecuteQuery(
+                "SELECT * FROM `/Root/T/iu/indexImplTable` ORDER BY pk;",
+                NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::SUCCESS, it.GetIssues().ToString());
+            CompareYson(
+                R"([[[1];[9000]];[[2];[1001]];[[3];[1002]]])",
+                StreamResultToYson(it));
+        }
+
+        const TString createQuery2 = R"(
+            CREATE TABLE `/Root/T2` (
+                pk Int64,
+                s1 Int64,
+                s2 Int64,
+                u Int64,
+                data Int64,
+                PRIMARY KEY (pk),
+                INDEX i1 GLOBAL SYNC ON (s1),
+                INDEX i2 GLOBAL SYNC ON (s2) COVER (data),
+                INDEX iu GLOBAL UNIQUE SYNC ON (u)
+            );
+        )";
+        UNIT_ASSERT_C(session.ExecuteSchemeQuery(createQuery2).GetValueSync().GetStatus() == NYdb::EStatus::SUCCESS, "create T2");
+        {
+            auto it = client.ExecuteQuery(R"(
+                UPSERT INTO `/Root/T2` (pk, s1, s2, u, data) VALUES
+                    (1, 99, 98, 9000, 999),
+                    (2, 11, 21, 1001, 222),
+                    (3, 12, 22, 1002, 333);
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+        }
+        {
+            auto it = client.StreamExecuteQuery(
+                "SELECT * FROM `/Root/T2` ORDER BY pk;",
+                NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::SUCCESS, it.GetIssues().ToString());
+            CompareYson(mainExpected, StreamResultToYson(it));
+        }
+        {
+            auto it = client.StreamExecuteQuery(
+                "SELECT * FROM `/Root/T2/i2/indexImplTable` ORDER BY pk;",
+                NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::SUCCESS, it.GetIssues().ToString());
+            CompareYson(
+                R"([[[999];[1];[98]];[[222];[2];[21]];[[333];[3];[22]]])",
+                StreamResultToYson(it));
+        }
+        {
+            auto it = client.StreamExecuteQuery(
+                "SELECT * FROM `/Root/T2/iu/indexImplTable` ORDER BY pk;",
+                NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::SUCCESS, it.GetIssues().ToString());
+            CompareYson(
+                R"([[[1];[9000]];[[2];[1001]];[[3];[1002]]])",
+                StreamResultToYson(it));
+        }
+    }
+
+    Y_UNIT_TEST_TWIN(UpsertPartialColumnsWithCoveringIndex, StreamIndex) {
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableIndexStreamWrite(StreamIndex);
+
+        TKikimrRunner kikimr(settings);
+        Tests::NCommon::TLoggerInit(kikimr).Initialize();
+
+        auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+        const TString createQuery = R"(
+            CREATE TABLE `/Root/T` (
+                pk Int64,
+                s Int64,
+                data Int64,
+                PRIMARY KEY (pk),
+                INDEX idx GLOBAL SYNC ON (s) COVER (data)
+            );
+        )";
+        auto result = session.ExecuteSchemeQuery(createQuery).GetValueSync();
+        UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+
+        auto client = kikimr.GetQueryClient();
+
+        {
+            auto it = client.ExecuteQuery(
+                "UPSERT INTO `/Root/T` (pk, s, data) VALUES (1, 10, 100);",
+                NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+        }
+        {
+            auto it = client.ExecuteQuery(
+                "UPSERT INTO `/Root/T` (pk, data) VALUES (1, 200);",
+                NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+        }
+
+        {
+            auto it = client.StreamExecuteQuery(
+                "SELECT * FROM `/Root/T` ORDER BY pk;",
+                NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::SUCCESS, it.GetIssues().ToString());
+            CompareYson(R"([[[200];[1];[10]]])", StreamResultToYson(it));
+        }
+        {
+            auto it = client.StreamExecuteQuery(
+                "SELECT * FROM `/Root/T/idx/indexImplTable` ORDER BY pk;",
+                NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::SUCCESS, it.GetIssues().ToString());
+            CompareYson(R"([[[200];[1];[10]]])", StreamResultToYson(it));
+        }
+
+        {
+            auto it = client.ExecuteQuery(
+                "UPSERT INTO `/Root/T` (pk, s) VALUES (1, 11);",
+                NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+        }
+        {
+            auto it = client.StreamExecuteQuery(
+                "SELECT * FROM `/Root/T` ORDER BY pk;",
+                NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::SUCCESS, it.GetIssues().ToString());
+            CompareYson(R"([[[200];[1];[11]]])", StreamResultToYson(it));
+        }
+        {
+            auto it = client.StreamExecuteQuery(
+                "SELECT * FROM `/Root/T/idx/indexImplTable` ORDER BY pk;",
+                NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::SUCCESS, it.GetIssues().ToString());
+            CompareYson(R"([[[200];[1];[11]]])", StreamResultToYson(it));
+        }
+    }
+
+    Y_UNIT_TEST_TWIN(UpsertDefaultColumnWithCoveringIndex, StreamIndex) {
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableIndexStreamWrite(StreamIndex);
+
+        TKikimrRunner kikimr(settings);
+        Tests::NCommon::TLoggerInit(kikimr).Initialize();
+
+        auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+        const TString createQuery = R"(
+            CREATE TABLE `/Root/T` (
+                pk Int64,
+                s Int64,
+                data Int64 NOT NULL DEFAULT 42,
+                PRIMARY KEY (pk),
+                INDEX idx GLOBAL SYNC ON (s) COVER (data)
+            );
+        )";
+        auto result = session.ExecuteSchemeQuery(createQuery).GetValueSync();
+        UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+
+        auto client = kikimr.GetQueryClient();
+
+        {
+            auto it = client.ExecuteQuery(
+                "INSERT INTO `/Root/T` (pk, s) VALUES (1, 10);",
+                NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+        }
+        {
+            auto it = client.ExecuteQuery(
+                "UPSERT INTO `/Root/T` (pk, s) VALUES (2, 20);",
+                NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+        }
+
+        {
+            auto it = client.StreamExecuteQuery(
+                "SELECT * FROM `/Root/T` ORDER BY pk;",
+                NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::SUCCESS, it.GetIssues().ToString());
+            CompareYson(R"([[42;[1];[10]];[42;[2];[20]]])", StreamResultToYson(it));
+        }
+        {
+            auto it = client.StreamExecuteQuery(
+                "SELECT * FROM `/Root/T/idx/indexImplTable` ORDER BY pk;",
+                NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::SUCCESS, it.GetIssues().ToString());
+            CompareYson(R"([[42;[1];[10]];[42;[2];[20]]])", StreamResultToYson(it));
+        }
+    }
+
+    Y_UNIT_TEST_TWIN(ConditionalUpdateIndexKeyChangeAndNoChange, StreamIndex) {
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableIndexStreamWrite(StreamIndex);
+
+        TKikimrRunner kikimr(settings);
+        Tests::NCommon::TLoggerInit(kikimr).Initialize();
+
+        auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+        const TString createQuery = R"(
+            CREATE TABLE `/Root/T` (
+                pk Int64,
+                s Int64,
+                tag Int64,
+                PRIMARY KEY (pk),
+                INDEX idx GLOBAL SYNC ON (s)
+            );
+        )";
+        auto result = session.ExecuteSchemeQuery(createQuery).GetValueSync();
+        UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+
+        auto client = kikimr.GetQueryClient();
+
+        {
+            auto it = client.ExecuteQuery(R"(
+                UPSERT INTO `/Root/T` (pk, s, tag) VALUES
+                    (1, 10, 0),
+                    (2, 20, 0),
+                    (3, 30, 1);
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+        }
+        {
+            auto it = client.ExecuteQuery(
+                "UPDATE `/Root/T` SET s = s + 100 WHERE tag = 0;",
+                NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+        }
+
+        {
+            auto it = client.StreamExecuteQuery(
+                "SELECT * FROM `/Root/T` ORDER BY pk;",
+                NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::SUCCESS, it.GetIssues().ToString());
+            CompareYson(R"([[[1];[110];[0]];[[2];[120];[0]];[[3];[30];[1]]])", StreamResultToYson(it));
+        }
+        {
+            auto it = client.StreamExecuteQuery(
+                "SELECT * FROM `/Root/T/idx/indexImplTable` ORDER BY pk;",
+                NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::SUCCESS, it.GetIssues().ToString());
+            CompareYson(R"([[[1];[110]];[[2];[120]];[[3];[30]]])", StreamResultToYson(it));
+        }
+    }
+
+    Y_UNIT_TEST_TWIN(ConditionalUpdateConcurrentDelete, StreamIndex) {
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableIndexStreamWrite(StreamIndex);
+
+        TKikimrRunner kikimr(settings);
+        Tests::NCommon::TLoggerInit(kikimr).Initialize();
+
+        auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+        const TString createQuery = R"(
+            CREATE TABLE `/Root/T` (
+                pk Int64,
+                s Int64,
+                v Int64,
+                PRIMARY KEY (pk),
+                INDEX idx GLOBAL SYNC ON (s)
+            );
+        )";
+        auto result = session.ExecuteSchemeQuery(createQuery).GetValueSync();
+        UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+
+        auto client = kikimr.GetQueryClient();
+        {
+            auto it = client.ExecuteQuery(
+                "UPSERT INTO `/Root/T` (pk, s, v) VALUES (1, 10, 100);",
+                NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+        }
+
+        auto session1 = client.GetSession().GetValueSync().GetSession();
+        auto session2 = client.GetSession().GetValueSync().GetSession();
+
+        auto r1 = session1.ExecuteQuery(R"(
+            PRAGMA kikimr.KqpForceImmediateEffectsExecution="true";
+            UPDATE `/Root/T` SET v = 200 WHERE pk = 1;
+        )", NYdb::NQuery::TTxControl::BeginTx(NYdb::NQuery::TTxSettings::SnapshotRW())).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(r1.GetStatus(), EStatus::SUCCESS, r1.GetIssues().ToString());
+        auto tx1 = r1.GetTransaction();
+        UNIT_ASSERT(tx1);
+
+        auto r2 = session2.ExecuteQuery(R"(
+            DELETE FROM `/Root/T` WHERE pk = 1;
+        )", NYdb::NQuery::TTxControl::BeginTx(NYdb::NQuery::TTxSettings::SnapshotRW()).CommitTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(r2.GetStatus(), EStatus::SUCCESS, r2.GetIssues().ToString());
+
+        auto c1 = session1.ExecuteQuery(R"(
+            SELECT * FROM `/Root/T`;
+        )", NYdb::NQuery::TTxControl::Tx(*tx1).CommitTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(c1.GetStatus(), EStatus::ABORTED, c1.GetIssues().ToString());
+
+        {
+            auto it = client.StreamExecuteQuery(
+                "SELECT * FROM `/Root/T` ORDER BY pk;",
+                NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::SUCCESS, it.GetIssues().ToString());
+            CompareYson(R"([])", StreamResultToYson(it));
+        }
+        {
+            auto it = client.StreamExecuteQuery(
+                "SELECT * FROM `/Root/T/idx/indexImplTable` ORDER BY pk;",
+                NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::SUCCESS, it.GetIssues().ToString());
+            CompareYson(R"([])", StreamResultToYson(it));
+        }
     }
 }
 }

@@ -35,7 +35,7 @@ RECURSE(
     keyvalue
     kqp
     load_test
-    local_pgwire
+    local_indexes
     local_proxy
     log_backend
     metering
@@ -46,7 +46,6 @@ RECURSE(
     nbs
     node_whiteboard
     persqueue
-    pgproxy
     public_http
     quoter
     raw_socket

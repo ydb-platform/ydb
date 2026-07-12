@@ -13,6 +13,7 @@ template <std::totally_ordered TKey, typename TPortion>
 struct CompactionTask {
     std::vector<typename TPortion::TConstPtr> Portions;
     ui8 TargetLevel;
+    TOptimizationPriority Priority;
 };
 
 template <typename TPortion>
@@ -57,10 +58,6 @@ struct ICompactionUnit {
         DoRemovePortion(p);
     }
 
-    std::vector<CompactionTask<TKey, TPortion>> GetOptimizationTasks(TFunctionRef<bool(typename TPortion::TConstPtr)> isLocked) const {
-        return DoGetOptimizationTasks(isLocked);
-    }
-
     std::optional<CompactionTask<TKey, TPortion>> GetNextOptimizationTask(TFunctionRef<bool(typename TPortion::TConstPtr)> isLocked) const {
         return DoGetNextOptimizationTask(isLocked);
     }
@@ -68,14 +65,10 @@ struct ICompactionUnit {
     virtual std::optional<CompactionTask<TKey, TPortion>> DoGetNextOptimizationTask(
         TFunctionRef<bool(typename TPortion::TConstPtr)> isLocked) const = 0;
 
-    virtual std::vector<CompactionTask<TKey, TPortion>> DoGetOptimizationTasks(TFunctionRef<bool(typename TPortion::TConstPtr)> isLocked) const {
-        if (const auto task = DoGetNextOptimizationTask(isLocked)) {
-            return { *task };
-        }
-        return {};
-    }
+    virtual void DoActualize(const TInstant /*currentInstant*/) {
+        return;
+    };
 
-    virtual void DoActualize() = 0;
     virtual TOptimizationPriority DoGetUsefulMetric() const = 0;
 
 protected:

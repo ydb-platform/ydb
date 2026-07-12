@@ -1,4 +1,3 @@
-/* postgres can not */
 SELECT
     IF(3 < 2, 13, 42U) AS i32_then,
     IF(3 < 2, 13U, 42) AS i32_else,

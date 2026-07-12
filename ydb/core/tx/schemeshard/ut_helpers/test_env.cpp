@@ -16,9 +16,11 @@
 #include <ydb/core/tx/columnshard/test_helper/columnshard_ut_common.h>
 #include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/tx/schemeshard/schemeshard_private.h>
+#include <ydb/core/tx/schemeshard/schemeshard_set_column_constraint.h>
 #include <ydb/core/tx/sequenceproxy/sequenceproxy.h>
 #include <ydb/core/tx/tx_allocator/txallocator.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
+#include <ydb/core/test_tablet/test_tablet.h>
 
 #include <ydb/services/metadata/ds_table/service.h>
 
@@ -640,7 +642,12 @@ NSchemeShardUT_Private::TTestEnv::TTestEnv(TTestActorRuntime& runtime, const TTe
     app.FeatureFlags.SetEnableAddUniqueIndex(true);
     app.FeatureFlags.SetEnableOnlineAddUniqueIndex(true);
     app.FeatureFlags.SetEnableFulltextIndex(true);
+    app.FeatureFlags.SetEnableFulltextIndexPrefix(opts.EnableFulltextIndexPrefix_);
+    app.FeatureFlags.SetEnableFulltextIndexRowId(opts.EnableFulltextIndexRowId_);
+    app.FeatureFlags.SetEnableJsonIndex(true);
+    app.FeatureFlags.SetEnableSetColumnConstraint(true);
     app.FeatureFlags.SetEnableColumnStore(true);
+    app.FeatureFlags.SetEnableColumnStatistics(true);
     app.FeatureFlags.SetEnableStrictAclCheck(opts.EnableStrictAclCheck_);
     app.SetEnableMoveIndex(opts.EnableMoveIndex_);
     app.SetEnableChangefeedInitialScan(opts.EnableChangefeedInitialScan_);
@@ -693,6 +700,9 @@ NSchemeShardUT_Private::TTestEnv::TTestEnv(TTestActorRuntime& runtime, const TTe
     }
     if (opts.MaxBuildIndexShardsInFlight_) {
         app.SchemeShardConfig.SetMaxBuildIndexShardsInFlight(*opts.MaxBuildIndexShardsInFlight_);
+    }
+    if (opts.MaxStoredIndexBuilds_) {
+        app.SchemeShardConfig.SetMaxStoredIndexBuilds(*opts.MaxStoredIndexBuilds_);
     }
 
     // graph settings
@@ -1066,6 +1076,9 @@ std::function<NActors::IActor *(const NActors::TActorId &, NKikimr::TTabletStora
         return [](const TActorId& tablet, TTabletStorageInfo* info) {
             return new TFakeFileStore(tablet, info);
         };
+    case TTabletTypes::TestShard:
+        return &NKikimr::NTestShard::CreateTestShard;
+
     default:
         return nullptr;
     }
@@ -1204,6 +1217,7 @@ NSchemeShardUT_Private::TTestWithReboots::TTestWithReboots(bool killOnCommit, NS
     NoRebootEventTypes.insert(TEvIndexBuilder::EvGetRequest);
     NoRebootEventTypes.insert(TEvIndexBuilder::EvCancelRequest);
     NoRebootEventTypes.insert(TEvIndexBuilder::EvForgetRequest);
+    NoRebootEventTypes.insert(TEvSetColumnConstraint::EvCreateRequest);
 }
 
 void NSchemeShardUT_Private::TTestWithReboots::Run(std::function<void (TTestActorRuntime &, bool &)> testScenario) {

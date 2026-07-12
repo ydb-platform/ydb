@@ -461,6 +461,10 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         case NKikimrSchemeOp::ESchemeOpCreateLongIncrementalBackupOp:
             return *modifyScheme.MutableBackupIncrementalBackupCollection()->MutableName();
 
+        case NKikimrSchemeOp::ESchemeOpCreateFullBackupOp:
+            // The aggregator has no sub-name; WorkingDir is the collection path.
+            return *modifyScheme.MutableWorkingDir();
+
         case NKikimrSchemeOp::ESchemeOpRestoreBackupCollection:
             return *modifyScheme.MutableRestoreBackupCollection()->MutableName();
 
@@ -497,6 +501,12 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
 
         case NKikimrSchemeOp::ESchemeOpTruncateTable:
             return *modifyScheme.MutableTruncateTable()->MutableTableName();
+
+        case NKikimrSchemeOp::ESchemeOpCreateTestShardSet:
+            return *modifyScheme.MutableCreateTestShardSet()->MutableName();
+
+        case NKikimrSchemeOp::ESchemeOpDropTestShardSet:
+            return *modifyScheme.MutableDrop()->MutableName();
         }
         Y_UNREACHABLE();
     }
@@ -529,6 +539,7 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         case NKikimrSchemeOp::ESchemeOpCreateSysView:
         case NKikimrSchemeOp::ESchemeOpCreateSecret:
         case NKikimrSchemeOp::ESchemeOpCreateStreamingQuery:
+        case NKikimrSchemeOp::ESchemeOpCreateTestShardSet:
             return true;
         default:
             return false;
@@ -922,6 +933,7 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         case NKikimrSchemeOp::ESchemeOpDropBackupCollection:
         case NKikimrSchemeOp::ESchemeOpDropSecret:
         case NKikimrSchemeOp::ESchemeOpDropStreamingQuery:
+        case NKikimrSchemeOp::ESchemeOpDropTestShardSet:
         {
             auto toResolve = TPathToResolve(pbModifyScheme);
             toResolve.Path = Merge(workingDir, SplitPath(GetPathNameForScheme(pbModifyScheme)));
@@ -985,6 +997,7 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         case NKikimrSchemeOp::ESchemeOpCreateResourcePool:
         case NKikimrSchemeOp::ESchemeOpCreateBackupCollection:
         case NKikimrSchemeOp::ESchemeOpCreateStreamingQuery:
+        case NKikimrSchemeOp::ESchemeOpCreateTestShardSet:
         {
             auto toResolve = TPathToResolve(pbModifyScheme);
             toResolve.Path = workingDir;
@@ -1057,6 +1070,14 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
             toResolve.Path = workingDir;
             auto collectionPath = SplitPath(pbModifyScheme.GetBackupIncrementalBackupCollection().GetName());
             std::move(collectionPath.begin(), collectionPath.end(), std::back_inserter(toResolve.Path));
+            toResolve.RequireAccess = NACLib::EAccessRights::GenericWrite;
+            ResolveForACL.push_back(toResolve);
+            break;
+        }
+        case NKikimrSchemeOp::ESchemeOpCreateFullBackupOp: {
+            // WorkingDir IS the backup-collection path; no sub-name to append.
+            auto toResolve = TPathToResolve(pbModifyScheme);
+            toResolve.Path = workingDir;
             toResolve.RequireAccess = NACLib::EAccessRights::GenericWrite;
             ResolveForACL.push_back(toResolve);
             break;
@@ -1474,6 +1495,9 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
                         return false;
                     }
                 }
+
+                // Admins can always change ACLs
+                allowACLBypass = isAdmin;
             } else if (modifyScheme.GetOperationType() == NKikimrSchemeOp::ESchemeOpAlterExtSubDomain) {
                 if (IsDB(entry) && !IsClusterAdministrator) {
                     const auto errString = MakeAccessDeniedError(ctx, entry.Path, TStringBuilder()
@@ -1708,19 +1732,12 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
             {
                 auto& targetUser = *alterLogin.MutableCreateUser();
                 if (targetUser.GetHashedPassword()) {
-                    // to support compatibility between old and new hash formats
+                    // an old-format hash may come e.g. from a local backup restore;
                     // TODO: remove after the end of old format support in local backups
-                    auto hashes = NLogin::ConvertHashes(targetUser.GetHashedPassword());
-                    if (hashes) {
-                        targetUser.SetPassword(std::move(hashes->OldHashFormat));
-                        targetUser.SetIsHashedPassword(true);
-                        targetUser.SetHashedPassword(std::move(hashes->NewHashFormat));
-                    } else {
-                        auto issue = MakeIssue(NKikimrIssues::TIssuesIds::DEFAULT_ERROR,
-                            "Unsupported format of hashed password");
-                        ReportStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::PreconditionFailed, nullptr, &issue, ctx);
-                        return Die(ctx);
+                    if (NLogin::IsOldFormatHash(targetUser.GetHashedPassword())) {
+                        targetUser.SetHashedPassword(NLogin::ConvertOldFormatHash(targetUser.GetHashedPassword()));
                     }
+                    targetUser.ClearPassword();
                 } else {
                     RunPasswordHasher(ctx, targetUser.GetUser(), targetUser.GetPassword());
                     return;
@@ -1731,19 +1748,12 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
             {
                 auto& targetUser = *alterLogin.MutableModifyUser();
                 if (targetUser.HasHashedPassword()) {
-                    // to support compatibility between old and new hash formats
+                    // an old-format hash may come e.g. from a local backup restore;
                     // TODO: remove after the end of old format support in local backups
-                    auto hashes = NLogin::ConvertHashes(targetUser.GetHashedPassword());
-                    if (hashes) {
-                        targetUser.SetPassword(std::move(hashes->OldHashFormat));
-                        targetUser.SetIsHashedPassword(true);
-                        targetUser.SetHashedPassword(std::move(hashes->NewHashFormat));
-                    } else {
-                        auto issue = MakeIssue(NKikimrIssues::TIssuesIds::DEFAULT_ERROR,
-                            "Unsupported format of hashed password");
-                        ReportStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::PreconditionFailed, nullptr, &issue, ctx);
-                        return Die(ctx);
+                    if (NLogin::IsOldFormatHash(targetUser.GetHashedPassword())) {
+                        targetUser.SetHashedPassword(NLogin::ConvertOldFormatHash(targetUser.GetHashedPassword()));
                     }
+                    targetUser.ClearPassword();
                 } else if (targetUser.HasPassword()) {
                     RunPasswordHasher(ctx, targetUser.GetUser(), targetUser.GetPassword());
                     return;
@@ -1774,8 +1784,7 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         {
             auto& targetUser = *alterLogin.MutableCreateUser();
             targetUser.SetUser(std::move(computedHashes->PreparedUsername));
-            targetUser.SetPassword(std::move(computedHashes->ArgonHash));
-            targetUser.SetIsHashedPassword(true);
+            targetUser.ClearPassword();
             targetUser.SetHashedPassword(std::move(computedHashes->Hashes));
             break;
         }
@@ -1783,8 +1792,7 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         {
             auto& targetUser = *alterLogin.MutableModifyUser();
             targetUser.SetUser(std::move(computedHashes->PreparedUsername));
-            targetUser.SetPassword(std::move(computedHashes->ArgonHash));
-            targetUser.SetIsHashedPassword(true);
+            targetUser.ClearPassword();
             targetUser.SetHashedPassword(std::move(computedHashes->Hashes));
             break;
         }

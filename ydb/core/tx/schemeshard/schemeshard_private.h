@@ -1,6 +1,7 @@
 #pragma once
 #include "schemeshard_identificators.h"
 
+#include <ydb/core/base/storage_pools.h>
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
 
 #include <ydb/core/protos/flat_scheme_op.pb.h>
@@ -54,6 +55,10 @@ namespace TEvPrivate {
         EvTestNotifySubdomainCleanup,
         EvFlushConditionalEraseBatch,
         EvRunForcedCompaction,
+        EvProgressTablePartitionsFormatSweep,
+        EvFullBackupItemDone,
+        EvProgressForcedCompaction,
+        EvMoveShardToStoragePool,
         EvEnd
     };
 
@@ -380,6 +385,46 @@ namespace TEvPrivate {
         const TPathId Item;
         const bool Success = false;
         const TString Error;
+    };
+
+    struct TEvProgressTablePartitionsFormatSweep
+        : public TEventLocal<TEvProgressTablePartitionsFormatSweep, EvProgressTablePartitionsFormatSweep>
+    {};
+
+    // Sent self->self post-commit when a CopyTable sub-op of a tracked full backup finishes.
+    struct TEvFullBackupItemDone : public NActors::TEventLocal<TEvFullBackupItemDone, EvFullBackupItemDone> {
+        TEvFullBackupItemDone(ui64 fullBackupId, TPathId dstPathId, bool success)
+            : FullBackupId(fullBackupId)
+            , DstPathId(dstPathId)
+            , Success(success)
+        {}
+
+        const ui64 FullBackupId;
+        const TPathId DstPathId;
+        const bool Success;
+    };
+
+    struct TEvProgressForcedCompaction : TEventLocal<TEvProgressForcedCompaction, EvProgressForcedCompaction> {
+        TEvProgressForcedCompaction()
+        {}
+    };
+
+    // Sent by the DevUI move-shard actor once Hive acks, to persist the shard's new channel
+    // bindings in a dedicated tx. That tx also answers the HTTP request (from Complete()), so
+    // success is reported only after the binding is durable. HttpSender: the request's sender;
+    // HiveReply: the already-serialized Hive response to hand back.
+    struct TEvMoveShardToStoragePool : public TEventLocal<TEvMoveShardToStoragePool, EvMoveShardToStoragePool> {
+        TShardIdx ShardIdx;
+        TChannelsBindings NewBindings;
+        TActorId HttpSender;
+        TString HiveReply;
+
+        TEvMoveShardToStoragePool(const TShardIdx& shardIdx, TChannelsBindings newBindings, const TActorId& httpSender, TString hiveReply)
+            : ShardIdx(shardIdx)
+            , NewBindings(std::move(newBindings))
+            , HttpSender(httpSender)
+            , HiveReply(std::move(hiveReply))
+        {}
     };
 
 }; // TEvPrivate

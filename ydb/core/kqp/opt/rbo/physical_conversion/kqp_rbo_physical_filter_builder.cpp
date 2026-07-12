@@ -25,7 +25,6 @@ TExprNode::TPtr TPhysicalFilterBuilder::BuildPhysicalOp(TExprNode::TPtr input) {
 
     auto lambda = TCoLambda(Filter->FilterExpr.Node);
     auto lambdaBody = lambda.Body().Ptr();
-    const bool isPg = lambdaBody->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Pg;
 
     auto isMember = [&](const TExprNode::TPtr& node) -> bool {
         if (node->IsCallable("Member")) {
@@ -44,17 +43,6 @@ TExprNode::TPtr TPhysicalFilterBuilder::BuildPhysicalOp(TExprNode::TPtr input) {
     }
 
     auto lambdaResult = Ctx.ReplaceNodes(std::move(lambdaBody), replaces);
-    if (isPg) {
-        // Fixes coalesce type mismatch.
-        // clang-format off
-        lambdaResult = Ctx.Builder(Pos)
-            .Callable("FromPg")
-                .Add(0, lambdaResult)
-            .Seal()
-        .Build();
-        // clang-format on
-    }
-
     // clang-format off
     lambdaResult = Build<TCoCoalesce>(Ctx, Pos)
         .Predicate(lambdaResult)
@@ -74,7 +62,7 @@ TExprNode::TPtr TPhysicalFilterBuilder::BuildPhysicalOp(TExprNode::TPtr input) {
     .Done().Ptr();
     // clang-format on
 
-    input = NPhysicalConvertionUtils::BuildNarrowMapForWideInput(input, inputColumns, Ctx);
+    input = NPhysicalConvertionUtils::BuildNarrowMapForWideInput(input, inputColumns, NPhysicalConvertionUtils::BuildNameSet(Filter->GetOutputIUs()), Ctx);
 
     // clang-format off
     input = Build<TCoFromFlow>(Ctx, Pos)

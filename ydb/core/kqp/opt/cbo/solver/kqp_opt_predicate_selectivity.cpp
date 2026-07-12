@@ -131,7 +131,9 @@ namespace {
             case EInequalityPredicateType::Equal:
                 return estimator->EstimateEqual<T>(val);
             case EInequalityPredicateType::NotEqual:
-                return estimator->GetNumElements() - estimator->EstimateEqual<T>(val);
+                auto equal = estimator->EstimateEqual<T>(val);
+                auto total = estimator->GetNumElements();
+                return (equal <= total) ? (total - equal) : 0;
         }
         return Nothing();
     }
@@ -223,6 +225,14 @@ namespace {
             i8 l = FromString<i8>(left);
             i8 r = FromString<i8>(right);
             return (l < r) ? -1 : (l > r) ? 1 : 0;
+        } else if (columnType == "Uint16") {
+            ui16 l = FromString<ui16>(left);
+            ui16 r = FromString<ui16>(right);
+            return (l < r) ? -1 : (l > r) ? 1 : 0;
+        } else if (columnType == "Int16") {
+            i16 l = FromString<i16>(left);
+            i16 r = FromString<i16>(right);
+            return (l < r) ? -1 : (l > r) ? 1 : 0;
         } else if (columnType == "Uint32") {
             ui32 l = FromString<ui32>(left);
             ui32 r = FromString<ui32>(right);
@@ -243,13 +253,17 @@ namespace {
             float l = FromString<float>(left);
             float r = FromString<float>(right);
             return (l < r) ? -1 : (l > r) ? 1 : 0;
-        } else if (columnType == "Double" || columnType == "Decimal(12,2)") {
+        } else if (columnType == "Double" || columnType.StartsWith("Decimal")) {
             double l = FromString<double>(left);
             double r = FromString<double>(right);
             return (l < r) ? -1 : (l > r) ? 1 : 0;
-        } else if (columnType == "Date" || columnType == "Date32") {
+        } else if (columnType == "Date") {
             ui16 l = FromString<ui16>(left);
             ui16 r = FromString<ui16>(right);
+            return (l < r) ? -1 : (l > r) ? 1 : 0;
+        } else if (columnType == "Date32") {
+            i32 l = FromString<i32>(left);
+            i32 r = FromString<i32>(right);
             return (l < r) ? -1 : (l > r) ? 1 : 0;
         } else if (columnType == "Datetime") {
             ui32 l = FromString<ui32>(left);
@@ -277,7 +291,22 @@ namespace {
         const TMaybe<TString> literal = ExtractLiteral(maybeLiteral);
         if (literal.Defined()) {
             const TString value = literal.GetRef();
-            if (columnType == "Uint32") {
+            if (columnType == "Bool") {
+                ui8 val = FromString<bool>(value);
+                return EstimateInequalityPredicateByType<ui8>(eqWidthHistogram, val, predicate);
+            } else if (columnType == "Uint8") {
+                ui8 val = FromString<ui8>(value);
+                return EstimateInequalityPredicateByType<ui8>(eqWidthHistogram, val, predicate);
+            } else if (columnType == "Int8") {
+                i8 val = FromString<i8>(value);
+                return EstimateInequalityPredicateByType<i8>(eqWidthHistogram, val, predicate);
+            } else if (columnType == "Uint16") {
+                ui16 val = FromString<ui16>(value);
+                return EstimateInequalityPredicateByType<ui16>(eqWidthHistogram, val, predicate);
+            } else if (columnType == "Int16") {
+                i16 val = FromString<i16>(value);
+                return EstimateInequalityPredicateByType<i16>(eqWidthHistogram, val, predicate);
+            } else if (columnType == "Uint32") {
                 ui32 val = FromString<ui32>(value);
                 return EstimateInequalityPredicateByType<ui32>(eqWidthHistogram, val, predicate);
             } else if (columnType == "Int32") {
@@ -289,12 +318,15 @@ namespace {
             } else if (columnType == "Int64") {
                 i64 val = FromString<i64>(value);
                 return EstimateInequalityPredicateByType<i64>(eqWidthHistogram, val, predicate);
-            } else if (columnType == "Double" || columnType == "Decimal(12,2)") {
+            } else if (columnType == "Double" || columnType.StartsWith("Decimal")) {
                 double val = FromString<double>(value);
                 return EstimateInequalityPredicateByType<double>(eqWidthHistogram, val, predicate);
-            } else if (columnType == "Date" || columnType == "Date32") {
+            } else if (columnType == "Date") {
                 ui16 val = FromString<ui16>(value);
                 return EstimateInequalityPredicateByType<ui16>(eqWidthHistogram, val, predicate);
+            } else if (columnType == "Date32") {
+                i32 val = FromString<i32>(value);
+                return EstimateInequalityPredicateByType<i32>(eqWidthHistogram, val, predicate);
             }
             // TODO: Add support for other types.
             return Nothing();
@@ -314,7 +346,27 @@ namespace {
             const TString leftValue = leftLiteral.GetRef();
             const TString rightValue = rightLiteral.GetRef();
 
-            if (columnType == "Uint32") {
+            if (columnType == "Bool") {
+                ui8 leftVal = FromString<bool>(leftValue);
+                ui8 rightVal = FromString<bool>(rightValue);
+                return EstimateRangePredicateByType<ui8>(eqWidthHistogram, leftVal, rightVal, leftPredicate, rightPredicate);
+            } else if (columnType == "Uint8") {
+                ui8 leftVal = FromString<ui8>(leftValue);
+                ui8 rightVal = FromString<ui8>(rightValue);
+                return EstimateRangePredicateByType<ui8>(eqWidthHistogram, leftVal, rightVal, leftPredicate, rightPredicate);
+            } else if (columnType == "Int8") {
+                i8 leftVal = FromString<i8>(leftValue);
+                i8 rightVal = FromString<i8>(rightValue);
+                return EstimateRangePredicateByType<i8>(eqWidthHistogram, leftVal, rightVal, leftPredicate, rightPredicate);
+            } else if (columnType == "Uint16") {
+                ui16 leftVal = FromString<ui16>(leftValue);
+                ui16 rightVal = FromString<ui16>(rightValue);
+                return EstimateRangePredicateByType<ui16>(eqWidthHistogram, leftVal, rightVal, leftPredicate, rightPredicate);
+            } else if (columnType == "Int16") {
+                i16 leftVal = FromString<i16>(leftValue);
+                i16 rightVal = FromString<i16>(rightValue);
+                return EstimateRangePredicateByType<i16>(eqWidthHistogram, leftVal, rightVal, leftPredicate, rightPredicate);
+            } else if (columnType == "Uint32") {
                 ui32 leftVal = FromString<ui32>(leftValue);
                 ui32 rightVal = FromString<ui32>(rightValue);
                 return EstimateRangePredicateByType<ui32>(eqWidthHistogram, leftVal, rightVal, leftPredicate, rightPredicate);
@@ -330,14 +382,18 @@ namespace {
                 i64 leftVal = FromString<i64>(leftValue);
                 i64 rightVal = FromString<i64>(rightValue);
                 return EstimateRangePredicateByType<i64>(eqWidthHistogram, leftVal, rightVal, leftPredicate, rightPredicate);
-            } else if (columnType == "Double" || columnType == "Decimal(12,2)") {
+            } else if (columnType == "Double" || columnType.StartsWith("Decimal")) {
                 double leftVal = FromString<double>(leftValue);
                 double rightVal = FromString<double>(rightValue);
                 return EstimateRangePredicateByType<double>(eqWidthHistogram, leftVal, rightVal, leftPredicate, rightPredicate);
-            } else if (columnType == "Date" || columnType == "Date32") {
+            } else if (columnType == "Date") {
                 ui16 leftVal = FromString<ui16>(leftValue);
                 ui16 rightVal = FromString<ui16>(rightValue);
                 return EstimateRangePredicateByType<ui16>(eqWidthHistogram, leftVal, rightVal, leftPredicate, rightPredicate);
+            } else if (columnType == "Date32") {
+                i32 leftVal = FromString<i32>(leftValue);
+                i32 rightVal = FromString<i32>(rightValue);
+                return EstimateRangePredicateByType<i32>(eqWidthHistogram, leftVal, rightVal, leftPredicate, rightPredicate);
             }
             // TODO: Add support for other types.
             return Nothing();
@@ -360,6 +416,12 @@ namespace {
             } else if (columnType == "Int8") {
                 i8 val = FromString<i8>(value);
                 return countMinSketch->Probe(reinterpret_cast<const char*>(&val), sizeof(val));
+            } else if (columnType == "Uint16") {
+                ui16 val = FromString<ui16>(value);
+                return countMinSketch->Probe(reinterpret_cast<const char*>(&val), sizeof(val));
+            } else if (columnType == "Int16") {
+                i16 val = FromString<i16>(value);
+                return countMinSketch->Probe(reinterpret_cast<const char*>(&val), sizeof(val));
             } else if (columnType == "Uint32") {
                 ui32 val = FromString<ui32>(value);
                 return countMinSketch->Probe(reinterpret_cast<const char*>(&val), sizeof(val));
@@ -375,11 +437,14 @@ namespace {
             } else if (columnType == "Float") {
                 float val = FromString<float>(value);
                 return countMinSketch->Probe(reinterpret_cast<const char*>(&val), sizeof(val));
-            } else if (columnType == "Double" || columnType == "Decimal(12,2)") {
+            } else if (columnType == "Double" || columnType.StartsWith("Decimal")) {
                 double val = FromString<double>(value);
                 return countMinSketch->Probe(reinterpret_cast<const char*>(&val), sizeof(val));
-            } else if (columnType == "Date" || columnType == "Date32") {
+            } else if (columnType == "Date") {
                 ui16 val = FromString<ui16>(value);
+                return countMinSketch->Probe(reinterpret_cast<const char*>(&val), sizeof(val));
+            } else if (columnType == "Date32") {
+                i32 val = FromString<i32>(value);
                 return countMinSketch->Probe(reinterpret_cast<const char*>(&val), sizeof(val));
             } else if (columnType == "Datetime") {
                 ui32 val = FromString<ui32>(value);
@@ -426,9 +491,25 @@ namespace NKikimr::NKqp {
 
 
 TMaybe<TString> TPredicateSelectivityComputer::GetAttributeType(const TString& attributeName) {
-    if (Stats && Stats->ColumnStatistics) {
-        return Stats->ColumnStatistics->Data[attributeName].Type;
+    if (!Stats || !Stats->ColumnStatistics) {
+        return Nothing();
     }
+
+    TString columnName = attributeName;
+    if (Lineage) {
+        const auto& mapping = Lineage->Mapping;
+        if (mapping.contains(TInfoUnit(attributeName).GetFullName())) {
+            const auto& entry = mapping.at(TInfoUnit(attributeName).GetFullName());
+            auto infoUnit = TInfoUnit(entry.TableName, entry.ColumnName);
+            columnName = infoUnit.GetColumnName();
+        }
+    }
+
+    auto it = Stats->ColumnStatistics->Data.find(columnName);
+    if (it != Stats->ColumnStatistics->Data.end()) {
+        return it->second.Type;
+    }
+
     return Nothing();
 }
 
@@ -448,7 +529,7 @@ double TPredicateSelectivityComputer::ComputeInequalitySelectivity(
         if (IsAttribute(right)) {
             return TWO_COLUMNS_DEFAULT_SELECTIVITY;
         } else if (IsConstantExprWithParams(right.Ptr())) {
-            const TString attributeName = attribute.GetRef();
+            TString attributeName = attribute.GetRef();
             if (!IsConstantExpr(right.Ptr())) {
                 return DefaultInequalitySelectivity(Stats, attributeName);
             }
@@ -462,6 +543,15 @@ double TPredicateSelectivityComputer::ComputeInequalitySelectivity(
                 return DefaultInequalitySelectivity(Stats, attributeName);
             }
 
+            if (Lineage) {
+                const auto& mapping = Lineage->Mapping;
+                if (mapping.contains(TInfoUnit(attributeName).GetFullName())) {
+                    const auto& entry = mapping.at(TInfoUnit(attributeName).GetFullName());
+                    auto infoUnit = TInfoUnit(entry.TableName, entry.ColumnName);
+                    attributeName = infoUnit.GetColumnName();
+                }
+            }
+
             if (const auto eqWidthHistogram = Stats->ColumnStatistics->Data[attributeName].EqWidthHistogramEstimator) {
                 const auto columnType = Stats->ColumnStatistics->Data[attributeName].Type;
                 TMaybe<ui64> estimation = EstimateInequalityPredicateByHistogram(right, columnType, eqWidthHistogram, predicate);
@@ -469,7 +559,7 @@ double TPredicateSelectivityComputer::ComputeInequalitySelectivity(
                     return DefaultInequalitySelectivity(Stats, attributeName);
                 }
                 // Should we compare the number of rows in histogram against `Nrows` and adjust `value` based on that ?!
-                return estimation.GetRef() / Stats->Nrows;
+                return estimation.GetRef() / std::max(Stats->Nrows, 1e-4);
             }
             return DefaultInequalitySelectivity(Stats, attributeName);
         }
@@ -502,7 +592,7 @@ double TPredicateSelectivityComputer::ComputeEqualitySelectivity(
 
         // In case the right side is a constant that can be extracted, compute the selectivity using statistics
         else if (IsConstantExprWithParams(right.Ptr())) {
-            const TString attributeName = attribute.GetRef();
+            TString attributeName = attribute.GetRef();
             if (!IsConstantExpr(right.Ptr())) {
                 return DefaultEqualitySelectivity(Stats, attributeName);
             }
@@ -523,13 +613,22 @@ double TPredicateSelectivityComputer::ComputeEqualitySelectivity(
                 return DefaultEqualitySelectivity(Stats, attributeName);
             }
 
+            if (Lineage) {
+                const auto& mapping = Lineage->Mapping;
+                if (mapping.contains(TInfoUnit(attributeName).GetFullName())) {
+                    const auto& entry = mapping.at(TInfoUnit(attributeName).GetFullName());
+                    auto infoUnit = TInfoUnit(entry.TableName, entry.ColumnName);
+                    attributeName = infoUnit.GetColumnName();
+                }
+            }
+
             if (const auto countMinSketch = Stats->ColumnStatistics->Data[attributeName].CountMinSketch) {
                 const auto columnType = Stats->ColumnStatistics->Data[attributeName].Type;
                 TMaybe<ui32> estimation = EstimateEqualityPredicateBySketch(right, columnType, countMinSketch);
                 if (!estimation.Defined() || !Stats->Nrows) {
                     return DefaultEqualitySelectivity(Stats, attributeName);
                 }
-                return estimation.GetRef() / Stats->Nrows;
+                return estimation.GetRef() / std::max(Stats->Nrows, 1e-4);
             }
             return DefaultEqualitySelectivity(Stats, attributeName);
         }
@@ -613,7 +712,7 @@ std::shared_ptr<TTreeNode> TPredicateSelectivityComputer::ProcessStringPredicate
     return node;
 }
 
-std::shared_ptr<TTreeNode> TPredicateSelectivityComputer::ProcessRegexPredicte(
+std::shared_ptr<TTreeNode> TPredicateSelectivityComputer::ProcessRegexPredicate(
     bool underNot,
     bool collectMembers
 ) {
@@ -705,7 +804,6 @@ std::shared_ptr<TTreeNode> TPredicateSelectivityComputer::ConvertInequalityToRan
             node->Range = std::move(rangeNode);
         }
     }
-
 
     return node;
 }
@@ -829,6 +927,15 @@ double TPredicateSelectivityComputer::ReComputeEstimation(TString attributeName,
         return DefaultEqualitySelectivity(Stats, attributeName); 
     }
 
+    if (Lineage) {
+        const auto& mapping = Lineage->Mapping;
+        if (mapping.contains(TInfoUnit(attributeName).GetFullName())) {
+            const auto& entry = mapping.at(TInfoUnit(attributeName).GetFullName());
+            auto infoUnit = TInfoUnit(entry.TableName, entry.ColumnName);
+            attributeName = infoUnit.GetColumnName();
+        }
+    }
+
     // point predicate logic
     if (mergedRange.LeftBound.Defined() && mergedRange.RightBound.Defined()
             && mergedRange.LeftBound.GetRef() == mergedRange.RightBound.GetRef()) {
@@ -852,7 +959,7 @@ double TPredicateSelectivityComputer::ReComputeEstimation(TString attributeName,
             if (!estimation.Defined()) {
                 return DefaultEqualitySelectivity(Stats, attributeName);
             }
-            return (double) estimation.GetRef() / Stats->Nrows;
+            return (double) estimation.GetRef() / std::max(Stats->Nrows, 1e-4);
         }
 
         return DefaultEqualitySelectivity(Stats, attributeName);
@@ -889,7 +996,7 @@ double TPredicateSelectivityComputer::ReComputeEstimation(TString attributeName,
             if (!estimation.Defined()) {
                 return DefaultInequalitySelectivity(Stats, attributeName);
             }
-            return (double) estimation.GetRef() / Stats->Nrows;
+            return (double) estimation.GetRef() / std::max(Stats->Nrows, 1e-4);
         }
 
         return DefaultInequalitySelectivity(Stats, attributeName);
@@ -903,7 +1010,7 @@ double TPredicateSelectivityComputer::ReComputeEstimation(TString attributeName,
     TMaybe<TExprBase> nodePtr;
     EInequalityPredicateType inequalitySign;
     if (mergedRange.Left.Defined()) {
-        mergedRange.Left.GetRef();
+        nodePtr = mergedRange.Left.GetRef();
         inequalitySign = EInequalityPredicateType::Greater;
         if (mergedRange.LeftInclusive) {
             inequalitySign = EInequalityPredicateType::GreaterOrEqual;
@@ -928,7 +1035,7 @@ double TPredicateSelectivityComputer::ReComputeEstimation(TString attributeName,
         if (!estimation.Defined()) {
             return DefaultInequalitySelectivity(Stats, attributeName);
         }
-        return (double) estimation.GetRef() / Stats->Nrows;
+        return (double) estimation.GetRef() / std::max(Stats->Nrows, 1e-4);
     }
 
     return DefaultInequalitySelectivity(Stats, attributeName);
@@ -1080,10 +1187,8 @@ double TPredicateSelectivityComputer::ComputeSelectivity(const std::shared_ptr<T
     }
 
     else if (node->Operator == ELogicalOperator::Leaf) {
-        TString tableAlias;
         if (node->TableAlias.Defined()) {
             tableAliases.insert(node->TableAlias.GetRef());
-            tableAlias = node->TableAlias.GetRef();
         }
         return node->Selectivity;
     }
@@ -1109,16 +1214,16 @@ double TPredicateSelectivityComputer::ComputeSelectivity(const std::shared_ptr<T
         }
 
         // intersect overlaps and re-compute selectivity
-        for (auto& entry : columnSelectivities) {
-            if (entry.second.size() == 0) {
-
-            } else if (entry.second.size() == 1) {
-                resSelectivity *= ComputeSelectivity(entry.second.front(), tableAliases);
+        for (auto& column : columnSelectivities) {
+            if (column.second.size() == 0) {
+                // do nothing
+            } else if (column.second.size() == 1) {
+                resSelectivity *= ComputeSelectivity(column.second.front(), tableAliases);
             } else {
-                TString columnType = entry.second.front()->ColumnType;
-                TMaybe<TPredicateRange> mergedRange = IntersectOverlappingConjunctions(entry.second, columnType);
+                TString columnType = column.second.front()->ColumnType;
+                TMaybe<TPredicateRange> mergedRange = IntersectOverlappingConjunctions(column.second, columnType);
                 if (mergedRange.Defined()) {
-                    resSelectivity *= ReComputeEstimation(entry.first, mergedRange.GetRef());
+                    resSelectivity *= ReComputeEstimation(column.first, mergedRange.GetRef());
                 } else {
                     // in case of no overlaps, zero selectivity
                     return 0.0;
@@ -1150,21 +1255,21 @@ double TPredicateSelectivityComputer::ComputeSelectivity(const std::shared_ptr<T
         }
 
         // union overlaps and re-compute selectivity
-        for (auto& entry : columnSelectivities) {
-            if (entry.second.size() == 0) {
-
-            } else if (entry.second.size() == 1) {
-                resSelectivity += ComputeSelectivity(entry.second.front(), tableAliases);
+        for (auto& column : columnSelectivities) {
+            if (column.second.size() == 0) {
+                // do nothing
+            } else if (column.second.size() == 1) {
+                resSelectivity += ComputeSelectivity(column.second.front(), tableAliases);
             } else {
-                TString columnType = entry.second.front()->ColumnType;
-                TMaybe<TVector<TPredicateRange>> allMergedRanges = UnionOverlappingDisjunctions(entry.second, columnType);
+                TString columnType = column.second.front()->ColumnType;
+                TMaybe<TVector<TPredicateRange>> allMergedRanges = UnionOverlappingDisjunctions(column.second, columnType);
                 if (allMergedRanges.Defined()) {
                     for (auto& mergedRange : allMergedRanges.GetRef()) {
                         // domain full coverage
                         if (!mergedRange.LeftBound.Defined() && !mergedRange.RightBound.Defined()) {
                             return 1.0;
                         }
-                        resSelectivity += ReComputeEstimation(entry.first, mergedRange);
+                        resSelectivity += ReComputeEstimation(column.first, mergedRange);
                     }
                 } else {
                     // in case of no overlaps, zero selectivity
@@ -1188,8 +1293,10 @@ double TPredicateSelectivityComputer::Compute(const NNodes::TExprBase& input) {
 
     TSet<TString> tableAliases;
     double resSelectivity = ComputeSelectivity(rootNode, tableAliases);
-    if (tableAliases.size() != 1) {
-        YQL_CLOG(TRACE, CoreDq) << "No or multiple table aliases in computing selectivity.";
+    if (tableAliases.size() == 0) {
+        YQL_CLOG(TRACE, CoreDq) << "No table aliases in computing selectivity.";
+    } else if (tableAliases.size() != 1) {
+        YQL_CLOG(TRACE, CoreDq) << "Multiple table aliases in computing selectivity.";
     }
 
     return std::min(1.0, resSelectivity);
@@ -1334,7 +1441,7 @@ std::shared_ptr<TTreeNode> TPredicateSelectivityComputer::ComputeImpl(
         auto atom = input.Cast<TCoAtom>();
         // regexp (all starts with Re2)
         if (atom.StringValue().StartsWith("Re2")) {
-            return ProcessRegexPredicte(underNot, collectMembers);
+            return ProcessRegexPredicate(underNot, collectMembers);
         }
     }
 

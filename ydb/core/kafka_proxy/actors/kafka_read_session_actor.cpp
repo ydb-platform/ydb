@@ -258,11 +258,11 @@ void TKafkaReadSessionActor::SendSyncGroupResponseOk(const TActorContext& ctx, u
 
     auto assignment = BuildAssignmentAndInformBalancerIfRelease(ctx);
 
-    TWritableBuf buf(nullptr, assignment.Size(ASSIGNMENT_VERSION) + sizeof(ASSIGNMENT_VERSION));
+    TKafkaWriteBuffer buf(Context->Config.GetPacketSize());
     TKafkaWritable writable(buf);
     writable << ASSIGNMENT_VERSION;
     assignment.Write(writable, ASSIGNMENT_VERSION);
-    response->AssignmentStr = TString(buf.GetFrontBuffer().data(), buf.GetFrontBuffer().size());
+    response->AssignmentStr = buf.AsString();
     response->Assignment = response->AssignmentStr;
 
     Send(Context->ConnectionId, new TEvKafka::TEvResponse(corellationId, response, EKafkaErrors::NONE_ERROR));
@@ -334,14 +334,16 @@ bool TKafkaReadSessionActor::TryFillTopicsToRead(const TMessagePtr<TJoinGroupReq
     }
 
     auto result = GetSubscriptions(*request);
-    for (auto topic: result->Topics) {
-        if (topic.has_value()) {
-            KAFKA_LOG_D("JOIN_GROUP requested topic to read: " << topic);
+    if (result.has_value()) {
+        for (auto topic: result->Topics) {
+            if (topic.has_value()) {
+                KAFKA_LOG_D("JOIN_GROUP requested topic to read: " << topic);
 
-            auto normalizedTopicName = NormalizePath(Context->DatabasePath, topic.value());
-            OriginalTopicNames[normalizedTopicName] = topic.value();
-            OriginalTopicNames[normalizedTopicName + "/streamImpl"] = topic.value();
-            topics.emplace(normalizedTopicName);
+                auto normalizedTopicName = NormalizePath(Context->DatabasePath, topic.value());
+                OriginalTopicNames[normalizedTopicName] = topic.value();
+                OriginalTopicNames[normalizedTopicName + "/streamImpl"] = topic.value();
+                topics.emplace(normalizedTopicName);
+            }
         }
     }
 

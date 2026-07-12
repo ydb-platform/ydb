@@ -8,6 +8,7 @@
 #include <ydb/core/persqueue/pqtablet/common/event_helpers.h>
 #include <ydb/core/persqueue/pqtablet/cache/read.h>
 #include <ydb/core/persqueue/pqtablet/readproxy/readproxy.h>
+#include <ydb/core/persqueue/pqtablet/batching/batch_processor.h>
 #include <ydb/core/persqueue/public/constants.h>
 #include <ydb/core/persqueue/public/utils.h>
 #include <ydb/core/persqueue/pqtablet/common/tracing_support.h>
@@ -56,7 +57,6 @@ static constexpr ui32 MAX_BYTES = 25_MB;
 static constexpr ui32 MAX_SOURCE_ID_LENGTH = 2048;
 static constexpr ui32 MAX_HEARTBEAT_SIZE = 2_KB;
 static constexpr ui32 MAX_TXS = 1000;
-
 struct TChangeNotification {
     TChangeNotification(const TActorId& actor, const ui64 txId)
         : Actor(actor)
@@ -1125,6 +1125,22 @@ void TPersQueue::Handle(TEvPQ::TEvPartitionCounters::TPtr& ev, const TActorConte
     SetTxCounters();
 }
 
+void TPersQueue::Handle(TEvPQ::TEvConsumerBatchProcessorMetrics::TPtr& ev, const TActorContext&)
+{
+    const auto partitionId = ev->Get()->PartitionId;
+
+    auto it = Partitions.find(TPartitionId{partitionId});
+    if (it == Partitions.end()) {
+        return;
+    }
+
+    auto& partitionInfo = it->second;
+    if (!partitionInfo.InitDone) {
+        return;
+    }
+    Forward(ev, partitionInfo.Actor);
+}
+
 
 void TPersQueue::AggregateAndSendLabeledCountersFor(const TString& group, const TActorContext& ctx)
 {
@@ -1866,6 +1882,28 @@ void TPersQueue::HandleUpdateWriteTimestampRequest(const ui64 responseCookie, NW
     ctx.Send(partActor, event.Release(), 0, 0, std::move(traceId));
 }
 
+void TPersQueue::FillBatchInfo(
+    const NKikimrClient::TPersQueuePartitionRequest::TCmdWrite& cmd,
+    TEvPQ::TEvWrite::TMsg& msg) const
+{
+    if (cmd.HasMaxSeqNo()) {
+        msg.MaxSeqNo = static_cast<ui64>(cmd.GetMaxSeqNo());
+    }
+    msg.LogicalMessageCount = static_cast<ui32>(cmd.GetLogicalMessageCount());
+    msg.IsBatch = cmd.GetIsBatch();
+    if (cmd.GetPartNo() > 0) {
+        return;
+    }
+
+    msg.PartitionKeys.reserve(cmd.PartitionKeysSize());
+    for (ui32 i = 0; i < cmd.PartitionKeysSize(); ++i) {
+        const auto& partitionKey = cmd.GetPartitionKeys(i);
+        msg.PartitionKeys.emplace_back(
+            partitionKey.GetKey(),
+            partitionKey.HasSize() ? static_cast<ui64>(partitionKey.GetSize()) : 0);
+    }
+}
+
 void TPersQueue::HandleWriteRequest(const ui64 responseCookie, NWilson::TTraceId traceId, const TActorId& partActor,
                                     const NKikimrClient::TPersQueuePartitionRequest& req, const TActorContext& ctx)
 {
@@ -1945,6 +1983,10 @@ void TPersQueue::HandleWriteRequest(const ui64 responseCookie, NWilson::TTraceId
             errorStr = "too long partition key";
         } else if (cmd.GetSeqNo() < 0) {
             errorStr = "SeqNo must be >= 0";
+        } else if (cmd.HasMaxSeqNo() && cmd.GetMaxSeqNo() < 0) {
+            errorStr = "MaxSeqNo must be >= 0";
+        } else if (cmd.GetLogicalMessageCount() < 1 || cmd.GetLogicalMessageCount() > MAX_LOGICAL_MESSAGE_COUNT) {
+            errorStr = TStringBuilder() << "LogicalMessageCount must be >= 1 and <= " << MAX_LOGICAL_MESSAGE_COUNT;
         } else if (cmd.HasPartNo() && (cmd.GetPartNo() < 0 || cmd.GetPartNo() >= Max<ui16>())) {
             errorStr = "PartNo must be >= 0 and < 65535";
         } else if (cmd.HasPartNo() != cmd.HasTotalParts()) {
@@ -2056,8 +2098,9 @@ void TPersQueue::HandleWriteRequest(const ui64 responseCookie, NWilson::TTraceId
                     .HeartbeatVersion = heartbeatVersion,
                     .EnableKafkaDeduplication = cmd.GetEnableKafkaDeduplication(),
                     .ProducerEpoch = (cmd.HasProducerEpoch() ? TMaybe<i32>(cmd.GetProducerEpoch()) : Nothing()),
-                    .MessageDeduplicationId = deduplicationId
+                    .MessageDeduplicationId = deduplicationId,
                 });
+                FillBatchInfo(cmd, msgs.back());
 
                 partNo++;
                 uncompressedSize = 0;
@@ -2106,8 +2149,9 @@ void TPersQueue::HandleWriteRequest(const ui64 responseCookie, NWilson::TTraceId
                 .HeartbeatVersion = heartbeatVersion,
                 .EnableKafkaDeduplication = cmd.GetEnableKafkaDeduplication(),
                 .ProducerEpoch = (cmd.HasProducerEpoch() ? TMaybe<i32>(cmd.GetProducerEpoch()) : Nothing()),
-                .MessageDeduplicationId = std::move(deduplicationId)
+                .MessageDeduplicationId = std::move(deduplicationId),
             });
+            FillBatchInfo(cmd, msgs.back());
         }
         PQ_LOG_D("got client message topic: " << (TopicConverter ? TopicConverter->GetClientsideName() : "Undefined") <<
                  " partition: " << req.GetPartition() <<
@@ -2271,6 +2315,7 @@ void TPersQueue::HandleReadRequest(
                                        cmd.GetClientId(),
                                        cmd.HasTimeoutMs() ? cmd.GetTimeoutMs() : 0,
                                        bytes,
+                                       cmd.GetReadToBlobEnd(),
                                        cmd.HasMaxTimeLagMs() ? cmd.GetMaxTimeLagMs() : 0,
                                        cmd.HasReadTimestampMs() ? cmd.GetReadTimestampMs() : 0,
                                        clientDC,
@@ -2611,7 +2656,7 @@ void TPersQueue::HandleEventForSupportivePartition(const ui64 responseCookie,
         // This branch happens when previous Kafka transaction has committed and we receive write for next one
         // after PQ has deleted supportive partition and before it has deleted writeId from TxWrites (tx has not transaitioned to DELETED state)
         PQ_LOG_D("GetOwnership request for the next Kafka transaction while previous is being deleted. Saving it till the complete delete of the previous tx.%01");
-        KafkaNextTransactionRequests[writeId.KafkaProducerInstanceId].push_back(event);
+        KafkaNextTransactionRequests[writeId.GetKafkaProducerInstanceId()].push_back(event);
         return;
     } else if (TxWrites.contains(writeId) && TxWrites.at(writeId).Partitions.contains(originalPartitionId)) {
         //
@@ -2632,7 +2677,7 @@ void TPersQueue::HandleEventForSupportivePartition(const ui64 responseCookie,
             // This branch happens when previous Kafka transaction has committed and we receive write for next one
             // before PQ has deleted supportive partition for previous transaction
             PQ_LOG_D("GetOwnership request for the next Kafka transaction while previous is being deleted. Saving it till the complete delete of the previous tx.%02");
-            KafkaNextTransactionRequests[writeId.KafkaProducerInstanceId].push_back(event);
+            KafkaNextTransactionRequests[writeId.GetKafkaProducerInstanceId()].push_back(event);
             return;
         }
 
@@ -2650,10 +2695,10 @@ void TPersQueue::HandleEventForSupportivePartition(const ui64 responseCookie,
     } else {
         if (!req.GetNeedSupportivePartition()) {
             // missing supportivce partition in kafka transaction means that we already committed and deleted transaction for current producerId + producerEpoch
-            NPersQueue::NErrorCode::EErrorCode errorCode = writeId.KafkaApiTransaction ?
+            NPersQueue::NErrorCode::EErrorCode errorCode = writeId.IsKafkaApiTransaction() ?
                 NPersQueue::NErrorCode::KAFKA_TRANSACTION_MISSING_SUPPORTIVE_PARTITION :
                 NPersQueue::NErrorCode::PRECONDITION_FAILED;
-            TString error = writeId.KafkaApiTransaction ?
+            TString error = writeId.IsKafkaApiTransaction() ?
                 "Kafka transaction and there is no supportive partition for current producerId and producerEpoch. It means GetOwnership request was not called from TPartitionWriter" :
                 "lost messages";
 
@@ -2696,7 +2741,7 @@ void TPersQueue::HandleEventForSupportivePartition(const ui64 responseCookie,
             SubscribeWriteId(writeId, ctx);
         }
 
-        if (writeId.KafkaApiTransaction) {
+        if (writeId.IsKafkaApiTransaction()) {
             writeInfo.KafkaTransaction = true;
             writeInfo.CreatedAt = TAppData::TimeProvider->Now();
         }
@@ -2727,7 +2772,8 @@ void TPersQueue::Handle(TEvPersQueue::TEvRequest::TPtr& ev, const TActorContext&
             directKey.SessionId = pipeIter->second.SessionId;
             directKey.PartitionSessionId = pipeIter->second.PartitionSessionId;
         }
-        TActorId rr = ctx.RegisterWithSameMailbox(CreateReadProxy(ev->Sender, TabletID(), ctx.SelfID, GetGeneration(), directKey, request));
+        TActorId rr = ctx.RegisterWithSameMailbox(CreateReadProxy(
+            ev->Sender, TabletID(), ctx.SelfID, GetGeneration(), directKey, request, BatchProcessorActor));
         ans = CreateResponseProxy(rr, ctx.SelfID, TopicName, p, m, s, c, ResourceMetrics, ctx);
     } else {
         ans = CreateResponseProxy(ev->Sender, ctx.SelfID, TopicName, p, m, s, c, ResourceMetrics, ctx);
@@ -2971,6 +3017,7 @@ void TPersQueue::HandleDie(const TActorContext& ctx)
         ctx.Send(p.second.Actor, new TEvents::TEvPoisonPill());
     }
     ctx.Send(CacheActor, new TEvents::TEvPoisonPill());
+    ctx.Send(BatchProcessorActor, new TEvents::TEvPoisonPill());
 
     for (auto& pipe : PipesInfo) {
         if (!pipe.second.SessionId.empty()) {
@@ -3035,6 +3082,7 @@ void TPersQueue::CreatedHook(const TActorContext& ctx)
 {
     IsServerless = AppData(ctx)->FeatureFlags.GetEnableDbCounters(); //TODO: find out it via describe
     CacheActor = ctx.RegisterWithSameMailbox(new TPQCacheProxy(ctx.SelfID, TabletID()));
+    BatchProcessorActor = ctx.Register(NBatching::CreateBatchProcessor(TabletID(), ctx.SelfID));
 
     SamplingControl = AppData(ctx)->TracingConfigurator->GetControl();
 
@@ -3168,7 +3216,7 @@ void TPersQueue::ScheduleDeleteExpiredKafkaTransactions() {
 
     for (auto& pair : TxWrites) {
         if (txnExpired(pair.second)) {
-            PQ_LOG_D("Transaction for Kafka producer " << pair.first.KafkaProducerInstanceId << " is expired");
+            PQ_LOG_D("Transaction for Kafka producer " << pair.first.GetKafkaProducerInstanceId() << " is expired");
             BeginDeletePartitions(pair.first, pair.second);
         }
     }
@@ -3176,7 +3224,7 @@ void TPersQueue::ScheduleDeleteExpiredKafkaTransactions() {
 
 void TPersQueue::TryContinueKafkaWrites(const TMaybe<TWriteId> writeId, const TActorContext& ctx) {
     if (writeId.Defined() && writeId->IsKafkaApiTransaction()) {
-        auto it = KafkaNextTransactionRequests.find(writeId->KafkaProducerInstanceId);
+        auto it = KafkaNextTransactionRequests.find(writeId->GetKafkaProducerInstanceId());
         if (it != KafkaNextTransactionRequests.end()) {
             for (auto& request : it->second) {
                 Handle(request, ctx);
@@ -3351,6 +3399,28 @@ void TPersQueue::HandleDataTransaction(TAutoPtr<TEvPersQueue::TEvProposeTransact
                                     "empty list of operations",
                                     ctx);
         return;
+    }
+
+    if (txBody.HasWriteId() && GetWriteId(txBody).IsDeferredPublicationApiTransaction()) {
+        PQ_LOG_TX_W("TxId " << event.GetTxId() << " deferred publication is not supported");
+        SendProposeTransactionAbort(ActorIdFromProto(event.GetSourceActor()),
+                                    event.GetTxId(),
+                                    NKikimrPQ::TError::BAD_REQUEST,
+                                    "deferred publication is not supported",
+                                    ctx);
+        return;
+    }
+
+    for (const auto& operation : txBody.GetOperations()) {
+        if (IsDeferredPublicationTxOperation(operation)) {
+            PQ_LOG_TX_W("TxId " << event.GetTxId() << " deferred publication is not supported");
+            SendProposeTransactionAbort(ActorIdFromProto(event.GetSourceActor()),
+                                        event.GetTxId(),
+                                        NKikimrPQ::TError::BAD_REQUEST,
+                                        "deferred publication is not supported",
+                                        ctx);
+            return;
+        }
     }
 
     if (!CheckTxWriteOperations(txBody)) {
@@ -3655,17 +3725,19 @@ bool TPersQueue::CanProcessTxWrites() const
 void TPersQueue::SubscribeWriteId(const TWriteId& writeId,
                                   const TActorContext& ctx)
 {
+    PQ_ENSURE(writeId.IsTopicApiTransaction());
     PQ_LOG_TX_D("send TEvSubscribeLock for WriteId " << writeId);
-    ctx.Send(NLongTxService::MakeLongTxServiceID(writeId.NodeId),
-             new NLongTxService::TEvLongTxService::TEvSubscribeLock(writeId.KeyId, writeId.NodeId));
+    ctx.Send(NLongTxService::MakeLongTxServiceID(writeId.GetNodeId()),
+             new NLongTxService::TEvLongTxService::TEvSubscribeLock(writeId.GetKeyId(), writeId.GetNodeId()));
 }
 
 void TPersQueue::UnsubscribeWriteId(const TWriteId& writeId,
                                     const TActorContext& ctx)
 {
+    PQ_ENSURE(writeId.IsTopicApiTransaction());
     PQ_LOG_TX_D("send TEvUnsubscribeLock for WriteId " << writeId);
-    ctx.Send(NLongTxService::MakeLongTxServiceID(writeId.NodeId),
-             new NLongTxService::TEvLongTxService::TEvUnsubscribeLock(writeId.KeyId, writeId.NodeId));
+    ctx.Send(NLongTxService::MakeLongTxServiceID(writeId.GetNodeId()),
+             new NLongTxService::TEvLongTxService::TEvUnsubscribeLock(writeId.GetKeyId(), writeId.GetNodeId()));
 }
 
 void TPersQueue::CreateSupportivePartitionActors(const TActorContext& ctx)
@@ -4979,6 +5051,7 @@ IActor* TPersQueue::CreatePartitionActor(const TPartitionId& partitionId,
                           SubDomainOutOfSpace,
                           (ui32)channels,
                           GetPartitionQuoter(partitionId),
+                          BatchProcessorActor,
                           SamplingControl,
                           newPartition);
 }
@@ -5581,6 +5654,7 @@ bool TPersQueue::HandleHook(STFUNC_SIG)
         HFuncTraced(TEvKeyValue::TEvResponse, Handle);
         HFuncTraced(TEvPQ::TEvInitComplete, Handle);
         HFuncTraced(TEvPQ::TEvPartitionCounters, Handle);
+        HFuncTraced(TEvPQ::TEvConsumerBatchProcessorMetrics, Handle);
         HFuncTraced(TEvPQ::TEvMetering, Handle);
         HFuncTraced(TEvPQ::TEvPartitionLabeledCounters, Handle);
         HFuncTraced(TEvPQ::TEvPartitionLabeledCountersDrop, Handle);

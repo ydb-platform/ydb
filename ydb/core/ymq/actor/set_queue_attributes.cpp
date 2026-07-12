@@ -117,7 +117,7 @@ private:
             hFunc(TEvWakeup,      HandleWakeup);
             hFunc(TSqsEvents::TEvExecuted, HandleExecuted);
             hFunc(TSqsEvents::TEvQueueId,  HandleQueueId);
-            hFunc(NPQ::NSchema::TEvAlterTopicResponse, Handle);
+            hFunc(NPQ::NSchema::TEvSchemaResponse, Handle);
         }
     }
 
@@ -215,7 +215,7 @@ private:
         Send(QueueLeader_, MakeHolder<TSqsEvents::TEvClearQueueAttributesCache>());
     }
 
-    void Handle(NPQ::NSchema::TEvAlterTopicResponse::TPtr& ev) {
+    void Handle(NPQ::NSchema::TEvSchemaResponse::TPtr& ev) {
         const auto& response = *ev->Get();
         if (response.Status == Ydb::StatusIds::SUCCESS) {
             NotifyQueueLeader();

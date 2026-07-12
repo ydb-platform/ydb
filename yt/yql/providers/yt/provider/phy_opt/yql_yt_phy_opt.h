@@ -48,6 +48,8 @@ private:
 
     NNodes::TMaybeNode<NNodes::TExprBase> FillToMaterialize(NNodes::TExprBase node, TExprContext& ctx) const;
 
+    NNodes::TMaybeNode<NNodes::TExprBase> BypassPersistBeforePublish(NNodes::TExprBase node, TExprContext& ctx, const TGetParents& getParents) const;
+
     NNodes::TMaybeNode<NNodes::TExprBase> TakeOrSkip(NNodes::TExprBase node, TExprContext& ctx, const TGetParents& getParents) const;
 
     NNodes::TMaybeNode<NNodes::TExprBase> Extend(NNodes::TExprBase node, TExprContext& ctx) const;
@@ -178,8 +180,10 @@ private:
 
     NNodes::TExprBase RebuildKeyFilterAfterPushDown(NNodes::TExprBase filter, size_t usedKeysCount, TExprContext& ctx) const;
 
+    NNodes::TMaybeNode<NNodes::TExprBase> OptimizeAssumeConstraints(TPositionHandle pos, NNodes::TExprBase input, const TConstraintSet& constraints, TExprContext& ctx, const TGetParents& getParents) const;
+
 private:
     const TYtState::TPtr State_;
 };
 
-}  // namespace NYql
+} // namespace NYql

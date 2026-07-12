@@ -14,7 +14,6 @@ public:
     TFmrJobFactory(const TFmrJobFactorySettings& settings)
         : NumThreads_(settings.NumThreads), MaxQueueSize_(settings.MaxQueueSize), Function_(settings.Function), RandomProvider_(settings.RandomProvider)
     {
-        YQL_ENSURE(NumThreads_ > 1);
         Start();
     }
 
@@ -57,7 +56,8 @@ public:
     }
 
     void Start() override {
-        ThreadPool_ = CreateThreadPool(NumThreads_, MaxQueueSize_, TThreadPool::TParams().SetBlocking(true).SetCatching(true));
+        ThreadPool_.Reset(new TThreadPool(TThreadPool::TParams().SetBlocking(true).SetCatching(true)));
+        ThreadPool_->Start(NumThreads_, MaxQueueSize_);
     }
 
     void Stop() override {

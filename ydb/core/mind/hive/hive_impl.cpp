@@ -690,6 +690,31 @@ void THive::BuildCurrentConfig() {
     for (const NKikimrConfig::THiveTabletPreference& tabletPreference : CurrentConfig.GetDefaultTabletPreference()) {
         DefaultDataCentersPreference[tabletPreference.GetType()] = tabletPreference.GetDataCentersPreference();
     }
+    TabletTypeAllowedMetricsDefaults.clear();
+    auto setComputeMetric = [](TVector<i64>& metrics, i64 metricId, auto value) {
+        if (value == NKikimrConfig::THiveConfig::THiveTabletAllowedMetrics::Default) {
+            return;
+        }
+        auto it = Find(metrics, metricId);
+        if (value == NKikimrConfig::THiveConfig::THiveTabletAllowedMetrics::Enabled && it == metrics.end()) {
+            metrics.emplace_back(metricId);
+        } else if (value == NKikimrConfig::THiveConfig::THiveTabletAllowedMetrics::Disabled && it != metrics.end()) {
+            metrics.erase(it);
+        }
+    };
+    for (const auto& allowedMetrics : CurrentConfig.GetDefaultTabletAllowedMetrics()) {
+        for (auto t : allowedMetrics.GetTabletType()) {
+            const TTabletTypes::EType tabletType = TTabletTypes::EType(t);
+            if (!IsValidTabletType(tabletType)) {
+                continue;
+            }
+            TVector<i64> metricIds = GetDefaultAllowedMetricIdsForType(tabletType);
+            setComputeMetric(metricIds, NKikimrTabletBase::TMetrics::kCPUFieldNumber, allowedMetrics.GetCPU());
+            setComputeMetric(metricIds, NKikimrTabletBase::TMetrics::kMemoryFieldNumber, allowedMetrics.GetMemory());
+            setComputeMetric(metricIds, NKikimrTabletBase::TMetrics::kNetworkFieldNumber, allowedMetrics.GetNetwork());
+            TabletTypeAllowedMetricsDefaults.insert_or_assign(tabletType, std::move(metricIds));
+        }
+    }
     BalancerIgnoreTabletTypes.clear();
     for (auto i : CurrentConfig.GetBalancerIgnoreTabletTypes()) {
         const auto type = TTabletTypes::EType(i);
@@ -904,7 +929,7 @@ void THive::Handle(TEvPrivate::TEvKickTablet::TPtr &ev) {
             Execute(CreateRestartTablet(tabletId));
         }
     } else {
-        Execute(CreateRestartTablet(tabletId));
+        Execute(CreateForceRestartTablet(tabletId));
     }
 }
 
@@ -1039,6 +1064,9 @@ void THive::Handle(TEvHive::TEvReassignTablet::TPtr &ev) {
                     groups[i].SetErasureSpecies(groupParameters.GetErasureSpecies());
                 }
                 groups[i].SetGroupID(record.GetForcedGroupIDs(i));
+            }
+            if (!std::exchange(tablet->IsMarkedForReassign, true)) {
+                UpdateCounterTabletsReassigning(+1);
             }
             Execute(CreateUpdateTabletGroups(tablet->Id, std::move(groups)));
         } else {
@@ -1812,6 +1840,14 @@ void THive::UpdateCounterTabletsDeleting() {
     }
 }
 
+void THive::UpdateCounterTabletsReassigning(i64 tabletsReassigningDiff) {
+    if (TabletCounters != nullptr) {
+        auto& counter = TabletCounters->Simple()[NHive::COUNTER_TABLETS_REASSIGNING];
+        auto newValue = counter.Get() + tabletsReassigningDiff;
+        counter.Set(newValue);
+    }
+}
+
 void THive::RecordTabletMove(const TTabletMoveInfo& moveInfo) {
     TabletMoveHistory.PushBack(moveInfo);
     TabletCounters->Cumulative()[NHive::COUNTER_TABLETS_MOVED].Increment(1);
@@ -2453,7 +2489,7 @@ void THive::RemoveNodeFromSegments(TNodeInfo* node) {
         NodeSegments.erase(it);
     }
 }
- 
+
 void THive::RemoveNodeFromSegments(TNodeId nodeId) {
     if (auto* node = FindNode(nodeId)) {
         RemoveNodeFromSegments(node);
@@ -2846,12 +2882,15 @@ const TVector<i64>& THive::GetDefaultAllowedMetricIdsForType(TTabletTypes::EType
 }
 
 const TVector<i64>& THive::GetTabletTypeAllowedMetricIds(TTabletTypes::EType type) const {
-    const TVector<i64>& defaultAllowedMetricIds = GetDefaultAllowedMetricIdsForType(type);
     auto it = TabletTypeAllowedMetrics.find(type);
     if (it != TabletTypeAllowedMetrics.end()) {
         return it->second;
     }
-    return defaultAllowedMetricIds;
+    it = TabletTypeAllowedMetricsDefaults.find(type);
+    if (it != TabletTypeAllowedMetricsDefaults.end()) {
+        return it->second;
+    }
+    return GetDefaultAllowedMetricIdsForType(type);
 }
 
 THolder<TGroupFilter> THive::BuildGroupParametersForChannel(const TLeaderTabletInfo& tablet, ui32 channelId) {
@@ -2954,7 +2993,8 @@ void THive::CreateTabletFollowers(TLeaderTabletInfo& tablet, NIceDb::TNiceDb& db
                 }
                 for (ui32 i = 0; i < group.GetFollowerCountForDataCenter(dataCenterId); ++i) {
                     TFollowerTabletInfo& follower = tablet.AddFollower(group);
-                    follower.NodeFilter.AllowedDataCenters = {dataCenterId};
+                    follower.NodeFilter.AllowedDataCenters.Clear();
+                    follower.NodeFilter.AllowedDataCenters.AddDataCenter(dataCenterId);
                     follower.Statistics.SetLastAliveTimestamp(TlsActivationContext->Now().MilliSeconds());
                     db.Table<Schema::TabletFollowerTablet>().Key(tablet.Id, follower.Id).Update(
                                 NIceDb::TUpdate<Schema::TabletFollowerTablet::GroupID>(follower.FollowerGroup.Id),
@@ -3820,7 +3860,7 @@ void THive::Handle(TEvHive::TEvShrinkStoragePool::TPtr& ev) {
     BLOG_D("Handle TEvShrinkStoragePool");
     const auto& record = ev->Get()->Record;
     auto& pool = GetStoragePool(record.GetStoragePool());
-    if (pool.ConsoleVersion < record.GetVersion()) {
+    if (pool.ConsoleVersion <= record.GetVersion()) {
         pool.ConsoleVersion = record.GetVersion();
     } else {
         BLOG_W("Got outdated TEvShrinkStoragePool request");
@@ -4011,7 +4051,7 @@ bool THive::ReassignInactiveGroups(TStoragePoolInfo& pool) {
             return new TEvPrivate::TEvReassignInactiveGroupsComplete(PoolName);
         }
 
-        TShrinkPoolReassignCallback(const TString& poolName) 
+        TShrinkPoolReassignCallback(const TString& poolName)
             : PoolName(poolName)
         {}
     };
@@ -4081,6 +4121,7 @@ void THive::CheckRemainingHistory(TStoragePoolInfo& pool) {
     BLOG_D("ShrinkPool - done");
     auto ev = std::make_unique<TEvHive::TEvShrinkStoragePoolDone>();
     ev->Record.SetStoragePool(pool.Name);
+    ev->Record.MutableGroupsToRemove()->Assign(pool.InactiveGroups.begin(), pool.InactiveGroups.end());
     if (AreWeRootHive()) {
         SendToConsolePipe(ev.release());
     } else {

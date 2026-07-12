@@ -338,7 +338,7 @@ struct TBalancerStats {
 struct TNodeFilter {
     TVector<TSubDomainKey> AllowedDomains;
     TVector<TNodeId> AllowedNodes;
-    TVector<TDataCenterId> AllowedDataCenters;
+    NKikimrHive::TDataCentersGroup AllowedDataCenters;
     TSubDomainKey ObjectDomain;
     TTabletTypes::EType TabletType = TTabletTypes::TypeInvalid;
     bool MustBePrimaryPile = true;

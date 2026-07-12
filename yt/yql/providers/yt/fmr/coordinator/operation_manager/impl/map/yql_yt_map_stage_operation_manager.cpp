@@ -24,13 +24,14 @@ public:
         const auto& partIdStats = context.PartIdStats;
         auto ytCoordinatorService = context.YtCoordinatorService;
 
+        TPartitionResult result;
         if (operationParams.MapJobType == EFmrJobType::OrderedMap) {
             // Ordered map -> ordered partition
             auto orderedPartitionerSettings = GetOrderedPartitionerSettings(fmrOperationSpec);
             auto orderedPartitioner = TOrderedPartitioner(partIdsForTables, partIdStats, orderedPartitionerSettings);
 
             std::vector<TOperationTableRef> inputTables = operationParams.Input;
-            return PartitionInputTablesIntoTasksOrdered(inputTables, orderedPartitioner, ytCoordinatorService, clusterConnections);
+            result = PartitionInputTablesIntoTasksOrdered(inputTables, orderedPartitioner, ytCoordinatorService, clusterConnections);
         } else {
             // Unordered map -> unordered partition
             auto fmrPartitionerSettings = GetFmrPartitionerSettings(fmrOperationSpec);
@@ -47,8 +48,21 @@ public:
                 }
             }
 
-            return PartitionInputTablesIntoTasks(ytInputTables, fmrInputTables, fmrPartitioner, ytCoordinatorService, clusterConnections, ytPartitionerSettings);
+            result = PartitionInputTablesIntoTasks(ytInputTables, fmrInputTables, fmrPartitioner, ytCoordinatorService, clusterConnections, ytPartitionerSettings);
         }
+
+        if (operationParams.ForceSingleTask && !result.Error && result.TaskInputs.size() > 1) {
+            // JobCount=1 in Map spec — collapse all partitions into a single task.
+            TTaskTableInputRef merged;
+            for (auto& taskInput: result.TaskInputs) {
+                for (auto& input: taskInput.Inputs) {
+                    merged.Inputs.emplace_back(std::move(input));
+                }
+            }
+            result.TaskInputs = {std::move(merged)};
+            YQL_CLOG(INFO, FastMapReduce) << "Map: ForceSingleTask collapsed partitions into 1 task";
+        }
+        return result;
     }
 
     TGenerateTasksResult GenerateTasksImpl(
@@ -72,8 +86,13 @@ public:
                 return TFmrTableOutputRef(fmrTableRef);
             });
 
-            TString newPartId = GenerateId();
+            // Each output table needs its own distinct PartId, even though they're all written by
+            // the same job run: the coordinator's PartIdStats_ is keyed by bare PartId (not
+            // (TableId, PartId)), so reusing one PartId across several output tables would let one
+            // table's chunk stats silently clobber another's whenever they're reported together in
+            // a worker heartbeat.
             for (auto& fmrTableOutputRef: fmrTableOutputRefs) {
+                TString newPartId = GenerateId();
                 fmrTableOutputRef.PartId = newPartId;
                 result.PartIdsToUpdate[fmrTableOutputRef.TableId].emplace_back(newPartId);
             }

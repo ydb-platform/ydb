@@ -21,9 +21,8 @@ def intranges_from_list(list_: List[int]) -> Tuple[int, ...]:
     ranges = []
     last_write = -1
     for i in range(len(sorted_list)):
-        if i + 1 < len(sorted_list):
-            if sorted_list[i] == sorted_list[i + 1] - 1:
-                continue
+        if i + 1 < len(sorted_list) and sorted_list[i] == sorted_list[i + 1] - 1:
+            continue
         current_range = sorted_list[last_write + 1 : i + 1]
         ranges.append(_encode_range(current_range[0], current_range[-1] + 1))
         last_write = i

@@ -1,9 +1,10 @@
 #include "test_client.h"
 
 #include <ydb/core/kqp/runtime/scheduler/kqp_compute_scheduler_service.h>
-#include <ydb/core/kqp/federated_query/actors/kqp_federated_query_actors.h>
+#include <ydb/services/scheme_secret/service.h>
 #include <ydb/core/testlib/basics/runtime.h>
 #include <ydb/core/base/path.h>
+#include <ydb/core/audit/audit_config/audit_config.h>
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/hive.h>
 #include <ydb/core/base/feature_flags_service.h>
@@ -40,6 +41,7 @@
 #include <ydb/services/deprecated/persqueue_v0/persqueue.h>
 #include <ydb/services/persqueue_v1/persqueue.h>
 #include <ydb/services/persqueue_v1/topic.h>
+#include <ydb/services/persqueue_v1/topic_deferred_publish.h>
 #include <ydb/services/persqueue_v1/grpc_pq_write.h>
 #include <ydb/services/replication/grpc_service.h>
 #include <ydb/services/monitoring/grpc_service.h>
@@ -76,6 +78,7 @@
 #include <ydb/core/kqp/proxy_service/kqp_proxy_service.h>
 #include <ydb/core/kqp/finalize_script_service/kqp_finalize_script_service.h>
 #include <ydb/core/metering/metering.h>
+#include <ydb/core/protos/replication.pb.h>
 #include <ydb/core/protos/stream.pb.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/library/services/services.pb.h>
@@ -119,7 +122,9 @@
 #include <ydb/core/statistics/aggregator/aggregator.h>
 #include <ydb/core/statistics/service/service.h>
 #include <ydb/core/keyvalue/keyvalue.h>
+#include <ydb/core/test_tablet/test_tablet.h>
 #include <ydb/core/persqueue/pq.h>
+#include <ydb/core/persqueue/deferred_publish/registry_actor.h>
 #include <ydb/library/security/ydb_credentials_provider_factory.h>
 #include <ydb/core/fq/libs/init/init.h>
 #include <ydb/core/fq/libs/mock/yql_mock.h>
@@ -561,6 +566,7 @@ namespace Tests {
             MERGE_CFG_FROM_APP_CFG(HiveConfig);
             MERGE_CFG_FROM_APP_CFG(DataShardConfig);
             MERGE_CFG_FROM_APP_CFG(ColumnShardConfig);
+            MERGE_CFG_FROM_APP_CFG(SmallBlobsQuotaConfig);
             MERGE_CFG_FROM_APP_CFG(SchemeShardConfig);
             MERGE_CFG_FROM_APP_CFG(MeteringConfig);
             MERGE_CFG_FROM_APP_CFG(CompactionConfig);
@@ -572,6 +578,7 @@ namespace Tests {
             MERGE_CFG_FROM_APP_CFG(SharedCacheConfig);
             MERGE_CFG_FROM_APP_CFG(MetadataCacheConfig);
             MERGE_CFG_FROM_APP_CFG(MemoryControllerConfig);
+            MERGE_CFG_FROM_APP_CFG(ReplicationConfig);
             MERGE_CFG_FROM_APP_CFG(HealthCheckConfig);
             MERGE_CFG_FROM_APP_CFG(WorkloadManagerConfig);
             MERGE_CFG_FROM_APP_CFG(QueryServiceConfig);
@@ -579,6 +586,7 @@ namespace Tests {
             MERGE_CFG_FROM_SETTINGS(BridgeConfig);
             MERGE_CFG_FROM_APP_CFG(StatisticsConfig);
             MERGE_CFG_FROM_APP_CFG(SystemTabletBackupConfig);
+            appData.AuditConfig = Settings->AppConfig->GetAuditConfig();
 #undef MERGE_APP_CFG_FROM
 #undef MERGE_CFG_FROM_APP_CFG
 
@@ -791,6 +799,7 @@ namespace Tests {
         grpcServer->AddService(new NGRpcService::TGRpcOperationService(system, counters, grpcRequestProxies[0], true));
         grpcServer->AddService(new NGRpcService::V1::TGRpcPersQueueService(system, counters, NMsgBusProxy::CreatePersQueueMetaCacheV2Id(), grpcRequestProxies[0], true));
         grpcServer->AddService(new NGRpcService::V1::TGRpcTopicService(system, counters, NMsgBusProxy::CreatePersQueueMetaCacheV2Id(), grpcRequestProxies[0], true));
+        grpcServer->AddService(new NGRpcService::V1::TGRpcTopicDeferredPublishService(system, counters, grpcRequestProxies[0], true));
         grpcServer->AddService(new NGRpcService::TGRpcPQClusterDiscoveryService(system, counters, grpcRequestProxies[0]));
         grpcServer->AddService(new NKesus::TKesusGRpcService(system, counters, appData.InFlightLimiterRegistry, grpcRequestProxies[0], true));
         grpcServer->AddService(new NGRpcService::TGRpcCmsService(system, counters, grpcRequestProxies[0], true));
@@ -1147,6 +1156,10 @@ namespace Tests {
             TLocalConfig::TTabletClassInfo(new TTabletSetupInfo(
                 &CreateKeyValueFlat, TMailboxType::Revolving, appData.UserPoolId,
                 TMailboxType::Revolving, appData.SystemPoolId));
+        localConfig.TabletClassInfo[TTabletTypes::TestShard] =
+            TLocalConfig::TTabletClassInfo(new TTabletSetupInfo(
+                &NKikimr::NTestShard::CreateTestShard, TMailboxType::Revolving, appData.UserPoolId,
+                TMailboxType::Revolving, appData.SystemPoolId));
         localConfig.TabletClassInfo[TTabletTypes::ColumnShard] =
             TLocalConfig::TTabletClassInfo(new TTabletSetupInfo(
                 &CreateColumnShard, TMailboxType::Revolving, appData.UserPoolId,
@@ -1344,7 +1357,7 @@ namespace Tests {
         {
             IActor* describeSchemaSecretsService = Settings->DescribeSchemaSecretsServiceFactory->CreateService();
             TActorId describeSchemaSecretsServiceId = Runtime->Register(describeSchemaSecretsService, nodeIdx, userPoolId);
-            Runtime->RegisterService(NKqp::MakeKqpDescribeSchemaSecretServiceId(Runtime->GetNodeId(nodeIdx)), describeSchemaSecretsServiceId, nodeIdx);
+            Runtime->RegisterService(NSecret::MakeDescribeSchemaSecretServiceId(Runtime->GetNodeId(nodeIdx)), describeSchemaSecretsServiceId, nodeIdx);
         }
         {
             auto kqpProxySharedResources = std::make_shared<NKqp::TKqpProxySharedResources>();
@@ -1431,6 +1444,11 @@ namespace Tests {
                     Settings->PqGateway ? NYql::CreatePqFileGatewayFactory(Settings->PqGateway) : pqGatewayFactory,
                     actorSystemPtr,
                     FederatedQuerySetupDriver_);
+
+                federatedQuerySetupFactory->SetScriptExecutionSettings({
+                        .EnableBackgroundLeaseChecks = Settings->EnableScriptExecutionBackgroundChecks,
+                        .LeaseCheckStartupTimeout = TDuration::Zero(),
+                        });
             }
 
             const auto& allExternalSourcesTypes = NYql::GetAllExternalDataSourceTypes();
@@ -1440,22 +1458,20 @@ namespace Tests {
                 }
             }
 
-            if (federatedQuerySetupFactory) {
-                federatedQuerySetupFactory->SetScriptExecutionSettings({
-                    .EnableBackgroundLeaseChecks = Settings->EnableScriptExecutionBackgroundChecks,
-                    .LeaseCheckStartupTimeout = TDuration::Zero(),
-                });
-            }
-
             auto counters = MakeIntrusive<::NMonitoring::TDynamicCounters>();
             Runtime->GetAppData(nodeIdx).KqpComputeScheduler = NKqp::CreateKqpComputeScheduler(counters, *Settings->AppConfig);
+
+            if (!Settings->AppConfig->GetTableServiceConfig().HasEnableCompileCacheWarmup()) {
+                Settings->AppConfig->MutableTableServiceConfig()->SetEnableCompileCacheWarmup(false);
+            }
 
             IActor* kqpProxyService = NKqp::CreateKqpProxyService(Settings->AppConfig->GetLogConfig(),
                                                                   Settings->AppConfig->GetTableServiceConfig(),
                                                                   Settings->AppConfig->GetQueryServiceConfig(),
                                                                   Settings->AppConfig->GetTliConfig(),
                                                                   TVector<NKikimrKqp::TKqpSetting>(Settings->KqpSettings),
-                                                                  nullptr, std::move(kqpProxySharedResources),
+                                                                  Settings->QueryReplayBackendFactory,
+                                                                  std::move(kqpProxySharedResources),
                                                                   federatedQuerySetupFactory, Settings->S3ActorsFactory);
             TActorId kqpProxyServiceId = Runtime->Register(kqpProxyService, nodeIdx, userPoolId);
             Runtime->RegisterService(NKqp::MakeKqpProxyID(Runtime->GetNodeId(nodeIdx)), kqpProxyServiceId, nodeIdx);
@@ -1518,6 +1534,14 @@ namespace Tests {
             IActor* pqReadCacheService = NPQ::CreatePQDReadCacheService(Runtime->GetDynamicCounters());
             TActorId readCacheId = Runtime->Register(pqReadCacheService, nodeIdx, userPoolId);
             Runtime->RegisterService(NPQ::MakePQDReadCacheServiceActorId(), readCacheId, nodeIdx);
+        }
+        {
+            IActor* deferredPublishRegistry = NPQ::NDeferredPublish::CreateDeferredPublishRegistryActor();
+            TActorId deferredPublishRegistryId = Runtime->Register(deferredPublishRegistry, nodeIdx, userPoolId);
+            Runtime->RegisterService(
+                NPQ::NDeferredPublish::MakeDeferredPublishRegistryActorId(),
+                deferredPublishRegistryId,
+                nodeIdx);
         }
 
         {
@@ -2404,15 +2428,36 @@ namespace Tests {
         UNIT_ASSERT_VALUES_EQUAL(status, NMsgBusProxy::EResponseStatus::MSTATUS_OK);
     }
 
-    NKikimrScheme::TEvLoginResult TClient::Login(TTestActorRuntime& runtime, const TString& user, const TString& password) {
+    NKikimrScheme::TEvLoginResult TClient::Login(TTestActorRuntime& runtime,
+        const TString& user, NLoginProto::ESaslAuthMech::SaslAuthMech authMech,
+        NLoginProto::EHashType::HashType hashType, const TString& hash, const TString& authMessage)
+    {
         TActorId sender = runtime.AllocateEdgeActor();
         TAutoPtr<NSchemeShard::TEvSchemeShard::TEvLogin> evLogin(new NSchemeShard::TEvSchemeShard::TEvLogin());
         evLogin->Record.SetUser(user);
-        evLogin->Record.SetPassword(password);
+        auto& hashesToValidate = *evLogin->Record.MutableHashToValidate();
+        hashesToValidate.SetAuthMech(authMech);
+        hashesToValidate.SetHashType(hashType);
+        hashesToValidate.SetHash(hash);
+        hashesToValidate.SetAuthMessage(authMessage);
 
-        if (auto ldapDomain = runtime.GetAppData().AuthConfig.GetLdapAuthenticationDomain(); user.EndsWith("@" + ldapDomain)) {
-            evLogin->Record.SetExternalAuth(ldapDomain);
-        }
+        const ui64 schemeRoot = GetPatchedSchemeRoot(SchemeRoot, Domain, SupportsRedirect);
+        ForwardToTablet(runtime, schemeRoot, sender, evLogin.Release());
+        TAutoPtr<IEventHandle> handle;
+        auto event = runtime.GrabEdgeEvent<NSchemeShard::TEvSchemeShard::TEvLoginResult>(handle);
+        UNIT_ASSERT(event);
+        return event->Record;
+    }
+
+    NKikimrScheme::TEvLoginResult TClient::LoginExternal(TTestActorRuntime& runtime, const TString& user) {
+        // External (LDAP) authentication: the password is verified by LDAP, not by YDB, so it is passed through as is.
+        const auto ldapDomain = runtime.GetAppData().AuthConfig.GetLdapAuthenticationDomain();
+
+        TActorId sender = runtime.AllocateEdgeActor();
+        TAutoPtr<NSchemeShard::TEvSchemeShard::TEvLogin> evLogin(new NSchemeShard::TEvSchemeShard::TEvLogin());
+        evLogin->Record.SetUser(user);
+        evLogin->Record.SetExternalAuth(ldapDomain);
+
         const ui64 schemeRoot = GetPatchedSchemeRoot(SchemeRoot, Domain, SupportsRedirect);
         ForwardToTablet(runtime, schemeRoot, sender, evLogin.Release());
         TAutoPtr<IEventHandle> handle;

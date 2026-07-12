@@ -113,9 +113,18 @@ void TSchemeShard::PersistCreateBuildIndex(NIceDb::TNiceDb& db, const TIndexBuil
             case NKikimrSchemeOp::EIndexTypeGlobal:
             case NKikimrSchemeOp::EIndexTypeGlobalAsync:
             case NKikimrSchemeOp::EIndexTypeGlobalUnique:
-            case NKikimrSchemeOp::EIndexTypeGlobalJson:
                 // no specialized index description
                 Y_ASSERT(std::holds_alternative<std::monostate>(info.SpecializedIndexDescription));
+                break;
+            case NKikimrSchemeOp::EIndexTypeGlobalJson:
+            case NKikimrSchemeOp::EIndexTypeGlobalJsonCompact:
+                // JSON indexes carry a fulltext description only when rowid mode (__ydb_row_id as doc_id)
+                // has been enabled; otherwise there is no specialized index description.
+                if (const auto* ft = std::get_if<NKikimrSchemeOp::TFulltextIndexDescription>(&info.SpecializedIndexDescription)) {
+                    *serializableRepresentation.MutableFulltextIndexDescription() = *ft;
+                } else {
+                    Y_ASSERT(std::holds_alternative<std::monostate>(info.SpecializedIndexDescription));
+                }
                 break;
             case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree:
                 *serializableRepresentation.MutableVectorIndexKmeansTreeDescription() =
@@ -123,6 +132,8 @@ void TSchemeShard::PersistCreateBuildIndex(NIceDb::TNiceDb& db, const TIndexBuil
                 break;
             case NKikimrSchemeOp::EIndexTypeGlobalFulltextPlain:
             case NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance:
+            case NKikimrSchemeOp::EIndexTypeGlobalFulltextCompact:
+            case NKikimrSchemeOp::EIndexTypeGlobalFulltextCompactRelevance:
                 *serializableRepresentation.MutableFulltextIndexDescription() =
                     std::get<NKikimrSchemeOp::TFulltextIndexDescription>(info.SpecializedIndexDescription);
                 break;
@@ -157,7 +168,9 @@ void TSchemeShard::PersistCreateBuildIndex(NIceDb::TNiceDb& db, const TIndexBuil
             NIceDb::TUpdate<Schema::BuildColumnOperationSettings::DefaultFromLiteral>(
                 TString(info.BuildColumns[i].DefaultFromLiteral.SerializeAsString())),
             NIceDb::TUpdate<Schema::BuildColumnOperationSettings::NotNull>(info.BuildColumns[i].NotNull),
-            NIceDb::TUpdate<Schema::BuildColumnOperationSettings::FamilyName>(info.BuildColumns[i].FamilyName)
+            NIceDb::TUpdate<Schema::BuildColumnOperationSettings::FamilyName>(info.BuildColumns[i].FamilyName),
+            NIceDb::TUpdate<Schema::BuildColumnOperationSettings::DefaultFromSequence>(info.BuildColumns[i].DefaultFromSequence),
+            NIceDb::TUpdate<Schema::BuildColumnOperationSettings::BitReverseSequenceValue>(info.BuildColumns[i].BitReverseSequenceValue)
         );
     }
 }
@@ -205,93 +218,62 @@ void TSchemeShard::PersistBuildIndexAddIssue(NIceDb::TNiceDb& db, TIndexBuildInf
     }
 }
 
-void TSchemeShard::PersistBuildIndexAlterMainTableTxId(NIceDb::TNiceDb& db, const TIndexBuildInfo& indexInfo) {
+void TSchemeShard::PersistBuildIndexFulltextProvisioning(NIceDb::TNiceDb& db, const TIndexBuildInfo& indexInfo) {
     db.Table<Schema::IndexBuild>().Key(indexInfo.Id).Update(
-        NIceDb::TUpdate<Schema::IndexBuild::AlterMainTableTxId>(indexInfo.AlterMainTableTxId));
+        NIceDb::TUpdate<Schema::IndexBuild::FulltextNeedsRowIdColumn>(indexInfo.FulltextNeedsRowIdColumn),
+        NIceDb::TUpdate<Schema::IndexBuild::FulltextNeedsUniqueIndex>(indexInfo.FulltextNeedsUniqueIndex),
+        NIceDb::TUpdate<Schema::IndexBuild::AutoUniqueIndexName>(indexInfo.AutoUniqueIndexName),
+        NIceDb::TUpdate<Schema::IndexBuild::RowIdColumnBuildId>(indexInfo.RowIdColumnBuildId),
+        NIceDb::TUpdate<Schema::IndexBuild::RowIdUniqueBuildId>(indexInfo.RowIdUniqueBuildId),
+        NIceDb::TUpdate<Schema::IndexBuild::ParentBuildId>(indexInfo.ParentBuildId));
 }
 
-void TSchemeShard::PersistBuildIndexAlterMainTableTxStatus(NIceDb::TNiceDb& db, const TIndexBuildInfo& indexInfo) {
+void TSchemeShard::PersistBuildIndexAlterMainTableTx(NIceDb::TNiceDb& db, const TIndexBuildInfo& indexInfo) {
     db.Table<Schema::IndexBuild>().Key(indexInfo.Id).Update(
-        NIceDb::TUpdate<Schema::IndexBuild::AlterMainTableTxStatus>(indexInfo.AlterMainTableTxStatus));
-}
-
-void TSchemeShard::PersistBuildIndexAlterMainTableTxDone(NIceDb::TNiceDb& db, const TIndexBuildInfo& indexInfo) {
-    db.Table<Schema::IndexBuild>().Key(indexInfo.Id).Update(
+        NIceDb::TUpdate<Schema::IndexBuild::AlterMainTableTxId>(indexInfo.AlterMainTableTxId),
+        NIceDb::TUpdate<Schema::IndexBuild::AlterMainTableTxStatus>(indexInfo.AlterMainTableTxStatus),
         NIceDb::TUpdate<Schema::IndexBuild::AlterMainTableTxDone>(indexInfo.AlterMainTableTxDone));
 }
 
-void TSchemeShard::PersistBuildIndexInitiateTxId(NIceDb::TNiceDb& db, const TIndexBuildInfo& indexInfo) {
+void TSchemeShard::PersistBuildIndexCreateBuildSequenceTx(NIceDb::TNiceDb& db, const TIndexBuildInfo& indexInfo) {
     db.Table<Schema::IndexBuild>().Key(indexInfo.Id).Update(
-        NIceDb::TUpdate<Schema::IndexBuild::InitiateTxId>(indexInfo.InitiateTxId));
+        NIceDb::TUpdate<Schema::IndexBuild::CreateBuildSequenceTxId>(indexInfo.CreateBuildSequenceTxId),
+        NIceDb::TUpdate<Schema::IndexBuild::CreateBuildSequenceTxStatus>(indexInfo.CreateBuildSequenceTxStatus),
+        NIceDb::TUpdate<Schema::IndexBuild::CreateBuildSequenceTxDone>(indexInfo.CreateBuildSequenceTxDone));
 }
 
-void TSchemeShard::PersistBuildIndexInitiateTxStatus(NIceDb::TNiceDb& db, const TIndexBuildInfo& indexInfo) {
+void TSchemeShard::PersistBuildIndexInitiateTx(NIceDb::TNiceDb& db, const TIndexBuildInfo& indexInfo) {
     db.Table<Schema::IndexBuild>().Key(indexInfo.Id).Update(
-        NIceDb::TUpdate<Schema::IndexBuild::InitiateTxStatus>(indexInfo.InitiateTxStatus));
-}
-
-void TSchemeShard::PersistBuildIndexInitiateTxDone(NIceDb::TNiceDb& db, const TIndexBuildInfo& indexInfo) {
-    db.Table<Schema::IndexBuild>().Key(indexInfo.Id).Update(
+        NIceDb::TUpdate<Schema::IndexBuild::InitiateTxId>(indexInfo.InitiateTxId),
+        NIceDb::TUpdate<Schema::IndexBuild::InitiateTxStatus>(indexInfo.InitiateTxStatus),
         NIceDb::TUpdate<Schema::IndexBuild::InitiateTxDone>(indexInfo.InitiateTxDone));
 }
 
-void TSchemeShard::PersistBuildIndexApplyTxId(NIceDb::TNiceDb& db, const TIndexBuildInfo& indexInfo) {
+void TSchemeShard::PersistBuildIndexApplyTx(NIceDb::TNiceDb& db, const TIndexBuildInfo& indexInfo) {
     db.Table<Schema::IndexBuild>().Key(indexInfo.Id).Update(
-        NIceDb::TUpdate<Schema::IndexBuild::ApplyTxId>(indexInfo.ApplyTxId));
-}
-
-void TSchemeShard::PersistBuildIndexApplyTxStatus(NIceDb::TNiceDb& db, const TIndexBuildInfo& indexInfo) {
-    db.Table<Schema::IndexBuild>().Key(indexInfo.Id).Update(
-        NIceDb::TUpdate<Schema::IndexBuild::ApplyTxStatus>(indexInfo.ApplyTxStatus));
-}
-
-void TSchemeShard::PersistBuildIndexApplyTxDone(NIceDb::TNiceDb& db, const TIndexBuildInfo& indexInfo) {
-    db.Table<Schema::IndexBuild>().Key(indexInfo.Id).Update(
+        NIceDb::TUpdate<Schema::IndexBuild::ApplyTxId>(indexInfo.ApplyTxId),
+        NIceDb::TUpdate<Schema::IndexBuild::ApplyTxStatus>(indexInfo.ApplyTxStatus),
         NIceDb::TUpdate<Schema::IndexBuild::ApplyTxDone>(indexInfo.ApplyTxDone));
 }
 
-void TSchemeShard::PersistBuildIndexLockTxId(NIceDb::TNiceDb& db, const TIndexBuildInfo& indexInfo) {
+void TSchemeShard::PersistBuildIndexLockTx(NIceDb::TNiceDb& db, const TIndexBuildInfo& indexInfo) {
     db.Table<Schema::IndexBuild>().Key(indexInfo.Id).Update(
-        NIceDb::TUpdate<Schema::IndexBuild::LockTxId>(indexInfo.LockTxId));
-}
-
-void TSchemeShard::PersistBuildIndexLockTxStatus(NIceDb::TNiceDb& db, const TIndexBuildInfo& indexInfo) {
-    db.Table<Schema::IndexBuild>().Key(indexInfo.Id).Update(
-        NIceDb::TUpdate<Schema::IndexBuild::LockTxStatus>(indexInfo.LockTxStatus));
-}
-
-void TSchemeShard::PersistBuildIndexLockTxDone(NIceDb::TNiceDb& db, const TIndexBuildInfo& indexInfo) {
-    db.Table<Schema::IndexBuild>().Key(indexInfo.Id).Update(
+        NIceDb::TUpdate<Schema::IndexBuild::LockTxId>(indexInfo.LockTxId),
+        NIceDb::TUpdate<Schema::IndexBuild::LockTxStatus>(indexInfo.LockTxStatus),
         NIceDb::TUpdate<Schema::IndexBuild::LockTxDone>(indexInfo.LockTxDone));
 }
 
-void TSchemeShard::PersistBuildIndexUnlockTxDone(NIceDb::TNiceDb& db, const TIndexBuildInfo& indexInfo) {
+void TSchemeShard::PersistBuildIndexUnlockTx(NIceDb::TNiceDb& db, const TIndexBuildInfo& indexInfo) {
     db.Table<Schema::IndexBuild>().Key(indexInfo.Id).Update(
-        NIceDb::TUpdate<Schema::IndexBuild::UnlockTxDone>(indexInfo.UnlockTxDone));
-}
-
-void TSchemeShard::PersistBuildIndexUnlockTxStatus(NIceDb::TNiceDb& db, const TIndexBuildInfo& indexInfo) {
-    db.Table<Schema::IndexBuild>().Key(indexInfo.Id).Update(
-        NIceDb::TUpdate<Schema::IndexBuild::UnlockTxStatus>(indexInfo.UnlockTxStatus));
-}
-
-void TSchemeShard::PersistBuildIndexUnlockTxId(NIceDb::TNiceDb& db, const TIndexBuildInfo& indexInfo) {
-    db.Table<Schema::IndexBuild>().Key(indexInfo.Id).Update(
+        NIceDb::TUpdate<Schema::IndexBuild::UnlockTxDone>(indexInfo.UnlockTxDone),
+        NIceDb::TUpdate<Schema::IndexBuild::UnlockTxStatus>(indexInfo.UnlockTxStatus),
         NIceDb::TUpdate<Schema::IndexBuild::UnlockTxId>(indexInfo.UnlockTxId));
 }
 
-void TSchemeShard::PersistBuildIndexDropColumnsTxId(NIceDb::TNiceDb& db, const TIndexBuildInfo& indexInfo) {
+void TSchemeShard::PersistBuildIndexDropColumnsTx(NIceDb::TNiceDb& db, const TIndexBuildInfo& indexInfo) {
     db.Table<Schema::IndexBuild>().Key(indexInfo.Id).Update(
-        NIceDb::TUpdate<Schema::IndexBuild::DropColumnsTxId>(indexInfo.DropColumnsTxId));
-}
-
-void TSchemeShard::PersistBuildIndexDropColumnsTxStatus(NIceDb::TNiceDb& db, const TIndexBuildInfo& indexInfo) {
-    db.Table<Schema::IndexBuild>().Key(indexInfo.Id).Update(
-        NIceDb::TUpdate<Schema::IndexBuild::DropColumnsTxStatus>(indexInfo.DropColumnsTxStatus));
-}
-
-void TSchemeShard::PersistBuildIndexDropColumnsTxDone(NIceDb::TNiceDb& db, const TIndexBuildInfo& indexInfo) {
-    db.Table<Schema::IndexBuild>().Key(indexInfo.Id).Update(
+        NIceDb::TUpdate<Schema::IndexBuild::DropColumnsTxId>(indexInfo.DropColumnsTxId),
+        NIceDb::TUpdate<Schema::IndexBuild::DropColumnsTxStatus>(indexInfo.DropColumnsTxStatus),
         NIceDb::TUpdate<Schema::IndexBuild::DropColumnsTxDone>(indexInfo.DropColumnsTxDone));
 }
 
@@ -537,12 +519,11 @@ bool TSchemeShard::PersistBuildIndexForget(NIceDb::TNiceDb& db, const TIndexBuil
 
 void TSchemeShard::Resume(const TDeque<TIndexBuildId>& indexIds, const TActorContext& ctx) {
     for (const auto& id : indexIds) {
-        const auto* buildInfoPtr = IndexBuilds.FindPtr(id);
-        if (!buildInfoPtr || buildInfoPtr->get()->IsBroken) {
-            continue;
+        if (const auto* opPtr = SetColumnConstraintOperations.FindPtr(id); opPtr) {
+            Execute(CreateTxSetColumnConstraintProgress(id), ctx);
+        } else if (const auto* buildInfoPtr = IndexBuilds.FindPtr(id); buildInfoPtr && !buildInfoPtr->get()->IsBroken) {
+            Execute(CreateTxProgress(id), ctx);
         }
-
-        Execute(CreateTxProgress(id), ctx);
     }
 }
 
@@ -563,6 +544,7 @@ void TSchemeShard::SetupRouting(const TDeque<TIndexBuildId>& indexIds, const TAc
 
         // TODO(mbkkt) order here is unexpected, is it intentional or accidental?
         handle(buildInfo.LockTxId);
+        handle(buildInfo.CreateBuildSequenceTxId);
         handle(buildInfo.AlterMainTableTxId);
         handle(buildInfo.InitiateTxId);
         handle(buildInfo.ApplyTxId);

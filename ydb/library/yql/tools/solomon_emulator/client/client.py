@@ -58,6 +58,17 @@ def add_monitoring_metrics(folderId, service, metrics):
     return add_solomon_metrics(folderId, folderId, service, metrics)
 
 
+def fail_solomon_push(project, cluster, service, count=1):
+    """Make the emulator answer the next ``count`` pushes to the shard with a retriable error."""
+    url = "{url}/fail/push?project={project}&cluster={cluster}&service={service}&count={count}".format(
+        url=get_api_url(),
+        project=project,
+        cluster=cluster,
+        service=service,
+        count=count)
+    _do_request("POST", url)
+
+
 def get_solomon_metrics(project, cluster, service):
     url = "{url}/metrics/get?project={project}&cluster={cluster}&service={service}".format(
         url=get_api_url(),

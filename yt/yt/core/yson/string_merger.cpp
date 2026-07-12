@@ -9,6 +9,7 @@
 #include <yt/yt/core/ytree/ypath_client.h>
 
 #include <library/cpp/yt/yson_string/string.h>
+#include <library/cpp/yt/string/stream.h>
 #include <library/cpp/iterator/functools.h>
 
 #include <util/stream/output.h>
@@ -91,7 +92,7 @@ public:
     {
         YsonWriter_.OnKeyedItem(key);
         PathStack_.Pop();
-        PathStack_.Push(TString{key});
+        PathStack_.Push(std::string{key});
         auto path = PathStack_.GetPath();
         auto it = PathToIndex_.find(path);
         if (it != PathToIndex_.end()) {
@@ -174,7 +175,7 @@ TYsonString MergeYsonStrings(
         ForceYPath(rootNode, path);
         NYTree::SetNodeByYPath(rootNode, path, NYTree::GetEphemeralNodeFactory()->CreateMap());
     }
-    TString result;
+    std::string result;
     size_t sizeEstimate = std::accumulate(
         ysonStringBufs.begin(),
         ysonStringBufs.end(),
@@ -183,7 +184,7 @@ TYsonString MergeYsonStrings(
             return accumulated + ysonStringBuf.AsStringBuf().size();
         });
     result.reserve(sizeEstimate);
-    TStringOutput outputStream{result};
+    TStdStringOutput outputStream{result};
     TYsonStringMerger merger(&outputStream, std::move(paths), std::move(ysonStringBufs), format);
     NYTree::VisitTree(rootNode, &merger, /*stable*/ true);
     return TYsonString{result, EYsonType::Node};

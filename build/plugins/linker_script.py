@@ -1,4 +1,8 @@
-def onlinker_script(unit, *args):
+from ymake import macro, Unit
+
+
+@macro
+def LINKER_SCRIPT(unit: Unit, *args: tuple[str, ...]):
     """
     @usage: LINKER_SCRIPT(Files...)
 

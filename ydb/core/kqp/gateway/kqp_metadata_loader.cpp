@@ -125,6 +125,98 @@ void IndexProtoToMetadata(const TIndexProto& indexes, NYql::TKikimrTableMetadata
     }
 }
 
+// Convert multi-column statistics (stored inline in the row TTableDescription and in the
+// column table schema, both as NKikimrSchemeOp::TMultiColumnStatisticsDescription) into
+// NYql::TMultiColumnStatisticsDescription entries of the table metadata.
+template<typename TMultiColumnStatisticsProto>
+void MultiColumnStatisticsProtoToMetadata(const TMultiColumnStatisticsProto& statistics, NYql::TKikimrTableMetadataPtr tableMeta) {
+    for (const NKikimrSchemeOp::TMultiColumnStatisticsDescription& stat : statistics) {
+        tableMeta->MultiColumnStatistics.emplace_back(NYql::TMultiColumnStatisticsDescription(stat));
+    }
+}
+
+// Convert OLAP (column table) local indexes, stored in the column table schema as
+// NKikimrSchemeOp::TOlapIndexDescription, into NYql::TIndexDescription entries of the
+// table metadata. This is what makes local CS indexes (bloom / bloom-ngram / min-max)
+// visible in TKikimrTableMetadata::Indexes so that ALTER INDEX can find them.
+void OlapIndexProtoToMetadata(
+    const google::protobuf::RepeatedPtrField<NKikimrSchemeOp::TOlapIndexDescription>& indexes,
+    const std::map<ui32, TString, std::less<ui32>>& columnNameById,
+    NYql::TKikimrTableMetadataPtr tableMeta)
+{
+    auto resolveColumns = [&](const auto& columnIds) {
+        TVector<TString> names;
+        for (const ui32 columnId : columnIds) {
+            auto it = columnNameById.find(columnId);
+            if (it != columnNameById.end()) {
+                names.push_back(it->second);
+            }
+        }
+        return names;
+    };
+
+    for (const auto& index : indexes) {
+        NYql::TIndexDescription::EType type;
+        NYql::TIndexDescription::TSpecializedIndexDescription specialized;
+        TVector<TString> keyColumns;
+
+        switch (index.GetImplementationCase()) {
+            case NKikimrSchemeOp::TOlapIndexDescription::kBloomFilter: {
+                type = NYql::TIndexDescription::EType::LocalBloomFilter;
+                const auto& bloom = index.GetBloomFilter();
+                NYql::TIndexDescription::TLocalBloomFilterDescription desc;
+                if (bloom.HasFalsePositiveProbability()) {
+                    desc.FalsePositiveProbability = bloom.GetFalsePositiveProbability();
+                }
+                specialized = desc;
+                keyColumns = resolveColumns(bloom.GetColumnIds());
+                break;
+            }
+            case NKikimrSchemeOp::TOlapIndexDescription::kBloomNGrammFilter: {
+                type = NYql::TIndexDescription::EType::LocalBloomNgramFilter;
+                const auto& ngram = index.GetBloomNGrammFilter();
+                NYql::TIndexDescription::TLocalBloomNgramFilterDescription desc;
+                if (ngram.HasNGrammSize()) {
+                    desc.NgramSize = ngram.GetNGrammSize();
+                }
+                if (ngram.HasCaseSensitive()) {
+                    desc.CaseSensitive = ngram.GetCaseSensitive();
+                }
+                if (ngram.HasFalsePositiveProbability()) {
+                    desc.FalsePositiveProbability = ngram.GetFalsePositiveProbability();
+                }
+                specialized = desc;
+                if (ngram.HasColumnId()) {
+                    keyColumns = resolveColumns(std::initializer_list<ui32>{ngram.GetColumnId()});
+                }
+                break;
+            }
+            case NKikimrSchemeOp::TOlapIndexDescription::kMinMaxIndex: {
+                type = NYql::TIndexDescription::EType::LocalMinMax;
+                if (index.GetMinMaxIndex().HasColumnId()) {
+                    keyColumns = resolveColumns(std::initializer_list<ui32>{index.GetMinMaxIndex().GetColumnId()});
+                }
+                break;
+            }
+            default:
+                // CountMinSketch and other implementations are not represented in
+                // TKikimrTableMetadata::Indexes; skip them.
+                continue;
+        }
+
+        tableMeta->Indexes.emplace_back(NYql::TIndexDescription(
+            index.GetName(),
+            keyColumns,
+            /* dataColumns */ TVector<TString>{},
+            type,
+            NYql::TIndexDescription::EIndexState::Ready,
+            tableMeta->SchemaVersion,
+            tableMeta->PathId.TableId(),
+            tableMeta->PathId.OwnerId(),
+            specialized));
+    }
+}
+
 template<typename TIndexProto>
 void CheckWritesAreDisabled(const TIndexProto& indexes, NYql::TKikimrTableMetadataPtr tableMeta) {
     TStringBuilder disableReason;
@@ -226,12 +318,18 @@ TTableMetadataResult GetTableMetadataResult(const NSchemeCache::TSchemeCacheNavi
         tableMeta->Columns.emplace(
             columnDesc.Name,
             NYql::TKikimrColumnMetadata(
-                columnDesc.Name, columnDesc.Id, typeName, notNull, columnDesc.PType, columnDesc.PTypeMod,
+                columnDesc.Name,
+                columnDesc.Id,
+                typeName,
+                notNull,
+                columnDesc.PType,
+                columnDesc.PTypeMod,
                 columnDesc.DefaultFromSequence,
                 defaultFromSequencePathId,
                 defaultKind,
                 columnDesc.DefaultFromLiteral,
-                columnDesc.IsBuildInProgress
+                columnDesc.IsBuildInProgress,
+                columnDesc.SetNotNullInProgress
             )
         );
         if (columnDesc.KeyOrder >= 0) {
@@ -255,9 +353,16 @@ TTableMetadataResult GetTableMetadataResult(const NSchemeCache::TSchemeCacheNavi
             tableMeta->PartitionedByColumns.push_back(column);
         }
 
+        // Local CS indexes live in the column table schema, not in entry.Indexes.
+        const auto& description = entry.ColumnTableInfo->Description;
+        if (description.HasSchema()) {
+            OlapIndexProtoToMetadata(description.GetSchema().GetIndexes(), columnOrder, tableMeta);
+        }
+        MultiColumnStatisticsProtoToMetadata(description.GetMultiColumnStatistics(), tableMeta);
     }
 
     IndexProtoToMetadata(entry.Indexes, tableMeta);
+    MultiColumnStatisticsProtoToMetadata(entry.MultiColumnStatistics, tableMeta);
 
     // Check if we have unique indexes that are not built
     if (!enableOnlineAddUniqueIndex) {
@@ -379,7 +484,8 @@ TTableMetadataResult GetSysViewMetadataResult(const NSchemeCache::TSchemeCacheNa
 
         tableMeta->Columns.emplace(
             column.Name,
-            NYql::TKikimrColumnMetadata(column.Name, column.Id, typeName, notNull, column.PType, column.PTypeMod)
+            NYql::TKikimrColumnMetadata(column.Name, column.Id, typeName, notNull, column.PType, column.PTypeMod,
+                {}, {}, NKikimrKqp::TKqpColumnMetadataProto::DEFAULT_KIND_UNSPECIFIED, {}, false, column.SetNotNullInProgress)
         );
 
         if (column.KeyOrder >= 0) {
@@ -482,7 +588,8 @@ TTableMetadataResult GetLoadTableMetadataResult(const NSchemeCache::TSchemeCache
         EKind::KindExternalDataSource,
         EKind::KindView,
         EKind::KindSysView,
-        EKind::KindTopic
+        EKind::KindTopic,
+        EKind::KindCdcStream,
     }, entry.Kind)) {
         return ResultFromError<TResult>(YqlIssue({}, TIssuesIds::KIKIMR_SCHEME_ERROR, "Path is not a table or topic"));
     }
@@ -502,6 +609,7 @@ TTableMetadataResult GetLoadTableMetadataResult(const NSchemeCache::TSchemeCache
             result = GetSysViewMetadataResult(entry, cluster, tableName);
             break;
         case EKind::KindTopic:
+        case EKind::KindCdcStream:
             result = GetTopicMetadataResult(entry, cluster, database, tableName, userToken);
             break;
         default:

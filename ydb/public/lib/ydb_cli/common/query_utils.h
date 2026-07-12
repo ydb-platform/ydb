@@ -6,6 +6,7 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/client.h>
 
 #include <util/generic/fwd.h>
+#include <optional>
 
 namespace NYdb::NConsoleClient {
 
@@ -37,6 +38,9 @@ public:
         NQuery::TExecuteQuerySettings Settings;
         std::optional<TParams> Parameters;
         bool AddIndent = false;
+        // When set, query is executed on this session (required for interactive transactions).
+        std::optional<NQuery::TSession> Session;
+        NQuery::TTxControl TxControl = NQuery::TTxControl::NoTx();
     };
 
     int Execute(const TString& query, const TSettings& execSettings);

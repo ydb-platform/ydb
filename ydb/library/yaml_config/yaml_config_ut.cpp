@@ -1,10 +1,12 @@
 #include "yaml_config.h"
 
 #include <ydb/library/yaml_config/yaml_config_parser.h>
-
+#include <ydb/library/yaml_config/public/yaml_config_impl.h>
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <ydb/core/protos/key.pb.h>
+
+#include <util/string/strip.h>
 
 using namespace NKikimr;
 
@@ -406,7 +408,6 @@ allowed_labels:
 incompatibility_overrides:
   disable_rules:
     - builtin_branch_must_have_value
-    - builtin_configuration_version_must_have_value
     - builtin_dynamic_must_have_value
     - builtin_node_host_must_have_value
     - builtin_node_id_must_have_value
@@ -453,7 +454,6 @@ allowed_labels:
 incompatibility_overrides:
   disable_rules:
     - builtin_branch_must_have_value
-    - builtin_configuration_version_must_have_value
     - builtin_dynamic_must_have_value
     - builtin_node_host_must_have_value
     - builtin_node_id_must_have_value
@@ -507,7 +507,6 @@ allowed_labels:
 incompatibility_overrides:
   disable_rules:
     - builtin_branch_must_have_value
-    - builtin_configuration_version_must_have_value
     - builtin_dynamic_must_have_value
     - builtin_node_host_must_have_value
     - builtin_node_id_must_have_value
@@ -554,7 +553,6 @@ config:
 incompatibility_overrides:
   disable_rules:
     - builtin_branch_must_have_value
-    - builtin_configuration_version_must_have_value
     - builtin_dynamic_must_have_value
     - builtin_node_host_must_have_value
     - builtin_node_id_must_have_value
@@ -816,7 +814,6 @@ allowed_labels:
 incompatibility_overrides:
   disable_rules:
     - builtin_branch_must_have_value
-    - builtin_configuration_version_must_have_value
     - builtin_dynamic_must_have_value
     - builtin_node_host_must_have_value
     - builtin_node_id_must_have_value
@@ -1272,6 +1269,125 @@ TMap<TSet<TVector<NYamlConfig::TLabel>>, TVector<int>> ExpectedResolved =
     },
 };
 
+Y_UNIT_TEST_SUITE(YamlConfigOpaqueConfigMarker) {
+
+    Y_UNIT_TEST(OpaqueConfigFieldsIncludesExistingOpaqueFields) {
+        const auto& fields = NYaml::OpaqueConfigFields();
+
+        bool found = false;
+        for (const auto& f : fields) {
+            if (f.Name == "private_database_config") {
+                found = true;
+                break;
+            }
+        }
+        UNIT_ASSERT_C(found,
+            "expected 'private_database_config' in OpaqueConfigFields()");
+    }
+
+    Y_UNIT_TEST(OpaqueConfigFieldsAreStable) {
+        // The list is computed once and cached; consecutive calls must return
+        // the same vector by reference.
+        const auto& a = NYaml::OpaqueConfigFields();
+        const auto& b = NYaml::OpaqueConfigFields();
+        UNIT_ASSERT_EQUAL(&a, &b);
+    }
+
+    Y_UNIT_TEST(CaptureOpaqueConfigFieldsReplacesMessageSubtreeWithEmptyMap) {
+        NJson::TJsonValue cfg(NJson::JSON_MAP);
+        auto& sub = cfg["private_database_config"];
+        sub.SetType(NJson::JSON_MAP);
+        sub["some_unknown_field"] = 42;
+        sub["some_unknown_struct"]["field_1"] = 1;
+        sub["some_unknown_struct"]["field_2"] = "abc";
+
+        NYaml::CaptureOpaqueConfigFields(cfg);
+
+        UNIT_ASSERT(cfg.Has("private_database_config"));
+        const auto& captured = cfg["private_database_config"];
+        UNIT_ASSERT_C(captured.IsMap(),
+            "private_database_config must remain a map after capture");
+        UNIT_ASSERT_C(captured.GetMap().empty(),
+            "private_database_config must be replaced with an empty map");
+    }
+
+    Y_UNIT_TEST(CaptureOpaqueConfigFieldsLeavesOtherFieldsUntouched) {
+        NJson::TJsonValue cfg(NJson::JSON_MAP);
+        cfg["private_database_config"]["dropped"] = "value";
+        cfg["feature_flags"]["enable_something"] = true;
+        cfg["actor_system_config"]["sys_executor"] = 0;
+
+        NYaml::CaptureOpaqueConfigFields(cfg);
+
+        UNIT_ASSERT(cfg["private_database_config"].IsMap());
+        UNIT_ASSERT(cfg["private_database_config"].GetMap().empty());
+
+        UNIT_ASSERT(cfg["feature_flags"].IsMap());
+        UNIT_ASSERT_EQUAL(cfg["feature_flags"]["enable_something"].GetBoolean(), true);
+
+        UNIT_ASSERT(cfg["actor_system_config"].IsMap());
+        UNIT_ASSERT_EQUAL(cfg["actor_system_config"]["sys_executor"].GetInteger(), 0);
+    }
+
+    Y_UNIT_TEST(CaptureOpaqueConfigFieldsIsNoopWhenFieldAbsent) {
+        NJson::TJsonValue cfg(NJson::JSON_MAP);
+        cfg["feature_flags"]["enable_something"] = true;
+
+        NYaml::CaptureOpaqueConfigFields(cfg);
+
+        UNIT_ASSERT(!cfg.Has("private_database_config"));
+        UNIT_ASSERT(cfg["feature_flags"].IsMap());
+        UNIT_ASSERT_EQUAL(cfg["feature_flags"]["enable_something"].GetBoolean(), true);
+    }
+
+    Y_UNIT_TEST(CaptureOpaqueConfigFieldsIsNoopOnNonMap) {
+        // Non-map inputs must not crash and must remain unchanged.
+        NJson::TJsonValue arr(NJson::JSON_ARRAY);
+        arr.AppendValue(1);
+        arr.AppendValue(2);
+        NYaml::CaptureOpaqueConfigFields(arr);
+        UNIT_ASSERT(arr.IsArray());
+        UNIT_ASSERT_VALUES_EQUAL(arr.GetArray().size(), 2u);
+
+        NJson::TJsonValue scalar(42);
+        NYaml::CaptureOpaqueConfigFields(scalar);
+        UNIT_ASSERT_EQUAL(scalar.GetInteger(), 42);
+    }
+
+    Y_UNIT_TEST(CaptureOpaqueConfigFieldsHandlesAlreadyEmptyMap) {
+        NJson::TJsonValue cfg(NJson::JSON_MAP);
+        cfg["private_database_config"].SetType(NJson::JSON_MAP);
+
+        NYaml::CaptureOpaqueConfigFields(cfg);
+
+        UNIT_ASSERT(cfg["private_database_config"].IsMap());
+        UNIT_ASSERT(cfg["private_database_config"].GetMap().empty());
+    }
+
+    Y_UNIT_TEST(ParseAcceptsUnknownOpaqueFieldSubtree) {
+        // End-to-end: the parser must accept unknown content under an
+        // opaque top-level field without allow_unknown_fields, because
+        // CaptureOpaqueConfigFields() strips the subtree before the
+        // proto merge.
+        const TString yaml = R"(---
+metadata:
+  cluster: ""
+  version: 0
+config:
+  private_database_config:
+    some_unknown_field: 42
+    some_unknown_struct:
+      field_1: 1
+      field_2: abc
+)";
+        NKikimrConfig::TAppConfig cfg;
+        UNIT_ASSERT_NO_EXCEPTION(cfg = NYaml::Parse(yaml, /*transform=*/ false));
+        // The merge stored an empty message for the opaque field; nothing
+        // from the YAML sub-tree leaked into the proto.
+        UNIT_ASSERT(cfg.HasPrivateDatabaseConfig());
+    }
+}
+
 Y_UNIT_TEST_SUITE(YamlConfig) {
     Y_UNIT_TEST(CollectLabels) {
         auto doc = NFyaml::TDocument::Parse(WholeConfig);
@@ -1517,6 +1633,147 @@ Y_UNIT_TEST_SUITE(YamlConfig) {
         }
         TStringStream stream;
         stream << cfg;
+    }
+
+    void CheckAppendDatabaseConfig(
+        const TString mainConfig,
+        const TString databaseConfig)
+    {
+        auto treeOriginal = NFyaml::TDocument::Parse(mainConfig);
+        auto tree = NFyaml::TDocument::Parse(mainConfig);
+        auto dbTree = NFyaml::TDocument::Parse(databaseConfig);
+
+        const size_t selectorsCountBefore =
+            tree.Root().Map().Has("selector_config")
+                ? tree.Root().Map().at("selector_config").Sequence().size()
+                : 0;
+
+        // Add empty selector_config nodes to avoid processing missing YAML
+        // nodes
+        if (!tree.Root().Map().Has("selector_config")) {
+            tree.Root().Map().Append(
+                tree.Buildf("selector_config"),
+                tree.Buildf("[]"));
+        }
+        if (!treeOriginal.Root().Map().Has("selector_config")) {
+            treeOriginal.Root().Map().Append(
+                treeOriginal.Buildf("selector_config"),
+                treeOriginal.Buildf("[]"));
+        }
+
+        UNIT_ASSERT_NO_EXCEPTION(
+            NKikimr::NYamlConfig::AppendDatabaseConfig(tree, dbTree));
+
+        auto selectors = tree.Root().Map().at("selector_config").Sequence();
+        UNIT_ASSERT_VALUES_EQUAL(selectors.size(), selectorsCountBefore + 1);
+
+        auto lastSelector = selectors.at(selectors.size() - 1).Map();
+        UNIT_ASSERT(lastSelector.Has("config"));
+
+        // Check that main config selectors have not changed
+        auto selectorsOriginal =
+            treeOriginal.Root().Map().at("selector_config").Sequence();
+
+        for (size_t i = 0; i < selectorsCountBefore; i++) {
+            UNIT_ASSERT_VALUES_EQUAL(
+                selectors.at(i).Map().size(),
+                selectorsOriginal.at(i).Map().size());
+
+            // Сheck all map elements (description, selector, config)
+            for (auto field = selectors.at(i).Map().begin(),
+                      fieldOrig = selectorsOriginal.at(i).Map().begin();
+                 field != selectors.at(i).Map().end();
+                 field++, fieldOrig++)
+            {
+                TStringStream fieldStr;
+                fieldStr << field->Key() << ": " << field->Value();
+
+                TStringStream fieldOriginalStr;
+                fieldOriginalStr << fieldOrig->Key() << ": "
+                                 << fieldOrig->Value();
+
+                UNIT_ASSERT_VALUES_EQUAL(
+                    fieldStr.Str(),
+                    fieldOriginalStr.Str());
+            }
+        }
+
+        // Check that the db config selector is appended to the end of the main
+        // config selectors
+        TStringStream actualLastConfig;
+        actualLastConfig << lastSelector.at("config");
+
+        TStringStream expectedConfig;
+        expectedConfig << dbTree.Root().Map().at("config");
+
+        UNIT_ASSERT_VALUES_EQUAL(actualLastConfig.Str(), expectedConfig.Str());
+    }
+
+    Y_UNIT_TEST(AppendDatabaseConfigAsTheOnlySelector)
+    {
+        const TString mainConfig = R"(
+---
+metadata:
+  kind: MainConfig
+  cluster: ""
+  version: 0
+config:
+  feature_flags:
+    some_param_1: true
+)";
+
+        const TString databaseConfig = R"(
+---
+metadata:
+  kind: DatabaseConfig
+  database: "/dc/tenant"
+  version: 0
+config:
+  feature_flags: !inherit
+    some_param_1: false
+)";
+
+        CheckAppendDatabaseConfig(mainConfig, databaseConfig);
+    }
+
+    Y_UNIT_TEST(AppendDatabaseConfigAfterExistingSelectors)
+    {
+        const TString mainConfig = R"(
+---
+metadata:
+  kind: MainConfig
+  cluster: ""
+  version: 0
+config:
+  feature_flags:
+    some_param_1: true
+selector_config:
+- description: pre-existing selector 1 with config
+  selector:
+    tenant: dynamic
+  config:
+    feature_flags: !inherit
+      some_param_2: true
+- description: pre-existing selector 2 with config
+  selector:
+    tenant: dynamic
+  config:
+    feature_flags: !inherit
+      some_param_3: true
+)";
+
+        const TString databaseConfig = R"(
+---
+metadata:
+  kind: DatabaseConfig
+  database: "/dc/tenant"
+  version: 0
+config:
+  feature_flags: !inherit
+    some_param_1: false
+)";
+
+        CheckAppendDatabaseConfig(mainConfig, databaseConfig);
     }
 
     Y_UNIT_TEST(GetMetadata) {
@@ -2080,19 +2337,19 @@ Y_UNIT_TEST(AllTestConfigs) {
             uniqDocs.insert(toStr(cfg.second));
         }
 
-        UNIT_ASSERT_VALUES_EQUAL_C(uniqDocs.size(), resolvedUniq.size(), 
+        UNIT_ASSERT_VALUES_EQUAL_C(uniqDocs.size(), resolvedUniq.size(),
             TString("Config: ") + name + ", ResolveUniqueDocs has duplicates");
 
         for (const auto& s : uniqDocs) {
-            UNIT_ASSERT_C(allDocs.contains(s), 
+            UNIT_ASSERT_C(allDocs.contains(s),
                 TString("Config: ") + name + ", ResolveUniqueDocs has extra doc not in ResolveAll");
         }
 
-        UNIT_ASSERT_VALUES_EQUAL_C(allDocs.size(), uniqDocs.size(), 
+        UNIT_ASSERT_VALUES_EQUAL_C(allDocs.size(), uniqDocs.size(),
             TString("Config: ") + name + ", size mismatch");
 
         for (const auto& s : allDocs) {
-            UNIT_ASSERT_C(uniqDocs.contains(s), 
+            UNIT_ASSERT_C(uniqDocs.contains(s),
                 TString("Config: ") + name + ", ResolveUniqueDocs missing doc from ResolveAll");
         }
     };
@@ -2105,4 +2362,1852 @@ Y_UNIT_TEST(AllTestConfigs) {
     testConfig(UnresolvedSimpleConfigAppend, "UnresolvedSimpleConfigAppend");
 }
 
+}
+
+Y_UNIT_TEST_SUITE(ApplySelectors) {
+/**
+ * Tests:
+ *  1. None                   - Successfull no-change resolving with no config
+ *  2. Empty                  - Successfull no-change resolving with empty config
+ *  3. NoSelectors            - Successfull no-change resolving with no selectors
+ *  4. AddToMap               - Selector-based parameters addition to map
+ *  5. AddToList              - Selector-based elements addition to list
+ *  6. ModifyInMap            - Selector-based parameters modification in map
+ *  7. ModifyInList           - Selector-based parameters modification in list
+ *  8. ModifyAbsentInMap      - Edge cases of absent map elements modification with selectors
+ *  9. ModifyAbsentInList     - Edge cases of absent list elements modification with selectors.
+ *                              PAY ATTENTION: has erroneous behavior with '!remove' tag
+ * 10. LabeledSelectors       - Label-respected selector applying
+ * 11. MultipleSelectors      - Multiple selectors layering
+ *
+ * Notes:
+ *  - tests 4-9 performed for all possible parameter types (scalar, list, map)
+ *    with with tags and nested levels
+ */
+
+     Y_UNIT_TEST(None)
+    {
+        const TString config = R"(
+fictive:
+  a: 1
+  b:
+    c: 2
+)";
+
+        // Without and with labels
+        TSet<NYamlConfig::TNamedLabel> labels;
+        for (int i = 0; i < 2; i++)
+        {
+            auto doc = NFyaml::TDocument::Parse(config);
+            NYamlConfig::ApplySelectors(doc, labels);
+
+            TStringStream resolved;
+            resolved << doc.Root();
+            UNIT_ASSERT_VALUES_EQUAL(Strip(resolved.Str()), Strip(config));
+
+            labels.emplace("some_label", "a");
+        }
+    }
+
+     Y_UNIT_TEST(NoneWithSelectors)
+    {
+        const TString config = R"(
+fictive:
+  a: 1
+  b:
+    c: 2
+selector_config:
+- description: some none
+  selector: {}
+  config:
+    param: 1
+- description: some a
+  selector:
+    some_label: a
+  config:
+    param: 2
+)";
+
+        // Without and with labels
+        TSet<NYamlConfig::TNamedLabel> labels;
+        for (int i = 0; i < 2; i++)
+        {
+            auto doc = NFyaml::TDocument::Parse(config);
+            NYamlConfig::ApplySelectors(doc, labels);
+
+            TStringStream resolved;
+            resolved << doc.Root();
+            UNIT_ASSERT_VALUES_EQUAL(Strip(resolved.Str()), Strip(config));
+
+            labels.emplace("some_label", "a");
+        }
+    }
+
+     Y_UNIT_TEST(Empty)
+    {
+        const TString config = R"(
+config:
+)";
+        // Without and with labels
+        TSet<NYamlConfig::TNamedLabel> labels;
+        for (int i = 0; i < 2; i++)
+        {
+            auto doc = NFyaml::TDocument::Parse(config);
+            NYamlConfig::ApplySelectors(doc, labels);
+
+            TStringStream resolved;
+            resolved << doc.Root();
+            UNIT_ASSERT_VALUES_EQUAL(Strip(resolved.Str()), Strip(config));
+
+            labels.emplace("some_label", "a");
+        }
+    }
+
+    Y_UNIT_TEST(NoSelectors)
+    {
+        const TString config = R"(
+config:
+  subconfig_1:
+    param_1: none
+  subconfig_2: !inherit
+    param_2: true
+)";
+        // Without and with labels
+        TSet<NYamlConfig::TNamedLabel> labels;
+        for (int i = 0; i < 2; i++)
+        {
+            auto doc = NFyaml::TDocument::Parse(config);
+            NYamlConfig::ApplySelectors(doc, labels);
+
+            TStringStream resolved;
+            resolved << doc.Root();
+            UNIT_ASSERT_VALUES_EQUAL(Strip(resolved.Str()), Strip(config));
+
+            labels.emplace("some_label", "a");
+        }
+    }
+
+    Y_UNIT_TEST(AddToMap)
+    {
+        const TString config = R"(
+config:
+  subconfig:
+    field_1: f1
+    map_1:
+      field_1: m1f1
+      map_1:
+        field_1: m1m1f1
+      list_1:
+      - name: a
+        field_1: m1l1af1
+      - name: b
+        field_1: m1l1bf1
+selector_config:
+- description: add to map
+  selector: {}
+  config:
+    subconfig: !inherit
+      field_2: f2
+      map_1: !inherit
+        field_2: m1f2
+        map_1: !inherit
+          field_2: m1m1f2
+        map_2:
+          field_1: m1m2f1
+        list_2:
+        - name: c
+          field_1: m1l2cf1
+        - name: d
+          field_1: m1l2df1
+      list_1:
+      - name: e
+        field_1: l1ef1
+)";
+        const TString expected = R"(
+subconfig:
+  field_1: f1
+  map_1:
+    field_1: m1f1
+    map_1:
+      field_1: m1m1f1
+      field_2: m1m1f2
+    list_1:
+    - name: a
+      field_1: m1l1af1
+    - name: b
+      field_1: m1l1bf1
+    field_2: m1f2
+    map_2:
+      field_1: m1m2f1
+    list_2:
+    - name: c
+      field_1: m1l2cf1
+    - name: d
+      field_1: m1l2df1
+  field_2: f2
+  list_1:
+  - name: e
+    field_1: l1ef1
+)";
+
+        auto doc = NFyaml::TDocument::Parse(config);
+        NYamlConfig::ApplySelectors(doc, {});
+
+        TStringStream resolved;
+        resolved << doc.Root().Map().at("config");
+        UNIT_ASSERT_VALUES_EQUAL(Strip(resolved.Str()), Strip(expected));
+    }
+
+    Y_UNIT_TEST(AddToList)
+    {
+        const TString config = R"(
+config:
+  subconfig:
+    list_1:
+    - name: a
+      field_1: l1af1
+    - name: b
+      field_1: l1bf1
+    list_2:
+    - name: a
+      field_1: l2af1
+    - name: b
+      field_1: l2bf1
+selector_config:
+- description: add to list
+  selector: {}
+  config:
+    subconfig: !inherit
+      list_1: !inherit:name   # existing elements shall be fully replaced
+      - name: a
+        field_1: l1af1-new
+      - name: c
+        field_1: l1cf1
+      list_2: !append         # existing elements shall be kept, duplicates shall be added
+      - name: a
+        field_1: l2af1-new
+      - name: c
+        field_1: l2cf1
+)";
+        const TString expected = R"(
+subconfig:
+  list_1:
+  - name: a
+    field_1: l1af1-new
+  - name: b
+    field_1: l1bf1
+  - name: c
+    field_1: l1cf1
+  list_2:
+  - name: a
+    field_1: l2af1
+  - name: b
+    field_1: l2bf1
+  - name: a
+    field_1: l2af1-new
+  - name: c
+    field_1: l2cf1
+)";
+        auto doc = NFyaml::TDocument::Parse(config);
+        NYamlConfig::ApplySelectors(doc, {});
+
+        TStringStream resolved;
+        resolved << doc.Root().Map().at("config");
+        UNIT_ASSERT_VALUES_EQUAL(Strip(resolved.Str()), Strip(expected));
+    }
+
+    Y_UNIT_TEST(ModifyInMap)
+    {
+        const TString config = R"(
+config:
+  subconfig_1:
+
+    field_1: f1
+    field_2: f2-unchanged
+
+    map_1:
+      field_1: m1f1
+      field_2: m1f2-unchanged
+      map_1:
+        field_1: m1m1f1
+        field_2: m1m1f2-unchanged
+      map_2:
+        field_1: m1m2f1
+        field_2: m1m2f2
+      list_1:
+      - name: a
+        field_1: m1l1af1
+      - name: b
+        field_1: m1l1bf1
+
+    map_2-unchanged:
+      field_1: m2f1-unchanged
+
+    list_1:
+    - name: a
+      field_1: l1af1
+
+  subconfig_2:
+    field_1: f1
+    field_2: f1
+    map_1:
+      field_1: m1f1
+    list_1:
+    - name: a
+      field_1: l1af1
+
+  subconfig_3:
+    field_1: f1
+    field_2: f1
+    map_1:
+      field_1: m1f1
+    list_1:
+    - name: a
+      field_1: l1af1
+
+  subconfig_4:
+    field_1: f1-unchanged
+    field_2: f1-unchanged
+
+selector_config:
+- description:
+  selector: {}
+  config:
+
+    subconfig_1: !inherit       # map:   shall be appended/modified
+
+      field_1: f1-new           # field: shall be replaced
+      field_3: f3-new           # field: shall be added
+
+      map_1: !inherit           # map:   shall be appended/modified
+
+        field_1: m1f1-new       # field: shall be replaced
+        field_3: m1f3-new       # field: shall be added
+
+        map_1: !inherit         # map:   shall be appended/modified
+          field_1: m1m1f1-new   # field: shall be replaced
+          field_3: m1m1f3-new   # field: shall be added
+
+        map_2:                  # map:   shall be replaced
+          field_3: m1m2f3-new
+
+        map_3_1:                # map:   shall be added
+          field_1: m1m31f1-new
+
+        list_1:                 # list:  shall be replaced
+        - name: c
+          field_1: m1l1cf1-new
+
+        list_2_1:               # list:  shall be added
+        - name: a
+          field_1: m1l21af1-new
+
+      list_1:                   # list: shall be replaced
+      - name: d
+        field_1: l1df1-new
+
+      list_2_1:                 # list:  shall be added
+      - name: a
+        field_1: l21af1-new
+
+    subconfig_2:                # map:  shall be replaced
+      field_1: f1-new
+      field_3: f3-new
+
+    subconfig_3:                # map:  shall be replaced
+
+    subconfig_5_1:              # map:  shall be added as not existing
+
+    subconfig_5_2:              # map:  shall be added as not existing
+      field_1: f1-new
+      field_3: f3-new
+)";
+        const TString expected = R"(
+subconfig_1:
+  field_2: f2-unchanged
+  map_1:
+    field_2: m1f2-unchanged
+    map_1:
+      field_2: m1m1f2-unchanged
+      field_1: m1m1f1-new
+      field_3: m1m1f3-new
+    field_1: m1f1-new
+    field_3: m1f3-new
+    map_2:
+      field_3: m1m2f3-new
+    map_3_1:
+      field_1: m1m31f1-new
+    list_1:
+    - name: c
+      field_1: m1l1cf1-new
+    list_2_1:
+    - name: a
+      field_1: m1l21af1-new
+  map_2-unchanged:
+    field_1: m2f1-unchanged
+  field_1: f1-new
+  field_3: f3-new
+  list_1:
+  - name: d
+    field_1: l1df1-new
+  list_2_1:
+  - name: a
+    field_1: l21af1-new
+subconfig_4:
+  field_1: f1-unchanged
+  field_2: f1-unchanged
+subconfig_2:
+  field_1: f1-new
+  field_3: f3-new
+subconfig_3: )" R"(
+subconfig_5_1: )" R"(
+subconfig_5_2:
+  field_1: f1-new
+  field_3: f3-new
+)";
+        auto doc = NFyaml::TDocument::Parse(config);
+        NYamlConfig::ApplySelectors(doc, {});
+
+        TStringStream resolved;
+        resolved << doc.Root().Map().at("config");
+        UNIT_ASSERT_VALUES_EQUAL(Strip(resolved.Str()), Strip(expected));
+    }
+
+    Y_UNIT_TEST(ModifyInList)
+    {
+        const TString config = R"(
+config:
+  subconfig_1:
+
+    list_1:
+    - name: a
+      field_1: l1af1
+      map_1:
+        field_1: l1am1f1
+    - name: b
+      field_1: l1bf1
+      map_1:
+        field_1: l1bm1f1
+    - name: c
+      field_1: l1cf1-unchanged
+      map_1:
+        field_1: l1cm1f1-unchanged
+
+    list_2:
+    - name: a
+      field_1: l2af1
+      map_1:
+        field_1: l2am1f1
+    - name: b
+      field_1: l2bf1
+    - name: c
+      field_1: l2cf1
+
+selector_config:
+- description:
+  selector: {}
+  config:
+    subconfig_1: !inherit
+
+      list_1: !inherit:name       # shall remove/replace existing elements (by key 'name') and append new
+      - name: a                   # shall be replaced
+        field_2: l1af2-new
+        map_1:
+          field_2: l1am1f2-new
+        map_2:
+          field_1: l1am2f1-new
+      - !remove                   # shall be removed ('name: b')
+        name: b
+      - name: d                   # shall be added
+        field_3: l1df3-new
+        map_3:
+          field_1: l1dm3f1-new
+
+      list_2: !append             # shall unconditionally append elements (even duplicates)
+      - name: b
+        field_1: l2bf1
+        map_1:
+          field_1: l2bm1f1
+      - name: d
+        field_1: l2df1
+        map_1:
+          field_1: l2dm1f1
+      - name: e
+        field_1: l2ef1
+        map_1:
+          field_1: l2em1f1
+      - name: a
+        field_1: l2af1
+        map_1:
+          field_1: l2am1f1
+)";
+        const TString expected = R"(
+subconfig_1:
+  list_1:
+  - name: a
+    field_2: l1af2-new
+    map_1:
+      field_2: l1am1f2-new
+    map_2:
+      field_1: l1am2f1-new
+  - name: c
+    field_1: l1cf1-unchanged
+    map_1:
+      field_1: l1cm1f1-unchanged
+  - name: d
+    field_3: l1df3-new
+    map_3:
+      field_1: l1dm3f1-new
+  list_2:
+  - name: a
+    field_1: l2af1
+    map_1:
+      field_1: l2am1f1
+  - name: b
+    field_1: l2bf1
+  - name: c
+    field_1: l2cf1
+  - name: b
+    field_1: l2bf1
+    map_1:
+      field_1: l2bm1f1
+  - name: d
+    field_1: l2df1
+    map_1:
+      field_1: l2dm1f1
+  - name: e
+    field_1: l2ef1
+    map_1:
+      field_1: l2em1f1
+  - name: a
+    field_1: l2af1
+    map_1:
+      field_1: l2am1f1
+)";
+        auto doc = NFyaml::TDocument::Parse(config);
+        NYamlConfig::ApplySelectors(doc, {});
+
+        TStringStream resolved;
+        resolved << doc.Root().Map().at("config");
+        UNIT_ASSERT_VALUES_EQUAL(Strip(resolved.Str()), Strip(expected));
+    }
+
+    Y_UNIT_TEST(ModifyAbsentInMap)
+    {
+        const TString config = R"(
+config:
+  subconfig_1:
+    map_1:
+      field_1: m1f1
+
+selector_config:
+- description:
+  selector: {}
+  config:
+
+    subconfig_1: !inherit
+
+      map_1: !inherit
+
+        map_1: !inherit         # map:   shall be added keeping '!inherit' tag as not existing
+          field_1: m1m1f1-new
+
+        list_1: !inherit:name   # list:  shall be added "as is" with tag '!inherit:name' as not existing
+        - name: a
+          field_1: m1m1l1af1-new
+
+      list_1: !inherit:name     # list:  shall be added "as is" with tag '!inherit:name' as not existing
+      - name: a
+        field_1: l1af1-new
+
+    subconfig_2: !inherit       # map:  shall be added "as is" with tag '!inherit' as not existing
+
+    subconfig_3: !inherit       # map:  shall be added "as is" with tag '!inherit' as not existing
+      field_1: f1-new
+      map_1: !inherit           # map:  shall be added "as is" with tag '!inherit' as not existing
+        field_1: m1f1-new
+)";
+        const TString expected = R"(
+subconfig_1:
+  map_1:
+    field_1: m1f1
+    map_1: !inherit
+      field_1: m1m1f1-new
+    list_1: !inherit:name
+    - name: a
+      field_1: m1m1l1af1-new
+  list_1: !inherit:name
+  - name: a
+    field_1: l1af1-new
+subconfig_2: !inherit )" R"(
+subconfig_3: !inherit
+  field_1: f1-new
+  map_1: !inherit
+    field_1: m1f1-new
+)";
+        // All migrated tags must be removed with NYamlConfig::RemoveTags()
+        const TString expectedAfterRemoveTags = R"(
+subconfig_1:
+  map_1:
+    field_1: m1f1
+    map_1:
+      field_1: m1m1f1-new
+    list_1:
+    - name: a
+      field_1: m1m1l1af1-new
+  list_1:
+  - name: a
+    field_1: l1af1-new
+subconfig_2: )" R"(
+subconfig_3:
+  field_1: f1-new
+  map_1:
+    field_1: m1f1-new
+)";
+
+        auto doc = NFyaml::TDocument::Parse(config);
+        NYamlConfig::ApplySelectors(doc, {});
+
+        {
+            TStringStream resolved;
+            resolved << doc.Root().Map().at("config");
+            UNIT_ASSERT_VALUES_EQUAL(Strip(resolved.Str()), Strip(expected));
+        }
+
+        {
+            NYamlConfig::RemoveTags(doc);
+
+            TStringStream resolved;
+            resolved << doc.Root().Map().at("config");
+            UNIT_ASSERT_VALUES_EQUAL(Strip(resolved.Str()), Strip(expectedAfterRemoveTags));
+        }
+    }
+
+    Y_UNIT_TEST(ModifyAbsentInList)
+    {
+        const TString config = R"(
+config:
+  subconfig_1:
+
+    list_1:
+    - name: a
+      field_1: l1af1
+      map_1:
+        field_1: l1am1f1
+
+    list_2:
+    - name: a
+      field_1: l2af1
+      map_1:
+        field_1: l2am1f1
+
+selector_config:
+- description:
+  selector: {}
+  config:
+    subconfig_1: !inherit
+
+      list_1: !inherit:name       # shall remove/replace existing elements (by key 'name') and append new
+      - name: a                   # shall be replaced
+        field_1: l1af1-new
+        map_1: !inherit           # shall be added "as is" with tag !inherit as not existing (whole element is replaced)
+          field_1: l1am1f1-new
+      - name: b                   # shall be added
+        field_1: l1bf1-new
+        map_1: !inherit           # shall be added "as is" with tag !inherit as not existing (whole element is replaced)
+          field_1: l1bm1f1-new
+      - !remove                   # shall be added "as is" with tag !remove as not existing
+        name: c
+
+      list_2: !append             # shall unconditionally append elements (even duplicates)
+      - name: a                   # shall be added
+        field_1: l2af1-new
+        map_1: !inherit           # shall be added "as is" with tag !inherit as not existing (whole element is replaced)
+          field_1: l2am1f1-new
+      - name: b                   # shall be added
+        field_1: l2bf1-new
+        map_1: !inherit           # shall be added "as is" with tag !inherit as not existing (whole element is replaced)
+          field_1: l2bm1f1-new
+      - !remove                   # shall be added "as is" with tag !remove as not existing
+        name: c
+
+      list_3: !append             # shall be added "as is" with tag !inherit:name as not existing
+      - name: a
+        field_1: l3af1-new
+        map_1: !inherit           # shall be added "as is" with tag !inherit as not existing
+          field_1: l3am1f1-new
+      - !remove                   # shall be added "as is" with tag !remove as not existing
+        name: c
+
+      list_4: !inherit:name       # shall be added "as is" with tag !inherit:name as not existing
+      - name: a
+        field_1: l4af1-new
+        map_1: !inherit           # shall be added "as is" with tag !inherit as not existing
+          field_1: l4am1f1-new
+      - !remove                   # shall be added "as is" with tag !remove as not existing
+        name: c
+)";
+        const TString expected = R"(
+subconfig_1:
+  list_1:
+  - name: a
+    field_1: l1af1-new
+    map_1: !inherit
+      field_1: l1am1f1-new
+  - name: b
+    field_1: l1bf1-new
+    map_1: !inherit
+      field_1: l1bm1f1-new
+  - !remove
+    name: c
+  list_2:
+  - name: a
+    field_1: l2af1
+    map_1:
+      field_1: l2am1f1
+  - name: a
+    field_1: l2af1-new
+    map_1: !inherit
+      field_1: l2am1f1-new
+  - name: b
+    field_1: l2bf1-new
+    map_1: !inherit
+      field_1: l2bm1f1-new
+  - !remove
+    name: c
+  list_3: !append
+  - name: a
+    field_1: l3af1-new
+    map_1: !inherit
+      field_1: l3am1f1-new
+  - !remove
+    name: c
+  list_4: !inherit:name
+  - name: a
+    field_1: l4af1-new
+    map_1: !inherit
+      field_1: l4am1f1-new
+  - !remove
+    name: c
+)";
+        // All migrated tags must be removed with NYamlConfig::RemoveTags(),
+        // except '!remove' erroneous behavior: 'name:c' shall be added instead do nothing
+        const TString expectedAfterRemoveTags = R"(
+subconfig_1:
+  list_1:
+  - name: a
+    field_1: l1af1-new
+    map_1:
+      field_1: l1am1f1-new
+  - name: b
+    field_1: l1bf1-new
+    map_1:
+      field_1: l1bm1f1-new
+  - name: c)" /* ERROR: 'name:c' has been added instead do nothing */ R"(
+  list_2:
+  - name: a
+    field_1: l2af1
+    map_1:
+      field_1: l2am1f1
+  - name: a
+    field_1: l2af1-new
+    map_1:
+      field_1: l2am1f1-new
+  - name: b
+    field_1: l2bf1-new
+    map_1:
+      field_1: l2bm1f1-new
+  - name: c)" /* ERROR: 'name:c' has been added instead do nothing */ R"(
+  list_3:
+  - name: a
+    field_1: l3af1-new
+    map_1:
+      field_1: l3am1f1-new
+  - name: c)" /* ERROR: 'name:c' has been added instead do nothing */ R"(
+  list_4:
+  - name: a
+    field_1: l4af1-new
+    map_1:
+      field_1: l4am1f1-new
+  - name: c)" /* ERROR: 'name:c' has been added instead do nothing */ R"(
+)";
+        auto doc = NFyaml::TDocument::Parse(config);
+        NYamlConfig::ApplySelectors(doc, {});
+
+        {
+            TStringStream resolved;
+            resolved << doc.Root().Map().at("config");
+            UNIT_ASSERT_VALUES_EQUAL(Strip(resolved.Str()), Strip(expected));
+        }
+
+        {
+            NYamlConfig::RemoveTags(doc);
+
+            TStringStream resolved;
+            resolved << doc.Root().Map().at("config");
+            UNIT_ASSERT_VALUES_EQUAL(Strip(resolved.Str()), Strip(expectedAfterRemoveTags));
+        }
+    }
+
+    Y_UNIT_TEST(LabeledSelectors)
+    {
+        const TString config = R"(
+config:
+  subconfig_1: !inherit
+    field_1: 1
+    field_2: 2
+    map_1: !inherit
+      field_1: 1
+      field_2: 2
+      list_1: !inherit:name
+      - name: a
+        field_1: 1
+        field_2: 2
+      - name: x
+        field_1: 1
+      - name: y
+        field_1: 1
+    list_1: !append
+    - name: a
+      field_1: 1
+      field_2: 2
+
+selector_config:
+
+- description:
+  selector:
+    type: x
+  config:
+    subconfig_1: !inherit
+      field_1: 1x
+      map_1: !inherit
+        field_1: 1x
+        list_1: !inherit:name
+        - name: a
+          field_1: 1x
+        - !remove
+          name: y
+      list_1: !append
+      - name: a
+        field_1: 1x
+
+- description:
+  selector:
+    type: y
+  config:
+    subconfig_1: !inherit
+      field_1: 1y
+      map_1: !inherit
+        field_1: 1y
+        list_1: !inherit:name
+        - name: a
+          field_1: 1y
+        - !remove
+          name: x
+      list_1: !append
+      - name: a
+        field_1: 1y
+
+- description:
+  selector:
+    type:
+      in:
+      - q
+      - w
+  config:
+    subconfig_1: !inherit
+      field_1: 1qw
+      map_1: !inherit
+        field_1: 1qw
+        list_1: !inherit:name
+        - name: a
+          field_1: 1qw
+        - !remove
+          name: x
+        - !remove
+          name: y
+      list_1: !append
+      - name: a
+        field_1: 1qw
+)";
+        const TString expectedNone = R"(
+subconfig_1: !inherit
+  field_1: 1
+  field_2: 2
+  map_1: !inherit
+    field_1: 1
+    field_2: 2
+    list_1: !inherit:name
+    - name: a
+      field_1: 1
+      field_2: 2
+    - name: x
+      field_1: 1
+    - name: y
+      field_1: 1
+  list_1: !append
+  - name: a
+    field_1: 1
+    field_2: 2
+)";
+        const TString expectedX = R"(
+subconfig_1: !inherit
+  field_2: 2
+  map_1: !inherit
+    field_2: 2
+    list_1: !inherit:name
+    - name: a
+      field_1: 1x
+    - name: x
+      field_1: 1
+    field_1: 1x
+  list_1: !append
+  - name: a
+    field_1: 1
+    field_2: 2
+  - name: a
+    field_1: 1x
+  field_1: 1x
+)";
+        const TString expectedY = R"(
+subconfig_1: !inherit
+  field_2: 2
+  map_1: !inherit
+    field_2: 2
+    list_1: !inherit:name
+    - name: a
+      field_1: 1y
+    - name: y
+      field_1: 1
+    field_1: 1y
+  list_1: !append
+  - name: a
+    field_1: 1
+    field_2: 2
+  - name: a
+    field_1: 1y
+  field_1: 1y
+)";
+        const TString expectedQW = R"(
+subconfig_1: !inherit
+  field_2: 2
+  map_1: !inherit
+    field_2: 2
+    list_1: !inherit:name
+    - name: a
+      field_1: 1qw
+    field_1: 1qw
+  list_1: !append
+  - name: a
+    field_1: 1
+    field_2: 2
+  - name: a
+    field_1: 1qw
+  field_1: 1qw
+)";
+        {
+            auto doc = NFyaml::TDocument::Parse(config);
+            NYamlConfig::ApplySelectors(doc, {});
+
+            TStringStream resolved;
+            resolved << doc.Root().Map().at("config");
+            UNIT_ASSERT_VALUES_EQUAL(Strip(resolved.Str()), Strip(expectedNone));
+        }
+        {
+            auto doc = NFyaml::TDocument::Parse(config);
+            NYamlConfig::ApplySelectors(doc, {
+                NYamlConfig::TNamedLabel{"type", "x"}});
+
+            TStringStream resolved;
+            resolved << doc.Root().Map().at("config");
+            UNIT_ASSERT_VALUES_EQUAL(Strip(resolved.Str()), Strip(expectedX));
+        }
+        {
+            auto doc = NFyaml::TDocument::Parse(config);
+            NYamlConfig::ApplySelectors(doc, {
+                NYamlConfig::TNamedLabel{"type", "y"}});
+
+            TStringStream resolved;
+            resolved << doc.Root().Map().at("config");
+            UNIT_ASSERT_VALUES_EQUAL(Strip(resolved.Str()), Strip(expectedY));
+        }
+        {
+            auto doc = NFyaml::TDocument::Parse(config);
+            NYamlConfig::ApplySelectors(doc, {
+                NYamlConfig::TNamedLabel{"type", "q"}});
+
+            TStringStream resolved;
+            resolved << doc.Root().Map().at("config");
+            UNIT_ASSERT_VALUES_EQUAL(Strip(resolved.Str()), Strip(expectedQW));
+        }
+        {
+            auto doc = NFyaml::TDocument::Parse(config);
+            NYamlConfig::ApplySelectors(doc, {
+                NYamlConfig::TNamedLabel{"type", "w"}});
+
+            TStringStream resolved;
+            resolved << doc.Root().Map().at("config");
+            UNIT_ASSERT_VALUES_EQUAL(Strip(resolved.Str()), Strip(expectedQW));
+        }
+    }
+
+    Y_UNIT_TEST(MultipleSelectors)
+    {
+        const TString config = R"(
+config:
+  subconfig_1: !inherit
+    field_1: 1
+    field_2: 2
+    map_1: !inherit
+      field_1: 1
+      field_2: 2
+      list_1: !inherit:name
+      - name: a
+        field_1: 1
+        field_2: 2
+      - name: _
+        field_1: 1
+      - name: x
+        field_1: 1
+      - name: y
+        field_1: 1
+    list_1: !append
+    - name: a
+      field_1: 1
+      field_2: 2
+
+selector_config:
+
+- description:  all
+  selector: {}
+  config:
+    subconfig_1: !inherit
+      field_2: 3
+      list_1: !append
+      - name: _
+        field_2: 3
+
+- description:  all
+  selector: {}
+  config:
+    subconfig_1: !inherit
+      map_1: !inherit
+        field_2: 4
+        list_1: !inherit:name
+        - name: a
+          field_2: 4
+        - !remove
+          name: _
+
+- description:  type_1 = x && type_2 = ???
+  selector:
+    type_1: x
+  config:
+    subconfig_1: !inherit
+      field_1: 1x
+      list_1: !append
+      - name: a
+        field_1: 1x
+
+- description:  type_1 = x && type_2 = ???
+  selector:
+    type_1: x
+  config:
+    subconfig_1: !inherit
+      map_1: !inherit
+        field_1: 1x
+        list_1: !inherit:name
+        - name: a
+          field_1: 1x
+        - !remove
+          name: y
+
+- description:  type_1 = ??? && type_2 = y
+  selector:
+    type_2: y
+  config:
+    subconfig_1: !inherit
+      field_1: 1y
+      list_1: !append
+      - name: a
+        field_1: 1y
+
+- description:  type_1 = ??? && type_2 = y
+  selector:
+    type_2: y
+  config:
+    subconfig_1: !inherit
+      map_1: !inherit
+        field_1: 1y
+        list_1: !inherit:name
+        - name: a
+          field_1: 1y
+        - !remove
+          name: x
+
+- description:  type_1 = x && type_2 = y
+  selector:
+    type_1: x
+    type_2: y
+  config:
+    subconfig_1: !inherit
+      field_2: 2xy
+      list_1: !append
+      - name: a
+        field_2: 2xy
+
+- description:  type_1 = x && type_2 = y
+  selector:
+    type_1: x
+    type_2: y
+  config:
+    subconfig_1: !inherit
+      map_1: !inherit
+        field_2: 2xy
+
+- description:  type_1 = x && type_2 != y
+  selector:
+    type_1:
+      in:
+      - o
+      - x
+    type_2:
+      not_in:
+      - y
+      - o
+  config:
+    subconfig_1: !inherit
+      field_3: 3ox
+      list_1: !append
+      - name: a
+        field_3: 3ox
+
+- description:  type_1 = x && type_2 != y
+  selector:
+    type_1:
+      in:
+      - o
+      - x
+    type_2:
+      not_in:
+      - y
+      - o
+  config:
+    subconfig_1: !inherit
+      map_1: !inherit
+        field_3: 3ox
+)";
+        const TString expectedNone = R"(
+subconfig_1: !inherit
+  field_1: 1
+  map_1: !inherit
+    field_1: 1
+    list_1: !inherit:name
+    - name: a
+      field_2: 4
+    - name: x
+      field_1: 1
+    - name: y
+      field_1: 1
+    field_2: 4
+  list_1: !append
+  - name: a
+    field_1: 1
+    field_2: 2
+  - name: _
+    field_2: 3
+  field_2: 3
+)";
+        const TString expectedX = R"(
+subconfig_1: !inherit
+  map_1: !inherit
+    list_1: !inherit:name
+    - name: a
+      field_1: 1x
+    - name: x
+      field_1: 1
+    field_2: 4
+    field_1: 1x
+    field_3: 3ox
+  list_1: !append
+  - name: a
+    field_1: 1
+    field_2: 2
+  - name: _
+    field_2: 3
+  - name: a
+    field_1: 1x
+  - name: a
+    field_3: 3ox
+  field_2: 3
+  field_1: 1x
+  field_3: 3ox
+)";
+        const TString expectedY = R"(
+subconfig_1: !inherit
+  map_1: !inherit
+    list_1: !inherit:name
+    - name: a
+      field_1: 1y
+    - name: y
+      field_1: 1
+    field_2: 4
+    field_1: 1y
+  list_1: !append
+  - name: a
+    field_1: 1
+    field_2: 2
+  - name: _
+    field_2: 3
+  - name: a
+    field_1: 1y
+  field_2: 3
+  field_1: 1y
+)";
+        const TString expectedXY = R"(
+subconfig_1: !inherit
+  map_1: !inherit
+    list_1: !inherit:name
+    - name: a
+      field_1: 1y
+    field_1: 1y
+    field_2: 2xy
+  list_1: !append
+  - name: a
+    field_1: 1
+    field_2: 2
+  - name: _
+    field_2: 3
+  - name: a
+    field_1: 1x
+  - name: a
+    field_1: 1y
+  - name: a
+    field_2: 2xy
+  field_1: 1y
+  field_2: 2xy
+)";
+        {
+            auto doc = NFyaml::TDocument::Parse(config);
+            NYamlConfig::ApplySelectors(doc, {});
+
+            TStringStream resolved;
+            resolved << doc.Root().Map().at("config");
+            UNIT_ASSERT_VALUES_EQUAL(Strip(resolved.Str()), Strip(expectedNone));
+        }
+        {
+            auto doc = NFyaml::TDocument::Parse(config);
+            NYamlConfig::ApplySelectors(doc, {
+                NYamlConfig::TNamedLabel{"type_1", "x"}});
+
+            TStringStream resolved;
+            resolved << doc.Root().Map().at("config");
+            UNIT_ASSERT_VALUES_EQUAL(Strip(resolved.Str()), Strip(expectedX));
+        }
+        {
+            auto doc = NFyaml::TDocument::Parse(config);
+            NYamlConfig::ApplySelectors(doc, {
+                NYamlConfig::TNamedLabel{"type_2", "y"}});
+
+            TStringStream resolved;
+            resolved << doc.Root().Map().at("config");
+            UNIT_ASSERT_VALUES_EQUAL(Strip(resolved.Str()), Strip(expectedY));
+        }
+        {
+            auto doc = NFyaml::TDocument::Parse(config);
+            NYamlConfig::ApplySelectors(doc, {
+                NYamlConfig::TNamedLabel{"type_1", "x"},
+                NYamlConfig::TNamedLabel{"type_2", "y"}});
+
+            TStringStream resolved;
+            resolved << doc.Root().Map().at("config");
+            UNIT_ASSERT_VALUES_EQUAL(Strip(resolved.Str()), Strip(expectedXY));
+        }
+    }
+}
+
+Y_UNIT_TEST_SUITE(YamlDatabaseConfigResolve) {
+
+/**
+ * Tests:
+ *  1. Empty                  - Successfull no-change resolving with empty config
+ *  2. NoSelectors            - Successfull no-change resolving with no selectors
+ *  3. DropLabelsAndSelectors - Drop 'allowed_labels' and 'selector_config' sections after resolving
+ *  4. PreserveExistingTags   - Preserve existing elements tags at all levels
+ *  5. SingleSelector         - Single selector applying
+ *  6. MultipleSelectors      - Multiple selectors layering
+ *
+ * Notes:
+ *  - tests 1-4 performed both without and with labels passed into ResolveDatabaseConfig() function
+ */
+
+     Y_UNIT_TEST(Empty)
+    {
+        const TString config = R"(
+metadata:
+  kind: DatabaseConfig
+  database: "/dc/tenant"
+  version: 0
+config:
+)";
+        const TString expected = config;
+
+        // Without and with labels
+        TSet<NYamlConfig::TNamedLabel> labels;
+        for (int i = 0; i < 2; i++)
+        {
+            auto doc = NFyaml::TDocument::Parse(config);
+            NYamlConfig::ResolveDatabaseConfig(doc, labels);
+
+            TStringStream resolved;
+            resolved << doc.Root();
+            UNIT_ASSERT_VALUES_EQUAL(Strip(resolved.Str()), Strip(expected));
+
+            labels.emplace("type", "a");
+        }
+    }
+
+    Y_UNIT_TEST(NoSelectors)
+    {
+        const TString config = R"(
+metadata:
+  kind: DatabaseConfig
+  database: "/dc/tenant"
+  version: 0
+config:
+  subconfig_1:
+    param_1: none
+  subconfig_2: !inherit
+    param_2: true
+)";
+        const TString expected = config;
+
+        // Without and with labels
+        TSet<NYamlConfig::TNamedLabel> labels;
+        for (int i = 0; i < 2; i++)
+        {
+            auto doc = NFyaml::TDocument::Parse(config);
+            NYamlConfig::ResolveDatabaseConfig(doc, labels);
+
+            TStringStream resolved;
+            resolved << doc.Root();
+            UNIT_ASSERT_VALUES_EQUAL(Strip(resolved.Str()), Strip(expected));
+
+            labels.emplace("type", "a");
+        }
+    }
+
+    Y_UNIT_TEST(ResolveDropLabelsAndSelectors)
+    {
+        const TString config = R"(---
+metadata:
+  kind: DatabaseConfig
+  database: "/dc/tenant"
+  version: 0
+
+config:
+  subconfig_1:
+    field_1: none
+  subconfig_2: !inherit
+    field_2: true
+
+allowed_labels:
+  type_1:
+    type: string
+  type_2:
+    type: enum
+    values:
+      ? a
+      ? b
+
+selector_config:
+
+- description: all
+  selector: {}
+  config:
+    subconfig_1: !inherit
+      field_1: all
+
+- description:  type = a
+  selector:
+    type_1: a
+  config:
+    subconfig_1: !inherit
+      field_1: a
+)";
+        // Without and with labels
+        TSet<NYamlConfig::TNamedLabel> labels;
+        for (int i = 0; i < 3; i++)
+        {
+            auto doc = NFyaml::TDocument::Parse(config);
+            NYamlConfig::ResolveDatabaseConfig(doc, {});
+
+            UNIT_ASSERT(!doc.Root().Map().Has("allowed_labels"));
+            UNIT_ASSERT(!doc.Root().Map().Has("selector_config"));
+
+            if (!i) {
+                labels.emplace("type_1", "x");
+            }
+            else {
+                labels.emplace("type_1", "a");
+            }
+        }
+    }
+
+    Y_UNIT_TEST(PreserveExistingTags)
+    {
+        const TString config = R"(
+metadata:
+  kind: DatabaseConfig
+  database: "/dc/tenant"
+  version: 0
+
+config:
+
+  subconfig_1: !inherit
+    map_1: !inherit
+      field_1: 1
+      list_1: !inherit:name
+      - name: a
+        map_1: !inherit
+          field_1: 1
+      - !remove
+        name: b
+
+    list_1: !inherit:name
+    - name: a
+      map_1: !inherit
+        field_1: 1
+    - !remove
+      name: b
+
+    list_2: !append
+    - name: a
+      map_1:
+        field_1: 1
+    - !remove
+      name: b
+
+selector_config:
+
+- description:
+  selector: {}
+  config:
+
+    subconfig_1: !inherit
+      map_1: !inherit
+        field_1: 2
+        list_1: !append
+        - name: c
+          map_1:
+            field_1: 2
+
+      list_1: !inherit:name
+      - name: a
+        map_1:
+          field_1: 2
+
+      list_2: !append
+      - name: c
+        map_1:
+          field_1: 2
+
+      # all tags of new element shall not be preserved
+      # (except errorneous '!remove', see Y_UNIT_TEST(ModifyAbsentInList))
+
+      list_3: !append
+      - name: a
+        map_1: !inherit
+          field_1: 3
+        list_1: !inherit:name
+        - name: a
+          field_1: 3
+      map_3: !inherit
+        map_1: !inherit
+          field_1: 3
+        list_1: !append
+        - name: c
+          map_1: !inherit
+            field_1: 3
+)";
+        const TString expected = R"(
+metadata:
+  kind: DatabaseConfig
+  database: "/dc/tenant"
+  version: 0
+config:
+  subconfig_1: !inherit
+    map_1: !inherit
+      list_1: !inherit:name
+      - name: a
+        map_1: !inherit
+          field_1: 1
+      - !remove
+        name: b
+      - name: c
+        map_1:
+          field_1: 2
+      field_1: 2
+    list_1: !inherit:name
+    - name: a
+      map_1: !inherit
+        field_1: 2
+    - !remove
+      name: b
+    list_2: !append
+    - name: a
+      map_1:
+        field_1: 1
+    - !remove
+      name: b
+    - name: c
+      map_1:
+        field_1: 2
+    list_3:
+    - name: a
+      map_1:
+        field_1: 3
+      list_1:
+      - name: a
+        field_1: 3
+    map_3:
+      map_1:
+        field_1: 3
+      list_1:
+      - name: c
+        map_1:
+          field_1: 3
+)";
+        auto doc = NFyaml::TDocument::Parse(config);
+        NYamlConfig::ResolveDatabaseConfig(doc, {});
+
+        TStringStream resolved;
+        resolved << doc.Root();
+        UNIT_ASSERT_VALUES_EQUAL(Strip(resolved.Str()), Strip(expected));
+    }
+
+    Y_UNIT_TEST(SingleSelector)
+    {
+        const TString config = R"(
+metadata:
+  kind: DatabaseConfig
+  database: "/dc/tenant"
+  version: 0
+
+config:
+
+  subconfig_1: !inherit
+    field_0: 0
+    field_1: 1
+
+selector_config:
+
+- description:
+  selector:
+    type: x
+  config:
+    subconfig_1: !inherit
+      field_1: 1x
+      field_2: 2x
+
+- description:
+  selector:
+    type: y
+  config:
+    subconfig_1: !inherit
+      field_1: 1y
+      field_2: 2y
+
+- description:
+  selector:
+    type:
+      in:
+      - q
+      - w
+  config:
+    subconfig_1: !inherit
+      field_1: 1qw
+      field_2: 2qw
+)";
+        const TString expectedNone = R"(
+metadata:
+  kind: DatabaseConfig
+  database: "/dc/tenant"
+  version: 0
+config:
+  subconfig_1: !inherit
+    field_0: 0
+    field_1: 1
+)";
+        const TString expectedX = R"(
+metadata:
+  kind: DatabaseConfig
+  database: "/dc/tenant"
+  version: 0
+config:
+  subconfig_1: !inherit
+    field_0: 0
+    field_1: 1x
+    field_2: 2x
+)";
+        const TString expectedY = R"(
+metadata:
+  kind: DatabaseConfig
+  database: "/dc/tenant"
+  version: 0
+config:
+  subconfig_1: !inherit
+    field_0: 0
+    field_1: 1y
+    field_2: 2y
+)";
+        const TString expectedQW = R"(
+metadata:
+  kind: DatabaseConfig
+  database: "/dc/tenant"
+  version: 0
+config:
+  subconfig_1: !inherit
+    field_0: 0
+    field_1: 1qw
+    field_2: 2qw
+)";
+        {
+            auto doc = NFyaml::TDocument::Parse(config);
+            NYamlConfig::ResolveDatabaseConfig(doc, {});
+
+            TStringStream resolved;
+            resolved << doc.Root();
+            UNIT_ASSERT_VALUES_EQUAL(Strip(resolved.Str()), Strip(expectedNone));
+        }
+        {
+            auto doc = NFyaml::TDocument::Parse(config);
+            NYamlConfig::ResolveDatabaseConfig(doc, {
+                NYamlConfig::TNamedLabel{"type", "x"}});
+
+            TStringStream resolved;
+            resolved << doc.Root();
+            UNIT_ASSERT_VALUES_EQUAL(Strip(resolved.Str()), Strip(expectedX));
+        }
+        {
+            auto doc = NFyaml::TDocument::Parse(config);
+            NYamlConfig::ResolveDatabaseConfig(doc, {
+                NYamlConfig::TNamedLabel{"type", "y"}});
+
+            TStringStream resolved;
+            resolved << doc.Root();
+            UNIT_ASSERT_VALUES_EQUAL(Strip(resolved.Str()), Strip(expectedY));
+        }
+        {
+            auto doc = NFyaml::TDocument::Parse(config);
+            NYamlConfig::ResolveDatabaseConfig(doc, {
+                NYamlConfig::TNamedLabel{"type", "q"}});
+
+            TStringStream resolved;
+            resolved << doc.Root();
+            UNIT_ASSERT_VALUES_EQUAL(Strip(resolved.Str()), Strip(expectedQW));
+        }
+        {
+            auto doc = NFyaml::TDocument::Parse(config);
+            NYamlConfig::ResolveDatabaseConfig(doc, {
+                NYamlConfig::TNamedLabel{"type", "w"}});
+
+            TStringStream resolved;
+            resolved << doc.Root();
+            UNIT_ASSERT_VALUES_EQUAL(Strip(resolved.Str()), Strip(expectedQW));
+        }
+    }
+
+    Y_UNIT_TEST(MultipleSelectors)
+    {
+        const TString config = R"(
+metadata:
+  kind: DatabaseConfig
+  database: "/dc/tenant"
+  version: 0
+
+config:
+
+  subconfig_1: !inherit
+    field_0: 0
+    field_1: 1
+    field_2: 2
+
+selector_config:
+
+- description:  all
+  selector: {}
+  config:
+    subconfig_1: !inherit
+      field_1: _
+
+- description:  all
+  selector: {}
+  config:
+    subconfig_1: !inherit
+      field_2: _
+      field_3: _
+      field_4: _
+
+- description:  type_1 = x && type_2 = ???
+  selector:
+    type_1: x
+  config:
+    subconfig_1: !inherit
+      field_1: 1x
+
+- description:  type_1 = x && type_2 = ???
+  selector:
+    type_1: x
+  config:
+    subconfig_1: !inherit
+      field_3: 1x
+
+- description:  type_1 = ??? && type_2 = y
+  selector:
+    type_2: y
+  config:
+    subconfig_1: !inherit
+      field_2: 1y
+
+- description:  type_1 = ??? && type_2 = y
+  selector:
+    type_2: y
+  config:
+    subconfig_1: !inherit
+      field_4: 1y
+
+- description:  type_1 = x && type_2 = y
+  selector:
+    type_1: x
+    type_2: y
+  config:
+    subconfig_1: !inherit
+      field_1: 2xy
+
+- description:  type_1 = x && type_2 = y
+  selector:
+    type_1: x
+    type_2: y
+  config:
+    subconfig_1: !inherit
+      field_4: 2xy
+
+- description:  type_1 = x && type_2 != y
+  selector:
+    type_1:
+      in:
+      - o
+      - x
+    type_2:
+      not_in:
+      - y
+      - o
+  config:
+    subconfig_1: !inherit
+      field_2: 3ox
+
+- description:  type_1 = x && type_2 != y
+  selector:
+    type_1:
+      in:
+      - o
+      - x
+    type_2:
+      not_in:
+      - y
+      - o
+  config:
+    subconfig_1: !inherit
+      field_3: 3ox
+)";
+        const TString expectedNone = R"(
+metadata:
+  kind: DatabaseConfig
+  database: "/dc/tenant"
+  version: 0
+config:
+  subconfig_1: !inherit
+    field_0: 0
+    field_1: _
+    field_2: _
+    field_3: _
+    field_4: _
+)";
+        const TString expectedX = R"(
+metadata:
+  kind: DatabaseConfig
+  database: "/dc/tenant"
+  version: 0
+config:
+  subconfig_1: !inherit
+    field_0: 0
+    field_4: _
+    field_1: 1x
+    field_2: 3ox
+    field_3: 3ox
+)";
+        const TString expectedY = R"(
+metadata:
+  kind: DatabaseConfig
+  database: "/dc/tenant"
+  version: 0
+config:
+  subconfig_1: !inherit
+    field_0: 0
+    field_1: _
+    field_3: _
+    field_2: 1y
+    field_4: 1y
+)";
+        const TString expectedXY = R"(
+metadata:
+  kind: DatabaseConfig
+  database: "/dc/tenant"
+  version: 0
+config:
+  subconfig_1: !inherit
+    field_0: 0
+    field_3: 1x
+    field_2: 1y
+    field_1: 2xy
+    field_4: 2xy
+)";
+        {
+            auto doc = NFyaml::TDocument::Parse(config);
+            NYamlConfig::ResolveDatabaseConfig(doc, {});
+
+            TStringStream resolved;
+            resolved << doc.Root();
+            UNIT_ASSERT_VALUES_EQUAL(Strip(resolved.Str()), Strip(expectedNone));
+        }
+        {
+            auto doc = NFyaml::TDocument::Parse(config);
+            NYamlConfig::ResolveDatabaseConfig(doc, {
+                NYamlConfig::TNamedLabel{"type_1", "x"}});
+
+            TStringStream resolved;
+            resolved << doc.Root();
+            UNIT_ASSERT_VALUES_EQUAL(Strip(resolved.Str()), Strip(expectedX));
+        }
+        {
+            auto doc = NFyaml::TDocument::Parse(config);
+            NYamlConfig::ResolveDatabaseConfig(doc, {
+                NYamlConfig::TNamedLabel{"type_2", "y"}});
+
+            TStringStream resolved;
+            resolved << doc.Root();
+            UNIT_ASSERT_VALUES_EQUAL(Strip(resolved.Str()), Strip(expectedY));
+        }
+        {
+            auto doc = NFyaml::TDocument::Parse(config);
+            NYamlConfig::ResolveDatabaseConfig(doc, {
+                NYamlConfig::TNamedLabel{"type_1", "x"},
+                NYamlConfig::TNamedLabel{"type_2", "y"}});
+
+            TStringStream resolved;
+            resolved << doc.Root();
+            UNIT_ASSERT_VALUES_EQUAL(Strip(resolved.Str()), Strip(expectedXY));
+        }
+    }
 }

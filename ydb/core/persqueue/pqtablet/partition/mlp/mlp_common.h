@@ -2,9 +2,20 @@
 
 #include <ydb/core/persqueue/events/internal.h>
 #include <ydb/core/persqueue/events/global.h>
+#include <ydb/core/persqueue/public/mlp/mlp.h>
 #include <ydb/library/actors/core/actorid.h>
 
+#include <library/cpp/containers/absl/flat_hash_map.h>
+
 namespace NKikimr::NPQ::NMLP {
+
+inline NKikimrPQ::EMLPOperationResult ToProto(EOperationResult result) {
+    return static_cast<NKikimrPQ::EMLPOperationResult>(static_cast<ui8>(result));
+}
+
+inline EOperationResult FromProto(NKikimrPQ::EMLPOperationResult result) {
+    return static_cast<EOperationResult>(static_cast<ui8>(result));
+}
 
 struct TDLQMessage {
     ui64 Offset;
@@ -26,6 +37,21 @@ struct TResult {
     ui64 Cookie;
 };
 
+struct TOffsetsResult : public TResult {
+    TOffsetsResult(const NActors::TActorId& sender, ui64 cookie,
+                   absl::flat_hash_map<ui64, EOperationResult>&& offsetResults = {})
+        : TResult(sender, cookie)
+        , OffsetResults(std::move(offsetResults))
+    {
+    }
+
+    absl::flat_hash_map<ui64, EOperationResult> OffsetResults;
+};
+
+using TCommitResult = TOffsetsResult;
+using TUnlockResult = TOffsetsResult;
+using TChangeMessageDeadlineResult = TOffsetsResult;
+
 struct TReadMessage {
     ui64 Offset;
     ui32 ApproximateReceiveCount;
@@ -46,15 +72,6 @@ std::unique_ptr<TEvPersQueue::TEvRequest> MakeEvPQRead(
     ui32 partitionId,
     ui64 startOffset,
     std::optional<ui64> count = std::nullopt
-);
-
-std::unique_ptr<TEvPQ::TEvRead> MakeEvRead(
-    const NActors::TActorId& selfId,
-    const TString& consumerName,
-    ui64 startOffset,
-    ui64 count,
-    ui64 cookie,
-    ui64 nextPartNo = 0
 );
 
 std::unique_ptr<TEvPQ::TEvSetClientInfo> MakeEvCommit(

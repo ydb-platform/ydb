@@ -382,31 +382,6 @@ Y_UNIT_TEST_SUITE(SystemView) {
         }
     }
 
-    Y_UNIT_TEST(PgTablesOneSchemeShardDataQuery) {
-        TTestEnv env;
-        CreateRootTable(env, 1, false, 0);
-        CreateRootTable(env, 2, false, 1);
-
-        env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_EXECUTER, NActors::NLog::PRI_DEBUG);
-        env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_COMPILE_SERVICE, NActors::NLog::PRI_DEBUG);
-        env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_YQL, NActors::NLog::PRI_TRACE);
-        env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::SYSTEM_VIEWS, NActors::NLog::PRI_DEBUG);
-
-        TTableClient client(env.GetDriver());
-        auto session = client.CreateSession().GetValueSync().GetSession();
-        {
-            auto result = session.ExecuteDataQuery(R"(
-                SELECT schemaname, tablename, tableowner, tablespace, hasindexes, hasrules, hastriggers, rowsecurity FROM `/Root/.sys/pg_tables` WHERE tablename = PgName("Table0") OR tablename = PgName("Table1") ORDER BY tablename;
-            )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
-
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-            NKqp::CompareYson(R"([
-                ["public";"Table0";"root@builtin";#;"t";"f";"f";"f"];
-                ["public";"Table1";"root@builtin";#;"t";"f";"f";"f"]
-            ])", FormatResultSetYson(result.GetResultSet(0)));
-        }
-    }
-
     Y_UNIT_TEST(Nodes) {
         TTestEnv env;
         CreateTenantsAndTables(env, false);
@@ -1201,6 +1176,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
                     NodeId,
                     PDiskId,
                     Replicated,
+                    PhantomOnly,
                     State,
                     Status,
                     VDisk,
@@ -1220,7 +1196,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
             }
         }
 
-        TYsonFieldChecker check(ysonString, 15);
+        TYsonFieldChecker check(ysonString, 16);
 
         check.Uint64(0u, true); // AllocatedSize
         check.Uint64(0u, true); // AvailableSize
@@ -1233,6 +1209,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
         check.Uint64(env.GetServer().GetRuntime()->GetNodeId(0)); // NodeId
         check.Uint64(1u); // PDiskId
         check.Null(); // Replicated
+        check.Bool(false); // PhantomOnly
         check.Null(); // State
         check.Null(); // Status
         check.Uint64(0u); // VDisk
@@ -2045,7 +2022,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
             UNIT_ASSERT_VALUES_EQUAL(entry.Type, ESchemeEntryType::Directory);
 
             auto children = result.GetChildren();
-            UNIT_ASSERT_VALUES_EQUAL(children.size(), 35);
+            UNIT_ASSERT_VALUES_EQUAL(children.size(), 32);
 
             THashSet<TString> names;
             for (const auto& child : children) {
@@ -2065,7 +2042,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
 
             auto children = result.GetChildren();
 
-            UNIT_ASSERT_VALUES_EQUAL(children.size(), 29);
+            UNIT_ASSERT_VALUES_EQUAL(children.size(), 26);
 
             THashSet<TString> names;
             for (const auto& child : children) {

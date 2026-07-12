@@ -52,4 +52,6 @@ void CreatePostingTable(Tests::TServer::TPtr server, TActorId sender, TShardedTa
 void CreatePrefixTable(Tests::TServer::TPtr server, TActorId sender, TShardedTableOptions options);
 void CreateBuildPrefixTable(Tests::TServer::TPtr server, TActorId sender, TShardedTableOptions options, const char* name);
 
+void CreateFulltextCompactTable(Tests::TServer::TPtr server, TActorId sender, const char* name, const char* keyType = "Uint64");
+
 } // namespace NKikimr

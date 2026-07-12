@@ -20,6 +20,18 @@ using namespace NYql::NNodes;
 
 namespace {
 
+TString GetOlapColumnName(TStringBuf columnName, bool stripAliasPrefix) {
+    if (!stripAliasPrefix) {
+        return TString(columnName);
+    }
+
+    const auto it = columnName.find('.');
+    if (it == TStringBuf::npos) {
+        return TString(columnName);
+    }
+    return TString(columnName.substr(it + 1));
+}
+
 TMaybeNode<TExprBase> NullNode = TMaybeNode<TExprBase>();
 TFilterOpsLevels NullFilterOpsLevels = TFilterOpsLevels(NullNode, NullNode);
 
@@ -280,18 +292,6 @@ TMaybeNode<TExprBase> SafeCastPredicatePushdown(const TCoFlatMap& inputFlatmap, 
 
 namespace {
 
-TString GetColName(const TString& colName, bool stripAliasPrefix = false) {
-    if (!stripAliasPrefix) {
-        return colName;
-    }
-
-    auto it = colName.find(".");
-    if (it != TString::npos) {
-        return colName.substr(it + 1);
-    }
-    return colName;
-}
-
 const TTypeAnnotationNode* GetInputType(const TTypeAnnotationNode* inputType, TExprContext& ctx, bool stripAliasPrefix = false) {
     if (!stripAliasPrefix) {
         return inputType;
@@ -369,7 +369,7 @@ std::vector<TExprBase> ConvertComparisonNode(const TExprBase& nodeIn, const TExp
         }
 
         if (auto maybeMember = node.Maybe<TCoMember>()) {
-            const TString colName = GetColName(maybeMember.Cast().Name().StringValue(), pushdownOptions.StripAliasPrefixFromColName);
+            const TString colName = GetOlapColumnName(maybeMember.Cast().Name().StringValue(), pushdownOptions.StripAliasPrefixFromColName);
             const TTypeAnnotationNode* inputType = GetInputType(argument.GetTypeAnn(), ctx, pushdownOptions.StripAliasPrefixFromColName);
             // clang-format off
             return Build<TKqpOlapApplyColumnArg>(ctx, pos)
@@ -388,7 +388,7 @@ std::vector<TExprBase> ConvertComparisonNode(const TExprBase& nodeIn, const TExp
 
             YQL_ENSURE(maybeColMember, "Expected TCoMember in column field of JSON_VALUE function for pushdown");
             YQL_ENSURE(maybePathUtf8, "Expected TCoUtf8 in path of JSON_VALUE function for pushdown");
-            const TString colName = GetColName(maybeColMember.Cast().Name().StringValue(), pushdownOptions.StripAliasPrefixFromColName);
+            const TString colName = GetOlapColumnName(maybeColMember.Cast().Name().StringValue(), pushdownOptions.StripAliasPrefixFromColName);
 
             auto builder = Build<TKqpOlapJsonValue>(ctx, pos)
                 .Column<TCoAtom>()
@@ -703,7 +703,7 @@ TMaybeNode<TCoAtomList> BuildColumnsFromLambda(const TCoLambda& lambda, TExprCon
 template<bool Empty>
 TMaybeNode<TExprBase> ExistsPushdown(const TCoExists& exists, TExprContext& ctx, TPositionHandle pos, const TPushdownOptions& options)
 {
-    const TString columnName = GetColName(exists.Optional().Cast<TCoMember>().Name().StringValue(), options.StripAliasPrefixFromColName);
+    const TString columnName = GetOlapColumnName(exists.Optional().Cast<TCoMember>().Name().StringValue(), options.StripAliasPrefixFromColName);
     return Build<TKqpOlapFilterUnaryOp>(ctx, pos)
             .Operator()
                 .Value(Empty ? "empty" : "exists", TNodeFlags::Default)
@@ -739,7 +739,7 @@ TMaybeNode<TExprBase> YqlApplyPushdown(const TExprBase& apply, const TExprNode& 
     TExprNode::TListType lambdaArgs;
 
     for (const auto& member : members) {
-        const auto columnName = GetColName(TCoMember(member).Name().StringValue(), pushdownOptions.StripAliasPrefixFromColName);
+        const auto columnName = GetOlapColumnName(TCoMember(member).Name().StringValue(), pushdownOptions.StripAliasPrefixFromColName);
         const TTypeAnnotationNode* inputType = GetInputType(argument.GetTypeAnn(), ctx, pushdownOptions.StripAliasPrefixFromColName);
         auto columnArg = Build<TKqpOlapApplyColumnArg>(ctx, member->Pos())
             .TableRowType(ExpandType(argument.Pos(), *inputType, ctx))
@@ -896,7 +896,7 @@ bool CollectOlapOperationForProjection(TExprNode::TPtr input, const TExprNode& a
             if (!predicateMembers.contains(originalMemberName)) {
                 if (projectionMembers.contains(originalMemberName)) {
                     if (pushdownOptions.StripAliasPrefixFromColName && HasAlias(originalMemberName)) {
-                        originalMemberName = GetAlias(originalMemberName) + "." + "__kqp_olap_projection_" + GetColName(originalMemberName, /*stripAlias=*/true) +
+                        originalMemberName = GetAlias(originalMemberName) + "." + "__kqp_olap_projection_" + GetOlapColumnName(originalMemberName, /*stripAlias=*/true) +
                                              ToString(nextMemberId++);
                     } else {
                         originalMemberName = "__kqp_olap_projection_" + originalMemberName + ToString(nextMemberId++);

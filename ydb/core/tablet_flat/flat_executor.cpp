@@ -32,6 +32,7 @@
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/hive.h>
+#include <ydb/core/base/table_index.h>
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/control/lib/immediate_control_board_impl.h>
 #include <ydb/core/protos/memory_controller_config.pb.h>
@@ -3270,6 +3271,7 @@ void TExecutor::Handle(TEvTablet::TEvCommitResult::TPtr &ev, const TActorContext
         break;
     case ECommit::Snap:
         LogicSnap->Confirm(msg->Step);
+        GcLogic->Confirm(ctx);
 
         VacuumLogic->OnSnapshotCommited(Generation(), step);
         if (NeedLogSnapshot || VacuumLogic->NeedLogSnaphot())
@@ -3319,7 +3321,7 @@ void TExecutor::Handle(TEvTablet::TEvSnapshotConfirmed::TPtr &ev, const TActorCo
 }
 
 void TExecutor::Handle(TEvBlobStorage::TEvCollectGarbageResult::TPtr &ev) {
-    if (auto retryDelay = GcLogic->OnCollectGarbageResult(ev)) {
+    if (auto retryDelay = GcLogic->OnCollectGarbageResult(ev, OwnerCtx(), Launcher)) {
         Schedule(retryDelay, new TEvPrivate::TEvRetryGcRequest(ev->Get()->Channel));
     }
     VacuumLogic->OnCollectedGarbage(OwnerCtx());
@@ -4932,6 +4934,28 @@ ui64 TExecutor::BeginCompaction(THolder<NTable::TCompactionParams> params)
     comp->Layout.MinRowVersion = snapshot->Subset->MinRowVersion();
     comp->Layout.Groups.resize(rowScheme->Families.size());
     comp->Writer.Groups.resize(rowScheme->Families.size());
+
+    // Detect fulltext compact tables
+    if (tableInfo->SpecialTableType == NKikimrSchemeOp::ESpecialTableType::ESpecialTableTypeFulltextCompact ||
+        tableInfo->SpecialTableType == NKikimrSchemeOp::ESpecialTableType::ESpecialTableTypeFulltextCompactRelevance) {
+        comp->IsFulltextCompact = true;
+        comp->FulltextWithRelevance = (tableInfo->SpecialTableType == NKikimrSchemeOp::ESpecialTableType::ESpecialTableTypeFulltextCompactRelevance);
+        // Resolve column tags by name from tableInfo->Columns
+        for (const auto& [id, col] : tableInfo->Columns) {
+            if (col.Name == NTableIndex::NFulltext::AddedColumn) {
+                comp->FulltextAddedTag = id;
+            } else if (col.Name == NTableIndex::NFulltext::SegmentColumn) {
+                comp->FulltextSegmentTag = id;
+            }
+        }
+        // Determine if key type is signed from the last key column (__ydb_max_id)
+        if (tableInfo->KeyColumns.size() >= 3) {
+            auto maxIdColId = tableInfo->KeyColumns.back();
+            auto keyTypeId = tableInfo->Columns.at(maxIdColId).PType.GetTypeId();
+            comp->FulltextKeySigned = (keyTypeId == NScheme::NTypeIds::Int64 || keyTypeId == NScheme::NTypeIds::Int32);
+            comp->FulltextKeySize = (keyTypeId == NScheme::NTypeIds::Int64 || keyTypeId == NScheme::NTypeIds::Uint64 ? 8 : 4);
+        }
+    }
 
     auto addChannel = [&](ui8 channel) {
         auto group = Owner->Info()->GroupFor(channel, Generation());

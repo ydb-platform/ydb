@@ -84,6 +84,10 @@ namespace NKikimr::NSqsTopic::V1 {
             if (!FormalValidQueueUrl()) {
                 return ReplyWithError(MakeError(NSQS::NErrors::INVALID_PARAMETER_VALUE, "Invalid QueueUrl"));
             }
+            if (!AppData(ctx)->PQConfig.GetTopicsAreFirstClassCitizen()) {
+                return ReplyWithError(MakeError(NSQS::NErrors::UNSUPPORTED_OPERATION,
+                    "SetQueueAttributes is not supported"));
+            }
 
             DescribeTopic(NACLib::UpdateRow);
             Become(&TSetQueueAttributesActor::StateWork);
@@ -93,7 +97,7 @@ namespace NKikimr::NSqsTopic::V1 {
             switch (ev->GetTypeRewrite()) {
                 hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, HandleCacheNavigateResponse);
                 hFunc(NDescriber::TEvDescribeTopicsResponse, Handle);
-                hFunc(NPQ::NSchema::TEvAlterTopicResponse, Handle);
+                hFunc(NPQ::NSchema::TEvSchemaResponse, Handle);
                 default:
                     TBase::StateWork(ev);
             }
@@ -238,7 +242,7 @@ namespace NKikimr::NSqsTopic::V1 {
             }));
         }
 
-        void Handle(NPQ::NSchema::TEvAlterTopicResponse::TPtr& ev) {
+        void Handle(NPQ::NSchema::TEvSchemaResponse::TPtr& ev) {
             const auto* result = ev->Get();
             if (result->Status != Ydb::StatusIds::SUCCESS) {
                 return ReplyWithError(MakeError(NSQS::NErrors::INTERNAL_FAILURE, result->ErrorMessage));

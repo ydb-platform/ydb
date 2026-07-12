@@ -3,7 +3,6 @@
 // For the sake of sane code completion.
 #include "hedging_channel.h"
 #endif
-#undef HEDGING_CHANNEL_INL_H_
 
 namespace NYT::NRpc {
 

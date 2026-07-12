@@ -5,6 +5,9 @@
 #include <yql/essentials/public/udf/udf_ptr.h>
 #include <yql/essentials/public/udf/udf_type_inspection.h>
 #include <yql/essentials/public/udf/udf_type_size_check.h>
+#include <yql/essentials/public/udf/udf_data_type.h>
+
+#include <util/generic/guid.h>
 
 namespace NYql::NUdf {
 
@@ -144,8 +147,8 @@ public:
     }
 };
 
-template <typename TStringType, bool Nullable>
-class TStringBlockItemComparator: public TBlockItemComparatorBase<TStringBlockItemComparator<TStringType, Nullable>, Nullable> {
+template <bool Nullable>
+class TStringBlockItemComparatorBase: public TBlockItemComparatorBase<TStringBlockItemComparatorBase<Nullable>, Nullable> {
 public:
     i64 DoCompare(TBlockItem lhs, TBlockItem rhs) const {
         return lhs.AsStringRef().Compare(rhs.AsStringRef());
@@ -158,6 +161,18 @@ public:
     bool DoLess(TBlockItem lhs, TBlockItem rhs) const {
         return lhs.AsStringRef() < rhs.AsStringRef();
     }
+};
+
+template <typename TStringType, bool Nullable>
+class TStringBlockItemComparator: public TStringBlockItemComparatorBase<Nullable> {
+};
+
+template <bool Nullable>
+class TUuidBlockItemComparator: public TStringBlockItemComparatorBase<Nullable> {
+};
+
+template <bool Nullable>
+class TFixedSizeBlockItemComparator<TGUID, Nullable>: public TUuidBlockItemComparator<Nullable> {
 };
 
 class TSingularTypeBlockItemComparator: public TBlockItemComparatorBase<TSingularTypeBlockItemComparator, /*Nullable=*/false> {
@@ -252,6 +267,47 @@ public:
         }
 
         return false;
+    }
+
+private:
+    const TVector<std::unique_ptr<IBlockItemComparator>> Children_;
+};
+
+class TVariantBlockItemComparator: public TBlockItemComparatorBase<TVariantBlockItemComparator, false> {
+public:
+    explicit TVariantBlockItemComparator(TVector<std::unique_ptr<IBlockItemComparator>>&& children)
+        : Children_(std::move(children))
+    {
+    }
+
+    i64 DoCompare(TBlockItem lhs, TBlockItem rhs) const {
+        const ui32 leftIndex = lhs.GetVariantIndex();
+        const ui32 rightIndex = rhs.GetVariantIndex();
+        if (leftIndex < rightIndex) {
+            return -1;
+        }
+        if (leftIndex > rightIndex) {
+            return 1;
+        }
+        return Children_[leftIndex]->Compare(lhs.GetVariantItem(), rhs.GetVariantItem());
+    }
+
+    bool DoEquals(TBlockItem lhs, TBlockItem rhs) const {
+        const ui32 leftIndex = lhs.GetVariantIndex();
+        const ui32 rightIndex = rhs.GetVariantIndex();
+        if (leftIndex != rightIndex) {
+            return false;
+        }
+        return Children_[leftIndex]->Equals(lhs.GetVariantItem(), rhs.GetVariantItem());
+    }
+
+    bool DoLess(TBlockItem lhs, TBlockItem rhs) const {
+        const ui32 leftIndex = lhs.GetVariantIndex();
+        const ui32 rightIndex = rhs.GetVariantIndex();
+        if (leftIndex != rightIndex) {
+            return leftIndex < rightIndex;
+        }
+        return Children_[leftIndex]->Less(lhs.GetVariantItem(), rhs.GetVariantItem());
     }
 
 private:

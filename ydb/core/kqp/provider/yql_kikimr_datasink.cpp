@@ -562,6 +562,7 @@ public:
         , PhysicalOptProposalTransformer(CreateKiPhysicalOptProposalTransformer(sessionCtx))
         , CallableExecutionTransformer(CreateKiSinkCallableExecutionTransformer(gateway, sessionCtx, queryExecutor))
         , DqTypeAnnTransformer(NDq::CreateDqTypeAnnotationTransformer())
+        , ConstraintsTransformer(CreateKiSinkConstraintsTransformer(sessionCtx))
     {
         Y_UNUSED(FunctionRegistry);
         Y_UNUSED(Types);
@@ -598,6 +599,11 @@ public:
     IGraphTransformer& GetTypeAnnotationTransformer(bool instantOnly) override {
         Y_UNUSED(instantOnly);
         return *TypeAnnotationTransformer;
+    }
+
+    IGraphTransformer& GetConstraintTransformer(bool instantOnly, bool subGraph) override {
+        Y_UNUSED(instantOnly, subGraph);
+        return *ConstraintsTransformer;
     }
 
     IGraphTransformer& GetCallableExecutionTransformer() override {
@@ -1361,6 +1367,7 @@ public:
                         .PrimaryKey(settings.PrimaryKey.Cast())
                         .Settings(settings.Other)
                         .Indexes(settings.Indexes.Cast())
+                        .Statistics(settings.Statistics.Cast())
                         .Changefeeds(settings.Changefeeds.Cast())
                         .PartitionBy(settings.PartitionBy.Cast())
                         .ColumnFamilies(settings.ColumnFamilies.Cast())
@@ -1915,6 +1922,7 @@ private:
     TAutoPtr<IGraphTransformer> PhysicalOptProposalTransformer;
     TAutoPtr<IGraphTransformer> CallableExecutionTransformer;
     const THolder<TVisitorTransformerBase> DqTypeAnnTransformer;
+    const TAutoPtr<IGraphTransformer> ConstraintsTransformer;
 };
 
 } // anonymous namespace

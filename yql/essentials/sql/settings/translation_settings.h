@@ -1,5 +1,6 @@
 #pragma once
 
+#include <yql/essentials/sql/settings/flags/flags.h>
 #include <yql/essentials/core/pg_settings/guc_settings.h>
 #include <yql/essentials/public/langver/yql_langver.h>
 #include <yql/essentials/public/udf_meta/udf_meta.h>
@@ -144,6 +145,8 @@ struct TTranslationSettings {
     bool AllowTablesFunction = false;
 
     bool ValidateViewStatement = true;
+
+    TVector<TString> ExtraSystemColumnPrefixes;
 };
 
 struct TParsedSettings {
@@ -158,5 +161,7 @@ struct TParsedSettings {
 bool ParseTranslationSettingsFromComments(const TString& query, TParsedSettings& parsed, NYql::TIssues& issues);
 
 bool ParseTranslationSettings(const TString& query, TTranslationSettings& settings, NYql::TIssues& issues);
+
+void ParseTranslationSettings(const TExtendedSqlFlags& flags, TTranslationSettings& settings);
 
 } // namespace NSQLTranslation

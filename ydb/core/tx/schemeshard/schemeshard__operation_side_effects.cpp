@@ -236,6 +236,8 @@ void TSideEffects::ApplyOnComplete(TSchemeShard* ss, const TActorContext& ctx) {
     DoTriggerDeleteShards(ss, ctx);
     DoTriggerDeleteSystemShards(ss, ctx);
 
+    DoFireFullBackupItemDone(ss, ctx);
+
     ResumeLongOps(ss, ctx);
 }
 
@@ -287,7 +289,7 @@ void TSideEffects::DoActivateOps(TSchemeShard* ss, const TActorContext& ctx) {
     }
 }
 
-bool TSideEffects::CheckDecouplingProposes(TString& errExpl) const {
+bool TSideEffects::CheckDecouplingProposes(const TSchemeShard* ss, TString& errExpl) const {
     THashMap<TTabletId, TOperationId> checkDecoupling;
     for (auto& rec: CoordinatorProposesShards) {
         TOperationId opId;
@@ -298,6 +300,18 @@ bool TSideEffects::CheckDecouplingProposes(TString& errExpl) const {
         auto position = checkDecoupling.end();
         std::tie(position, inserted) = checkDecoupling.emplace(shard, opId);
         if (!inserted && position->second != opId) {
+            // For shared shards, the same tablet can legitimately be involved
+            // in multiple concurrent operations (one per sharing table).
+            auto shardIdxIt = ss->TabletIdToShardIdx.find(shard);
+            if (shardIdxIt != ss->TabletIdToShardIdx.end()
+                && ss->SharedShards.contains(shardIdxIt->second))
+            {
+                const auto* txState1 = ss->TxInFlight.FindPtr(opId);
+                const auto* txState2 = ss->TxInFlight.FindPtr(position->second);
+                if (txState1 && txState2 && txState1->TargetPathId != txState2->TargetPathId) {
+                    continue;
+                }
+            }
             errExpl = TStringBuilder()
                     << "can't propose more then one operation to the shard with the same txId"
                     << ", here shardId is " << shard
@@ -312,7 +326,7 @@ bool TSideEffects::CheckDecouplingProposes(TString& errExpl) const {
 
 void TSideEffects::ExpandCoordinatorProposes(TSchemeShard* ss, const TActorContext& ctx) {
     TString errExpl;
-    Y_ABORT_UNLESS(CheckDecouplingProposes(errExpl), "check decoupling: %s", errExpl.c_str());
+    Y_ABORT_UNLESS(CheckDecouplingProposes(ss, errExpl), "check decoupling: %s", errExpl.c_str());
 
     TSet<TTxId> touchedTxIds;
     for (auto& rec: CoordinatorProposes) {
@@ -921,7 +935,28 @@ void TSideEffects::DoDoneParts(TSchemeShard *ss, const TActorContext &ctx) {
         }
 
         TOperation::TPtr operation = ss->Operations.at(txId);
-        operation->DoneParts.insert(opId.GetSubTxId());
+        const bool partNewlyDone = operation->DoneParts.insert(opId.GetSubTxId()).second;
+
+        // Queue (not send) TEvFullBackupItemDone for tracked TxCopyTable sub-ops;
+        // sending must happen post-commit in ApplyOnComplete, not here in ApplyOnExecute.
+        // Gate on partNewlyDone because DoDoneParts is called twice per ApplyOnExecute
+        // (barrier-released ops), so without it we would enqueue duplicates.
+        // Restrict to TxCopyTable to avoid firing on the control op's own Done.
+        if (partNewlyDone && ss->FullBackups.contains(ui64(opId.GetTxId()))) {
+            auto* txState = ss->FindTx(opId);
+            if (txState && txState->TxType == TTxState::TxCopyTable) {
+                // EPathStateDrop means AbortUnsafe was triggered; any other state is success.
+                bool aborted = false;
+                if (auto* path = ss->PathsById.FindPtr(txState->TargetPathId)) {
+                    aborted = ((*path)->PathState == NKikimrSchemeOp::EPathState::EPathStateDrop);
+                }
+                PendingFullBackupItemDone.emplace_back(
+                    ui64(opId.GetTxId()),
+                    txState->TargetPathId,
+                    /*success=*/!aborted);
+            }
+        }
+
         LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                     "Part operation is done"
                         << " id#" << opId
@@ -933,6 +968,19 @@ void TSideEffects::DoDoneParts(TSchemeShard *ss, const TActorContext &ctx) {
 
         DoneTransactions.insert(opId.GetTxId());
     }
+}
+
+void TSideEffects::DoFireFullBackupItemDone(TSchemeShard* ss, const TActorContext& ctx) {
+    for (auto& [id, dstPathId, success] : PendingFullBackupItemDone) {
+        LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                    "Fire TEvFullBackupItemDone"
+                        << " fullBackupId#" << id
+                        << " dstPathId#" << dstPathId
+                        << " success#" << success);
+        ctx.Send(ss->SelfId(),
+            new TEvPrivate::TEvFullBackupItemDone(id, dstPathId, success));
+    }
+    PendingFullBackupItemDone.clear();
 }
 
 void TSideEffects::DoDoneTransactions(TSchemeShard *ss, NTabletFlatExecutor::TTransactionContext &txc, const TActorContext &ctx) {
@@ -955,6 +1003,12 @@ void TSideEffects::DoDoneTransactions(TSchemeShard *ss, NTabletFlatExecutor::TTr
 
             Y_ABORT_UNLESS(ss->PathsById.contains(pathId));
             TPathElement::TPtr path = ss->PathsById.at(pathId);
+            Y_VERIFY_S(!path->Dropped() || state == NKikimrSchemeOp::EPathStateNotExist,
+                "ReleasePathAtDone: dropped path with non-NotExist state"
+                << ": pathId=" << pathId
+                << " StepDropped=" << path->StepDropped
+                << " currentPathState=" << static_cast<ui32>(path->PathState)
+                << " newPathState=" << static_cast<ui32>(state));
             path->PathState = state;
         }
 

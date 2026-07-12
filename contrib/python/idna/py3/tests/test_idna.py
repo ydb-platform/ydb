@@ -95,6 +95,30 @@ class IDNATests(unittest.TestCase):
             self.assertRaises(idna.IDNAError, idna.decode, payload)
             self.assertLess(time.perf_counter() - start, 1.0)
 
+    def test_oversized_label_rejected_promptly(self):
+        # The whole-domain cap in encode()/decode() does not cover direct
+        # callers of alabel/ulabel/check_label, nor the idna2008
+        # incremental codec which calls alabel/ulabel per label. Without a
+        # per-label cap, a single oversized CONTEXTO-heavy label still
+        # drives validation into quadratic time.
+        import codecs
+        import time
+
+        import idna.codec  # noqa: F401  (register the idna2008 codec)
+
+        payload = "・" * 8000 + "漢"
+        start = time.perf_counter()
+        self.assertRaises(idna.IDNAError, idna.check_label, payload)
+        self.assertRaises(idna.IDNAError, idna.alabel, payload)
+        self.assertRaises(idna.IDNAError, idna.ulabel, payload)
+        self.assertRaises(
+            idna.IDNAError,
+            codecs.getincrementalencoder("idna2008")().encode,
+            payload,
+            True,
+        )
+        self.assertLess(time.perf_counter() - start, 1.0)
+
     def test_check_bidi(self):
         la = "\u0061"
         r = "\u05d0"

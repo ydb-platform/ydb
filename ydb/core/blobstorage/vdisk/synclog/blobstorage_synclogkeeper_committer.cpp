@@ -4,6 +4,8 @@
 
 #include <ydb/core/base/blobstorage_grouptype.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::BS_VDISK_CHUNKS
+
 using namespace NKikimrServices;
 
 namespace NKikimr {
@@ -41,25 +43,16 @@ namespace NKikimr {
                 // commit msg
                 auto commitMsg = std::make_unique<NPDisk::TEvLog>(SlCtx->PDiskCtx->Dsk->Owner,
                         SlCtx->PDiskCtx->Dsk->OwnerRound, TLogSignature::SignatureSyncLogIdx,
-                        CommitRecord, TRcBuf(EntryPointSerializer.GetSerializedData()), seg, nullptr);
+                        CommitRecord, TRcBuf(EntryPointSerializer.GetSerializedData()), seg, nullptr,
+                        TWriteSource::SyncLogCommitterCommit,
+                        NPDisk::TEvLog::TCallback());
 
                 if (CommitRecord.CommitChunks || CommitRecord.DeleteChunks) {
-                    LOG_INFO(ctx, NKikimrServices::BS_SKELETON,
-                               VDISKP(SlCtx->VCtx->VDiskLogPrefix,
-                                    "synclog commit CommitChunks# %s "
-                                     " DeleteChunks# %s", FormatList(CommitRecord.CommitChunks).data(),
-                                     FormatList(CommitRecord.DeleteChunks).data()));
+                    YDB_LOG_INFO_CTX_COMP(ctx, NKikimrServices::BS_SKELETON, VDISKP(SlCtx->VCtx->VDiskLogPrefix, "synclog commit CommitChunks# %s " " DeleteChunks# %s", FormatList(CommitRecord.CommitChunks).data(), FormatList(CommitRecord.DeleteChunks).data()));
                 }
 
-                LOG_DEBUG(ctx, BS_SYNCLOG,
-                          VDISKP(SlCtx->VCtx->VDiskLogPrefix,
-                                "COMMITTER: commit message: %s",
-                                commitMsg->ToString().data()));
-                LOG_DEBUG(ctx, NKikimrServices::BS_VDISK_CHUNKS,
-                          VDISKP(SlCtx->VCtx->VDiskLogPrefix,
-                                "COMMIT: PDiskId# %s Lsn# %" PRIu64 " type# SyncLog msg# %s",
-                                SlCtx->PDiskCtx->PDiskIdString.data(), seg.Point(),
-                                commitMsg->CommitRecord.ToString().data()));
+                YDB_LOG_DEBUG_CTX_COMP(ctx, BS_SYNCLOG, VDISKP(SlCtx->VCtx->VDiskLogPrefix, "COMMITTER: commit message: %s", commitMsg->ToString().data()));
+                YDB_LOG_DEBUG_CTX(ctx, VDISKP(SlCtx->VCtx->VDiskLogPrefix, "COMMIT: PDiskId# %s Lsn# %" PRIu64 " type# SyncLog msg# %s", SlCtx->PDiskCtx->PDiskIdString.data(), seg.Point(), commitMsg->CommitRecord.ToString().data()));
 
                 ctx.Send(SlCtx->LoggerID, commitMsg.release());
                 Become(&TThis::StateCommit);
@@ -108,17 +101,31 @@ namespace NKikimr {
                     ctx.Send(SlCtx->PDiskCtx->PDiskId,
                              new NPDisk::TEvChunkWrite(SlCtx->PDiskCtx->Dsk->Owner, SlCtx->PDiskCtx->Dsk->OwnerRound,
                                                        chunkIdx, offset, p, SyncLogCookie,
-                                                       true, NPriWrite::SyncLog));
-                    LOG_DEBUG(ctx, BS_SYNCLOG,
-                              VDISKP(SlCtx->VCtx->VDiskLogPrefix,
+                                                       true, NPriWrite::SyncLog, TWriteSource::SyncLogCommitterWrite,
+                                                       true));
+                    YDB_LOG_DEBUG_CTX(ctx, VDISKP(SlCtx->VCtx->VDiskLogPrefix,
                                     "COMMITTER: initial write: chunkIdx# %" PRIu32, chunkIdx));
                     Become(&TThis::StateWrite);
                 }
             }
 
             void Handle(NPDisk::TEvChunkWriteResult::TPtr &ev, const TActorContext &ctx) {
-                LOG_DEBUG(ctx, BS_SYNCLOG,
-                        VDISKP(SlCtx->VCtx->VDiskLogPrefix, "COMMITTER: write done"));
+                YDB_LOG_DEBUG_CTX_COMP(ctx, BS_SYNCLOG, VDISKP(SlCtx->VCtx->VDiskLogPrefix, "COMMITTER: write done"));
+
+                if (ev->Get()->Status == NKikimrProto::OUT_OF_SPACE) {
+                    // We tried to allocate a new chunk for the sync log, but PDisk is out
+                    // of space (only fresh chunk allocation, i.e. chunkIdx == 0, can return
+                    // this status). The persistent sync log is not essential for data
+                    // persistence: peers requesting old lsns will simply fall back to full
+                    // sync. So instead of switching the VDisk to a terminal state, ask the
+                    // keeper to dispose of the whole disk sync log. CommitRecord.CommitChunks
+                    // holds all chunks we have managed to write during this commit.
+                    YDB_LOG_NOTICE_CTX_COMP(ctx, NKikimrServices::BS_VDISK_OTHER, VDISKP(SlCtx->VCtx->VDiskLogPrefix, "COMMITTER: OUT_OF_SPACE on chunk write, disposing disk sync log; %s", ev->Get()->ToString().data()));
+                    ctx.Send(NotifyID, new TEvSyncLogDiskOutOfSpace(std::move(CommitRecord.CommitChunks)));
+                    Die(ctx);
+                    return;
+                }
+
                 CHECK_PDISK_RESPONSE(SlCtx->VCtx, ev, ctx);
 
                 // chunk is written, apply index update
@@ -141,9 +148,9 @@ namespace NKikimr {
                     ctx.Send(SlCtx->PDiskCtx->PDiskId,
                              new NPDisk::TEvChunkWrite(SlCtx->PDiskCtx->Dsk->Owner, SlCtx->PDiskCtx->Dsk->OwnerRound,
                                                        chunkIdx, offset, p, SyncLogCookie,
-                                                       true, NPriWrite::SyncLog));
-                    LOG_DEBUG(ctx, BS_SYNCLOG,
-                              VDISKP(SlCtx->VCtx->VDiskLogPrefix,
+                                                       true, NPriWrite::SyncLog, TWriteSource::SyncLogCommitterWrite,
+                                                       true));
+                    YDB_LOG_DEBUG_CTX(ctx, VDISKP(SlCtx->VCtx->VDiskLogPrefix,
                                     "COMMITTER: next write: chunkIdx# %" PRIu32, chunkIdx));
                 }
             }

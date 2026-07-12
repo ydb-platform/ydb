@@ -1,5 +1,5 @@
 #include "fair_share_invoker_pool.h"
-#include "profiling_helpers.h"
+#include "helpers.h"
 
 #include <yt/yt/core/actions/current_invoker.h>
 #include <yt/yt/core/actions/invoker_detail.h>

@@ -78,10 +78,6 @@ void FillSchema(ISystemViewResolver::TSchema& schema) {
     TSchemaFiller<Schema>::Fill(schema);
 }
 
-constexpr TStringBuf PgTablesName = "pg_tables";
-constexpr TStringBuf InformationSchemaTablesName = "tables";
-constexpr TStringBuf PgClassName = "pg_class";
-
 struct Schema : NIceDb::Schema {
     struct PartitionStats : Table<1> {
         struct OwnerId                  : Column<1, NScheme::NTypeIds::Uint64> {};
@@ -206,6 +202,7 @@ struct Schema : NIceDb::Schema {
         struct ProcessCPUTime    : Column<27, NScheme::NTypeIds::Uint64> {};
         struct TypeCol           : Column<28, NScheme::NTypeIds::Utf8> { static TString GetColumnName(const TString&) { return "Type"; } };
         struct RequestUnits      : Column<29, NScheme::NTypeIds::Uint64> {};
+        struct TraceId           : Column<30, NScheme::NTypeIds::Utf8> {};
 
         using TKey = TableKey<IntervalEnd, Rank>;
         using TColumns = TableColumns<
@@ -237,7 +234,8 @@ struct Schema : NIceDb::Schema {
             CompileCPUTime,
             ProcessCPUTime,
             TypeCol,
-            RequestUnits>;
+            RequestUnits,
+            TraceId>;
     };
 
     struct PDisks : Table<4> {
@@ -305,6 +303,7 @@ struct Schema : NIceDb::Schema {
         struct Replicated      : Column<16, NScheme::NTypeIds::Bool> {};
         struct DiskSpace       : Column<17, NScheme::NTypeIds::Utf8> {};
         struct State           : Column<18, NScheme::NTypeIds::Utf8> {};
+        struct PhantomOnly     : Column<19, NScheme::NTypeIds::Bool> {};
 
         using TKey = TableKey<NodeId, PDiskId, VSlotId>;
         using TColumns = TableColumns<
@@ -322,7 +321,8 @@ struct Schema : NIceDb::Schema {
             Kind,
             FailRealm,
             Replicated,
-            DiskSpace>;
+            DiskSpace,
+            PhantomOnly>;
     };
 
     struct Groups : Table<6> {
@@ -598,6 +598,7 @@ struct Schema : NIceDb::Schema {
         struct WmState            : Column<18, NScheme::NTypeIds::Utf8> {};
         struct WmEnterTime        : Column<19, NScheme::NTypeIds::Timestamp> {};
         struct WmExitTime         : Column<20, NScheme::NTypeIds::Timestamp> {};
+        struct TraceId            : Column<21, NScheme::NTypeIds::Utf8> {};
 
         using TKey = TableKey<SessionId>;
         using TColumns = TableColumns<
@@ -618,7 +619,8 @@ struct Schema : NIceDb::Schema {
             WmPoolId,
             WmState,
             WmEnterTime,
-            WmExitTime>;
+            WmExitTime,
+            TraceId>;
     };
 
     struct PrimaryIndexPortionStats : Table<14> {
@@ -768,33 +770,20 @@ struct Schema : NIceDb::Schema {
         >;
     };
 
-    struct PgColumn {
-        NIceDb::TColumnId _ColumnId;
-        NScheme::TTypeInfo _ColumnTypeInfo;
-        TString _ColumnName;
-        PgColumn(NIceDb::TColumnId columnId, TStringBuf columnTypeName, TStringBuf columnName);
-    };
-
-    class PgTablesSchemaProvider {
-    public:
-        PgTablesSchemaProvider();
-        const TVector<PgColumn>& GetColumns(TStringBuf tableName) const;
-    private:
-        std::unordered_map<TString, TVector<PgColumn>> columnsStorage;
-    };
-
     struct ResourcePoolClassifiers : Table<20> {
         struct Name         : Column<1, NScheme::NTypeIds::Utf8> {};
         struct Rank         : Column<2, NScheme::NTypeIds::Int64> {};
         struct MemberName   : Column<4, NScheme::NTypeIds::Utf8> {};
         struct ResourcePool : Column<5, NScheme::NTypeIds::Utf8> {};
+        struct HasAppName   : Column<6, NScheme::NTypeIds::Utf8> {};
 
         using TKey = TableKey<Name>;
         using TColumns = TableColumns<
             Name,
             Rank,
             MemberName,
-            ResourcePool>;
+            ResourcePool,
+            HasAppName>;
     };
 
     struct ShowCreate : Table<21> {

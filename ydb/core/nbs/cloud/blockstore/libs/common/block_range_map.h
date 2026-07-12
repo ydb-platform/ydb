@@ -214,6 +214,17 @@ public:
         return Ranges.empty();
     }
 
+    [[nodiscard]] std::optional<TKey> GetMinKey() const
+    {
+        std::optional<TKey> minKey;
+        for (const auto& [itemKey, value]: Ranges) {
+            if (!minKey || itemKey.Key < *minKey) {
+                minKey = itemKey.Key;
+            }
+        }
+        return minKey;
+    }
+
     [[nodiscard]] size_t Size() const
     {
         return Ranges.size();

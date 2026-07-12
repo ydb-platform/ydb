@@ -1,7 +1,7 @@
-#include "const.h"
 #include "meta.h"
 
 #include <ydb/core/formats/arrow/hash/calcer.h>
+#include <ydb/core/local_indexes/bloom/const.h>
 #include <ydb/core/tx/columnshard/engines/storage/chunks/data.h>
 #include <ydb/core/tx/columnshard/engines/storage/indexes/bits_storage/array_power2.h>
 #include <ydb/core/tx/columnshard/engines/storage/indexes/helper/case_helper.h>

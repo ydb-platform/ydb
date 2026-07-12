@@ -18,7 +18,6 @@ Checks: >
   -bugprone-dynamic-static-initializers,
   -bugprone-exception-escape,
   bugprone-fold-init-type,
-  bugprone-forward-declaration-namespace,
   bugprone-forwarding-reference-overload,
   bugprone-inaccurate-erase,
   bugprone-incorrect-roundings,
@@ -318,7 +317,7 @@ Checks: >
   -misc-uniqueptr-reset-release,
   -misc-unused-alias-decls,
   -misc-unused-parameters,
-  -misc-unused-using-decls,
+  misc-unused-using-decls,
   misc-use-anonymous-namespace,
   -modernize-avoid-bind,
   modernize-avoid-c-arrays,
@@ -359,7 +358,7 @@ Checks: >
   performance-inefficient-algorithm,
   -performance-inefficient-string-concatenation,
   -performance-inefficient-vector-operation,
-  -performance-move-const-arg,
+  performance-move-const-arg,
   -performance-move-constructor-init,
   -performance-no-automatic-move,
   -performance-no-int-to-ptr,
@@ -371,7 +370,7 @@ Checks: >
   -portability-restrict-system-includes,
   -portability-simd-intrinsics,
   -readability-avoid-return-with-void-value,
-  -readability-avoid-const-params-in-decls,
+  readability-avoid-const-params-in-decls,
   -readability-braces-around-statements,
   readability-const-return-type,
   readability-container-data-pointer,
@@ -414,11 +413,19 @@ Checks: >
   -readability-uniqueptr-delete-release,
   readability-uppercase-literal-suffix,
   -readability-use-anyofallof,
-  readability-avoid-const-params-in-decls,
-  -sdc-no-lowercase-l-suffix
 CheckOptions:
+  - key: bugprone-argument-comment.IgnoreSingleArgument
+    value: true
+  - key: bugprone-argument-comment.CommentAnonymousInitLists
+    value: true
+  - key: bugprone-argument-comment.CommentBoolLiterals
+    value: true
+  - key: bugprone-argument-comment.CommentNullPtrs
+    value: true
   - key: modernize-avoid-c-arrays.AllowStringArrays
     value: true
+  - key: performance-move-const-arg.CheckTriviallyCopyableMove
+    value: false
   - key: readability-identifier-naming.StructPrefix
     value: T
   - key: readability-identifier-naming.EnumPrefix

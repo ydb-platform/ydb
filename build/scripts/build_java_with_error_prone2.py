@@ -36,16 +36,17 @@ def parse_args(argv):
     return parsed + [argv[i + 1 :]]
 
 
-def fix_cmd_line(error_prone_tool, cmd):
+def add_error_prone_to_cmd(error_prone_tool, cmd):
     if not error_prone_tool:
         return cmd
     error_prone_flags = []
-    for f in cmd:
+    cmd_wo_epf = []
+    for f in cmd:  # divide list to error_prone flags and others
         if f.startswith('-Xep'):
             error_prone_flags.append(f)
-    for f in error_prone_flags:
-        if f in cmd:
-            cmd.remove(f)
+        elif '-proc:none' != f:  # Remove disabling AP when error_prone present
+            cmd_wo_epf.append(f)
+    cmd = cmd_wo_epf
     if '-processor' in cmd:
         classpath = get_classpath(cmd)
         if classpath:

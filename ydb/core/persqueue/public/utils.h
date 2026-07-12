@@ -87,6 +87,7 @@ public:
 
     TString DebugString() const;
 
+    std::vector<ui32> GetRootPartitions() const;
 private:
     std::unordered_map<ui32, Node> Partitions;
 };

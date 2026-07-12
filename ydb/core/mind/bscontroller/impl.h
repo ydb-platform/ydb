@@ -178,9 +178,7 @@ public:
                     }
                 }
             }
-            if (status == NKikimrBlobStorage::EVDiskStatus::REPLICATING) {
-                OnlyPhantomsRemain = onlyPhantomsRemain;
-            }
+            OnlyPhantomsRemain = status == NKikimrBlobStorage::EVDiskStatus::REPLICATING && onlyPhantomsRemain;
         }
 
         NKikimrBlobStorage::EVDiskStatus GetStatus() const {
@@ -308,14 +306,15 @@ public:
             MaximumResourceValues.DataSize = Metrics.GetAvailableSize() + DiskResourceValues.DataSize;
         }
 
-        bool UpdateVDiskMetrics(const NKikimrBlobStorage::TVDiskMetrics& vDiskMetrics, i64 *allocatedSizeIncrementPtr) const {
+        void UpdateVDiskMetrics(const NKikimrBlobStorage::TVDiskMetrics& vDiskMetrics, i64 *allocatedSizeIncrementPtr,
+                bool *statusFlagsChanged) const {
             const ui64 allocatedSizeBefore = Metrics.GetAllocatedSize();
             const ui32 prevStatusFlags = Metrics.GetStatusFlags();
             Metrics.MergeFrom(vDiskMetrics);
             Metrics.DiscardUnknownFields();
             UpdateVDiskMetrics();
             *allocatedSizeIncrementPtr = Metrics.GetAllocatedSize() - allocatedSizeBefore;
-            return prevStatusFlags != Metrics.GetStatusFlags();
+            *statusFlagsChanged = prevStatusFlags != Metrics.GetStatusFlags();
         }
 
         TResourceRawValues GetResourceCurrentValues() const {
@@ -1501,7 +1500,7 @@ private:
     TMap<THostConfigId, THostConfigInfo> HostConfigs;
     TMap<TBoxId, TBoxInfo> Boxes;
     TMap<TBoxStoragePoolId, TStoragePoolInfo> StoragePools;
-    TMultiMap<TBoxStoragePoolId, TGroupId> StoragePoolGroups;
+    std::set<std::pair<TBoxStoragePoolId, TGroupId>> StoragePoolGroups;
     TMap<TGroupId, TBlobDepotDeleteQueueInfo> BlobDepotDeleteQueue;
     ui64 NextOperationLogIndex = 1;
     TActorId StatProcessorActorId;
@@ -1760,12 +1759,15 @@ private:
     void PassAway() override;
 
     void OnDetach(const TActorContext&) override {
-        STLOG(PRI_DEBUG, BS_CONTROLLER, BSC02, "OnDetach");
+        YDB_LOG_DEBUG_COMP(BS_CONTROLLER, "OnDetach",
+            {"marker", "BSC02"});
         PassAway();
     }
 
     void OnTabletDead(TEvTablet::TEvTabletDead::TPtr &ev, const TActorContext&) override {
-        STLOG(PRI_DEBUG, BS_CONTROLLER, BSC03, "OnTabletDead", (Event, ev->Get()->ToString()));
+        YDB_LOG_DEBUG_COMP(BS_CONTROLLER, "OnTabletDead",
+            {"marker", "BSC03"},
+            {"event", ev->Get()->ToString()});
         PassAway();
     }
 
@@ -1814,8 +1816,11 @@ private:
     void RenderGroupRow(IOutputStream& out, const TGroupInfo& group);
 
     void Enqueue(STFUNC_SIG) override {
-        STLOG(PRI_DEBUG, BS_CONTROLLER, BSC04, "Enqueue", (TabletID, TabletID()), (Type, ev->GetTypeRewrite()),
-            (Event, ev->ToString()));
+        YDB_LOG_DEBUG_COMP(BS_CONTROLLER, "Enqueue",
+            {"marker", "BSC04"},
+            {"tabletId", TabletID()},
+            {"type", ev->GetTypeRewrite()},
+            {"event", ev->ToString()});
         InitQueue.push_back(ev);
     }
 
@@ -2104,8 +2109,10 @@ public:
     ~TBlobStorageController();
 
     STFUNC(StateInit) {
-        STLOG(PRI_DEBUG, BS_CONTROLLER, BSC05, "StateInit event", (Type, ev->GetTypeRewrite()),
-            (Event, ev->ToString()));
+        YDB_LOG_DEBUG_COMP(BS_CONTROLLER, "StateInit event",
+            {"marker", "BSC05"},
+            {"type", ev->GetTypeRewrite()},
+            {"event", ev->ToString()});
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvInterconnect::TEvNodesInfo, Handle);
             hFunc(TEvNodeWardenStorageConfig, Handle);
@@ -2143,9 +2150,13 @@ public:
 
     bool ValidateIncomingNodeWardenEvent(const IEventHandle& ev) {
         auto makeError = [&](TString message) {
-            STLOG(PRI_ERROR, BS_CONTROLLER, BSC16, "ValidateIncomingNodeWardenEvent error",
-                (Sender, ev.Sender), (PipeServerId, ev.Recipient), (InterconnectSessionId, ev.InterconnectSession),
-                (Type, ev.GetTypeRewrite()), (Message, message));
+            YDB_LOG_ERROR_COMP(BS_CONTROLLER, "ValidateIncomingNodeWardenEvent error",
+                {"marker", "BSC16"},
+                {"sender", ev.Sender},
+                {"pipeServerId", ev.Recipient},
+                {"interconnectSessionId", ev.InterconnectSession},
+                {"type", ev.GetTypeRewrite()},
+                {"message", message});
             return false;
         };
 
@@ -2228,15 +2239,18 @@ public:
         }
 
         if (const TDuration time = TDuration::Seconds(timer.Passed()); time >= TDuration::MilliSeconds(100)) {
-            STLOG(PRI_ERROR, BS_CONTROLLER, BSC07, "ProcessControllerEvent event processing took too much time", (Type, type),
-                (Duration, time));
+            YDB_LOG_ERROR_COMP(BS_CONTROLLER, "ProcessControllerEvent event processing took too much time",
+                {"marker", "BSC07"},
+                {"type", type},
+                {"duration", time});
         }
     }
 
     STFUNC(StateWork);
 
     void LoadFinished() {
-        STLOG(PRI_DEBUG, BS_CONTROLLER, BSC09, "LoadFinished");
+        YDB_LOG_DEBUG_COMP(BS_CONTROLLER, "LoadFinished",
+            {"marker", "BSC09"});
         Become(&TThis::StateWork);
 
         ValidateInternalState();
@@ -2261,8 +2275,11 @@ public:
 
         for (; !InitQueue.empty(); InitQueue.pop_front()) {
             TAutoPtr<IEventHandle> &ev = InitQueue.front();
-            STLOG(PRI_DEBUG, BS_CONTROLLER, BSC08, "Dequeue", (TabletID, TabletID()), (Type, ev->GetTypeRewrite()),
-                (Event, ev->ToString()));
+            YDB_LOG_DEBUG_COMP(BS_CONTROLLER, "Dequeue",
+                {"marker", "BSC08"},
+                {"tabletId", TabletID()},
+                {"type", ev->GetTypeRewrite()},
+                {"event", ev->ToString()});
             StateWork(ev);
         }
 
@@ -2484,6 +2501,7 @@ public:
         std::optional<NKikimrBlobStorage::EVDiskStatus> VDiskStatus;
         TMonotonic VDiskStatusTimestamp;
         TMonotonic ReadySince = TMonotonic::Max(); // when IsReady becomes true for this disk; Max() in non-READY state
+        bool OnlyPhantomsRemain = false;
         bool MetricsCommitted = false;
 
         TStaticVSlotInfo(const NKikimrBlobStorage::TNodeWardenServiceSet::TVDisk& vdisk,
@@ -2501,9 +2519,14 @@ public:
                 VDiskStatus = item.VDiskStatus;
                 VDiskStatusTimestamp = item.VDiskStatusTimestamp;
                 ReadySince = item.ReadySince;
+                OnlyPhantomsRemain = item.OnlyPhantomsRemain;
             } else {
                 VDiskStatusTimestamp = mono;
             }
+        }
+
+        bool IsReplicatingWithPhantomsOnly() const {
+            return VDiskStatus == NKikimrBlobStorage::EVDiskStatus::REPLICATING && OnlyPhantomsRemain;
         }
     };
 
@@ -2592,7 +2615,7 @@ public:
     static void Serialize(NKikimrBlobStorage::TBaseConfig::TPDisk *pb, const TPDiskId &id, const TPDiskInfo &pdisk);
     static void Serialize(NKikimrBlobStorage::TVSlotId *pb, TVSlotId id);
     static void Serialize(NKikimrBlobStorage::TVDiskLocation *pb, const TVSlotInfo& vslot);
-    static void Serialize(NKikimrBlobStorage::TVDiskLocation *pb, const TVSlotId& vslotId);
+    static void Serialize(NKikimrBlobStorage::TVDiskLocation *pb, const TVSlotId& vslotId, std::optional<ui64> pdiskGuid = std::nullopt);
     static void Serialize(NKikimrBlobStorage::TBaseConfig::TVSlot *pb, const TVSlotInfo &vslot, const TVSlotFinder& finder);
     static void Serialize(NKikimrBlobStorage::TBaseConfig::TGroup *pb, const TGroupInfo &group,
         const TGroupInfo::TGroupFinder& finder, const TBridgeInfo *bridgeInfo);

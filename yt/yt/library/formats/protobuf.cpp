@@ -945,7 +945,7 @@ void TProtobufFormatDescriptionBase<TType>::InitColumn(
 {
     if (columnConfig->Type->ProtoType == EProtobufType::EmbeddedMessage) {
         if (columnConfig->Repeated) {
-            THROW_ERROR_EXCEPTION("Protobuf field %Qv of type %Qlv can not be repeated",
+            THROW_ERROR_EXCEPTION("Protobuf field %Qv of type %Qlv cannot be repeated",
             columnConfig->Name,
             EProtobufType::EmbeddedMessage);
         }
@@ -958,7 +958,7 @@ void TProtobufFormatDescriptionBase<TType>::InitColumn(
     TLogicalTypePtr logicalType = columnSchema ? columnSchema->LogicalType() : nullptr;
     if (columnConfig->ProtoType == EProtobufType::OtherColumns) {
         if (columnConfig->Repeated) {
-            THROW_ERROR_EXCEPTION("Protobuf field %Qv of type %Qlv can not be repeated",
+            THROW_ERROR_EXCEPTION("Protobuf field %Qv of type %Qlv cannot be repeated",
                 columnConfig->Name,
                 EProtobufType::OtherColumns);
         }
@@ -1010,15 +1010,13 @@ void TProtobufFormatDescriptionBase<TType>::InitFromProtobufSchema(
     if (config->Enumerations) {
         const auto& enumerationConfigMap = config->Enumerations;
         for (const auto& [name_, field] : enumerationConfigMap->GetChildren()) {
-            // TODO(babenko): migrate to std::string
-            auto name = std::string(name_);
+            const auto& name = name_;
             if (field->GetType() != ENodeType::Map) {
                 THROW_ERROR_EXCEPTION(R"(Invalid enumeration specification type: expected "map", found %Qlv)",
                     field->GetType());
             }
             const auto& enumerationConfig = field->AsMap();
-            // TODO(babenko): migrate to std::string
-            EnumerationDescriptionMap_.emplace(name, CreateEnumerationMap(std::string(TimestampColumnName), enumerationConfig));
+            EnumerationDescriptionMap_.emplace(name, CreateEnumerationMap(TimestampColumnName, enumerationConfig));
         }
     }
 
@@ -1198,7 +1196,12 @@ typename TProtobufTypeBuilder<TType>::TTypePtr TProtobufTypeBuilder<TType>::Find
             VisitStruct(type, typeConfig, descriptor);
             return type;
         case ELogicalMetatype::Dict:
-            YT_VERIFY(repeated);
+            if (!repeated) {
+                ThrowSchemaMismatch(
+                    "non-repeated protobuf field cannot match \"dict\" type in schema",
+                    descriptor,
+                    typeConfig);
+            }
             VisitDict(type, typeConfig, descriptor);
             return type;
         case ELogicalMetatype::Simple:
@@ -1264,7 +1267,7 @@ void TProtobufTypeBuilder<TType>:: VisitStruct(
             ? descriptor.VariantStructField(fieldIndex)
             : descriptor.StructField(fieldIndex);
         if (isOneof && childDescriptor.GetType()->IsNullable()) {
-            THROW_ERROR_EXCEPTION("Optional variant field %Qv can not match oneof field in protobuf format",
+            THROW_ERROR_EXCEPTION("Optional variant field %Qv cannot match oneof field in protobuf format",
                 childDescriptor.GetDescription());
         }
         type->AddChild(

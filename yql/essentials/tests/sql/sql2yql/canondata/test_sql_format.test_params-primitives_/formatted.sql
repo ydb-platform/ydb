@@ -1,4 +1,3 @@
-/* syntax version 1 */
 DECLARE $x1 AS int;
 DECLARE $x2 AS Double;
 DECLARE $x3 AS Bool;

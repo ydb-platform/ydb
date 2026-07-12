@@ -118,7 +118,6 @@ TContext::TContext(TLexers lexers, TParsers parsers,
     , AnsiQuotedIdentifiers(settings.AnsiLexer)
     , WarningPolicy(settings.IsReplay)
     , BlockEngineEnable(Settings.BlockDefaultAuto->Allow())
-    , StrictWarningAsError(true)
 {
     if (settings.LangVer >= NYql::NFeature::GroupByExprAfterWhere.MinLangVer) {
         GroupByExprAfterWhere = true;
@@ -133,9 +132,11 @@ TContext::TContext(TLexers lexers, TParsers parsers,
     }
 
     SetYqlSelectMode(settings.YqlSelect);
-
     if (settings.Flags.contains("AutoYqlSelect")) {
         SetYqlSelectMode(EYqlSelect::Auto);
+    }
+    if (settings.Flags.contains("ForceYqlSelect")) {
+        SetYqlSelectMode(EYqlSelect::Force);
     }
 
     for (auto lib : settings.Libraries) {
@@ -220,7 +221,7 @@ IOutputStream& TContext::Error(NYql::TIssueCode code) {
 IOutputStream& TContext::Error(NYql::TPosition pos, NYql::TIssueCode code) {
     HasPendingErrors = true;
     bool isError;
-    return MakeIssue(TSeverityIds::S_ERROR, code, pos, false, isError);
+    return MakeIssue(TSeverityIds::S_ERROR, code, pos, /*forceError=*/false, isError);
 }
 
 bool TContext::Warning(NYql::TPosition pos, NYql::TIssueCode code, std::function<void(IOutputStream&)> message,
@@ -228,12 +229,12 @@ bool TContext::Warning(NYql::TPosition pos, NYql::TIssueCode code, std::function
     bool isError;
     IOutputStream& out = MakeIssue(TSeverityIds::S_WARNING, code, pos, forceError, isError);
     message(out);
-    return !StrictWarningAsError || !isError;
+    return !isError;
 }
 
 IOutputStream& TContext::Info(NYql::TPosition pos) {
     bool isError;
-    return MakeIssue(TSeverityIds::S_INFO, TIssuesIds::INFO, pos, false, isError);
+    return MakeIssue(TSeverityIds::S_INFO, TIssuesIds::INFO, pos, /*forceError=*/false, isError);
 }
 
 void TContext::SetWarningPolicyFor(NYql::TIssueCode code, NYql::EWarningAction action) {

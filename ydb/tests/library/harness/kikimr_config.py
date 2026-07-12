@@ -80,7 +80,6 @@ def _load_default_yaml(default_tablet_node_ids, ydb_domain_name, static_erasure,
         data = data.decode('utf-8')
     data = data.format(
         ydb_result_rows_limit=os.getenv("YDB_KQP_RESULT_ROWS_LIMIT", 1000),
-        ydb_yql_syntax_version=os.getenv("YDB_YQL_SYNTAX_VERSION", "1"),
         ydb_defaut_tablet_node_ids=str(default_tablet_node_ids),
         ydb_default_log_level=ydb_default_log_level,
         ydb_domain_name=ydb_domain_name,
@@ -208,6 +207,8 @@ class KikimrConfigGenerator(object):
             enable_nbs=False,
             nbs_database_name="/Root/NBS",
             enable_topic_cloud_events=False,
+            shutdown_config=None,
+            replication_config=None,
     ):
         if extra_feature_flags is None:
             extra_feature_flags = []
@@ -281,11 +282,6 @@ class KikimrConfigGenerator(object):
 
         self.__additional_log_configs = {} if additional_log_configs is None else additional_log_configs
         self.__additional_log_configs.update(_get_additional_log_configs())
-        if pg_compatible_expirement:
-            self.__additional_log_configs.update({
-                'PGWIRE': LogLevels.from_string('DEBUG'),
-                'LOCAL_PGWIRE': LogLevels.from_string('DEBUG'),
-            })
 
         self.dynamic_pdisk_size = dynamic_pdisk_size
         self.dynamic_storage_pools = dynamic_storage_pools
@@ -346,10 +342,6 @@ class KikimrConfigGenerator(object):
         # nodes. These compute nodes are not properly tested and maintained on darwin platform.
         if sys.platform == "darwin":
             self.yaml_config["table_service_config"]["resource_manager"]["kqp_pattern_cache_compiled_capacity_bytes"] = 0
-
-        if os.getenv('PGWIRE_LISTENING_PORT', ''):
-            self.yaml_config["local_pg_wire_config"] = {}
-            self.yaml_config["local_pg_wire_config"]["listening_port"] = os.getenv('PGWIRE_LISTENING_PORT')
 
         # dirty hack for internal ydbd flavour
         if "cert" in self.get_binary_path(0):
@@ -472,6 +464,9 @@ class KikimrConfigGenerator(object):
         if query_service_config:
             self.yaml_config["query_service_config"] = query_service_config
 
+        if replication_config:
+            self.yaml_config["replication_config"] = replication_config
+
         if scan_grouped_memory_limiter_config:
             self.yaml_config["scan_grouped_memory_limiter_config"] = scan_grouped_memory_limiter_config
         if comp_grouped_memory_limiter_config:
@@ -565,13 +560,7 @@ class KikimrConfigGenerator(object):
             self.yaml_config["table_service_config"]["enable_ast_cache"] = True
             self.yaml_config["feature_flags"]['enable_temp_tables'] = True
             self.yaml_config["feature_flags"]['enable_table_pg_types'] = True
-            self.yaml_config['feature_flags']['enable_pg_syntax'] = True
             self.yaml_config['feature_flags']['enable_uniq_constraint'] = True
-            if "local_pg_wire_config" not in self.yaml_config:
-                self.yaml_config["local_pg_wire_config"] = {}
-
-            ydb_pgwire_port = self.port_allocator.get_node_port_allocator(node_id).pgwire_port
-            self.yaml_config['local_pg_wire_config']['listening_port'] = ydb_pgwire_port
 
             # https://github.com/ydb-platform/ydb/issues/5152
             # self.yaml_config["table_service_config"]["enable_pg_consts_to_params"] = True
@@ -684,6 +673,9 @@ class KikimrConfigGenerator(object):
 
         if system_tablet_backup_config:
             self.yaml_config["system_tablet_backup_config"] = system_tablet_backup_config
+
+        if shutdown_config:
+            self.yaml_config["shutdown_config"] = shutdown_config
 
         if metadata_section:
             self.full_config["metadata"] = metadata_section

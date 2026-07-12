@@ -16,6 +16,10 @@ namespace NKikimr::NOlap::NReader {
         NAMES("pathId", "tabletId", "txId", "scanId", "sourceId", "blobBytes", "rawBytes", "minPk", "maxPk", "minSnapshot", "maxSnapshot"))    \
     PROBE(ScanFinishSource, GROUPS("Scan"), TYPES(ui64, ui64, ui64, ui64, ui64, ui64, ui64, ui32, ui32, ui64),                                 \
         NAMES("pathId", "tabletId", "txId", "scanId", "sourceId", "blobBytes", "rawBytes", "filteredRows", "totalRows", "totalReservedBytes")) \
+    PROBE(ScanStartFetchingAccessor, GROUPS("Orbit", "Scan"), TYPES(ui64, ui64, ui64, ui64, TString),                                          \
+        NAMES("pathId", "tabletId", "txId", "scanId", "sourceIds"))                                                                            \
+    PROBE(ScanFinishFetchingAccessor, GROUPS("Orbit", "Scan"), TYPES(ui64, ui64, ui64, ui64, TString, TDuration),                              \
+        NAMES("pathId", "tabletId", "txId", "scanId", "sourceIds", "fetchDurationMs"))                                                         \
     PROBE(ColumnEngineForLogsSelect, GROUPS("Scan"), TYPES(ui64, ui64, ui64, ui64, ui64, ui64, ui64, ui64, ui64),                              \
         NAMES("pathId", "tabletId", "txId", "scanId", "timeOfInsertedSelectMs", "timeOfCommittedSelectMs", "totalPortionsCount",               \
             "totalFilteredPortionsCount", "totalResultSize"))

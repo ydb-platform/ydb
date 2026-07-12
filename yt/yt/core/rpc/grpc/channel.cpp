@@ -43,11 +43,13 @@ public:
     void RecordAnnotation(y_absl::string_view /*annotation*/) override
     { }
 
+    // TODO(babenko): migrate to std::string
     TString TraceId() override
     {
         return {};
     }
 
+    // TODO(babenko): migrate to std::string
     TString SpanId() override
     {
         return {};
@@ -93,6 +95,7 @@ public:
         if (!grpc_error_get_int(error, grpc_core::StatusIntProperty::kRpcStatus, &statusCode)) {
             statusCode = GRPC_STATUS_UNKNOWN;
         }
+        // TODO(babenko): migrate to std::string
         TString statusDetail;
         if (!grpc_error_get_str(error, grpc_core::StatusStrProperty::kDescription, &statusDetail)) {
             statusDetail = "Unknown error";
@@ -754,12 +757,21 @@ class TChannelFactory
     : public IChannelFactory
 {
 public:
+    explicit TChannelFactory(TChannelFactoryConfigPtr config)
+        : FactoryConfig_(std::move(config))
+    { }
+
     IChannelPtr CreateChannel(const std::string& address) override
     {
-        auto config = New<TChannelConfig>();
-        config->Address = address;
-        return CreateGrpcChannel(config);
+        auto channelConfig = New<TChannelConfig>();
+        channelConfig->Load(ConvertToNode(FactoryConfig_), /*postprocess*/ false, /*setDefaults*/ false);
+        channelConfig->Address = address;
+        channelConfig->Postprocess();
+        return CreateGrpcChannel(channelConfig);
     }
+
+private:
+    const TChannelFactoryConfigPtr FactoryConfig_;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -771,9 +783,14 @@ IGrpcChannelPtr CreateGrpcChannel(TChannelConfigPtr config)
     return New<TChannel>(std::move(config));
 }
 
-IChannelFactoryPtr GetGrpcChannelFactory()
+IChannelFactoryPtr CreateGrpcChannelFactory(TChannelFactoryConfigPtr config)
 {
-    return LeakyRefCountedSingleton<TChannelFactory>();
+    return New<TChannelFactory>(std::move(config));
+}
+
+IChannelFactoryPtr GetDefaultGrpcChannelFactory()
+{
+    return LeakyRefCountedSingleton<TChannelFactory>(New<TChannelFactoryConfig>());
 }
 
 ////////////////////////////////////////////////////////////////////////////////

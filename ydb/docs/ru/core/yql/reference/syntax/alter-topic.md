@@ -30,7 +30,7 @@ ALTER TOPIC topic_path SET (option = value[, ...]);
 * `min_active_partitions` — минимальное количество активных партиций топика. [Автопартиционирование](../../../../concepts/datamodel/topic#autopartitioning) не будет уменьшать количество активных партиций ниже этого значения. Тип — `integer`, значение по умолчанию — `1`.
 * `max_active_partitions` — максимальное количество активных партиций топика. [Автопартиционирование](../../../../concepts/datamodel/topic#autopartitioning) не будет увеличивать количество активных партиций выше этого значения. Тип — `integer`, по умолчанию равно `min_active_partitions`.
 * `retention_period` — время хранения данных в топике. Тип значения — `Interval`, значение по умолчанию — `18h`.
-* `retention_storage_mb` — ограничение на максимальное место на диске, занимаемое данными топика. При превышении этого значения старые данные будут удаляться, как по retention. Тип значения — `integer`, значение по умолчанию — `0` (не ограничено).
+* `retention_storage_mb` — ограничение на максимальное место на диске, занимаемое данными топика. При превышении этого значения старые данные будут удаляться, как по retention. При включенном автоматическом партиционировании потребляемое место может превышать установленное значение. Тип значения — `integer`, значение по умолчанию — `0` (не ограничено).
 * `partition_write_burst_bytes` — размер запаса квоты на запись в партицию на случай всплесков записи. При выставлении в `0` фактическое значение write_burst принимается равным значению квоты (что позволяет всплески записи длительностью до 1 секунды). Тип значения — `integer`, значение по умолчанию: `0`.
 * `partition_write_speed_bytes_per_second` — максимальная разрешенная скорость записи в 1 партицию. Если поток записи в партицию превысит это значение, запись будет квотироваться. Тип значения — `integer`, значение по умолчанию — `2097152` (2 МБ).
 * `auto_partitioning_strategy` — [режим автопартиционирования](../../../../concepts/datamodel/topic#autopartitioning_modes).
@@ -120,14 +120,8 @@ ALTER TOPIC topic_path ADD CONSUMER consumer_name [WITH (option = value[, ...])]
 
 * `option` и `value` — параметр читателя и его значение.
 
-Параметры читателя:
+{% include [x](_includes/topic_consumer_parameters.md) %}
 
-* `important` — определяет важного читателя. Никакие данные из топика не будут удалены, пока все важные читатели их не обработали. Тип значения — `boolean`, значение по умолчанию: `false`.
-* `availability_period` — определяет время доступности сообщений для читателя. Опция позволяет продлить время хранения сообщений в топике с [retention_period](#topic-parameters) вплоть до `availability_period`, если читатель не подтверждает их обработку. Тип значения — `Interval`. Не совместим с параметром `important`. Значение по умолчанию отсутствует.
-* `read_from` — определяет момент времени записи сообщений, начиная с которого читатель будет получать данные. Данные, записанные ранее этого момента, прочитаны не будут. Тип значения: `Datetime` ИЛИ `Timestamp` или `integer` (unix-timestamp в виде числа). Значение по умолчанию — `0` (чтение с самого раннего доступного в топике времени).
-{% if feature_topic_codecs %}
-* `supported_codecs` — список [кодеков](../../../../concepts/datamodel/topic#message-codec), поддерживаемых читателем.
-{% endif %}
 
 Следующая команда добавит к топику читателя с настройками по умолчанию:
 
@@ -139,6 +133,20 @@ ALTER TOPIC `my_topic` ADD CONSUMER my_consumer;
 
 ```yql
 ALTER TOPIC `my_topic` ADD CONSUMER my_consumer2 WITH (important = true);
+```
+
+Следующая команда добавит к топику разделяемого (общего) читателя:
+
+```yql
+ALTER TOPIC `my_topic`
+    ADD CONSUMER my_shared_consumer WITH (
+        type = 'shared',
+        keep_messages_order = false,
+        default_processing_timeout = Interval('PT30S'),
+        max_processing_attempts = 3,
+        dead_letter_policy = 'move',
+        dead_letter_queue = 'my_dlq_topic'
+    );
 ```
 
 ### Задать параметры читателя {#alter-consumer}

@@ -29,7 +29,10 @@ enum EOperationType {
     OPERATION_TYPE_DISTRIBUTED_UPLOAD = 5;
     OPERATION_TYPE_SORTED_MERGE = 6;
     OPERATION_TYPE_SORT = 7;
+    OPERATION_TYPE_REDUCE = 8;
     OPERATION_TYPE_PULL = 9;
+    OPERATION_TYPE_FILL = 10;
+    OPERATION_TYPE_MAP_REDUCE = 11;
 }
 
 enum ETaskType {
@@ -41,7 +44,10 @@ enum ETaskType {
     TASK_TYPE_DISTRIBUTED_UPLOAD = 5;
     TASK_TYPE_SORTED_MERGE = 6;
     TASK_TYPE_LOCAL_SORT = 7;
+    TASK_TYPE_REDUCE = 8;
     TASK_TYPE_PULL = 9;
+    TASK_TYPE_FILL = 10;
+    TASK_TYPE_MAP_REDUCE_MAP = 11;
 }
 
 enum EFmrComponent {
@@ -78,11 +84,13 @@ message TFmrError {
 message TYtTableRef {
     string RichPath = 1;
     optional string FilePath = 2;
+    uint32 TableIndex = 3;
 }
 
 message TYtTableTaskRef {
     repeated string RichPath = 1;
     repeated string FilePath = 2;
+    repeated uint32 TableIndex = 3;
 }
 
 message TFmrTableId {
@@ -95,6 +103,7 @@ message TFmrTableRef {
     optional string ColumnGroups = 3;
     repeated ESortOrder SortOrder = 4;
     repeated string SortColumns = 5;
+    uint32 TableIndex = 6;
 }
 
 message TTableRange {
@@ -112,6 +121,7 @@ message TFmrTableInputRef {
     optional bool   IsLastRowInclusive = 6;
     optional bytes  FirstRowKeys = 7;
     optional bytes  LastRowKeys = 8;
+    uint32 TableIndex = 9;
 }
 
 message TSortingColumns {
@@ -252,6 +262,7 @@ message TMapOperationParams {
     repeated TFmrTableRef Output = 2;
     bytes SerializedMapJobState = 3;
     EFmrJobType MapJobType = 4;
+    bool ForceSingleTask = 5;
 }
 
 message TMapTaskParams {
@@ -259,6 +270,16 @@ message TMapTaskParams {
     repeated TFmrTableOutputRef Output = 2;
     bytes SerializedMapJobState = 3;
     EFmrJobType MapJobType = 4;
+}
+
+message TFillOperationParams {
+    repeated TFmrTableRef Output = 1;
+    bytes SerializedFillJobState = 2;
+}
+
+message TFillTaskParams {
+    repeated TFmrTableOutputRef Output = 1;
+    bytes SerializedFillJobState = 2;
 }
 
 message TReduceOperationSpec {
@@ -286,6 +307,24 @@ message TSortOperationParams {
     TFmrTableRef Output = 2;
 }
 
+message TMapReduceOperationParams {
+    repeated TOperationTableRef Input = 1;
+    repeated TFmrTableRef Output = 2;
+    bytes SerializedMapJobState = 3;
+    bytes SerializedReduceJobState = 4;
+    TReduceOperationSpec ReduceOperationSpec = 5;
+    repeated TFmrTableRef DirectMapOutput = 6;
+}
+
+// Task params for the map stage of MapReduce: apply mapper, compute _yql_key_hash, local-sort.
+message TMapReduceMapTaskParams {
+    TTaskTableInputRef Input = 1;
+    TFmrTableOutputRef Output = 2;
+    bytes SerializedMapJobState = 3;
+    TReduceOperationSpec ReduceOperationSpec = 4;
+    repeated TFmrTableOutputRef DirectOutputs = 5;
+}
+
 message TPullOperationParams {
     repeated TOperationTableRef Input = 1;
 }
@@ -310,6 +349,8 @@ message TOperationParams {
         TSortOperationParams SortOperationParams = 7;
         TReduceOperationParams ReduceOperationParams = 8;
         TPullOperationParams PullOperationParams = 9;
+        TFillOperationParams FillOperationParams = 10;
+        TMapReduceOperationParams MapReduceOperationParams = 11;
     }
 }
 
@@ -324,6 +365,8 @@ message TTaskParams {
         TLocalSortTaskParams LocalSortTaskParams = 7;
         TReduceTaskParams ReduceTaskParams = 8;
         TPullTaskParams PullTaskParams = 9;
+        TFillTaskParams FillTaskParams = 10;
+        TMapReduceMapTaskParams MapReduceMapTaskParams = 11;
     }
 }
 
@@ -383,6 +426,9 @@ message TTaskMergeResult {
 message TTaskMapResult {
 }
 
+message TTaskFillResult {
+}
+
 message TTaskSortedUploadResult {
     bytes FragmentResult = 1;
     uint64 FragmentOrder = 2;
@@ -400,6 +446,7 @@ message TTaskResult {
         TTaskMapResult TaskMapResult = 4;
         TTaskSortedUploadResult TaskSortedUploadResult = 5;
         TTaskPullResult TaskPullResult = 6;
+        TTaskFillResult TaskFillResult = 7;
     }
 }
 

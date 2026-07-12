@@ -9,15 +9,23 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: add external label
-        uses: actions/github-script@v7
+        uses: actions/github-script@v8
         with:
           github-token: ${{ secrets.GH_PERSONAL_ACCESS_TOKEN }}
           script: |
-            const issueAuthor = context.payload.issue.user.login
+            const issueAuthor = context.payload.issue.user.login;
+            const issueAuthorId = context.payload.issue.user.id;
+
+            const vibeDbBotId = 274634113;
+
+            if (issueAuthorId == vibeDbBotId) {
+              console.log(`Issue created by robot-vibe-db app (${issueAuthor}), skipping external label`);
+              return;
+            }
             
             if (context.repo.owner == issueAuthor) {
-              console.log("Issue author is here");
-              return
+              console.log("Issue author is repo owner");
+              return;
             }
             
             const org = context.repo.owner;

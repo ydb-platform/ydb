@@ -31,10 +31,10 @@ YT_DEFINE_GLOBAL(const THeaders::THeaderNames, FilteredHeaders, {
     "host",
 });
 
-YT_DEFINE_GLOBAL(const TSharedRef, Http100ContinueBuffer, TSharedRef::FromString("HTTP/1.1 100 Continue\r\n\r\n"));
-YT_DEFINE_GLOBAL(const TSharedRef, CrLfBuffer, TSharedRef::FromString("\r\n"));
-YT_DEFINE_GLOBAL(const TSharedRef, ZeroCrLfBuffer, TSharedRef::FromString("0\r\n"));
-YT_DEFINE_GLOBAL(const TSharedRef, ZeroCrLfCrLfBuffer, TSharedRef::FromString("0\r\n\r\n"));
+YT_DEFINE_GLOBAL(const TSharedRef, Http100ContinueBuffer, TSharedRef::FromString(std::string("HTTP/1.1 100 Continue\r\n\r\n")));
+YT_DEFINE_GLOBAL(const TSharedRef, CrLfBuffer, TSharedRef::FromString(std::string("\r\n")));
+YT_DEFINE_GLOBAL(const TSharedRef, ZeroCrLfBuffer, TSharedRef::FromString(std::string("0\r\n")));
+YT_DEFINE_GLOBAL(const TSharedRef, ZeroCrLfCrLfBuffer, TSharedRef::FromString(std::string("0\r\n\r\n")));
 
 } // namespace
 
@@ -108,11 +108,11 @@ TSharedRef THttpParser::Feed(const TSharedRef& input)
         // and 64 bytes after error
         size_t contextEnd = std::min(read + 64, input.Size());
 
-        TString errorContext(input.Begin() + contextStart, contextEnd - contextStart);
+        std::string errorContext(input.Begin() + contextStart, contextEnd - contextStart);
 
         THROW_ERROR_EXCEPTION("HTTP parse error: %v", http_errno_description(http_errno))
             << TErrorAttribute("parser_error_name", http_errno_name(http_errno))
-            << TErrorAttribute("error_context", EscapeC(errorContext));
+            << TErrorAttribute("error_context", EscapeC(TStringBuf(errorContext)));
     }
 
     if (http_errno == HPE_PAUSED) {
@@ -748,7 +748,7 @@ TSharedRef THttpOutput::GetHeadersPart(std::optional<size_t> contentLength)
 
     Headers_->WriteTo(&messageHeaders, &FilteredHeaders());
 
-    TString headers;
+    std::string headers;
     messageHeaders.Buffer().AsString(headers);
     return TSharedRef::FromString(headers);
 }
@@ -759,7 +759,7 @@ TSharedRef THttpOutput::GetTrailersPart()
 
     Trailers_->WriteTo(&messageTrailers, &FilteredHeaders());
 
-    TString trailers;
+    std::string trailers;
     messageTrailers.Buffer().AsString(trailers);
     return TSharedRef::FromString(trailers);
 }

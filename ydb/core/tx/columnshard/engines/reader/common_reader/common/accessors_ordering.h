@@ -89,6 +89,20 @@ public:
         }
     };
 
+    class TLessByFinish {
+    public:
+        bool operator()(const TDataSourceConstructor& l, const TDataSourceConstructor& r) const {
+            auto cmp = l.Finish.Compare(r.Finish);
+            if (cmp == std::partial_ordering::less) {
+                return true;
+            } else if (cmp == std::partial_ordering::greater) {
+                return false;
+            } else {
+                return l.QueryAgnosticLess(r);
+            }
+        }
+    };
+
     class TSimpleLess {
     public:
         bool operator()(const TDataSourceConstructor& l, const TDataSourceConstructor& r) const {
@@ -99,10 +113,12 @@ public:
     class TReversedComparator {
     private:
         ERequestSorting Sorting;
+        bool SortByFinish = false;
 
     public:
-        TReversedComparator(const ERequestSorting sorting)
+        TReversedComparator(const ERequestSorting sorting, const bool sortByFinish = false)
             : Sorting(sorting)
+            , SortByFinish(sortByFinish)
         {
         }
 
@@ -121,6 +137,9 @@ public:
                     return TSimpleLess()(r, l);
                 case ERequestSorting::ASC:
                 case ERequestSorting::DESC:
+                    if (SortByFinish) {
+                        return TLessByFinish()(r, l);
+                    }
                     return TLessByStart()(r, l);
             }
         }
@@ -131,14 +150,16 @@ template <std::derived_from<TDataSourceConstructor> TObject>
 class TOrderedObjects {
 private:
     const ERequestSorting Sorting;
+    const bool SortByFinish = false;
     std::deque<TObject> HeapObjects;
     YDB_READONLY_DEF(std::deque<TObject>, AlreadySorted);
     bool Initialized = false;
     ui32 NextObjectIdx = 0;
 
 public:
-    TOrderedObjects(const ERequestSorting sorting)
+    TOrderedObjects(const ERequestSorting sorting, const bool sortByFinish = false)
         : Sorting(sorting)
+        , SortByFinish(sortByFinish)
     {
     }
 
@@ -176,12 +197,12 @@ public:
         AFL_VERIFY(!Initialized);
         Initialized = true;
         HeapObjects = std::move(objects);
-        std::make_heap(HeapObjects.begin(), HeapObjects.end(), typename TObject::TReversedComparator(Sorting));
+        std::make_heap(HeapObjects.begin(), HeapObjects.end(), typename TObject::TReversedComparator(Sorting, SortByFinish));
     }
 
     void PrepareOrdered(const ui32 count) {
         while (AlreadySorted.size() < count && HeapObjects.size()) {
-            std::pop_heap(HeapObjects.begin(), HeapObjects.end(), typename TObject::TReversedComparator(Sorting));
+            std::pop_heap(HeapObjects.begin(), HeapObjects.end(), typename TObject::TReversedComparator(Sorting, SortByFinish));
             HeapObjects.back().SetIndex(NextObjectIdx++);
             AlreadySorted.emplace_back(std::move(HeapObjects.back()));
             HeapObjects.pop_back();
@@ -248,12 +269,13 @@ public:
         }
 
         if (accessors.HasErrors()) {
-            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("error", "Data accessor result with errors " + accessors.GetErrorMessage());
+            YDB_LOG_ERROR_COMP(NKikimrServices::TX_COLUMNSHARD, "",
+                {"error", "Data accessor result with errors " + accessors.GetErrorMessage()});
         }
 
         if (accessors.HasRemovedData()) {
-            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)(
-                "error", TStringBuilder{} << "Data accessor result with removed data, " << accessors.GetRemovedData().size());
+            YDB_LOG_DEBUG_COMP(NKikimrServices::TX_COLUMNSHARD, "",
+                {"error", TStringBuilder{} << "Data accessor result with removed data, " << accessors.GetRemovedData().size()});
         }
 
         AFL_VERIFY(InFlightRequests);
@@ -311,8 +333,10 @@ private:
     virtual std::shared_ptr<IDataSource> DoTryExtractNext(
         const std::shared_ptr<TSpecialReadContext>& context, const ui32 inFlightCurrentLimit) override final {
         if (!Accessors.GetSize() && Accessors.HasRequest()) {
-            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "SKIP_NO_ACCESSORS")("has_request", Accessors.HasRequest())(
-                "in_flight", inFlightCurrentLimit);
+            YDB_LOG_DEBUG_COMP(NKikimrServices::TX_COLUMNSHARD_SCAN, "",
+                {"event", "SKIP_NO_ACCESSORS"},
+                {"hasRequest", Accessors.HasRequest()},
+                {"inFlight", inFlightCurrentLimit});
             return nullptr;
         }
         if (!Accessors.HasRequest() && (Accessors.GetSize() < Constructors.GetSize() && Accessors.GetSize() < inFlightCurrentLimit)) {
@@ -325,15 +349,20 @@ private:
                     break;
                 }
             }
-            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "START_FETCH_ACCESSORS")("acc_count", Accessors.GetSize())(
-                "add", request->GetSize())("in_flight", inFlightCurrentLimit);
+            YDB_LOG_DEBUG_COMP(NKikimrServices::TX_COLUMNSHARD_SCAN, "",
+                {"event", "START_FETCH_ACCESSORS"},
+                {"accCount", Accessors.GetSize()},
+                {"add", request->GetSize()},
+                {"inFlight", inFlightCurrentLimit});
             request->SetColumnIds(context->GetAllUsageColumns()->GetColumnIds());
             Accessors.StartRequest(std::move(request), context);
         }
         if (!Accessors.GetSize()) {
             AFL_VERIFY(Accessors.HasRequest());
-            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "SKIP_NO_ACCESSORS")("has_request", Accessors.HasRequest())(
-                "in_flight", inFlightCurrentLimit);
+            YDB_LOG_DEBUG_COMP(NKikimrServices::TX_COLUMNSHARD_SCAN, "",
+                {"event", "SKIP_NO_ACCESSORS"},
+                {"hasRequest", Accessors.HasRequest()},
+                {"inFlight", inFlightCurrentLimit});
             return nullptr;
         }
         return DoExtractNextImpl(context);
@@ -385,8 +414,8 @@ public:
         return result;
     }
 
-    TSourcesConstructorWithAccessors(const ERequestSorting sorting)
-        : Constructors(sorting)
+    TSourcesConstructorWithAccessors(const ERequestSorting sorting, const bool sortByFinish = false)
+        : Constructors(sorting, sortByFinish)
     {
     }
 

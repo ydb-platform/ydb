@@ -107,6 +107,8 @@ message THandshakeRequest {
     optional bool RequestExternalDataChannel = 21;
     optional bool RequestXxhash = 24;
     optional bool RequestXdcShuffle = 25;
+    optional bool RequestAllowDisablingPayloadChecksums = 28; // Can be requested per event. Affects XDC and RDMA payloads.
+    optional bool RequestSessionV2 = 29; // request TInterconnectSessionTCPv2 (no continuation, no encryption)
 
     optional bytes CompatibilityInfo = 22;
 
@@ -144,6 +146,8 @@ message THandshakeSuccess {
     optional bool UseExternalDataChannel = 14;
     optional bool UseXxhash = 16;
     optional bool UseXdcShuffle = 17;
+    optional bool AllowDisablingPayloadChecksums = 21;
+    optional bool UseSessionV2 = 22; // negotiated TInterconnectSessionTCPv2 usage
 
     optional bytes CompatibilityInfo = 15;
 

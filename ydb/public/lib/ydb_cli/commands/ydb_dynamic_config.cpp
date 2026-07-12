@@ -123,8 +123,8 @@ int TCommandConfigFetch::Run(TConfig& config) {
         // some database is set by mistake
         config.Database.clear();
     }
-    auto driver = std::make_unique<NYdb::TDriver>(CreateDriver(config));
-    auto client = NYdb::NConfig::TConfigClient(*driver);
+    auto driver = CreateDriver(config);
+    auto client = NYdb::NConfig::TConfigClient(driver);
 
     NYdb::NConfig::TFetchConfigResult result(TStatus(EStatus::CLIENT_CALL_UNIMPLEMENTED, {}), {}, {});
 
@@ -147,7 +147,7 @@ int TCommandConfigFetch::Run(TConfig& config) {
             return EXIT_FAILURE;
         }
 
-        auto client = NYdb::NDynamicConfig::TDynamicConfigClient(*driver);
+        auto client = NYdb::NDynamicConfig::TDynamicConfigClient(driver);
         auto result = client.GetConfig().GetValueSync();
         NStatusHelpers::ThrowOnErrorOrPrintIssues(result);
 
@@ -180,6 +180,7 @@ int TCommandConfigFetch::Run(TConfig& config) {
     NStatusHelpers::ThrowOnErrorOrPrintIssues(result);
     TString clusterConfig;
     TString storageConfig;
+    TString databaseConfig;
 
     for (const auto& entry : result.GetConfigs()) {
         std::visit([&](auto&& arg) {
@@ -192,6 +193,8 @@ int TCommandConfigFetch::Run(TConfig& config) {
                 if (DedicatedStorageSection || !DedicatedClusterSection) {
                     storageConfig = entry.Config;
                 }
+            } else if constexpr (std::is_same_v<T, NYdb::NConfig::TDatabaseConfigIdentity>) {
+                databaseConfig = entry.Config;
             }
         }, entry.Identity);
     }
@@ -208,7 +211,9 @@ int TCommandConfigFetch::Run(TConfig& config) {
             // and will get attention that something went horribly wrong
             Cerr << "Unable to bump main config version, returning as-is" << Endl;
         }
-        if (!storageConfig.empty() || DedicatedStorageSection) {
+        if (!storageConfig.empty() || !databaseConfig.empty() ||
+            DedicatedStorageSection)
+        {
             Cerr << "cluster config: " << Endl;
         }
         Cout << clusterConfig << Endl;
@@ -224,13 +229,36 @@ int TCommandConfigFetch::Run(TConfig& config) {
             // and will get attention that something went horribly wrong
             Cerr << "Unable to bump storage config version, returning as-is" << Endl;
         }
-        if (!clusterConfig.empty() || DedicatedClusterSection) {
+        if (!clusterConfig.empty() || !databaseConfig.empty() ||
+            DedicatedClusterSection)
+        {
             Cerr << "storage config:" << Endl;
         }
         Cout << storageConfig << Endl;
     }
 
-    if (clusterConfig.empty() && storageConfig.empty()) {
+    if (!databaseConfig.empty()) {
+        // NOTE: there is no native new-API path for per-database YAML config fetch yet —
+        // the request is routed through Console via the legacy API (see
+        // TFetchStorageConfigRequest::Bootstrap() in rpc_config.cpp).
+        // Console's contract for per-database YAML config replace is
+        // wire metadata.version == stored version, so the CLI must return the fetched
+        // body as-is. Bumping metadata.version here would break the next
+        // fetch | edit | replace round-trip — the user would have to manually fix
+        // the version before re-submitting. Once a native new-API path lands,
+        // this branch can mirror the cluster/storage branches and call
+        // UpgradeDatabaseConfigVersion.
+
+        if (!clusterConfig.empty() || !storageConfig.empty() ||
+            DedicatedStorageSection || DedicatedClusterSection)
+        {
+            Cerr << "database config:" << Endl;
+        }
+        Cout << databaseConfig << Endl;
+    }
+
+    if (clusterConfig.empty() && storageConfig.empty() && databaseConfig.empty())
+    {
         Cerr << "No config returned." << Endl;
         return EXIT_FAILURE;
     }
@@ -284,8 +312,8 @@ void TCommandConfigReplace::Parse(TConfig& config) {
 }
 
 int TCommandConfigReplace::Run(TConfig& config) {
-    std::unique_ptr<NYdb::TDriver> driver = std::make_unique<NYdb::TDriver>(CreateDriver(config));
-    auto client = NYdb::NConfig::TConfigClient(*driver);
+    auto driver = CreateDriver(config);
+    auto client = NYdb::NConfig::TConfigClient(driver);
 
     NYdb::NConfig::TReplaceConfigSettings settings;
 
@@ -310,7 +338,7 @@ int TCommandConfigReplace::Run(TConfig& config) {
     if (status.GetStatus() == EStatus::CLIENT_CALL_UNIMPLEMENTED || status.GetStatus() == EStatus::UNSUPPORTED) {
         Cerr << "Warning: Fallback to DynamicConfig API" << Endl;
 
-        auto client = NYdb::NDynamicConfig::TDynamicConfigClient(*driver);
+        auto client = NYdb::NDynamicConfig::TDynamicConfigClient(driver);
 
         status = [&]() {
             if (Force) {
@@ -410,8 +438,8 @@ TString ConfigHash(const NFyaml::TNodeRef& config) {
 }
 
 int TCommandConfigResolve::Run(TConfig& config) {
-    auto driver = std::make_unique<NYdb::TDriver>(CreateDriver(config));
-    auto client = NYdb::NDynamicConfig::TDynamicConfigClient(*driver);
+    auto driver = CreateDriver(config);
+    auto client = NYdb::NDynamicConfig::TDynamicConfigClient(driver);
 
     if (NodeId) {
         auto result = client.GetNodeLabels(NodeId).GetValueSync();
@@ -637,8 +665,8 @@ void TCommandConfigVolatileAdd::Parse(TConfig& config) {
 }
 
 int TCommandConfigVolatileAdd::Run(TConfig& config) {
-    auto driver = std::make_unique<NYdb::TDriver>(CreateDriver(config));
-    auto client = NYdb::NDynamicConfig::TDynamicConfigClient(*driver);
+    auto driver = CreateDriver(config);
+    auto client = NYdb::NDynamicConfig::TDynamicConfigClient(driver);
 
     const auto configStr = Filename == "-" ? Cin.ReadAll() : TFileInput(Filename).ReadAll();
 
@@ -712,8 +740,8 @@ void TCommandConfigVolatileDrop::Parse(TConfig& config) {
 }
 
 int TCommandConfigVolatileDrop::Run(TConfig& config) {
-    auto driver = std::make_unique<NYdb::TDriver>(CreateDriver(config));
-    auto client = NYdb::NDynamicConfig::TDynamicConfigClient(*driver);
+    auto driver = CreateDriver(config);
+    auto client = NYdb::NDynamicConfig::TDynamicConfigClient(driver);
 
     if (!Dir.empty()) {
         auto dir = TFsPath(Dir);
@@ -792,8 +820,8 @@ void TCommandConfigVolatileFetch::Parse(TConfig& config) {
 }
 
 int TCommandConfigVolatileFetch::Run(TConfig& config) {
-    auto driver = std::make_unique<NYdb::TDriver>(CreateDriver(config));
-    auto client = NYdb::NDynamicConfig::TDynamicConfigClient(*driver);
+    auto driver = CreateDriver(config);
+    auto client = NYdb::NDynamicConfig::TDynamicConfigClient(driver);
     auto result = client.GetConfig().GetValueSync();
     NStatusHelpers::ThrowOnErrorOrPrintIssues(result);
 
@@ -839,8 +867,8 @@ void TCommandGenerateDynamicConfig::Config(TConfig& config) {
 }
 
 int TCommandGenerateDynamicConfig::Run(TConfig& config) {
-    auto driver = std::make_unique<NYdb::TDriver>(CreateDriver(config));
-    auto client = NYdb::NDynamicConfig::TDynamicConfigClient(*driver);
+    auto driver = CreateDriver(config);
+    auto client = NYdb::NDynamicConfig::TDynamicConfigClient(driver);
 
     auto result = client.FetchStartupConfig().GetValueSync();
     NStatusHelpers::ThrowOnErrorOrPrintIssues(result);
@@ -878,8 +906,8 @@ void TCommandVersionDynamicConfig::Parse(TConfig& config) {
 }
 
 int TCommandVersionDynamicConfig::Run(TConfig& config) {
-    auto driver = std::make_unique<NYdb::TDriver>(CreateDriver(config));
-    auto client = NYdb::NDynamicConfig::TDynamicConfigClient(*driver);
+    auto driver = CreateDriver(config);
+    auto client = NYdb::NDynamicConfig::TDynamicConfigClient(driver);
     auto result = client.GetConfigurationVersion(ListNodes).GetValueSync();
     NStatusHelpers::ThrowOnErrorOrPrintIssues(result);
     auto sortNodes = [&](const auto& list) {

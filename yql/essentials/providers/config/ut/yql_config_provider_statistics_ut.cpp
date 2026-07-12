@@ -26,7 +26,7 @@ Y_UNIT_TEST_SUITE(TConfigProviderStatisticsTest) {
 Y_UNIT_TEST(NullConfigProducesNoStatistics) {
     TTypeAnnotationContext typesCtx;
     TExprContext exprCtx;
-    auto provider = CreateConfigProvider(typesCtx, nullptr, "testuser", {}, false);
+    auto provider = CreateConfigProvider(typesCtx, /*config=*/nullptr, "testuser", {}, /*forPartialTypeCheck=*/false);
 
     UNIT_ASSERT(provider->Initialize(exprCtx));
 
@@ -42,9 +42,9 @@ Y_UNIT_TEST(RuntimeSettingWithoutActivationProducesNoStatistics) {
     TGatewaysConfig config;
     auto* setting = config.MutableRuntimeSettings()->AddHostSettings();
     setting->SetName("DatumValidation");
-    setting->SetValue("true");
+    setting->SetValue("Cheap");
 
-    auto provider = CreateConfigProvider(typesCtx, &config, "testuser", {}, false);
+    auto provider = CreateConfigProvider(typesCtx, &config, "testuser", {}, /*forPartialTypeCheck=*/false);
     UNIT_ASSERT(provider->Initialize(exprCtx));
 
     TStringStream out;
@@ -62,7 +62,7 @@ Y_UNIT_TEST(RuntimeSettingWithMatchingActivationAppearsInStatistics) {
     setting->SetValue("true");
     setting->MutableActivation()->AddIncludeUsers("testuser");
 
-    auto provider = CreateConfigProvider(typesCtx, &config, "testuser", {}, false);
+    auto provider = CreateConfigProvider(typesCtx, &config, "testuser", {}, /*forPartialTypeCheck=*/false);
     UNIT_ASSERT(provider->Initialize(exprCtx));
 
     TStringStream out;
@@ -81,7 +81,7 @@ Y_UNIT_TEST(RuntimeSettingWithNonMatchingActivationProducesNoStatistics) {
     setting->SetValue("true");
     setting->MutableActivation()->AddIncludeUsers("otheruser");
 
-    auto provider = CreateConfigProvider(typesCtx, &config, "testuser", {}, false);
+    auto provider = CreateConfigProvider(typesCtx, &config, "testuser", {}, /*forPartialTypeCheck=*/false);
     UNIT_ASSERT(provider->Initialize(exprCtx));
 
     TStringStream out;
@@ -99,7 +99,7 @@ Y_UNIT_TEST(OnlyActivatedRuntimeSettingsAppearInStatistics) {
     {
         auto* setting = runtimeSettings->AddHostSettings();
         setting->SetName("DatumValidation");
-        setting->SetValue("true");
+        setting->SetValue("Cheap");
         // no activation — never recorded in statistics
     }
     {
@@ -109,7 +109,7 @@ Y_UNIT_TEST(OnlyActivatedRuntimeSettingsAppearInStatistics) {
         setting->MutableActivation()->AddIncludeUsers("testuser");
     }
 
-    auto provider = CreateConfigProvider(typesCtx, &config, "testuser", {}, false);
+    auto provider = CreateConfigProvider(typesCtx, &config, "testuser", {}, /*forPartialTypeCheck=*/false);
     UNIT_ASSERT(provider->Initialize(exprCtx));
 
     const TString statistics = CollectStatisticsToString(*provider);
@@ -126,7 +126,7 @@ Y_UNIT_TEST(CoreFlagWithMatchingActivationAppearsInStatistics) {
     coreFlag->SetName("UseBlocks");
     coreFlag->MutableActivation()->AddIncludeUsers("testuser");
 
-    auto provider = CreateConfigProvider(typesCtx, &config, "testuser", {}, false);
+    auto provider = CreateConfigProvider(typesCtx, &config, "testuser", {}, /*forPartialTypeCheck=*/false);
     UNIT_ASSERT(provider->Initialize(exprCtx));
 
     TStringStream out;
@@ -144,7 +144,7 @@ Y_UNIT_TEST(CoreFlagWithNonMatchingActivationProducesNoStatistics) {
     coreFlag->SetName("UseBlocks");
     coreFlag->MutableActivation()->AddIncludeUsers("otheruser");
 
-    auto provider = CreateConfigProvider(typesCtx, &config, "testuser", {}, false);
+    auto provider = CreateConfigProvider(typesCtx, &config, "testuser", {}, /*forPartialTypeCheck=*/false);
     UNIT_ASSERT(provider->Initialize(exprCtx));
 
     TStringStream out;
@@ -167,7 +167,7 @@ Y_UNIT_TEST(BothCoreAndRuntimeActivationsAppearInStatistics) {
     setting->SetValue("true");
     setting->MutableActivation()->AddIncludeUsers("testuser");
 
-    auto provider = CreateConfigProvider(typesCtx, &config, "testuser", {}, false);
+    auto provider = CreateConfigProvider(typesCtx, &config, "testuser", {}, /*forPartialTypeCheck=*/false);
     UNIT_ASSERT(provider->Initialize(exprCtx));
 
     const TString statistics = CollectStatisticsToString(*provider);

@@ -104,11 +104,9 @@ TExprBase KqpBuildInsertIndexStages(TExprBase node, TExprContext& ctx, const TKq
     bool abortOnError = insert.OnConflict().Value() == "abort"sv;
     const auto& table = kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, insert.Table().Path());
 
-    const bool isSink = NeedSinks(table, kqpCtx);
-
     auto indexes = BuildAffectedIndexTables(table, insert.Pos(), ctx, nullptr);
     YQL_ENSURE(indexes);
-    const bool useStreamIndex = isSink && kqpCtx.Config->GetEnableIndexStreamWrite();
+    const bool useStreamIndex = kqpCtx.Config->GetEnableIndexStreamWrite();
 
     const bool needPrecompute = !useStreamIndex
         || !abortOnError
@@ -185,7 +183,10 @@ TExprBase KqpBuildInsertIndexStages(TExprBase node, TExprContext& ctx, const TKq
     for (const auto& [tableNode, indexDesc] : indexes) {
         if (useStreamIndex
                 && (indexDesc->Type == TIndexDescription::EType::GlobalSync
-                    || indexDesc->Type == TIndexDescription::EType::GlobalSyncUnique)) {
+                    || indexDesc->Type == TIndexDescription::EType::GlobalSyncUnique
+                    || indexDesc->Type == TIndexDescription::EType::GlobalFulltextCompact
+                    || indexDesc->Type == TIndexDescription::EType::GlobalFulltextCompactRelevance
+                    || indexDesc->Type == TIndexDescription::EType::GlobalJsonCompact)) {
             continue;
         }
 
@@ -212,6 +213,9 @@ TExprBase KqpBuildInsertIndexStages(TExprBase node, TExprContext& ctx, const TKq
         std::optional<TExprBase> upsertIndexRows;
         switch (indexDesc->Type) {
             case TIndexDescription::EType::GlobalAsync:
+            case TIndexDescription::EType::GlobalFulltextCompact:
+            case TIndexDescription::EType::GlobalFulltextCompactRelevance:
+            case TIndexDescription::EType::GlobalJsonCompact:
                 AFL_ENSURE(false);
             case TIndexDescription::EType::GlobalSync:
             case TIndexDescription::EType::GlobalSyncUnique: {

@@ -2,6 +2,7 @@
 
 #include <library/cpp/threading/future/async.h>
 #include <ydb/core/statistics/events.h>
+#include <ydb/core/protos/analyze_operation.pb.h>
 
 #include <ydb/core/tx/columnshard/hooks/testing/controller.h>
 
@@ -178,6 +179,26 @@ void ValidateRowCount(TTestActorRuntime& runtime, ui32 nodeIndex, TPathId pathId
 void WaitForRowCount(
     TTestActorRuntime& runtime, ui32 nodeIndex,
     TPathId pathId, size_t expectedRowCount, size_t timeoutSec = 130);
+
+NKikimrAnalyzeOp::TEvListResponse TestListAnalyzeOps(
+    TTestActorRuntime& runtime, ui64 saTabletId,
+    const TString& dbName, ui64 pageSize = 100, const TString& pageToken = {},
+    Ydb::StatusIds::StatusCode expectedStatus = Ydb::StatusIds::SUCCESS);
+
+NKikimrAnalyzeOp::TEvGetResponse TestGetAnalyzeOp(
+    TTestActorRuntime& runtime, ui64 saTabletId,
+    const TString& dbName, const TString& binaryOpId,
+    Ydb::StatusIds::StatusCode expectedStatus = Ydb::StatusIds::SUCCESS);
+
+NKikimrAnalyzeOp::TEvCancelResponse TestCancelAnalyzeOp(
+    TTestActorRuntime& runtime, ui64 saTabletId,
+    const TString& dbName, const TString& binaryOpId,
+    Ydb::StatusIds::StatusCode expectedStatus = Ydb::StatusIds::SUCCESS);
+
+NKikimrAnalyzeOp::TEvForgetResponse TestForgetAnalyzeOp(
+    TTestActorRuntime& runtime, ui64 saTabletId,
+    const TString& dbName, const TString& binaryOpId,
+    Ydb::StatusIds::StatusCode expectedStatus = Ydb::StatusIds::SUCCESS);
 
 } // namespace NStat
 } // namespace NKikimr

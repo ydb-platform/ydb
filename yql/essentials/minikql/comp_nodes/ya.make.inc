@@ -19,6 +19,8 @@ SET(ORIG_SOURCES
     mkql_block_decimal.cpp
     mkql_block_exists.cpp
     mkql_block_getelem.cpp
+    mkql_block_guess.cpp
+    mkql_block_way.cpp
     mkql_block_if.cpp
     mkql_block_just.cpp
     mkql_block_logical.cpp
@@ -76,6 +78,7 @@ SET(ORIG_SOURCES
     mkql_length.cpp
     mkql_linear.cpp
     mkql_listfromrange.cpp
+    mkql_list_join.cpp
     mkql_logical.cpp
     mkql_lookup.cpp
     mkql_map.cpp

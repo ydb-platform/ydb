@@ -13,6 +13,7 @@ SRCS(
 )
 
 PEERDIR(
+    ydb/core/formats/arrow/filter
     ydb/core/tx/columnshard/engines/reader/common_reader/iterator
 )
 

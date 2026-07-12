@@ -33,23 +33,13 @@ public:
 
     TTxType GetTxType() const override { return NHive::TXTYPE_UPDATE_TABLET_STATUS; }
 
-    bool IsGoodStatusForPenalties() const {
-        switch (Status) {
-            case TEvLocal::TEvTabletStatus::StatusBootFailed:
-                switch (Reason) {
-                    case TEvTablet::TEvTabletDead::EReason::ReasonBootSSError:
-                    case TEvTablet::TEvTabletDead::EReason::ReasonBootBSError:
-                    case TEvTablet::TEvTabletDead::EReason::ReasonBootSSTimeout:
-                        return true;
-                    default:
-                        break;
-                }
-                break;
+    bool IsFailStatusForPostponeRestart() const {
+        return Status != TEvLocal::TEvTabletStatus::StatusOk && Status != TEvLocal::TEvTabletStatus::StatusSupersededByLeader;
+    }
 
-            default:
-                break;
-        }
-        return false;
+    bool IsFailStatusForNodePenalty() const {
+        // Hive can send Poison to tablets, it must not make penalty for the node
+        return IsFailStatusForPostponeRestart() && Reason != TEvTablet::TEvTabletDead::EReason::ReasonPill;
     }
 
     TString GetStatus() {
@@ -148,8 +138,8 @@ public:
                     if (Generation < leader.KnownGeneration) {
                         return true;
                     }
-                    if (leader.GetRestartsPerPeriod(now - Self->GetTabletRestartsPeriodForPenalties()) >= Self->GetTabletRestartsMaxCount()) {
-                        if (IsGoodStatusForPenalties()) {
+                    if (IsFailStatusForPostponeRestart()) {
+                        if (leader.GetRestartsPerPeriod(now - Self->GetTabletRestartsPeriodForPenalties()) >= Self->GetTabletRestartsMaxCount()) {
                             leader.PostponeStart(now + Self->GetPostponeStartPeriod());
                             BLOG_D("THive::TTxUpdateTabletStatus::Execute for tablet " << tablet->ToString()
                                 << " postponed start until " << leader.PostponedStart);
@@ -171,7 +161,7 @@ public:
                         }
                         tablet->InitiateStop(SideEffects);
                     }
-                    if (IsGoodStatusForPenalties()) {
+                    if (IsFailStatusForNodePenalty()) {
                         tablet->FailedNodeId = Local.NodeId();
                     }
                 }

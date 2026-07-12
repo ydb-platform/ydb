@@ -13,7 +13,7 @@
 using namespace NYT;
 using namespace NYT::NTracing;
 
-void SubrequestExample(std::optional<TString> endpoint)
+void SubrequestExample(std::optional<std::string> endpoint)
 {
     auto traceContext = TTraceContext::NewRoot("Example");
     traceContext->SetSampled();
@@ -45,7 +45,7 @@ void SubrequestExample(std::optional<TString> endpoint)
     Cout << ToString(traceContext->GetTraceId()) << '\t' << ToString(asyncChildTraceContext->GetTraceId()) << Endl;
 }
 
-void DelayedSamplingExample(std::optional<TString> endpoint)
+void DelayedSamplingExample(std::optional<std::string> endpoint)
 {
     auto traceContext = TTraceContext::NewRoot("Job");
     traceContext->SetRecorded();
@@ -79,7 +79,8 @@ NAuth::TTvmServiceConfigPtr GetTvmMockConfig()
     auto config = New<NAuth::TTvmServiceConfig>();
     config->EnableMock = true;
     config->ClientSelfSecret = "TestSecret-0";
-    config->ClientDstMap["tracing"] = 10;
+    config->ClientSelfId = NAuth::TTvmId{0};
+    config->ClientDstMap["tracing"] = NAuth::TTvmId{10};
     config->ClientEnableServiceTicketFetching = true;
 
     return config;
@@ -88,9 +89,9 @@ NAuth::TTvmServiceConfigPtr GetTvmMockConfig()
 NAuth::TTvmServiceConfigPtr GetTvmConfig()
 {
     auto config = New<NAuth::TTvmServiceConfig>();
-    config->ClientSelfId = FromString<NAuth::TTvmId>(GetEnv("TVM_ID"));
+    config->ClientSelfId = NAuth::TTvmId{FromString<ui32>(GetEnv("TVM_ID"))};
     config->ClientSelfSecretEnv = "TVM_SECRET";
-    config->ClientDstMap["tracing"] = FromString<NAuth::TTvmId>(GetEnv("TRACING_TVM_ID"));
+    config->ClientDstMap["tracing"] = NAuth::TTvmId{FromString<ui32>(GetEnv("TRACING_TVM_ID"))};
     config->ClientEnableServiceTicketFetching = true;
 
     return config;
@@ -102,7 +103,7 @@ int main(int argc, char* argv[])
         bool test = false;
         auto usage = Format("usage: %v [--test] COLLECTOR_ENDPOINTS", argv[0]);
 
-        if (argc >= 2 && argv[1] == TString("--test")) {
+        if (argc >= 2 && argv[1] == TStringBuf("--test")) {
             test = true;
             argv++;
             argc--;
@@ -126,7 +127,7 @@ int main(int argc, char* argv[])
         SetGlobalTracer(jaeger);
 
         for (int i = 1; i < argc; ++i) {
-            std::optional<TString> endpoint;
+            std::optional<std::string> endpoint;
             if (i != 1) {
                 endpoint = argv[i];
             }

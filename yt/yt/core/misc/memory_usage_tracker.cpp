@@ -232,7 +232,7 @@ TMemoryUsageTrackerGuard TMemoryUsageTrackerGuard::Build(
     }
 
     TMemoryUsageTrackerGuard guard;
-    guard.Tracker_ = tracker;
+    guard.Tracker_ = std::move(tracker);
     guard.Size_ = 0;
     guard.Granularity_ = granularity;
     return guard;
@@ -249,12 +249,12 @@ TMemoryUsageTrackerGuard TMemoryUsageTrackerGuard::Acquire(
 
     YT_VERIFY(size >= 0);
     TMemoryUsageTrackerGuard guard;
-    guard.Tracker_ = tracker;
+    guard.Tracker_ = std::move(tracker);
     guard.Size_ = size;
     guard.Granularity_ = granularity;
     if (size >= granularity) {
         guard.AcquiredSize_ = size;
-        tracker->Acquire(size);
+        guard.Tracker_->Acquire(size);
     }
     return guard;
 }
@@ -275,7 +275,7 @@ TErrorOr<TMemoryUsageTrackerGuard> TMemoryUsageTrackerGuard::TryAcquire(
         return error;
     }
     TMemoryUsageTrackerGuard guard;
-    guard.Tracker_ = tracker;
+    guard.Tracker_ = std::move(tracker);
     guard.Size_ = size;
     guard.AcquiredSize_ = size;
     guard.Granularity_ = granularity;

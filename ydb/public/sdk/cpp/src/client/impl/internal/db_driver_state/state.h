@@ -98,20 +98,24 @@ class TDbDriverStateTracker {
     };
 public:
     TDbDriverStateTracker(IInternalClient* client);
+    using TNotificationCbRunner = std::function<NThreading::TFuture<void>(TDbDriverState::TCb& cb)>;
+
     TDbDriverState::TPtr GetDriverState(
-        std::string database,
-        std::string DiscoveryEndpoint,
+        const std::string& database,
+        const std::string& discoveryEndpoint,
         EDiscoveryMode discoveryMode,
         const TSslCredentials& sslCredentials,
         std::shared_ptr<ICredentialsProviderFactory> credentialsProviderFactory
     );
     NThreading::TFuture<void> SendNotification(
-        TDbDriverState::ENotifyType type);
+        TDbDriverState::ENotifyType type,
+        TNotificationCbRunner cbRunner = {});
     void SetMetricRegistry(::NMonitoring::TMetricRegistry *sensorsRegistry);
 private:
     IInternalClient* DiscoveryClient_;
     std::unordered_map<TStateKey, std::weak_ptr<TDbDriverState>, TStateKeyHash> States_;
     std::shared_mutex Lock_;
+    std::condition_variable_any Notify_;
 };
 
 using TDbDriverStatePtr = TDbDriverState::TPtr;

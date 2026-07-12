@@ -1,10 +1,8 @@
 #pragma once
 
 #include "kqp_info_unit.h"
-
+#include <ydb/core/kqp/opt/kqp_opt.h>
 #include <yql/essentials/core/yql_statistics.h>
-
-#include <util/generic/string.h>
 
 #include <optional>
 
@@ -36,7 +34,6 @@ struct TConnection: TSimpleRefCount<TConnection> {
     ui32 GetOutputIndex() const {
         return OutputIndex;
     }
-    virtual TString GetExplainName() const = 0;
     virtual NJson::TJsonValue ToJson() const;
 
     TString Type;
@@ -44,34 +41,26 @@ struct TConnection: TSimpleRefCount<TConnection> {
 };
 
 struct TBroadcastConnection: public TConnection {
-    TBroadcastConnection(ui32 outputIndex = 0)
+    TBroadcastConnection(ui32 outputIndex)
         : TConnection("Broadcast", outputIndex) {
     }
     virtual NYql::TExprNode::TPtr BuildConnection(NYql::TExprNode::TPtr inputStage, NYql::TPositionHandle pos, NYql::TExprContext& ctx) override;
-    virtual TString GetExplainName() const override {
-        return "Broadcast";
-    }
 };
 
 struct TMapConnection: public TConnection {
-    TMapConnection(ui32 outputIndex = 0)
+    TMapConnection(ui32 outputIndex)
         : TConnection("Map", outputIndex) {
     }
     virtual NYql::TExprNode::TPtr BuildConnection(NYql::TExprNode::TPtr inputStage, NYql::TPositionHandle pos, NYql::TExprContext& ctx) override;
-    virtual TString GetExplainName() const override {
-        return "Map";
-    }
 };
 
 struct TUnionAllConnection: public TConnection {
-    TUnionAllConnection(ui32 outputIndex = 0, bool parallel = false)
+    TUnionAllConnection(ui32 outputIndex, bool parallel = false)
         : TConnection("UnionAll", outputIndex)
         , Parallel(parallel) {
     }
     virtual NYql::TExprNode::TPtr BuildConnection(NYql::TExprNode::TPtr inputStage, NYql::TPositionHandle pos, NYql::TExprContext& ctx) override;
-    virtual TString GetExplainName() const override {
-        return "UnionAll";
-    }
+    virtual NJson::TJsonValue ToJson() const override;
 
 private:
     bool Parallel{false};
@@ -81,15 +70,12 @@ struct TShuffleConnection: public TConnection {
     TShuffleConnection(const TVector<TInfoUnit>& keys,
                        ui32 outputIndex,
                        bool useSpilling = false)
-        : TConnection("Shuffle", outputIndex)
+        : TConnection("HashShuffle", outputIndex)
         , Keys(keys)
         , UseSpilling(useSpilling) {
     }
 
     virtual NYql::TExprNode::TPtr BuildConnection(NYql::TExprNode::TPtr inputStage, NYql::TPositionHandle pos, NYql::TExprContext& ctx) override;
-    virtual TString GetExplainName() const override {
-        return "HashShuffle";
-    }
     virtual NJson::TJsonValue ToJson() const override;
 
     TVector<TInfoUnit> Keys;
@@ -98,15 +84,12 @@ struct TShuffleConnection: public TConnection {
 };
 
 struct TMergeConnection: public TConnection {
-    TMergeConnection(const TVector<TSortElement>& order, ui32 outputIndex = 0)
+    TMergeConnection(const TVector<TSortElement>& order, ui32 outputIndex)
         : TConnection("Merge", outputIndex)
         , Order(order) {
     }
 
     virtual NYql::TExprNode::TPtr BuildConnection(NYql::TExprNode::TPtr inputStage, NYql::TPositionHandle pos, NYql::TExprContext& ctx) override;
-    virtual TString GetExplainName() const override {
-        return "Merge";
-    }
     virtual NJson::TJsonValue ToJson() const override;
 
     TVector<TSortElement> Order;
@@ -117,9 +100,6 @@ struct TSourceConnection: public TConnection {
         : TConnection("Source", 0) {
     }
     virtual NYql::TExprNode::TPtr BuildConnection(NYql::TExprNode::TPtr inputStage, NYql::TPositionHandle pos, NYql::TExprContext& ctx) override;
-    virtual TString GetExplainName() const override {
-        return "Source";
-    }
 };
 
 template <typename T>

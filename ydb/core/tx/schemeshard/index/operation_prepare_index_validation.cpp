@@ -142,7 +142,7 @@ public:
 
         const TTableInfo::TPtr tableInfo = context.SS->Tables.at(txState->TargetPathId);
         tableInfo->AlterVersion += 1;
-        tableInfo->MutablePartitionConfig().SetShadowData(false);
+        tableInfo->MutablePartitionConfig().ClearShadowData();
         tableInfo->MutablePartitionConfig().MutableCompactionPolicy()->SetKeepEraseMarkers(false);
         context.SS->PersistTableAlterVersion(db, txState->TargetPathId, tableInfo);
 

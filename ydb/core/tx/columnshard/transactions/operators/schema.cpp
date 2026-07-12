@@ -6,8 +6,12 @@
 #include <ydb/core/tx/columnshard/subscriber/events/tx_completed/event.h>
 #include <ydb/core/tx/columnshard/transactions/transactions/tx_finish_async.h>
 
+#include <ydb/library/actors/struct_log/log_stack.h>
+
 #include <util/stream/output.h>
 #include <util/string/join.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD
 
 namespace NKikimr::NColumnShard {
 
@@ -21,8 +25,10 @@ protected:
     }
 
     void OnEvent(const std::shared_ptr<NSubscriber::ISubscriptionEvent>& ev, TColumnShard& shard) {
-        const NActors::TLogContextGuard g = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD_WRITE)(
-            "event", "on_subscriber_event")("tx_id", TxId)("event", ev->DebugString());
+        const YDB_LOG_CREATE_CONTEXT_COMP(NKikimrServices::TX_COLUMNSHARD_WRITE,
+                  {"event", "on_subscriber_event"},
+                  {"txId", TxId},
+                  {"ev", ev->DebugString()});
         AFL_VERIFY(!IsFinished());
         DoOnEvent(ev);
         if (IsFinished()) {
@@ -55,7 +61,8 @@ public:
         for (auto&& i : evErased->GetPathIds()) {
             WaitTables.erase(i);
         }
-        AFL_NOTICE(NKikimrServices::TX_COLUMNSHARD)("remained", JoinSeq(",", WaitTables));
+        YDB_LOG_NOTICE("",
+            {"remained", JoinSeq(",", WaitTables)});
     }
 
     virtual bool IsFinished() const override {
@@ -85,7 +92,9 @@ public:
         AFL_VERIFY(ev->GetType() == NSubscriber::EEventType::TxCompleted);
         const auto* evCompleted = static_cast<const NSubscriber::TEventTxCompleted*>(ev.get());
         AFL_VERIFY(TxIdsToWait.erase(evCompleted->GetTxId()));
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("completed", evCompleted->GetTxId())("remained", JoinSeq(",", TxIdsToWait));
+        YDB_LOG_DEBUG("",
+            {"completed", evCompleted->GetTxId()},
+            {"remained", JoinSeq(",", TxIdsToWait)});
     }
 };
 
@@ -95,18 +104,45 @@ TTxController::TProposeResult TSchemaTransactionOperator::DoStartProposeOnExecut
     auto seqNo = SeqNoFromProto(SchemaTxBody.GetSeqNo());
     auto lastSeqNo = owner.LastSchemaSeqNo;
 
-    // Check if proposal is outdated
-    if (seqNo < lastSeqNo) {
-        auto errorMessage = TStringBuilder() << "Ignoring outdated schema tx proposal at tablet " << owner.TabletID() << " txId " << GetTxId()
-                                             << " ssId " << owner.CurrentSchemeShardId << " seqNo " << seqNo << " lastSeqNo " << lastSeqNo;
-        return TProposeResult(NKikimrTxColumnShard::EResultStatus::SCHEMA_CHANGED, errorMessage);
+    // Independent seq no for CopyTable and DropTable
+    std::optional<ui64> targetPathId;
+    switch (SchemaTxBody.TxBody_case()) {
+        case NKikimrTxColumnShard::TSchemaTxBody::kDropTable:
+            targetPathId = SchemaTxBody.GetDropTable().GetPathId();
+            break;
+        case NKikimrTxColumnShard::TSchemaTxBody::kCopyTable:
+            targetPathId = SchemaTxBody.GetCopyTable().GetDstPathId();
+            break;
+        default:
+            break;
+    }
+
+    if (targetPathId) {
+        // For path-specific operations, check SeqNo against the per-path SeqNo
+        auto pathSeqNoIt = owner.LastSchemaSeqNoByPath.find(*targetPathId);
+        if (pathSeqNoIt != owner.LastSchemaSeqNoByPath.end() && seqNo < pathSeqNoIt->second) {
+            auto errorMessage = TStringBuilder() << "Ignoring outdated schema tx proposal at tablet " << owner.TabletID() << " txId "
+                                                 << GetTxId() << " ssId " << owner.CurrentSchemeShardId << " seqNo " << seqNo << " lastSeqNo "
+                                                 << pathSeqNoIt->second << " pathId " << *targetPathId;
+            return TProposeResult(NKikimrTxColumnShard::EResultStatus::SCHEMA_CHANGED, errorMessage);
+        }
+    } else {
+        // For shard-wide operations, use the global SeqNo check
+        if (seqNo < lastSeqNo) {
+            auto errorMessage = TStringBuilder() << "Ignoring outdated schema tx proposal at tablet " << owner.TabletID() << " txId "
+                                                 << GetTxId() << " ssId " << owner.CurrentSchemeShardId << " seqNo " << seqNo << " lastSeqNo "
+                                                 << lastSeqNo;
+            return TProposeResult(NKikimrTxColumnShard::EResultStatus::SCHEMA_CHANGED, errorMessage);
+        }
     }
 
     switch (SchemaTxBody.TxBody_case()) {
         case NKikimrTxColumnShard::TSchemaTxBody::kInitShard: {
             if (owner.InitShardCounter.Add(1) != 1) {
-                AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "repeated_initialization")("tx_id", GetTxId())(
-                    "counter", owner.InitShardCounter.Val());
+                YDB_LOG_WARN("",
+                    {"event", "repeated_initialization"},
+                    {"txId", GetTxId()},
+                    {"counter", owner.InitShardCounter.Val()});
             }
             auto validationStatus = ValidateTables(SchemaTxBody.GetInitShard().GetTables());
             if (validationStatus.IsFail()) {
@@ -137,8 +173,10 @@ TTxController::TProposeResult TSchemaTransactionOperator::DoStartProposeOnExecut
         case NKikimrTxColumnShard::TSchemaTxBody::kMoveTable: {
             const auto srcSchemeShardLocalPathId = TSchemeShardLocalPathId::FromRawValue(SchemaTxBody.GetMoveTable().GetSrcPathId());
             const auto dstSchemeShardLocalPathId = TSchemeShardLocalPathId::FromRawValue(SchemaTxBody.GetMoveTable().GetDstPathId());
-            AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("propose_execute", "move_table")("src", srcSchemeShardLocalPathId)(
-                "dst", dstSchemeShardLocalPathId);
+            YDB_LOG_INFO("",
+                {"proposeExecute", "move_table"},
+                {"src", srcSchemeShardLocalPathId},
+                {"dst", dstSchemeShardLocalPathId});
             if (!owner.TablesManager.ResolveInternalPathId(srcSchemeShardLocalPathId, false)) {
                 return TProposeResult(NKikimrTxColumnShard::EResultStatus::SCHEMA_ERROR, "No such table");
             }
@@ -156,19 +194,21 @@ TTxController::TProposeResult TSchemaTransactionOperator::DoStartProposeOnExecut
         case NKikimrTxColumnShard::TSchemaTxBody::kCopyTable: {
             const auto srcSchemeShardLocalPathId = TSchemeShardLocalPathId::FromRawValue(SchemaTxBody.GetCopyTable().GetSrcPathId());
             const auto dstSchemeShardLocalPathId = TSchemeShardLocalPathId::FromRawValue(SchemaTxBody.GetCopyTable().GetDstPathId());
-            AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("propose_execute", "copy_table")("src", srcSchemeShardLocalPathId)(
-                "dst", dstSchemeShardLocalPathId);
+            YDB_LOG_INFO("",
+                {"proposeExecute", "copy_table"},
+                {"src", srcSchemeShardLocalPathId},
+                {"dst", dstSchemeShardLocalPathId});
             if (!owner.TablesManager.ResolveInternalPathId(srcSchemeShardLocalPathId, false)) {
                 return TProposeResult(NKikimrTxColumnShard::EResultStatus::SCHEMA_ERROR, "No such table");
             }
             if (owner.TablesManager.ResolveInternalPathId(dstSchemeShardLocalPathId, false)) {
                 return TProposeResult(NKikimrTxColumnShard::EResultStatus::SCHEMA_ERROR, "Copy to existing table");
             }
-            auto txIdsToWait = owner.GetProgressTxController().GetTxs();
-            if (!txIdsToWait.empty()) {
-                AFL_VERIFY(!txIdsToWait.contains(GetTxId()))("tx_id", GetTxId())("tx_ids", JoinSeq(",", txIdsToWait));
-                WaitOnPropose = std::make_shared<TWaitTxs>(GetTxId(), std::move(txIdsToWait));
-            }
+            // CopyTable is a read-only metadata operation that creates a new path pointing to the
+            // same data. Unlike MoveTable, it does not modify the source path mapping, so it does
+            // not conflict with existing transactions and should not wait for them. Waiting for all
+            // txs via GetTxs() caused hangs when other long-running transactions existed on the shard
+            // (e.g., during export when backup txs are pending on the same shards).
             owner.TablesManager.CopyTablePropose(srcSchemeShardLocalPathId);
             break;
         }
@@ -180,14 +220,18 @@ TTxController::TProposeResult TSchemaTransactionOperator::DoStartProposeOnExecut
     }
 
     owner.UpdateSchemaSeqNo(seqNo, txc);
+    // Update per-path SeqNo for path-specific operations
+    if (targetPathId) {
+        owner.LastSchemaSeqNoByPath[*targetPathId] = seqNo;
+    }
     return TProposeResult();
 }
 
 NKikimr::TConclusionStatus TSchemaTransactionOperator::ValidateTableSchema(const NKikimrSchemeOp::TColumnTableSchema& schema) const {
     namespace NTypeIds = NScheme::NTypeIds;
     static const THashSet<NScheme::TTypeId> pkSupportedTypes = { NTypeIds::Bool, NTypeIds::Timestamp, NTypeIds::Date32, NTypeIds::Datetime64,
-        NTypeIds::Timestamp64, NTypeIds::Interval64, NTypeIds::Interval, NTypeIds::Int8, NTypeIds::Int16, NTypeIds::Int32, NTypeIds::Int64, NTypeIds::Uint8,
-        NTypeIds::Uint16, NTypeIds::Uint32, NTypeIds::Uint64, NTypeIds::Date, NTypeIds::Datetime,
+        NTypeIds::Timestamp64, NTypeIds::Interval64, NTypeIds::Interval, NTypeIds::Int8, NTypeIds::Int16, NTypeIds::Int32, NTypeIds::Int64,
+        NTypeIds::Uint8, NTypeIds::Uint16, NTypeIds::Uint32, NTypeIds::Uint64, NTypeIds::Date, NTypeIds::Datetime,
         //NTypeIds::Float,
         //NTypeIds::Double,
         NTypeIds::String, NTypeIds::Utf8, NTypeIds::Decimal, NTypeIds::DyNumber, NTypeIds::Uuid };
@@ -285,25 +329,24 @@ void TSchemaTransactionOperator::DoOnTabletInit(TColumnShard& owner) {
         case NKikimrTxColumnShard::TSchemaTxBody::kCopyTable: {
             const auto srcSchemeShardLocalPathId = TSchemeShardLocalPathId::FromRawValue(SchemaTxBody.GetCopyTable().GetSrcPathId());
             const auto dstSchemeShardLocalPathId = TSchemeShardLocalPathId::FromRawValue(SchemaTxBody.GetCopyTable().GetDstPathId());
-            AFL_VERIFY(owner.TablesManager.ResolveInternalPathId(srcSchemeShardLocalPathId, false));
-            AFL_VERIFY(!owner.TablesManager.ResolveInternalPathId(dstSchemeShardLocalPathId, false));
-            owner.TablesManager.CopyTablePropose(srcSchemeShardLocalPathId);
-            auto txIdsToWait = owner.GetProgressTxController().GetTxs();
-            AFL_VERIFY(txIdsToWait.erase(GetTxId()));
-            if (!txIdsToWait.empty()) {
-                WaitOnPropose = std::make_shared<TWaitTxs>(GetTxId(), std::move(txIdsToWait));
+            const auto srcInternalPathId = owner.TablesManager.ResolveInternalPathId(srcSchemeShardLocalPathId, false);
+            AFL_VERIFY(srcInternalPathId);
+            // CopyTablePlanStep persists dst in TableInfoV1 before progress completes. After tablet restart
+            // dst is already in SchemeShardLocalToInternal, so replay must be idempotent (same as CopyTableProgress).
+            if (const auto dstInternalPathId = owner.TablesManager.ResolveInternalPathId(dstSchemeShardLocalPathId, false)) {
+                AFL_VERIFY(*dstInternalPathId == *srcInternalPathId)("src", *srcInternalPathId)("dst", *dstInternalPathId);
             }
+            owner.TablesManager.CopyTablePropose(srcSchemeShardLocalPathId);
         } break;
         case NKikimrTxColumnShard::TSchemaTxBody::TXBODY_NOT_SET:
             break;
     }
     if (WaitOnPropose) {
-        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "wait_on_propose")("tx_id", GetTxId());
+        YDB_LOG_WARN("",
+            {"event", "wait_on_propose"},
+            {"txId", GetTxId()});
         owner.Subscribers->RegisterSubscriber(WaitOnPropose);
-    } else {
-        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "remove_pathes_cleaned")("tx_id", GetTxId());
-        owner.Execute(new TTxFinishAsyncTransaction(owner, GetTxId()));
-    }
+    }   // else we need to wait for SS resend
 }
 
 void TSchemaTransactionOperator::DoStartProposeOnComplete(TColumnShard& /*owner*/, const TActorContext& /*ctx*/) {

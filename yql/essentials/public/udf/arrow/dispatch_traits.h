@@ -3,10 +3,23 @@
 #include <yql/essentials/public/udf/arrow/util.h>
 #include <yql/essentials/public/udf/udf_type_inspection.h>
 #include <yql/essentials/public/udf/udf_value_builder.h>
+#include <yql/essentials/public/udf/udf_data_type.h>
 
 #include <arrow/type.h>
 
+#include <util/generic/guid.h>
+
 namespace NYql::NUdf {
+
+template <typename TTraits, typename... TArgs>
+std::unique_ptr<typename TTraits::TResult> MakeVariantArrowTraitsImpl(bool isOptional, TVector<std::unique_ptr<typename TTraits::TResult>>&& children, const TType* type, TArgs&&... args) {
+    Y_ENSURE(!isOptional, "Optional<Variant> must go through external-optional wrapper");
+    if constexpr (TTraits::PassType) {
+        return std::make_unique<typename TTraits::TVariant>(std::move(children), type, std::forward<TArgs>(args)...);
+    } else {
+        return std::make_unique<typename TTraits::TVariant>(std::move(children), std::forward<TArgs>(args)...);
+    }
+}
 
 template <typename TTraits, typename... TArgs>
 std::unique_ptr<typename TTraits::TResult> MakeTupleArrowTraitsImpl(bool isOptional, TVector<std::unique_ptr<typename TTraits::TResult>>&& children, const TType* type, TArgs&&... args) {
@@ -145,6 +158,26 @@ std::unique_ptr<typename TTraits::TResult> DispatchByArrowTraits(const ITypeInfo
         return MakeTupleArrowTraitsImpl<TTraits>(isOptional, std::move(children), type, std::forward<TArgs>(args)...);
     }
 
+    TVariantTypeInspector typeVariant(typeInfoHelper, type);
+    if (typeVariant) {
+        const TType* underlying = SkipTaggedType(typeInfoHelper, typeVariant.GetUnderlyingType());
+        TStructTypeInspector typeStructUnderlying(typeInfoHelper, underlying);
+        TTupleTypeInspector typeTupleUnderlying(typeInfoHelper, underlying);
+        const ui32 altCount = typeStructUnderlying ? typeStructUnderlying.GetMembersCount() : typeTupleUnderlying.GetElementsCount();
+        TVector<std::unique_ptr<typename TTraits::TResult>> children;
+        children.reserve(altCount);
+        for (ui32 i = 0; i < altCount; ++i) {
+            const TType* altType = typeStructUnderlying
+                                       ? typeStructUnderlying.GetMemberType(i)
+                                       : typeTupleUnderlying.GetElementType(i);
+            children.emplace_back(DispatchByArrowTraits<TTraits>(
+                typeInfoHelper,
+                SkipTaggedType(typeInfoHelper, altType),
+                pgBuilder, args...));
+        }
+        return MakeVariantArrowTraitsImpl<TTraits>(isOptional, std::move(children), type, std::forward<TArgs>(args)...);
+    }
+
     TDataTypeInspector typeData(typeInfoHelper, type);
     if (typeData) {
         auto typeId = typeData.GetTypeId();
@@ -207,9 +240,15 @@ std::unique_ptr<typename TTraits::TResult> DispatchByArrowTraits(const ITypeInfo
                     Y_ENSURE(false, "Unsupported data slot");
                 }
             }
-            case NUdf::EDataSlot::Uuid:
+            case NUdf::EDataSlot::Uuid: {
+                if constexpr (requires { typename TTraits::template TFixedSize<TGUID, true>; }) {
+                    return MakeFixedSizeArrowTraitsImpl<TTraits, TGUID>(isOptional, type, std::forward<TArgs>(args)...);
+                } else {
+                    Y_ENSURE(false, "Unsupported data slot");
+                }
+            }
             case NUdf::EDataSlot::DyNumber:
-                Y_ENSURE(false, "Unsupported data slot");
+                return MakeStringArrowTraitsImpl<TTraits, arrow::BinaryType, NUdf::EDataSlot::DyNumber>(isOptional, type, std::forward<TArgs>(args)...);
         }
     }
 

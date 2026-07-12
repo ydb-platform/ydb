@@ -102,7 +102,8 @@ void ResolveAndParseYamlConfig(
     NKikimrConfig::TAppConfig& appConfig,
     std::optional<TString> databaseYamlConfig = std::nullopt,
     TString* resolvedYamlConfig = nullptr,
-    TString* resolvedJsonConfig = nullptr);
+    TString* resolvedJsonConfig = nullptr,
+    TSimpleSharedPtr<NProtobufJson::IUnknownFieldsCollector> unknownFieldsCollector = nullptr);
 
 enum class EValidationResult {
     Ok,

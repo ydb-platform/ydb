@@ -2,10 +2,10 @@ from importlib.metadata import version
 
 from scramp.core import (
     ScramClient,
-    ScramException,
     ScramMechanism,
     make_channel_binding,
 )
+from scramp.exceptions import ScramException
 
 __all__ = ["ScramClient", "ScramException", "ScramMechanism", "make_channel_binding"]
 

@@ -2,7 +2,7 @@
 
 #include "defs.h"
 
-#include <ydb/core/formats/arrow/arrow_filter.h>
+#include <ydb/core/formats/arrow/filter/filter.h>
 #include <ydb/core/tx/columnshard/common/snapshot.h>
 
 #include <ydb/library/formats/arrow/replace_key.h>

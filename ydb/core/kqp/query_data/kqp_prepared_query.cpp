@@ -222,11 +222,30 @@ TPreparedQueryHolder::TPreparedQueryHolder(NKikimrKqp::TPreparedQuery* proto,
                     tablesSet.insert(source.GetFullTextSource().GetTable().GetPath());
                 }
             }
+
+            auto fillFromSettings = [&](const NKikimrKqp::TKqpTableSinkSettings& settings) {
+                tablesSet.insert(settings.GetTable().GetPath());
+                for (const auto& indexSettings : settings.GetIndexes()) {
+                    tablesSet.insert(indexSettings.GetTable().GetPath());
+                    if (indexSettings.HasFulltextSettings()) {
+                        tablesSet.insert(indexSettings.GetDocsTable().GetPath());
+                        tablesSet.insert(indexSettings.GetDictTable().GetPath());
+                        tablesSet.insert(indexSettings.GetStatsTable().GetPath());
+                    }
+                }
+            };
             for (const auto& sink : stage.GetSinks()) {
                 if (sink.GetTypeCase() == NKqpProto::TKqpSink::kInternalSink && sink.GetInternalSink().GetSettings().Is<NKikimrKqp::TKqpTableSinkSettings>()) {
                     NKikimrKqp::TKqpTableSinkSettings settings;
                     YQL_ENSURE(sink.GetInternalSink().GetSettings().UnpackTo(&settings), "Failed to unpack settings");
-                    tablesSet.insert(settings.GetTable().GetPath());
+                    fillFromSettings(settings);
+                }
+            }
+            for (const auto& transform : stage.GetOutputTransforms()) {
+                if (transform.GetTypeCase() == NKqpProto::TKqpOutputTransform::kInternalSink && transform.GetInternalSink().GetSettings().Is<NKikimrKqp::TKqpTableSinkSettings>()) {
+                    NKikimrKqp::TKqpTableSinkSettings settings;
+                    YQL_ENSURE(transform.GetInternalSink().GetSettings().UnpackTo(&settings), "Failed to unpack settings");
+                    fillFromSettings(settings);
                 }
             }
         }
@@ -278,17 +297,60 @@ void TPreparedQueryHolder::FillTables(const google::protobuf::RepeatedPtrField< 
             }
         }
 
+        auto fillFromSettings = [&](const NKikimrKqp::TKqpTableSinkSettings& settings) {
+            if (settings.GetType() != NKikimrKqp::TKqpTableSinkSettings::MODE_FILL) {
+                auto& info = GetInfo(MakeTableId(settings.GetTable()));
+                for (const auto& column : settings.GetColumns()) {
+                    info->AddColumn(column.GetName());
+                }
+
+                for (const auto& indexSettings : settings.GetIndexes()) {
+                    if (indexSettings.GetIndexType() == NKqpProto::EKqpFullTextIndexType::EKqpFullTextCompact
+                        || indexSettings.GetIndexType() == NKqpProto::EKqpFullTextIndexType::EKqpFullTextJsonCompact
+                        || indexSettings.GetIndexType() == NKqpProto::EKqpFullTextIndexType::EKqpFullTextCompactRelevance) {
+                        auto& info = GetInfo(MakeTableId(indexSettings.GetTable()));
+                        for (const auto& column : {NTableIndex::NFulltext::TokenColumn, NTableIndex::NFulltext::MaxIdColumn,
+                                NTableIndex::NFulltext::GenColumn, NTableIndex::NFulltext::AddedColumn,
+                                NTableIndex::NFulltext::SegmentColumn}) {
+                            info->AddColumn(column);
+                        }
+                    } else {
+                        auto& info = GetInfo(MakeTableId(indexSettings.GetTable()));
+                        for (const auto& column : indexSettings.GetColumns()) {
+                            info->AddColumn(column.GetName());
+                        }
+                    }
+                    if (indexSettings.HasFulltextSettings()) {
+                        auto fillColumns = [&](const auto& indexImplTable, const auto& indexImplColumns) {
+                            if (indexImplTable.GetPath().empty()) {
+                                return;
+                            }
+                            auto& indexInfo = GetInfo(MakeTableId(indexImplTable));
+                            for (const auto& column : indexImplColumns) {
+                                indexInfo->AddColumn(column.GetName());
+                            }
+                        };
+                        fillColumns(indexSettings.GetDocsTable(), indexSettings.GetDocsColumns());
+                        fillColumns(indexSettings.GetDictTable(), indexSettings.GetDictColumns());
+                        fillColumns(indexSettings.GetStatsTable(), indexSettings.GetStatsColumns());
+                    }
+                }
+            }
+        };
+
         for (const auto& sink : stage.GetSinks()) {
             if (sink.GetTypeCase() == NKqpProto::TKqpSink::kInternalSink && sink.GetInternalSink().GetSettings().Is<NKikimrKqp::TKqpTableSinkSettings>()) {
                 NKikimrKqp::TKqpTableSinkSettings settings;
                 YQL_ENSURE(sink.GetInternalSink().GetSettings().UnpackTo(&settings), "Failed to unpack settings");
+                fillFromSettings(settings);
+            }
+        }
 
-                if (settings.GetType() != NKikimrKqp::TKqpTableSinkSettings::MODE_FILL) {
-                    auto& info = GetInfo(MakeTableId(settings.GetTable()));
-                    for (auto& column : settings.GetColumns()) {
-                        info->AddColumn(column.GetName());
-                    }
-                }
+        for (const auto& transform : stage.GetOutputTransforms()) {
+            if (transform.GetTypeCase() == NKqpProto::TKqpOutputTransform::kInternalSink && transform.GetInternalSink().GetSettings().Is<NKikimrKqp::TKqpTableSinkSettings>()) {
+                NKikimrKqp::TKqpTableSinkSettings settings;
+                YQL_ENSURE(transform.GetInternalSink().GetSettings().UnpackTo(&settings), "Failed to unpack settings");
+                fillFromSettings(settings);
             }
         }
 

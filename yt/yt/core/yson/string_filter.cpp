@@ -7,6 +7,8 @@
 #include <yt/yt/core/ypath/stack.h>
 #include <yt/yt/core/ytree/convert.h>
 
+#include <library/cpp/yt/string/stream.h>
+
 #include <util/stream/mem.h>
 
 namespace NYT::NYson {
@@ -58,8 +60,8 @@ public:
     }
 
 private:
-    TString Result_;
-    TStringOutput Output_ = TStringOutput(Result_);
+    std::string Result_;
+    TStdStringOutput Output_{Result_};
     TCheckedInDebugYsonTokenWriter Writer_ = TCheckedInDebugYsonTokenWriter(&Output_);
     TYPathStack Stack_;
     bool IsFirstStack_ = true;
@@ -345,9 +347,9 @@ TYsonString FilterYsonStringFallback(TYsonStringBuf yson)
     }
     switch (cursor->GetType()) {
         case EYsonItemType::BeginList:
-            return TYsonString(TString("[]"));
+            return TYsonString(std::string("[]"));
         case EYsonItemType::BeginMap:
-            return TYsonString(TString("{}"));
+            return TYsonString(std::string("{}"));
         case EYsonItemType::StringValue:
         case EYsonItemType::Int64Value:
         case EYsonItemType::Uint64Value:
@@ -355,8 +357,8 @@ TYsonString FilterYsonStringFallback(TYsonStringBuf yson)
         case EYsonItemType::BooleanValue:
         case EYsonItemType::EntityValue: {
             // Copy the value to a new YSON string and return it.
-            TString result;
-            TStringOutput output(result);
+            std::string result;
+            TStdStringOutput output(result);
             TCheckedInDebugYsonTokenWriter writer(&output);
             cursor.TransferComplexValue(&writer);
             writer.Flush();

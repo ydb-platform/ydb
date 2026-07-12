@@ -27,12 +27,6 @@
                 "effective_permissions": [
                     {
                         "permission_names": [
-                            "ydb.database.connect"
-                        ],
-                        "subject": "USERS"
-                    },
-                    {
-                        "permission_names": [
                             "ydb.generic.list"
                         ],
                         "subject": "METADATA-READERS"
@@ -732,7 +726,8 @@
         },
         "restart_pdisk_root_force": {
             "debugMessage": "text",
-            "result": true
+            "error": "PDisk not found NodeId# 1 PDiskId# 999999",
+            "result": false
         },
         "restart_pdisk_three_part_pdisk_id_root": {
             "status_code": 400,
@@ -1376,6 +1371,7 @@
                 {
                     "Codec": 1,
                     "CreateTimestamp": "not-zero-number",
+                    "Ip": "text",
                     "Message": "Y29tcHJlc3NlZC1tZXNzYWdlLTA=",
                     "Offset": 11,
                     "OriginalSize": 20,
@@ -1388,6 +1384,7 @@
                 {
                     "Codec": 1,
                     "CreateTimestamp": "not-zero-number",
+                    "Ip": "text",
                     "Message": "Y29tcHJlc3NlZC1tZXNzYWdlLTE=",
                     "Offset": 12,
                     "OriginalSize": 20,
@@ -1400,6 +1397,7 @@
                 {
                     "Codec": 1,
                     "CreateTimestamp": "not-zero-number",
+                    "Ip": "text",
                     "Message": "Y29tcHJlc3NlZC1tZXNzYWdlLTI=",
                     "Offset": 13,
                     "OriginalSize": 20,
@@ -1412,6 +1410,7 @@
                 {
                     "Codec": 1,
                     "CreateTimestamp": "not-zero-number",
+                    "Ip": "text",
                     "Message": "Y29tcHJlc3NlZC1tZXNzYWdlLTM=",
                     "Offset": 14,
                     "OriginalSize": 20,
@@ -1424,6 +1423,7 @@
                 {
                     "Codec": 1,
                     "CreateTimestamp": "not-zero-number",
+                    "Ip": "text",
                     "Message": "Y29tcHJlc3NlZC1tZXNzYWdlLTQ=",
                     "Offset": 15,
                     "OriginalSize": 20,
@@ -1443,6 +1443,7 @@
                 {
                     "Codec": 0,
                     "CreateTimestamp": "not-zero-number",
+                    "Ip": "text",
                     "Message": "bWVzc2FnZS0w",
                     "Offset": 0,
                     "OriginalSize": 9,
@@ -1455,6 +1456,7 @@
                 {
                     "Codec": 0,
                     "CreateTimestamp": "not-zero-number",
+                    "Ip": "text",
                     "Message": "bWVzc2FnZS0x",
                     "Offset": 1,
                     "OriginalSize": 9,
@@ -1467,6 +1469,7 @@
                 {
                     "Codec": 0,
                     "CreateTimestamp": "not-zero-number",
+                    "Ip": "text",
                     "Message": "bWVzc2FnZS0y",
                     "Offset": 2,
                     "OriginalSize": 9,
@@ -1486,6 +1489,7 @@
                 {
                     "Codec": 1,
                     "CreateTimestamp": "not-zero-number",
+                    "Ip": "text",
                     "Message": "bWVzc2FnZV93aXRoX21ldGE=",
                     "MessageMetadata": [
                         {
@@ -1515,6 +1519,7 @@
                 {
                     "Codec": 1,
                     "CreateTimestamp": "not-zero-number",
+                    "Ip": "text",
                     "Message": "Y29tcHJlc3NlZC1tZXNzYWdlLTk=",
                     "Offset": 20,
                     "OriginalSize": 20,
@@ -1534,6 +1539,7 @@
                 {
                     "Codec": 0,
                     "CreateTimestamp": "not-zero-number",
+                    "Ip": "text",
                     "Message": "bWVzc2FnZS0w",
                     "Offset": 0,
                     "OriginalSize": 9,
@@ -1546,6 +1552,7 @@
                 {
                     "Codec": 0,
                     "CreateTimestamp": "not-zero-number",
+                    "Ip": "text",
                     "Message": "bWVzc2FnZS0x",
                     "Offset": 1,
                     "OriginalSize": 9,
@@ -1558,6 +1565,7 @@
                 {
                     "Codec": 0,
                     "CreateTimestamp": "not-zero-number",
+                    "Ip": "text",
                     "Message": "bWVzc2FnZS0y",
                     "Offset": 2,
                     "OriginalSize": 9,
@@ -1570,6 +1578,7 @@
                 {
                     "Codec": 0,
                     "CreateTimestamp": "not-zero-number",
+                    "Ip": "text",
                     "Message": "bWVzc2FnZS0z",
                     "Offset": 3,
                     "OriginalSize": 9,
@@ -1582,6 +1591,7 @@
                 {
                     "Codec": 0,
                     "CreateTimestamp": "not-zero-number",
+                    "Ip": "text",
                     "Message": "bWVzc2FnZS00",
                     "Offset": 4,
                     "OriginalSize": 9,
@@ -1601,6 +1611,7 @@
                 {
                     "Codec": 1,
                     "CreateTimestamp": "not-zero-number",
+                    "Ip": "text",
                     "Message": "Y29tcHI=",
                     "Offset": 20,
                     "OriginalSize": 20,
@@ -1623,6 +1634,7 @@
                 {
                     "Codec": 0,
                     "CreateTimestamp": "not-zero-number",
+                    "Ip": "",
                     "Message": "eyJ1cGRhdGUiOnsibmFtZSI6ImVsbGV2ZW4ifSwia2V5IjpbMTFdfQ==",
                     "Offset": 0,
                     "OriginalSize": 40,
@@ -1663,12 +1675,6 @@
                     "tx_id": "not-zero-number-text"
                 },
                 "effective_permissions": [
-                    {
-                        "permission_names": [
-                            "ydb.database.connect"
-                        ],
-                        "subject": "USERS"
-                    },
                     {
                         "permission_names": [
                             "ydb.generic.list"
@@ -3981,7 +3987,7 @@
                     "PQPartitionsInside": "0",
                     "PQPartitionsLimit": "1000000",
                     "PathId_Depricated": "1",
-                    "PathsInside": "43",
+                    "PathsInside": "40",
                     "PathsLimit": "10000",
                     "ProcessingParams": {
                         "Coordinators": [
@@ -4200,8 +4206,8 @@
                     "PQGroupsInside": "0",
                     "PQPartitionsInside": "0",
                     "PQPartitionsLimit": "1000000",
-                    "PathId_Depricated": "38",
-                    "PathsInside": "36",
+                    "PathId_Depricated": "35",
+                    "PathsInside": "33",
                     "PathsLimit": "10000",
                     "ProcessingParams": {
                         "Coordinators": [
@@ -4323,8 +4329,8 @@
                     "PQGroupsInside": "0",
                     "PQPartitionsInside": "0",
                     "PQPartitionsLimit": "1000000",
-                    "PathId_Depricated": "40",
-                    "PathsInside": "31",
+                    "PathId_Depricated": "37",
+                    "PathsInside": "28",
                     "PathsLimit": "10000",
                     "ProcessingParams": {
                         "Coordinators": [
@@ -4458,8 +4464,8 @@
                     "PQGroupsInside": "0",
                     "PQPartitionsInside": "0",
                     "PQPartitionsLimit": "1000000",
-                    "PathId_Depricated": "39",
-                    "PathsInside": "36",
+                    "PathId_Depricated": "36",
+                    "PathsInside": "33",
                     "PathsLimit": "10000",
                     "ProcessingParams": {
                         "Coordinators": [
@@ -4538,6 +4544,22 @@
             "Source": 1,
             "Status": "StatusSuccess"
         }
+    },
+    "test.TestViewer.test_viewer_describe_column_table_local_index": {
+        "root_child_names": [
+            ".metadata",
+            ".sys",
+            "dedicated_db",
+            "serverless_db",
+            "shared_db"
+        ],
+        "table_children": [
+            {
+                "Name": "bloom_data",
+                "PathType": 9
+            }
+        ],
+        "table_children_exist": true
     },
     "test.TestViewer.test_viewer_domain_peers": {
         "FieldsAvailable": "0000011110111010000000000110101000011",
@@ -5505,8 +5527,11 @@
             "DynamicNodeConfig": {},
             "FeatureFlags": {
                 "EnableAlterDatabaseCreateHiveFirst": true,
+                "EnableColumnStatistics": true,
                 "EnableDrainOnShutdown": false,
                 "EnableExtraSidsControlForHttpViewer": true,
+                "EnableLocalBloomFilterIndex": true,
+                "EnableLocalIndexAsSchemeObject": true,
                 "EnableMvccSnapshotReads": true,
                 "EnablePersistentQueryStats": true,
                 "EnablePublicApiExternalBlobs": false,
@@ -6552,8 +6577,11 @@
             "DynamicNodeConfig": {},
             "FeatureFlags": {
                 "EnableAlterDatabaseCreateHiveFirst": true,
+                "EnableColumnStatistics": true,
                 "EnableDrainOnShutdown": false,
                 "EnableExtraSidsControlForHttpViewer": true,
+                "EnableLocalBloomFilterIndex": true,
+                "EnableLocalIndexAsSchemeObject": true,
                 "EnableMvccSnapshotReads": true,
                 "EnablePersistentQueryStats": true,
                 "EnablePublicApiExternalBlobs": false,
@@ -7599,8 +7627,11 @@
             "DynamicNodeConfig": {},
             "FeatureFlags": {
                 "EnableAlterDatabaseCreateHiveFirst": true,
+                "EnableColumnStatistics": true,
                 "EnableDrainOnShutdown": false,
                 "EnableExtraSidsControlForHttpViewer": true,
+                "EnableLocalBloomFilterIndex": true,
+                "EnableLocalIndexAsSchemeObject": true,
                 "EnableMvccSnapshotReads": true,
                 "EnablePersistentQueryStats": true,
                 "EnablePublicApiExternalBlobs": false,
@@ -7857,6 +7888,31 @@
             "status_code": 200,
             "text": "1\n"
         }
+    },
+    "test.TestViewer.test_viewer_groups_allocation_units_without_pool_name": {
+        "FieldsAvailable": "000000100000100000100011111",
+        "FieldsRequired": "000000000000100000000000011",
+        "FoundGroups": 5,
+        "StorageGroups": [
+            {
+                "GroupId": "0"
+            },
+            {
+                "GroupId": "2181038080"
+            },
+            {
+                "GroupId": "2181038081"
+            },
+            {
+                "AllocationUnits": "34",
+                "GroupId": "2181038082"
+            },
+            {
+                "AllocationUnits": "54",
+                "GroupId": "2181038083"
+            }
+        ],
+        "TotalGroups": 5
     },
     "test.TestViewer.test_viewer_groups_group_by_capacity_alert": [
         {
@@ -8728,7 +8784,7 @@
                             "PingTimeUs": "text",
                             "ScopeId": {
                                 "X1": "72057594046678944",
-                                "X2": "38"
+                                "X2": "35"
                             },
                             "Utilization": "number"
                         },
@@ -8745,7 +8801,7 @@
                             "PingTimeUs": "text",
                             "ScopeId": {
                                 "X1": "72057594046678944",
-                                "X2": "39"
+                                "X2": "36"
                             },
                             "Utilization": "number"
                         }
@@ -9119,7 +9175,7 @@
                             "PingTimeUs": "text",
                             "ScopeId": {
                                 "X1": "72057594046678944",
-                                "X2": "39"
+                                "X2": "36"
                             },
                             "Utilization": "number"
                         }
@@ -9143,7 +9199,7 @@
                             "PingTimeUs": "text",
                             "ScopeId": {
                                 "X1": "72057594046678944",
-                                "X2": "38"
+                                "X2": "35"
                             },
                             "Utilization": "number"
                         },
@@ -9160,7 +9216,7 @@
                             "PingTimeUs": "text",
                             "ScopeId": {
                                 "X1": "72057594046678944",
-                                "X2": "38"
+                                "X2": "35"
                             },
                             "Utilization": "number"
                         }
@@ -9331,7 +9387,7 @@
                             "PingTimeUs": "text",
                             "ScopeId": {
                                 "X1": "72057594046678944",
-                                "X2": "38"
+                                "X2": "35"
                             },
                             "Utilization": "number"
                         }
@@ -9355,7 +9411,7 @@
                             "PingTimeUs": "text",
                             "ScopeId": {
                                 "X1": "72057594046678944",
-                                "X2": "39"
+                                "X2": "36"
                             },
                             "Utilization": "number"
                         },
@@ -9372,7 +9428,7 @@
                             "PingTimeUs": "text",
                             "ScopeId": {
                                 "X1": "72057594046678944",
-                                "X2": "39"
+                                "X2": "36"
                             },
                             "Utilization": "number"
                         }
@@ -9533,7 +9589,7 @@
                             "PingTimeUs": "text",
                             "ScopeId": {
                                 "X1": "72057594046678944",
-                                "X2": "38"
+                                "X2": "35"
                             },
                             "Utilization": "number"
                         }
@@ -9557,7 +9613,7 @@
                             "PingTimeUs": "text",
                             "ScopeId": {
                                 "X1": "72057594046678944",
-                                "X2": "39"
+                                "X2": "36"
                             },
                             "Utilization": "number"
                         },
@@ -9574,7 +9630,7 @@
                             "PingTimeUs": "text",
                             "ScopeId": {
                                 "X1": "72057594046678944",
-                                "X2": "39"
+                                "X2": "36"
                             },
                             "Utilization": "number"
                         }
@@ -9750,7 +9806,7 @@
                             "PingTimeUs": "text",
                             "ScopeId": {
                                 "X1": "72057594046678944",
-                                "X2": "38"
+                                "X2": "35"
                             },
                             "Utilization": "number"
                         },
@@ -9767,7 +9823,7 @@
                             "PingTimeUs": "text",
                             "ScopeId": {
                                 "X1": "72057594046678944",
-                                "X2": "39"
+                                "X2": "36"
                             },
                             "Utilization": "number"
                         }
@@ -10183,7 +10239,7 @@
                             "PingTimeUs": "text",
                             "ScopeId": {
                                 "X1": "72057594046678944",
-                                "X2": "38"
+                                "X2": "35"
                             },
                             "Utilization": "number"
                         }
@@ -10207,7 +10263,7 @@
                             "PingTimeUs": "text",
                             "ScopeId": {
                                 "X1": "72057594046678944",
-                                "X2": "39"
+                                "X2": "36"
                             },
                             "Utilization": "number"
                         },
@@ -10224,7 +10280,7 @@
                             "PingTimeUs": "text",
                             "ScopeId": {
                                 "X1": "72057594046678944",
-                                "X2": "39"
+                                "X2": "36"
                             },
                             "Utilization": "number"
                         }
@@ -10385,7 +10441,7 @@
                             "PingTimeUs": "text",
                             "ScopeId": {
                                 "X1": "72057594046678944",
-                                "X2": "39"
+                                "X2": "36"
                             },
                             "Utilization": "number"
                         }
@@ -10409,7 +10465,7 @@
                             "PingTimeUs": "text",
                             "ScopeId": {
                                 "X1": "72057594046678944",
-                                "X2": "38"
+                                "X2": "35"
                             },
                             "Utilization": "number"
                         },
@@ -10426,7 +10482,7 @@
                             "PingTimeUs": "text",
                             "ScopeId": {
                                 "X1": "72057594046678944",
-                                "X2": "38"
+                                "X2": "35"
                             },
                             "Utilization": "number"
                         }
@@ -11335,6 +11391,28 @@
             }
         ],
         "status_code": 200
+    },
+    "test.TestViewer.test_viewer_query_forget_delayed": {
+        "message": "Query is running in background",
+        "status": "SUCCESS"
+    },
+    "test.TestViewer.test_viewer_query_forget_immediate": {
+        "result": [
+            {
+                "columns": [
+                    {
+                        "name": "column0",
+                        "type": "Int32"
+                    }
+                ],
+                "rows": [
+                    [
+                        42
+                    ]
+                ]
+            }
+        ],
+        "status": "SUCCESS"
     },
     "test.TestViewer.test_viewer_query_from_table": {
         "/Root/dedicated_db": {
@@ -13023,7 +13101,7 @@
                             "PingTimeUs": "text",
                             "ScopeId": {
                                 "X1": "72057594046678944",
-                                "X2": "38"
+                                "X2": "35"
                             },
                             "Utilization": "number"
                         },
@@ -13040,7 +13118,7 @@
                             "PingTimeUs": "text",
                             "ScopeId": {
                                 "X1": "72057594046678944",
-                                "X2": "39"
+                                "X2": "36"
                             },
                             "Utilization": "number"
                         }
@@ -13419,7 +13497,7 @@
                             "PingTimeUs": "text",
                             "ScopeId": {
                                 "X1": "72057594046678944",
-                                "X2": "38"
+                                "X2": "35"
                             },
                             "Utilization": "number"
                         },
@@ -13436,7 +13514,7 @@
                             "PingTimeUs": "text",
                             "ScopeId": {
                                 "X1": "72057594046678944",
-                                "X2": "39"
+                                "X2": "36"
                             },
                             "Utilization": "number"
                         }
@@ -13815,7 +13893,7 @@
                             "PingTimeUs": "text",
                             "ScopeId": {
                                 "X1": "72057594046678944",
-                                "X2": "38"
+                                "X2": "35"
                             },
                             "Utilization": "number"
                         },
@@ -13832,7 +13910,7 @@
                             "PingTimeUs": "text",
                             "ScopeId": {
                                 "X1": "72057594046678944",
-                                "X2": "39"
+                                "X2": "36"
                             },
                             "Utilization": "number"
                         }
@@ -14211,7 +14289,7 @@
                             "PingTimeUs": "text",
                             "ScopeId": {
                                 "X1": "72057594046678944",
-                                "X2": "38"
+                                "X2": "35"
                             },
                             "Utilization": "number"
                         },
@@ -14228,7 +14306,7 @@
                             "PingTimeUs": "text",
                             "ScopeId": {
                                 "X1": "72057594046678944",
-                                "X2": "39"
+                                "X2": "36"
                             },
                             "Utilization": "number"
                         }
@@ -14607,7 +14685,7 @@
                             "PingTimeUs": "text",
                             "ScopeId": {
                                 "X1": "72057594046678944",
-                                "X2": "38"
+                                "X2": "35"
                             },
                             "Utilization": "number"
                         },
@@ -14624,7 +14702,7 @@
                             "PingTimeUs": "text",
                             "ScopeId": {
                                 "X1": "72057594046678944",
-                                "X2": "39"
+                                "X2": "36"
                             },
                             "Utilization": "number"
                         }
@@ -16861,7 +16939,7 @@
                     "CoresTotal": "not-zero-number",
                     "CoresUsed": "not-zero-number",
                     "DatabaseQuotas": {},
-                    "Id": "38",
+                    "Id": "35",
                     "MemoryLimit": "not-zero-number-text",
                     "MemoryStats": {},
                     "Metrics": "not-empty-object",
@@ -16932,11 +17010,11 @@
                 {
                     "CoresUsed": "not-zero-number",
                     "DatabaseQuotas": {},
-                    "Id": "40",
+                    "Id": "37",
                     "Metrics": "not-empty-object",
                     "Name": "/Root/serverless_db",
                     "Owner": "root",
-                    "ResourceId": "39",
+                    "ResourceId": "36",
                     "State": "RUNNING",
                     "StateStats": [
                         {
@@ -16955,7 +17033,7 @@
                     "CoresTotal": "not-zero-number",
                     "CoresUsed": "not-zero-number",
                     "DatabaseQuotas": {},
-                    "Id": "39",
+                    "Id": "36",
                     "MemoryLimit": "not-zero-number-text",
                     "MemoryStats": {},
                     "Metrics": "not-empty-object",
@@ -17068,7 +17146,7 @@
                     "CoresTotal": "not-zero-number",
                     "CoresUsed": "not-zero-number",
                     "DatabaseQuotas": {},
-                    "Id": "38",
+                    "Id": "35",
                     "MemoryLimit": "not-zero-number-text",
                     "MemoryStats": {},
                     "Metrics": "not-empty-object",
@@ -17135,12 +17213,12 @@
                 {
                     "CoresUsed": "not-zero-number",
                     "DatabaseQuotas": {},
-                    "Id": "40",
+                    "Id": "37",
                     "Metrics": "not-empty-object",
                     "Name": "/Root/serverless_db",
                     "Overall": "Green",
                     "Owner": "root",
-                    "ResourceId": "39",
+                    "ResourceId": "36",
                     "State": "RUNNING",
                     "StateStats": [
                         {
@@ -17155,7 +17233,7 @@
                     "CoresTotal": "not-zero-number",
                     "CoresUsed": "not-zero-number",
                     "DatabaseQuotas": {},
-                    "Id": "39",
+                    "Id": "36",
                     "MemoryLimit": "not-zero-number-text",
                     "MemoryStats": {},
                     "Metrics": "not-empty-object",

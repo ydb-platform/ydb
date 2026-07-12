@@ -149,6 +149,10 @@ void TYqlUserJobBase::ChangeMkqlIOSpecIfNeeded() {
 
 }
 
+void TYqlUserJobBase::PostInitMkqlIOSpec() {
+
+}
+
 void TYqlUserJobBase::DoImpl() {
     TYqlJobBase::Init();
 
@@ -176,12 +180,14 @@ void TYqlUserJobBase::DoImpl() {
     if (UseBlockInput) {
         MkqlIOSpecs->SetUseBlockInput();
         MkqlIOSpecs->SetInputBlockRepresentation(TMkqlIOSpecs::EBlockRepresentation::WideBlock);
+        MkqlIOSpecs->SetDatumValidationMode(RuntimeSettings->DatumValidation.Get());
     }
     if (UseBlockOutput) {
         MkqlIOSpecs->SetUseBlockOutput();
     }
     ChangeMkqlIOSpecIfNeeded();
     MkqlIOSpecs->Init(*CodecCtx, InputSpec, InputGroups, TableNames, itemType, AuxColumns, OutSpec, JobStats.Get());
+    PostInitMkqlIOSpec();
     if (!RowOffsets.empty()) {
         MkqlIOSpecs->SetTableOffsets(RowOffsets);
     }

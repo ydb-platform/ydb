@@ -10,6 +10,7 @@
 #include <ydb/core/kqp/host/kqp_translate.h>
 #include <ydb/core/kqp/session_actor/kqp_worker_common.h>
 
+#include <ydb/library/security/util.h>
 #include <ydb/library/yql/utils/actor_log/log.h>
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
@@ -26,7 +27,15 @@
 
 namespace NKikimr::NKqp {
 
-static const TString YqlName = "CompileActor";
+namespace {
+
+const TString YqlName = "CompileActor";
+
+inline TString GetQueryTextForLog(const TString& queryText) {
+    return EscapeC(NKikimr::ProtectQueryForLoggingIfSensitive(queryText));
+}
+
+} // namespace
 
 using namespace NKikimrConfig;
 using namespace NThreading;
@@ -107,7 +116,7 @@ public:
             LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_COMPILE_ACTOR,
                 "Enforced SQL version 1, "
                 << "current sql version: " << tableServiceConfig.GetSqlVersion()
-                << " queryText: " << EscapeC(QueryId.Text)
+                << " queryText: " << GetQueryTextForLog(QueryId.Text)
             );
 
             config->SetSqlVersion(1);
@@ -125,6 +134,10 @@ public:
             } else {
                 config->_ResultRowsLimit.Clear();
             }
+        }
+
+        if (IsIn({NKikimrKqp::QUERY_TYPE_SQL_GENERIC_SCRIPT, NKikimrKqp::QUERY_TYPE_SQL_GENERIC_QUERY, NKikimrKqp::QUERY_TYPE_SQL_GENERIC_CONCURRENT_QUERY}, QueryId.Settings.QueryType)) {
+            config->_KqpYqlConstraintsTransformerEnabled = AppData()->FeatureFlags.GetEnableKqpConstraintsTransformer();
         }
 
         if (UserRequestContext && UserRequestContext->IsStreamingQuery) {
@@ -196,10 +209,8 @@ private:
         TKqpTranslationSettingsBuilder settingsBuilder(ConvertType(QueryId.Settings.QueryType), cluster, QueryId.Text, Config->GetYqlBindingsMode(), GUCSettings);
         settingsBuilder.SetKqpTablePathPrefix(Config->_KqpTablePathPrefix.Get().GetRef())
             .SetIsEnableExternalDataSources(AppData(ctx)->FeatureFlags.GetEnableExternalDataSources())
-            .SetIsEnablePgConstsToParams(Config->GetEnablePgConstsToParams())
             .SetApplicationName(ApplicationName)
             .SetQueryParameters(QueryId.QueryParameterTypes)
-            .SetIsEnablePgSyntax(AppData(ctx)->FeatureFlags.GetEnablePgSyntax())
             .SetFromConfig(*Config);
 
         return ParseStatements(QueryId.Text, QueryId.Settings.Syntax, QueryId.IsSql(), settingsBuilder, PerStatementResult);
@@ -229,6 +240,10 @@ private:
 
     void StartSplitting(const TActorContext &ctx) {
         Become(&TKqpCompileActor::SplitState);
+        if (QueryId.Settings.Syntax == Ydb::Query::Syntax::SYNTAX_PG) {
+            NYql::TIssue issue(NYql::TPosition(), "PostgreSQL syntax is not supported");
+            return ReplyError(Ydb::StatusIds::BAD_REQUEST, {issue});
+        }
         TimeoutTimerActorId = CreateLongTimer(ctx, CompilationTimeout, new IEventHandle(SelfId(), SelfId(),
             new TEvents::TEvWakeup()));
 
@@ -280,7 +295,7 @@ private:
             << ", self: " << ctx.SelfID
             << ", cluster: " << QueryId.Cluster
             << ", database: " << QueryId.Database
-            << ", text: \"" << EscapeC(QueryId.Text) << "\""
+            << ", text: \"" << GetQueryTextForLog(QueryId.Text) << "\""
             << ", startTime: " << StartTime);
 
         TimeoutTimerActorId = CreateLongTimer(ctx, CompilationTimeout, new IEventHandle(SelfId(), SelfId(),
@@ -296,6 +311,10 @@ private:
                 && QueryId.Settings.QueryType != NKikimrKqp::QUERY_TYPE_SQL_GENERIC_QUERY
                 && QueryId.Settings.QueryType != NKikimrKqp::QUERY_TYPE_SQL_GENERIC_CONCURRENT_QUERY) {
             NYql::TIssue issue(NYql::TPosition(), "Read Committed isolation level is supported only for generic query.");
+            return ReplyError(Ydb::StatusIds::BAD_REQUEST, {issue});
+        }
+        if (QueryId.Settings.Syntax == Ydb::Query::Syntax::SYNTAX_PG) {
+            NYql::TIssue issue(NYql::TPosition(), "PostgreSQL syntax is not supported");
             return ReplyError(Ydb::StatusIds::BAD_REQUEST, {issue});
         }
 
@@ -390,10 +409,6 @@ private:
                 prepareSettings.SyntaxVersion = 1;
                 break;
 
-            case Ydb::Query::Syntax::SYNTAX_PG:
-                prepareSettings.UsePgParser = true;
-                break;
-
             default:
                 break;
         }
@@ -402,6 +417,11 @@ private:
     }
 
     void AddMessageToReplayLog(const TString& queryPlan) {
+        if (NKikimr::IsQueryWithSensitiveInfo(QueryId.Text)) {
+            // Skip both replay log and QueryDiagnostics replay message for sensitive queries.
+            return;
+        }
+
         NJson::TJsonValue replayMessage(NJson::JSON_MAP);
 
         NJson::TJsonValue tablesMeta(NJson::JSON_ARRAY);
@@ -560,6 +580,7 @@ private:
             bool allowCache, bool success) {
         auto preparedQueryHolder = std::make_shared<TPreparedQueryHolder>(
             preparingQuery.release(), AppData()->FunctionRegistry, !success);
+        preparedQueryHolder->SetUseKqpTasksGraphV2(Config->GetUseKqpTasksGraphV2());
         preparedQueryHolder->MutableLlvmSettings().Fill(Config, queryType);
         KqpCompileResult->PreparedQuery = preparedQueryHolder;
         KqpCompileResult->AllowCache = CanCacheQuery(KqpCompileResult->PreparedQuery->GetPhysicalQuery()) && allowCache;
@@ -658,7 +679,7 @@ private:
             << ", self: " << SelfId()
             << ", cluster: " << QueryId.Cluster
             << ", database: " << QueryId.Database
-            << ", text: \"" << EscapeC(QueryId.Text) << "\""
+            << ", text: \"" << GetQueryTextForLog(QueryId.Text) << "\""
             << ", startTime: " << StartTime);
 
         NYql::TIssue issue(NYql::TPosition(), "Query compilation timed out.");
@@ -684,7 +705,7 @@ private:
         LOG_ERROR_S(ctx, NKikimrServices::KQP_COMPILE_ACTOR, logMessage
                 << ", self: " << ctx.SelfID
                 << ", database: " << QueryId.Database
-                << ", text: \"" << EscapeC(QueryId.Text) << "\"");
+                << ", text: \"" << GetQueryTextForLog(QueryId.Text) << "\"");
 
         // Explicitly drop a pointer to result, it holds pointer `TExprNode` allocated from `TExprContext` in KqpHost
         // and we want rebuild a KqpHost.

@@ -15,6 +15,7 @@ SRCS(
     bool_ut.cpp
     datatime64_ut.cpp
     decimal_ut.cpp
+    dictionary_ut.cpp
     dynumber_ut.cpp
     interval_ut.cpp
     json_ut.cpp

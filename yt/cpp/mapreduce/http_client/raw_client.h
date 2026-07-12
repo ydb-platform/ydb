@@ -136,7 +136,8 @@ public:
 
     void CommitTransaction(
         TMutationId& mutationId,
-        const TTransactionId& transactionId) override;
+        const TTransactionId& transactionId,
+        const TCommitTransactionOptions& options = {}) override;
 
     // Operations
 
@@ -399,6 +400,9 @@ public:
         const TVector<TRichYPath>& paths,
         const TGetTablePartitionsOptions& options = {}) override;
 
+    void CheckClusterLiveness(
+        const TCheckClusterLivenessOptions& options = {}) override;
+
     ui64 GenerateTimestamp() override;
 
     IRawBatchRequestPtr CreateRawBatchRequest() override;
@@ -408,13 +412,12 @@ public:
     IRawClientPtr Clone(const TClientContext& context) override;
 
 private:
-    void InitAsyncClient();
-    void PostAsync(const TString& command, TNode params);
+    void InitPingClient();
 
 private:
     const TClientContext Context_;
-    NHttp::IClientPtr AsyncHttpClient_;
-    std::once_flag AsyncHttpClientInitOnceFlag_;
+    NHttp::IClientPtr PingHttpClient_;
+    std::once_flag PingClientInitOnceFlag_;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

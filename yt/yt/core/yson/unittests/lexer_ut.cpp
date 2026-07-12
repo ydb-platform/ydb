@@ -38,7 +38,7 @@ public:
         return token;
     }
 
-    void TestToken(TStringBuf input, ETokenType expectedType, const TString& expectedValue)
+    void TestToken(TStringBuf input, ETokenType expectedType, const std::string& expectedValue)
     {
         auto token = GetToken(input);
         EXPECT_EQ(expectedType, token.GetType());
@@ -86,7 +86,7 @@ TEST_F(TStatelessLexerTest, StringValues)
     TestToken("\" abc_123\\t\\\\\\\"\"", ETokenType::String, " abc_123\t\\\"");
     TestToken("\"\\x01\\x02\\x03\\x04\"", ETokenType::String, "\x01\x02\x03\x04");
 
-    TestToken(TString("\x01\x00", 2), ETokenType::String, "");
+    TestToken(std::string("\x01\x00", 2), ETokenType::String, "");
     TestToken("\x01\x08\x01\x02\x03\x04", ETokenType::String, "\x01\x02\x03\x04");
 
     TestToken("nanka", ETokenType::String, "nanka");
@@ -100,7 +100,7 @@ TEST_F(TStatelessLexerTest, Int64Values)
     TestToken("+1", ETokenType::Int64, "1");
     TestToken("-1", ETokenType::Int64, "-1");
 
-    TestToken(TString("\x02\x00", 2), ETokenType::Int64, "0");
+    TestToken(std::string("\x02\x00", 2), ETokenType::Int64, "0");
     TestToken("\x02\x01", ETokenType::Int64, "-1");
     TestToken("\x02\x02", ETokenType::Int64, "1");
     TestToken("\x02\x03", ETokenType::Int64, "-2");
@@ -113,7 +113,7 @@ TEST_F(TStatelessLexerTest, Uint64Values)
     TestToken("123u", ETokenType::Uint64, "123");
     TestToken("0u", ETokenType::Uint64, "0");
 
-    TestToken(TString("\x06\x00", 2), ETokenType::Uint64, "0");
+    TestToken(std::string("\x06\x00", 2), ETokenType::Uint64, "0");
     TestToken("\x06\x02", ETokenType::Uint64, "2");
     TestToken("\x06\x04", ETokenType::Uint64, "4");
     TestToken("\x06\x80\x80\x80\x02", ETokenType::Uint64, ToString(1ull << 22));
@@ -125,7 +125,7 @@ TEST_F(TStatelessLexerTest, DoubleValues)
     TestDouble("3.1415926", x);
     TestDouble("0.31415926e+1", x);
     TestDouble("31415926e-7", x);
-    TestDouble(TString('\x03') + TString((const char*) &x, sizeof(x)), x);
+    TestDouble(std::string(1, '\x03') + std::string((const char*) &x, sizeof(x)), x);
 
     TestDouble("%inf", std::numeric_limits<double>::infinity());
     TestDouble("%+inf", std::numeric_limits<double>::infinity());

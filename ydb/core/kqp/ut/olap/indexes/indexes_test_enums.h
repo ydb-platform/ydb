@@ -8,5 +8,10 @@ enum EUseQueryService {
     QueryService
 };
 
+enum ELocalIndexAsSchemeObject {
+    SchemeObjectDisabled,
+    SchemeObjectEnabled
+};
+
 } // namespace NKqp
 } // namespace NKikimr

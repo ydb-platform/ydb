@@ -7,28 +7,40 @@ SRCS(
     constant_folding_stage.cpp
     correlated_filter_pullup.cpp
     expand_cbo_tree.cpp
+    expand_distinct_aggregation.cpp
     extract_join_expressions.cpp
+    extract_common_conjuncts.cpp
+    eliminate_left_join.cpp
     fuse_filters.cpp
     inline_cbo_tree.cpp
     inline_join_filters.cpp
     inline_scalar_subplan.cpp
     inline_simple_in_exists_subplan.cpp
+    inline_generic_in_exists_subplan.cpp
+    kqp_cbo_trees.cpp
     peephole_predicate.cpp
-    prune_columns_stage.cpp
+    map/prune_dead_outputs.cpp
+    map/push_map_elements_into_map.cpp
+    map/push_map_elements_through_aggregate.cpp
+    map/push_map_elements_through_input.cpp
+    map/push_map_elements_through_union_all.cpp
     push_filter_into_join.cpp
     push_filter_under_map.cpp
     push_limit_into_sort.cpp
-    push_map.cpp
     push_ranges.cpp
     push_olap_filter.cpp
     push_olap_projection.cpp
     disable_blocks_on_columns_limit.cpp
-    remove_extra_renames_stage.cpp
-    remove_identity_map.cpp
+    map/rename_to_append.cpp
+    map/remove_identity_map.cpp
+    map/push_rename_into_producer.cpp
+    map/rewrite_to_preferred_alias.cpp
     propagate_aggregate_through_stage.cpp
     propagate_hash_func_stage.cpp
     propagate_topsort_through_stage.cpp
     propagate_limit_through_stage.cpp
+    rewrite_right_join.cpp
+    traces/kqp_cbo_trace.cpp
 )
 
 PEERDIR(

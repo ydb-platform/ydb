@@ -6,7 +6,7 @@
 
 - [Глоссарий](glossary.md)
 - [Аналитические возможности](./analytics/index.md)
-- [Архитектура](architecture.md)
+- [Архитектура](architecture/index.md)
 - [Соединение с БД](connect.md)
 - [Схемные объекты](datamodel/index.md)
 - [Топология кластера](topology.md)
@@ -14,7 +14,6 @@
 - [Транзакции](transactions.md)
 - [Change Data Capture (CDC)](cdc.md)
 - [Time to Live (TTL) и вытеснение данных во внешнее хранилище](ttl.md)
-- [Scan-запросы](scan_query.md)
 - [Ограничения базы данных](limits-ydb.md)
 - [Асинхронная репликация](async-replication.md)
 - [Режим bridge](./bridge.md)

@@ -33,10 +33,16 @@ SET(ORIG_SOURCES
     mkql_block_map_join_ut_utils.cpp
     mkql_block_map_join_ut.cpp
     mkql_block_test_helper.cpp
+    mkql_block_serializer_test_utils.cpp
     mkql_block_fuzzer.cpp
     mkql_block_getelem_ut.cpp
+    mkql_block_guess_ut.cpp
+    mkql_block_way_ut.cpp
     mkql_block_just_ut.cpp
     mkql_block_top_sort_ut.cpp
+    mkql_block_variant_ut.cpp
+    mkql_block_uuid_ut.cpp
+    mkql_block_dynumber_ut.cpp
     mkql_blocks_ut.cpp
     mkql_callable_ut.cpp
     mkql_combine_ut.cpp
@@ -49,6 +55,7 @@ SET(ORIG_SOURCES
     mkql_flatmap_ut.cpp
     mkql_fromstring_ut.cpp
     mkql_linear_ut.cpp
+    mkql_list_join_ut.cpp
     mkql_multihopping_saveload_ut.cpp
     mkql_multihopping_ut.cpp
     mkql_multimap_ut.cpp
@@ -99,6 +106,8 @@ PEERDIR(
     yql/essentials/parser/pg_wrapper
     yql/essentials/parser/pg_wrapper/interface
     yql/essentials/sql/pg
+    yql/essentials/types/dynumber
+    yql/essentials/utils/random_data_generator
 )
 
 IF (ARCH_X86_64)

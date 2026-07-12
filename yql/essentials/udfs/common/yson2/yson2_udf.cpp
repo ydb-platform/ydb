@@ -236,14 +236,14 @@ TUnboxedValuePod ConvertToListImpl(TUnboxedValuePod x, const IValueBuilder* valu
                         values.reserve(size);
                         for (ui32 i = 0U; i < size; ++i) {
                             if (auto converted = Converter(elements[i], valueBuilder, pos)) {
-                                values.emplace_back(std::move(converted));
+                                values.emplace_back(converted);
                             }
                         }
                     } else {
                         const auto it = x.GetListIterator();
                         for (TUnboxedValue v; it.Next(v);) {
                             if (auto converted = Converter(v.Release(), valueBuilder, pos)) {
-                                values.emplace_back(std::move(converted));
+                                values.emplace_back(converted);
                             }
                         }
                     }
@@ -287,7 +287,7 @@ TUnboxedValuePod ConvertToDictImpl(TUnboxedValuePod x, const IValueBuilder* valu
                     const auto it = x.GetDictIterator();
                     for (TUnboxedValue key, payload; it.NextPair(key, payload);) {
                         if (auto converted = Converter(payload, valueBuilder, pos)) {
-                            pairs.emplace_back(std::move(key), std::move(converted));
+                            pairs.emplace_back(std::move(key), converted);
                         }
                     }
                     if (pairs.empty()) {
@@ -1212,7 +1212,7 @@ TUnboxedValue TParse<TJson, false>::Run(const IValueBuilder* valueBuilder, const
 
 template <>
 TUnboxedValue TParse<TJson, true>::Run(const IValueBuilder* valueBuilder, const TUnboxedValuePod* args) const try {
-    return TryParseJsonDom(args[0].AsStringRef(), valueBuilder, true);
+    return TryParseJsonDom(args[0].AsStringRef(), valueBuilder, /*decodeUtf8=*/true);
 } catch (const std::exception& e) {
     if (StrictType_ || ParseOptions(args[1]).Strict) {
         UdfTerminate((::TStringBuilder() << valueBuilder->WithCalleePosition(Pos_) << " " << e.what()).c_str());
@@ -1617,92 +1617,6 @@ public:
 private:
     const TFields Fields_;
 };
-
-template <ENodeType NodeType, bool IsStrict>
-TUnboxedValuePod AsScalar(TUnboxedValuePod value, TStringBuf name) {
-    if (IsNodeType<ENodeType::Attr>(value)) {
-        value = value.GetVariantItem().Release();
-    }
-
-    if (IsNodeType<NodeType>(value)) {
-        return value;
-    } else if constexpr (IsStrict) {
-        throw yexception() << "Expected " << name << ", but got: " << TDebugPrinter(value);
-    } else {
-        return {};
-    }
-}
-
-template <bool IsStrict>
-TUnboxedValuePod AsString(TUnboxedValuePod value) {
-    if (IsNodeType<ENodeType::Attr>(value)) {
-        value = value.GetVariantItem().Release();
-    }
-
-    if (IsNodeType(value, ENodeType::String)) {
-        // should clear upper bits in the length byte for embedded strings
-        return ClearUtf8Mark(value);
-    } else if constexpr (IsStrict) {
-        throw yexception() << "Expected string, but got: " << TDebugPrinter(value);
-    } else {
-        return {};
-    }
-}
-
-template <bool IsStrict>
-TUnboxedValuePod AsUtf8(TUnboxedValuePod value) {
-    if (IsNodeType<ENodeType::Attr>(value)) {
-        value = value.GetVariantItem().Release();
-    }
-
-    if (IsUtf8Node(value)) {
-        // should clear upper bits in the length byte for embedded strings
-        return ClearUtf8Mark(value);
-    } else if constexpr (IsStrict) {
-        throw yexception() << "Expected utf8, but got: " << TDebugPrinter(value);
-    } else {
-        return {};
-    }
-}
-
-template <bool IsStrict>
-TUnboxedValuePod AsList(TUnboxedValuePod value, const IValueBuilder* valueBuilder) {
-    if (IsNodeType<ENodeType::Attr>(value)) {
-        value = value.GetVariantItem().Release();
-    }
-
-    if (IsNodeType<ENodeType::List>(value)) {
-        if (!value.IsBoxed()) {
-            return valueBuilder->NewEmptyList().Release();
-        }
-
-        return value;
-    } else if constexpr (IsStrict) {
-        throw yexception() << "Expected list, but got: " << TDebugPrinter(value);
-    } else {
-        return {};
-    }
-}
-
-template <bool IsStrict>
-TUnboxedValuePod AsDict(TUnboxedValuePod value, const IValueBuilder* valueBuilder) {
-    if (IsNodeType<ENodeType::Attr>(value)) {
-        value = value.GetVariantItem().Release();
-    }
-
-    if (IsNodeType<ENodeType::Dict>(value)) {
-        if (!value.IsBoxed()) {
-            // it implements empty dict protocol too
-            return valueBuilder->NewEmptyList().Release();
-        }
-
-        return value;
-    } else if constexpr (IsStrict) {
-        throw yexception() << "Expected dict, but got: " << TDebugPrinter(value);
-    } else {
-        return {};
-    }
-}
 
 SIMPLE_UDF_OPTIONS(TAsBool, bool(TAutoMap<TNodeResource>), builder.SetMinLangVer(NYql::MakeLangVersion(2025, 5));) {
     Y_UNUSED(valueBuilder);
@@ -2220,13 +2134,13 @@ SIMPLE_UDF_OPTIONS(TMutUp, TMutNodeLinear(TMutNodeLinear), builder.SetMinLangVer
 
 SIMPLE_UDF_OPTIONS(TMutDownOrCreate, TMutNodeLinear(TMutNodeLinear, const char*), builder.SetMinLangVer(NYql::MakeLangVersion(2025, 5));) {
     Y_UNUSED(valueBuilder);
-    TMutNodeBuilder::From(args[0]).Down(args[1], true);
+    TMutNodeBuilder::From(args[0]).Down(args[1], /*createIfNotExists=*/true);
     return args[0];
 }
 
 SIMPLE_UDF_OPTIONS(TMutDown, TMutNodeLinear(TMutNodeLinear, const char*), builder.SetMinLangVer(NYql::MakeLangVersion(2025, 5));) {
     Y_UNUSED(valueBuilder);
-    auto err = TMutNodeBuilder::From(args[0]).Down(args[1], false);
+    auto err = TMutNodeBuilder::From(args[0]).Down(args[1], /*createIfNotExists=*/false);
     if (err) {
         throw yexception() << *err;
     }
@@ -2237,7 +2151,7 @@ SIMPLE_UDF_OPTIONS(TMutDown, TMutNodeLinear(TMutNodeLinear, const char*), builde
 using TMutTryDownReturn = TTuple<TMutNodeLinear, bool>;
 SIMPLE_UDF_OPTIONS(TMutTryDown, TMutTryDownReturn(TMutNodeLinear, const char*), builder.SetMinLangVer(NYql::MakeLangVersion(2025, 5));) {
     Y_UNUSED(valueBuilder);
-    auto err = TMutNodeBuilder::From(args[0]).Down(args[1], false);
+    auto err = TMutNodeBuilder::From(args[0]).Down(args[1], /*createIfNotExists=*/false);
     TUnboxedValue* items;
     auto ret = valueBuilder->NewArray(2, items);
     items[0] = args[0];

@@ -312,6 +312,10 @@ void INode::DisableSort() {
     DisableSort_ = true;
 }
 
+void INode::PreserveSort() {
+    PreserveSort_ = true;
+}
+
 bool INode::UsedSubquery() const {
     return false;
 }
@@ -702,7 +706,7 @@ TAstNode* TLangVerProxyNode::Translate(TContext& ctx) const {
 }
 
 TNodePtr TLangVerProxyNode::DoClone() const {
-    return new TLangVerProxyNode(GetPos(), Inner_, Feature_, MinLangVer_, MaxLangVer_);
+    return new TLangVerProxyNode(GetPos(), SafeClone(Inner_), Feature_, MinLangVer_, MaxLangVer_);
 }
 
 void IProxyNode::DoAdd(TPtr node) {
@@ -1114,11 +1118,11 @@ bool TCallDirectRow::DoInit(TContext& ctx, ISource* src) {
 }
 
 void TCallDirectRow::DoUpdateState() const {
-    State_.Set(ENodeState::Const, false);
+    State_.Set(ENodeState::Const, /*val=*/false);
 }
 
 void TWinAggrEmulation::DoUpdateState() const {
-    State_.Set(ENodeState::OverWindow, true);
+    State_.Set(ENodeState::OverWindow, /*val=*/true);
 }
 
 bool TWinAggrEmulation::DoInit(TContext& ctx, ISource* src) {
@@ -1178,7 +1182,7 @@ bool TWinCumeDist::DoInit(TContext& ctx, ISource* src) {
     YQL_ENSURE(Args_.empty());
     TVector<TNodePtr> optionsElements;
     if (ctx.AnsiCurrentRow) {
-        optionsElements.push_back(BuildTuple(Pos_, {BuildQuotedAtom(Pos_, "ansi", NYql::TNodeFlags::Default)}));
+        optionsElements.push_back(BuildTuple(Pos_, {BuildQuotedAtom(Pos_, "ansi", NYql::TAstNodeFlags::Default)}));
     }
     Args_.push_back(BuildTuple(Pos_, optionsElements));
 
@@ -1312,9 +1316,9 @@ bool TWinRank::DoInit(TContext& ctx, ISource* src) {
 
     TVector<TNodePtr> optionsElements;
     if (!ctx.AnsiRankForNullableKeys.Defined()) {
-        optionsElements.push_back(BuildTuple(Pos_, {BuildQuotedAtom(Pos_, "warnNoAnsi", NYql::TNodeFlags::Default)}));
+        optionsElements.push_back(BuildTuple(Pos_, {BuildQuotedAtom(Pos_, "warnNoAnsi", NYql::TAstNodeFlags::Default)}));
     } else if (*ctx.AnsiRankForNullableKeys) {
-        optionsElements.push_back(BuildTuple(Pos_, {BuildQuotedAtom(Pos_, "ansi", NYql::TNodeFlags::Default)}));
+        optionsElements.push_back(BuildTuple(Pos_, {BuildQuotedAtom(Pos_, "ansi", NYql::TAstNodeFlags::Default)}));
     }
     Args_.push_back(BuildTuple(Pos_, optionsElements));
 
@@ -1416,10 +1420,10 @@ void TColumns::Merge(const TColumns& columns) {
                 continue;
             }
             if (columns.Real.contains(c)) {
-                Add(&c, false, false);
+                Add(&c, /*countHint=*/false, /*isArtificial=*/false);
             }
             if (columns.Artificial.contains(c)) {
-                Add(&c, false, true);
+                Add(&c, /*countHint=*/false, /*isArtificial=*/true);
             }
         }
         HasUnreliable |= columns.HasUnreliable;
@@ -1734,7 +1738,7 @@ TNodePtr TColumnNode::DoClone() const {
 }
 
 void TColumnNode::DoUpdateState() const {
-    State_.Set(ENodeState::Const, false);
+    State_.Set(ENodeState::Const, /*val=*/false);
     State_.Set(ENodeState::MaybeConst, MaybeType_);
     State_.Set(ENodeState::Aggregated, GroupKey_);
     State_.Set(ENodeState::AggregationKey, GroupKey_);
@@ -1872,9 +1876,42 @@ std::pair<TNodePtr, bool> IAggregation::AggregationTraits(const TNodePtr& type, 
     return {distinct ? Q(Y(Q(Name_), wrapped, BuildQuotedAtom(Pos_, DistinctKey_))) : Q(Y(Q(Name_), wrapped)), true};
 }
 
+TStringBuf IAggregation::GetGroupByPhase(ISource* src) const {
+    if (!src) {
+        return "";
+    }
+
+    return src->GetGroupBySuffix();
+}
+
+bool IAggregation::IsOverStatePhase(ISource* src) const {
+    TStringBuf suffix = GetGroupByPhase(src);
+    return !(suffix.empty() || suffix == "Combine" || suffix == "Finalize");
+}
+
+bool IAggregation::IsManyPhase(ISource* src) const {
+    TStringBuf suffix = GetGroupByPhase(src);
+    return suffix == "MergeManyFinalize";
+}
+
+bool IAggregation::IsFinalizingPhase(ISource* src) const {
+    TStringBuf suffix = GetGroupByPhase(src);
+    return suffix.empty() ||
+           suffix == "Finalize" ||
+           suffix == "MergeFinalize" ||
+           suffix == "MergeManyFinalize";
+}
+
 TNodePtr IAggregation::WrapIfOverState(const TNodePtr& input, bool overState, bool many, TContext& ctx) const {
     if (!overState) {
         return input;
+    }
+
+    if (AggMode_ == EAggregateMode::Distinct ||
+        AggMode_ == EAggregateMode::OverWindowDistinct)
+    {
+        ctx.Error(Pos_) << "Distinct is not supported with aggregation phases";
+        return nullptr;
     }
 
     auto extractor = GetExtractor(many, ctx);
@@ -1902,7 +1939,7 @@ TNodePtr IAggregation::WindowTraits(const TNodePtr& type, TContext& ctx) const {
 
     const bool distinct = AggMode_ == EAggregateMode::OverWindowDistinct;
     const auto listType = distinct ? Y("ListType", Y("StructMemberType", Y("ListItemType", type), BuildQuotedAtom(Pos_, DistinctKey_))) : type;
-    auto traits = Y(Q(Name_), GetApply(listType, false, false, ctx));
+    auto traits = Y(Q(Name_), GetApply(listType, /*many=*/false, /*allowAggApply=*/false, ctx));
     if (AggMode_ == EAggregateMode::OverWindowDistinct) {
         traits->Add(BuildQuotedAtom(Pos_, DistinctKey_));
     }
@@ -1961,7 +1998,7 @@ StringContentInternal(TContext& ctx, TPosition pos, const TString& input, EStrin
             return {};
         }
 
-        result.Flags = NYql::TNodeFlags::ArbitraryContent;
+        result.Flags = NYql::TAstNodeFlags::ArbitraryContent;
         result.Content = UnescapeAnsiQuoted(input);
         return result;
     }
@@ -2017,7 +2054,7 @@ StringContentInternal(TContext& ctx, TPosition pos, const TString& input, EStrin
     bool singleQuoted = !doubleQuoted && (str.StartsWith('\'') && str.EndsWith('\''));
 
     if (str.size() >= 2 && (doubleQuoted || singleQuoted)) {
-        result.Flags = NYql::TNodeFlags::ArbitraryContent;
+        result.Flags = NYql::TAstNodeFlags::ArbitraryContent;
         if (ctx.Settings.AnsiLexer) {
             YQL_ENSURE(singleQuoted);
             result.Content = UnescapeAnsiQuoted(str);
@@ -2297,11 +2334,11 @@ template class TLiteralNumberNode<ui16>;
 template class TLiteralNumberNode<i16>;
 
 TNodePtr BuildLiteralNull(TPosition pos) {
-    return new TLiteralNode(pos, true);
+    return new TLiteralNode(pos, /*isNull=*/true);
 }
 
 TNodePtr BuildLiteralVoid(TPosition pos) {
-    return new TLiteralNode(pos, false);
+    return new TLiteralNode(pos, /*isNull=*/false);
 }
 
 TNodePtr BuildLiteralSmartString(TContext& ctx, const TString& value) {
@@ -2371,9 +2408,9 @@ TDeferredAtom::TDeferredAtom()
 {
 }
 
-TDeferredAtom::TDeferredAtom(TPosition pos, const TString& str)
+TDeferredAtom::TDeferredAtom(TPosition pos, const TString& str, ui32 flags)
 {
-    Node_ = BuildQuotedAtom(pos, str);
+    Node_ = BuildQuotedAtom(pos, str, flags);
     Explicit_ = str;
     Repr_ = str;
 }
@@ -2707,13 +2744,13 @@ public:
             }
 
             if (Ids_.size() > 2) {
-                if (!CheckColumnId(pos, ctx, Ids_[idx], ColumnOnly_ ? "Correlation" : "Column", true)) {
+                if (!CheckColumnId(pos, ctx, Ids_[idx], ColumnOnly_ ? "Correlation" : "Column", /*checkLookup=*/true)) {
                     return false;
                 }
                 ++idx;
             }
             if (!useSourceAsColumn) {
-                if (!IsLookup_ && !CheckColumnId(pos, ctx, Ids_[idx], ColumnOnly_ ? "Column" : "Member", false)) {
+                if (!IsLookup_ && !CheckColumnId(pos, ctx, Ids_[idx], ColumnOnly_ ? "Column" : "Member", /*checkLookup=*/false)) {
                     return false;
                 }
                 ++idx;
@@ -3142,7 +3179,7 @@ TNodePtr BuildIsNullOp(TPosition pos, TNodePtr a) {
         return nullptr;
     }
     if (a->IsNull()) {
-        return BuildLiteralBool(pos, true);
+        return BuildLiteralBool(pos, /*value=*/true);
     }
     return new TCallNodeImpl(pos, "Not", {new TCallNodeImpl(pos, "Exists", {a})});
 }
@@ -3406,7 +3443,7 @@ public:
         State_.Set(ENodeState::Const, FuncNode_->IsConstant());
         State_.Set(ENodeState::MaybeConst, FuncNode_->MaybeConstant());
         State_.Set(ENodeState::Aggregated, FuncNode_->IsAggregated());
-        State_.Set(ENodeState::OverWindow, true);
+        State_.Set(ENodeState::OverWindow, /*val=*/true);
     }
 
     void DoVisitChildren(const TVisitFunc& func, TVisitNodeSet& visited) const final {
@@ -3459,7 +3496,7 @@ public:
     }
 
     void DoUpdateState() const override {
-        State_.Set(ENodeState::Const, true);
+        State_.Set(ENodeState::Const, /*val=*/true);
     }
 
 protected:
@@ -3651,7 +3688,7 @@ public:
 
     bool DoInit(TContext& ctx, ISource* src) final {
         Y_UNUSED(src);
-        if (!IProxyNode::DoInit(ctx, nullptr) || !IProxyNode::InitReference(ctx)) {
+        if (!IProxyNode::DoInit(ctx, /*src=*/nullptr) || !IProxyNode::InitReference(ctx)) {
             return false;
         }
 
@@ -3743,6 +3780,19 @@ bool TSecretParameters::ValidateParameters(TContext& ctx, const TPosition stmBeg
     }
 
     return true;
+}
+
+TNodePtr RemoveSystemColumns(TNodePtr input, const TVector<TString>& extraSystemColumnPrefixes) {
+    TNodePtr result = input->Y("RemoveSystemMembers", input);
+    if (extraSystemColumnPrefixes.empty()) {
+        return result;
+    }
+    TNodePtr prefixes = input->Y();
+    for (const auto& prefix : extraSystemColumnPrefixes) {
+        prefixes = input->L(prefixes, input->Q(prefix));
+    }
+    result = input->Y("RemovePrefixMembers", result, input->Q(prefixes));
+    return result;
 }
 
 } // namespace NSQLTranslationV1

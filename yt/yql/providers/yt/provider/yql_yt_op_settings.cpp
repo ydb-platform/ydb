@@ -484,6 +484,8 @@ bool ValidateSettings(const TExprNode& settingsNode, EYtSettingTypes accepted, T
         case EYtSettingType::BlockOutputApplied:
         case EYtSettingType::Small:
         case EYtSettingType::Pruned:
+        case EYtSettingType::Transparent:
+        case EYtSettingType::PruneUnusedColumns:
             if (!EnsureTupleSize(*setting, 1, ctx)) {
                 return false;
             }
@@ -972,12 +974,6 @@ bool ValidateSettings(const TExprNode& settingsNode, EYtSettingTypes accepted, T
             if (!TryFromString(setting->Child(1)->Content(), mode)) {
                 ctx.AddError(TIssue(ctx.GetPosition(setting->Tail().Pos()), TStringBuilder()
                     << "Unsupported block output mode value " << TString{setting->Child(1)->Content()}.Quote()));
-                return false;
-            }
-            break;
-        }
-        case EYtSettingType::QLFilter: {
-            if (!EnsureTupleSize(*setting, 1, ctx)) {
                 return false;
             }
             break;

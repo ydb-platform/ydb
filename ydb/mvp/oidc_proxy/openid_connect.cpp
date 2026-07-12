@@ -28,18 +28,32 @@ bool TRestoreOidcContextResult::IsSuccess() const {
     return Status.IsSuccess;
 }
 
-TCheckStateResult::TCheckStateResult(bool ok, const TString& cookieSuffix, const TString& errorMessage)
+TCheckStateResult::TCheckStateResult(bool ok, const TString& errorMessage, const TString& requestedAddress)
     : Ok(ok)
     , ErrorMessage(errorMessage)
-    , CookieSuffix(cookieSuffix)
+    , RequestedAddress(requestedAddress)
 {}
 
-TCheckStateResult TCheckStateResult::Error(const TString& errorMessage, const TString& cookieSuffix) {
-    return TCheckStateResult(false, cookieSuffix, errorMessage);
+TCheckStateResult TCheckStateResult::Error(const TString& errorMessage, const TString& requestedAddress) {
+    return TCheckStateResult(false, errorMessage, requestedAddress);
 }
 
-TCheckStateResult TCheckStateResult::Success(const TString& cookieSuffix) {
-    return TCheckStateResult(true, cookieSuffix, "");
+TCheckStateResult TCheckStateResult::Success(const TString& requestedAddress) {
+    return TCheckStateResult(true, "", requestedAddress);
+}
+
+TString CreateAuthorizationServerRedirectUrl(const TOpenIdConnectSettings& settings, TStringBuf redirectUri, TStringBuf state) {
+    TCgiParameters authParams;
+    authParams.InsertUnescaped("response_type", "code");
+    authParams.InsertUnescaped("scope", "openid");
+    authParams.InsertUnescaped("state", state);
+    authParams.InsertUnescaped("client_id", settings.ClientId);
+    authParams.InsertUnescaped("redirect_uri", redirectUri);
+
+    return TStringBuilder()
+        << settings.GetAuthEndpointURL()
+        << "?"
+        << authParams.Print();
 }
 
 void SetCORS(const NHttp::THttpIncomingRequestPtr& request, NHttp::THeadersBuilder* const headers) {
@@ -90,18 +104,28 @@ NHttp::THttpOutgoingResponsePtr GetHttpOutgoingResponsePtr(const NHttp::THttpInc
         << request->Host
         << GetAuthCallbackUrl();
 
-    TCgiParameters authParams;
-    authParams.InsertUnescaped("response_type", "code");
-    authParams.InsertUnescaped("scope", "openid");
-    authParams.InsertUnescaped("state", context.GetState(settings.ClientSecret));
-    authParams.InsertUnescaped("client_id", settings.ClientId);
-    authParams.InsertUnescaped("redirect_uri", redirectUri);
+    TString state = context.GetState(settings.ClientSecret);
+    TString redirectUrl = CreateAuthorizationServerRedirectUrl(settings, redirectUri, state);
+    static constexpr size_t AUTH_CALLBACK_CODE_RESERVE_BYTES = 200;
+    if (redirectUrl.size() + AUTH_CALLBACK_CODE_RESERVE_BYTES > NHttp::THttpRequestParser::MaxURLSize) {
+        // Keep return_to in the temp cookie when the authorization request URL is too large
+        // to leave room for the code returned by IAM in the callback.
+        state = context.GetState(settings.ClientSecret, false);
+        redirectUrl = CreateAuthorizationServerRedirectUrl(settings, redirectUri, state);
+    }
+    const TString authFlowCookie = context.CreateYdbOidcCookie(settings.ClientSecret);
+    if (authFlowCookie.empty()) {
+        return CreateResponseForNotExistingResponseFromProtectedResource(
+            request,
+            "requested address is too large to preserve during authentication",
+            requestId
+        );
+    }
 
-    const TString redirectUrl = settings.GetAuthEndpointURL() + "?" + authParams.Print();
     NHttp::THeadersBuilder responseHeaders;
     SetCORS(request, &responseHeaders);
     SetRequestIdHeader(responseHeaders, requestId);
-    responseHeaders.Set("Set-Cookie", context.CreateYdbOidcCookie(settings.ClientSecret));
+    responseHeaders.Set("Set-Cookie", authFlowCookie);
     if (context.IsNavigationRequest()) {
         responseHeaders.Set(LOCATION_HEADER, redirectUrl);
         return request->CreateResponse("302", "Authorization required", responseHeaders);
@@ -112,10 +136,6 @@ NHttp::THttpOutgoingResponsePtr GetHttpOutgoingResponsePtr(const NHttp::THttpInc
     json["authUrl"] = redirectUrl;
     const TString body = NJson::WriteJson(json, false);
     return request->CreateResponse("401", "Unauthorized", responseHeaders, body);
-}
-
-TString CreateNameYdbOidcCookie(TStringBuf suffix) {
-    return TString(TOpenIdConnectSettings::YDB_OIDC_COOKIE) + TString(suffix);
 }
 
 TString CreateNameSessionCookie(TStringBuf key) {
@@ -145,67 +165,6 @@ TString ClearSecureCookie(const TString& name) {
     return cookieBuilder;
 }
 
-TRestoreOidcContextResult RestoreOidcContext(const NHttp::TCookies& cookies, const TString& key, TStringBuf cookieSuffix) {
-    TStringBuilder errorMessage;
-    errorMessage << "Restore oidc context failed: ";
-    TString cookieName = CreateNameYdbOidcCookie(cookieSuffix);
-    if (!cookies.Has(cookieName)) {
-        return TRestoreOidcContextResult({.IsSuccess = false,
-                                         .IsErrorRetryable = false,
-                                         .ErrorMessage = errorMessage << "Cannot find cookie " << cookieName});
-    }
-    TString signedRequestedAddress = Base64Decode(cookies.Get(cookieName));
-    TString requestedAddressContext;
-    TString expectedDigest;
-    NJson::TJsonValue jsonValue;
-    NJson::TJsonReaderConfig jsonConfig;
-    if (NJson::ReadJsonTree(signedRequestedAddress, &jsonConfig, &jsonValue)) {
-        const NJson::TJsonValue* jsonRequestedAddressContext = nullptr;
-        if (jsonValue.GetValuePointer("requested_address_context", &jsonRequestedAddressContext) && jsonRequestedAddressContext->IsString()) {
-            requestedAddressContext = jsonRequestedAddressContext->GetString();
-            requestedAddressContext = Base64Decode(requestedAddressContext);
-        }
-        if (requestedAddressContext.empty()) {
-            return TRestoreOidcContextResult({.IsSuccess = false,
-                                         .IsErrorRetryable = false,
-                                         .ErrorMessage = errorMessage << "Struct with state is empty"});
-        }
-        const NJson::TJsonValue* jsonDigest = nullptr;
-        if (jsonValue.GetValuePointer("digest", &jsonDigest) && jsonDigest->IsString()) {
-            expectedDigest = jsonDigest->GetString();
-            expectedDigest = Base64Decode(expectedDigest);
-        }
-        if (expectedDigest.empty()) {
-            return TRestoreOidcContextResult({.IsSuccess = false,
-                                            .IsErrorRetryable = false,
-                                            .ErrorMessage = errorMessage << "Expected digest is empty"});
-        }
-    }
-    TString digest = HmacSHA256(key, requestedAddressContext);
-    if (expectedDigest != digest) {
-        return TRestoreOidcContextResult({.IsSuccess = false,
-                                         .IsErrorRetryable = false,
-                                         .ErrorMessage = errorMessage << "Calculated digest is not equal expected digest"});
-    }
-    TString requestedAddress;
-    if (!NJson::ReadJsonTree(requestedAddressContext, &jsonConfig, &jsonValue)) {
-        return TRestoreOidcContextResult({.IsSuccess = false,
-                                         .IsErrorRetryable = false,
-                                         .ErrorMessage = errorMessage << "Requested address context is not valid json"});
-    }
-    const NJson::TJsonValue* jsonRequestedAddress = nullptr;
-    if (jsonValue.GetValuePointer("requested_address", &jsonRequestedAddress) && jsonRequestedAddress->IsString()) {
-        requestedAddress = jsonRequestedAddress->GetString();
-    } else {
-        return TRestoreOidcContextResult({.IsSuccess = false,
-                                         .IsErrorRetryable = false,
-                                         .ErrorMessage = errorMessage << "Requested address was not found in the cookie"});
-    }
-    return TRestoreOidcContextResult({.IsSuccess = true,
-                                     .IsErrorRetryable = true,
-                                     .ErrorMessage = ""}, TContext({.RequestedAddress = requestedAddress}));
-}
-
 TCheckStateResult TDecodeStateResult::Check(const TString& key) const {
     static constexpr TStringBuf ErrorPrefix = "Check state failed: ";
     if (!HasSignedStateJson) {
@@ -226,22 +185,22 @@ TCheckStateResult TDecodeStateResult::Check(const TString& key) const {
         return TCheckStateResult::Error(TString(ErrorPrefix) + "State container is not valid json");
     }
     if (!Payload.ExpirationTime) {
-        return TCheckStateResult::Error(TString(ErrorPrefix) + "Expiration time not found in json", Payload.CookieSuffix);
+        return TCheckStateResult::Error(TString(ErrorPrefix) + "Expiration time not found in json", Payload.RequestedAddress);
     }
     if (TInstant::Now() > *Payload.ExpirationTime) {
-        return TCheckStateResult::Error(TString(ErrorPrefix) + "State life time expired", Payload.CookieSuffix);
+        return TCheckStateResult::Error(TString(ErrorPrefix) + "State life time expired", Payload.RequestedAddress);
     }
-    return TCheckStateResult::Success(Payload.CookieSuffix);
+    return TCheckStateResult::Success(Payload.RequestedAddress);
 }
 
 TString EncodeState(const TState& payload, TStringBuf signingKey) {
     NJson::TJsonValue json(NJson::JSON_MAP);
     json["state"] = payload.AntiForgeryToken;
+    if (!payload.RequestedAddress.empty()) {
+        json["requested_address"] = payload.RequestedAddress;
+    }
     if (payload.ExpirationTime) {
         json["expiration_time"] = ToString(payload.ExpirationTime->TimeT());
-    }
-    if (!payload.CookieSuffix.empty()) {
-        json["cookie_suffix"] = payload.CookieSuffix;
     }
     const TString stateContainer = NJson::WriteJson(json, false);
 
@@ -279,9 +238,9 @@ TDecodeStateResult DecodeState(TStringBuf encodedState) {
             if (jsonValue.GetValuePointer("state", &jsonState) && jsonState->IsString()) {
                 result.Payload.AntiForgeryToken = jsonState->GetString();
             }
-            const NJson::TJsonValue* jsonCookieSuffix = nullptr;
-            if (jsonValue.GetValuePointer("cookie_suffix", &jsonCookieSuffix) && jsonCookieSuffix->IsString()) {
-                result.Payload.CookieSuffix = jsonCookieSuffix->GetString();
+            const NJson::TJsonValue* jsonRequestedAddress = nullptr;
+            if (jsonValue.GetValuePointer("requested_address", &jsonRequestedAddress) && jsonRequestedAddress->IsString()) {
+                result.Payload.RequestedAddress = jsonRequestedAddress->GetString();
             }
             const NJson::TJsonValue* jsonExpirationTime = nullptr;
             if (jsonValue.GetValuePointer("expiration_time", &jsonExpirationTime)) {

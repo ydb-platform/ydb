@@ -6,7 +6,7 @@
 
 #include <yql/essentials/sql/sql.h>
 #include <yql/essentials/sql/v1/sql.h>
-#include <yql/essentials/sql/v1/complete/check/check_complete.h>
+#include <yql/essentials/sql/v1/ide/completion/check/check_complete.h>
 #include <yql/essentials/sql/v1/format/sql_format.h>
 #include <yql/essentials/sql/v1/format/check/check_format.h>
 #include <yql/essentials/sql/v1/lexer/check/check_lexers.h>
@@ -104,14 +104,14 @@ void ExtractQuery(TPosOutput& out, const google::protobuf::Message& node) {
 
 } // namespace
 
-bool TestIssues(const NYql::TAstParseResult& parseRes, bool isStrictWarningAsError) {
+bool TestIssues(const NYql::TAstParseResult& parseRes) {
     bool isOk = parseRes.IsOk();
 
     const bool hasError = AnyOf(parseRes.Issues, [](const NYql::TIssue& issue) {
         return issue.GetSeverity() <= NYql::TSeverityIds::S_ERROR;
     });
 
-    if (parseRes.IsOk() && hasError && isStrictWarningAsError) {
+    if (parseRes.IsOk() && hasError) {
         Cerr << "Errors reported, but yql compiled result!" << Endl << Endl;
         isOk = false;
     }
@@ -125,7 +125,7 @@ bool TestIssues(const NYql::TAstParseResult& parseRes, bool isStrictWarningAsErr
 
 bool TestFormat(
     const TString& query,
-    const NYql::TAstParseResult& ast,
+    const NYql::TAstNode* ast,
     const NSQLTranslation::TTranslationSettings& settings,
     const TString& outFileName,
     const bool checkTripleFormatting,
@@ -140,7 +140,7 @@ bool TestFormat(
     }
 
     NYql::TIssues issues;
-    TMaybe<TString> formatted = NSQLFormat::CheckedFormat(query, ast.Root, settings, issues, convergence);
+    TMaybe<TString> formatted = NSQLFormat::CheckedFormat(query, ast, settings, issues, convergence);
     if (!formatted) {
         Cerr << issues.ToString() << Endl;
         return false;
@@ -284,7 +284,7 @@ int BuildAST(int argc, char** argv) {
         }
         TVector<NYql::NPg::TExtensionDesc> extensions;
         NYql::PgExtensionsFromProto(*pgExtConfig, extensions);
-        NYql::NPg::RegisterExtensions(extensions, true,
+        NYql::NPg::RegisterExtensions(extensions, /*typesOnly=*/true,
                                       *NSQLTranslationPG::CreateExtensionSqlParser(),
                                       NKikimr::NMiniKQL::CreateExtensionLoader().get());
     });
@@ -302,8 +302,12 @@ int BuildAST(int argc, char** argv) {
 
     IOutputStream& out = outFile ? *outFile.Get() : Cout;
 
+    NSQLTranslation::TExtendedSqlFlags sqlFlags;
+    for (auto&& flag : std::move(flags)) {
+        sqlFlags[flag] = {};
+    }
     if (gatewaysConfig) {
-        NYql::TGatewaySQLFlags::FromTesting(*gatewaysConfig).CollectAllTo(flags);
+        sqlFlags = NYql::TGatewaySQLFlags::FromTesting(*gatewaysConfig).ToMap(std::move(sqlFlags));
     }
 
     if (!res.Has("query") && queryFiles.empty()) {
@@ -375,7 +379,7 @@ int BuildAST(int argc, char** argv) {
             settings.Arena = &arena;
             settings.LangVer = langVer;
             settings.ClusterMapping = clusterMapping;
-            settings.Flags = flags;
+            NSQLTranslation::ParseTranslationSettings(sqlFlags, settings);
             settings.SyntaxVersion = syntaxVersion;
             settings.AnsiLexer = res.Has("ansi-lexer");
             settings.WarnOnV0 = false;
@@ -452,7 +456,7 @@ int BuildAST(int argc, char** argv) {
                 (parseRes.ActualSyntaxType == NYql::ESyntaxType::YQLv1 &&
                  !res.Has("pg"));
 
-            bool hasError = !TestIssues(parseRes, /*isStrictWarningAsError=*/true);
+            bool hasError = !TestIssues(parseRes);
 
             if (hasError || !noDebug) {
                 parseRes.Issues.PrintWithProgramTo(Cerr, queryFile, query);
@@ -461,7 +465,7 @@ int BuildAST(int argc, char** argv) {
             if (res.Has("test-format") && isSQLv1 && parseRes.IsOk()) {
                 hasError |= !TestFormat(
                     query,
-                    parseRes,
+                    parseRes.Root,
                     settings,
                     outFileNameFormat,
                     /*checkTripleFormatting=*/res.Has("test-triple-format"),

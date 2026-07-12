@@ -101,10 +101,11 @@ TArrayRef<const TSubDomainKey> TNodeFilter::GetEffectiveAllowedDomains() const {
 }
 
 bool TNodeFilter::IsAllowedDataCenter(TDataCenterId dc) const {
-    if (AllowedDataCenters.empty()) {
+    const auto& dcs = AllowedDataCenters.GetDataCenter();
+    if (dcs.empty()) {
         return true;
     }
-    return std::find(AllowedDataCenters.begin(), AllowedDataCenters.end(), dc) != AllowedDataCenters.end();
+    return std::find(dcs.begin(), dcs.end(), dc) != dcs.end();
 }
 
 bool TNodeFilter::IsAllowedPile(TBridgePileId pile) const {
@@ -186,7 +187,8 @@ const std::unordered_map<TTabletTypes::EType, TString> TABLET_TYPE_SHORT_NAMES =
                                                                                   {TTabletTypes::Coordinator, "C"},
                                                                                   {TTabletTypes::Mediator, "M"},
                                                                                   {TTabletTypes::BlockStoreVolume, "BV"},
-                                                                                  {TTabletTypes::BlockStorePartition2, "BP"},
+                                                                                  {TTabletTypes::BlockStorePartition, "BP"},
+                                                                                  {TTabletTypes::BlockStorePartition2, "BP2"},
                                                                                   {TTabletTypes::BlockStoreVolumeDirect, "DV"},
                                                                                   {TTabletTypes::BlockStorePartitionDirect, "DP"},
                                                                                   {TTabletTypes::Kesus, "K"},

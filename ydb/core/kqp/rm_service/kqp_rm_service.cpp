@@ -21,7 +21,7 @@
 
 #include <yql/essentials/utils/yql_panic.h>
 
-#include <library/cpp/containers/absl_flat_hash/flat_hash_map.h>
+#include <library/cpp/containers/absl/flat_hash_map.h>
 
 namespace NKikimr {
 namespace NKqp {
@@ -453,6 +453,18 @@ public:
         callback(std::move(resources));
     }
 
+    bool GetInitialBoardSyncDone() const override {
+        with_lock (ResourceSnapshotState->Lock) {
+            return ResourceSnapshotState->InitialBoardSyncReceived;
+        }
+    }
+
+    TVector<ui32> GetInitialBoardNodeIds() const override {
+        with_lock (ResourceSnapshotState->Lock) {
+            return ResourceSnapshotState->InitialBoardNodeIds;
+        }
+    }
+
     TKqpLocalNodeResources GetLocalResources() const override {
         TKqpLocalNodeResources result;
 
@@ -480,21 +492,13 @@ public:
 
     void EstimateTaskResources(TTaskResourceEstimation& ret, const ui32 tasksCount) override
     {
-        ui64 totalChannels = std::max(tasksCount, (ui32)1) * std::max(ret.ChannelBuffersCount, (ui32)1);
-        ui64 optimalChannelBufferSizeEstimation = totalChannels * ChannelBufferSize.load();
-
-        optimalChannelBufferSizeEstimation = std::min(optimalChannelBufferSizeEstimation, MaxTotalChannelBuffersSize.load());
-
-        ret.ChannelBufferMemoryLimit = std::max(MinChannelBufferSize.load(), optimalChannelBufferSizeEstimation / totalChannels);
-
-        if (ret.HeavyProgram) {
-            ret.MkqlProgramMemoryLimit = MkqlHeavyProgramMemoryLimit.load() / std::max(tasksCount, (ui32)1);
-        } else {
-            ret.MkqlProgramMemoryLimit = MkqlLightProgramMemoryLimit.load() / std::max(tasksCount, (ui32)1);
-        }
-
-        ret.TotalMemoryLimit = ret.ChannelBuffersCount * ret.ChannelBufferMemoryLimit
-            + ret.MkqlProgramMemoryLimit;
+        NKikimr::NKqp::EstimateTaskResources(ret, {
+            .ChannelBufferSize = ChannelBufferSize.load(),
+            .MinChannelBufferSize = MinChannelBufferSize.load(),
+            .MaxTotalChannelBuffersSize = MaxTotalChannelBuffersSize.load(),
+            .MkqlHeavyProgramMemoryLimit = MkqlHeavyProgramMemoryLimit.load(),
+            .MkqlLightProgramMemoryLimit = MkqlLightProgramMemoryLimit.load(),
+        }, tasksCount);
     }
 
     void SetConfigValues(const NKikimrConfig::TTableServiceConfig::TResourceManager& config) {

@@ -10,6 +10,7 @@ PEERDIR(
     library/cpp/yt/assert
     library/cpp/yt/memory
     library/cpp/yt/misc
+    library/cpp/yt/system
     library/cpp/yt/yson_string
 )
 
@@ -17,6 +18,7 @@ END()
 
 RECURSE(
     backends
+    benchmark
     plain_text_formatter
 )
 

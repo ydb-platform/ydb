@@ -5,12 +5,14 @@
     "endpointPrefix":"amplify",
     "jsonVersion":"1.1",
     "protocol":"rest-json",
+    "protocols":["rest-json"],
     "serviceAbbreviation":"Amplify",
     "serviceFullName":"AWS Amplify",
     "serviceId":"Amplify",
     "signatureVersion":"v4",
     "signingName":"amplify",
-    "uid":"amplify-2017-07-25"
+    "uid":"amplify-2017-07-25",
+    "auth":["aws.auth#sigv4"]
   },
   "operations":{
     "CreateApp":{
@@ -45,7 +47,7 @@
         {"shape":"InternalFailureException"},
         {"shape":"LimitExceededException"}
       ],
-      "documentation":"<p>Creates a new backend environment for an Amplify app. </p> <p>This API is available only to Amplify Gen 1 applications where the backend is created using Amplify Studio or the Amplify command line interface (CLI). This API isn’t available to applications created using the Amplify Gen 2 public preview. When you deploy an application with Amplify Gen 2, you provision the app's backend infrastructure using Typescript code.</p>"
+      "documentation":"<p>Creates a new backend environment for an Amplify app. </p> <p>This API is available only to Amplify Gen 1 applications where the backend is created using Amplify Studio or the Amplify command line interface (CLI). This API isn’t available to Amplify Gen 2 applications. When you deploy an application with Amplify Gen 2, you provision the app's backend infrastructure using Typescript code.</p>"
     },
     "CreateBranch":{
       "name":"CreateBranch",
@@ -79,7 +81,7 @@
         {"shape":"InternalFailureException"},
         {"shape":"LimitExceededException"}
       ],
-      "documentation":"<p>Creates a deployment for a manually deployed Amplify app. Manually deployed apps are not connected to a repository. </p> <p>The maximum duration between the <code>CreateDeployment</code> call and the <code>StartDeployment</code> call cannot exceed 8 hours. If the duration exceeds 8 hours, the <code>StartDeployment</code> call and the associated <code>Job</code> will fail.</p>"
+      "documentation":"<p>Creates a deployment for a manually deployed Amplify app. Manually deployed apps are not connected to a Git repository. </p> <p>The maximum duration between the <code>CreateDeployment</code> call and the <code>StartDeployment</code> call cannot exceed 8 hours. If the duration exceeds 8 hours, the <code>StartDeployment</code> call and the associated <code>Job</code> will fail.</p>"
     },
     "CreateDomainAssociation":{
       "name":"CreateDomainAssociation",
@@ -149,7 +151,7 @@
         {"shape":"InternalFailureException"},
         {"shape":"DependentServiceFailureException"}
       ],
-      "documentation":"<p>Deletes a backend environment for an Amplify app. </p> <p>This API is available only to Amplify Gen 1 applications where the backend was created using Amplify Studio or the Amplify command line interface (CLI). This API isn’t available to applications created using the Amplify Gen 2 public preview. When you deploy an application with Amplify Gen 2, you provision the app's backend infrastructure using Typescript code.</p>"
+      "documentation":"<p>Deletes a backend environment for an Amplify app. </p> <p>This API is available only to Amplify Gen 1 applications where the backend is created using Amplify Studio or the Amplify command line interface (CLI). This API isn’t available to Amplify Gen 2 applications. When you deploy an application with Amplify Gen 2, you provision the app's backend infrastructure using Typescript code.</p>"
     },
     "DeleteBranch":{
       "name":"DeleteBranch",
@@ -282,7 +284,7 @@
         {"shape":"NotFoundException"},
         {"shape":"InternalFailureException"}
       ],
-      "documentation":"<p>Returns a backend environment for an Amplify app. </p> <p>This API is available only to Amplify Gen 1 applications where the backend was created using Amplify Studio or the Amplify command line interface (CLI). This API isn’t available to applications created using the Amplify Gen 2 public preview. When you deploy an application with Amplify Gen 2, you provision the app's backend infrastructure using Typescript code.</p>"
+      "documentation":"<p>Returns a backend environment for an Amplify app. </p> <p>This API is available only to Amplify Gen 1 applications where the backend is created using Amplify Studio or the Amplify command line interface (CLI). This API isn’t available to Amplify Gen 2 applications. When you deploy an application with Amplify Gen 2, you provision the app's backend infrastructure using Typescript code.</p>"
     },
     "GetBranch":{
       "name":"GetBranch",
@@ -394,7 +396,7 @@
         {"shape":"UnauthorizedException"},
         {"shape":"InternalFailureException"}
       ],
-      "documentation":"<p>Lists the backend environments for an Amplify app. </p> <p>This API is available only to Amplify Gen 1 applications where the backend was created using Amplify Studio or the Amplify command line interface (CLI). This API isn’t available to applications created using the Amplify Gen 2 public preview. When you deploy an application with Amplify Gen 2, you provision the app's backend infrastructure using Typescript code.</p>"
+      "documentation":"<p>Lists the backend environments for an Amplify app. </p> <p>This API is available only to Amplify Gen 1 applications where the backend is created using Amplify Studio or the Amplify command line interface (CLI). This API isn’t available to Amplify Gen 2 applications. When you deploy an application with Amplify Gen 2, you provision the app's backend infrastructure using Typescript code.</p>"
     },
     "ListBranches":{
       "name":"ListBranches",
@@ -488,7 +490,7 @@
         {"shape":"NotFoundException"},
         {"shape":"LimitExceededException"}
       ],
-      "documentation":"<p>Starts a deployment for a manually deployed app. Manually deployed apps are not connected to a repository. </p> <p>The maximum duration between the <code>CreateDeployment</code> call and the <code>StartDeployment</code> call cannot exceed 8 hours. If the duration exceeds 8 hours, the <code>StartDeployment</code> call and the associated <code>Job</code> will fail.</p>"
+      "documentation":"<p>Starts a deployment for a manually deployed app. Manually deployed apps are not connected to a Git repository. </p> <p>The maximum duration between the <code>CreateDeployment</code> call and the <code>StartDeployment</code> call cannot exceed 8 hours. If the duration exceeds 8 hours, the <code>StartDeployment</code> call and the associated <code>Job</code> will fail.</p>"
     },
     "StartJob":{
       "name":"StartJob",
@@ -677,19 +679,23 @@
         },
         "platform":{
           "shape":"Platform",
-          "documentation":"<p>The platform for the Amplify app. For a static app, set the platform type to <code>WEB</code>. For a dynamic server-side rendered (SSR) app, set the platform type to <code>WEB_COMPUTE</code>. For an app requiring Amplify Hosting's original SSR support only, set the platform type to <code>WEB_DYNAMIC</code>.</p>"
+          "documentation":"<p>The platform for the Amplify app. For a static app, set the platform type to <code>WEB</code>. For a dynamic server-side rendered (SSR) app, set the platform type to <code>WEB_COMPUTE</code>. For an app requiring Amplify Hosting's original SSR support only, set the platform type to <code>WEB_DYNAMIC</code>.</p> <p>If you are deploying an SSG only app with Next.js 14 or later, you must use the platform type <code>WEB_COMPUTE</code>.</p>"
         },
         "createTime":{
           "shape":"CreateTime",
-          "documentation":"<p>Creates a date and time for the Amplify app. </p>"
+          "documentation":"<p>A timestamp of when Amplify created the application.</p>"
         },
         "updateTime":{
           "shape":"UpdateTime",
-          "documentation":"<p>Updates the date and time for the Amplify app. </p>"
+          "documentation":"<p>A timestamp of when Amplify updated the application.</p>"
+        },
+        "computeRoleArn":{
+          "shape":"ComputeRoleArn",
+          "documentation":"<p>The Amazon Resource Name (ARN) of the IAM role for an SSR app. The Compute role allows the Amplify Hosting compute service to securely access specific Amazon Web Services resources based on the role's permissions. For more information about the SSR Compute role, see <a href=\"https://docs.aws.amazon.com/latest/userguide/amplify-SSR-compute-role.html\">Adding an SSR Compute role</a> in the <i>Amplify User Guide</i>.</p>"
         },
         "iamServiceRoleArn":{
           "shape":"ServiceRoleArn",
-          "documentation":"<p>The AWS Identity and Access Management (IAM) service role for the Amazon Resource Name (ARN) of the Amplify app. </p>"
+          "documentation":"<p>The Amazon Resource Name (ARN) of the IAM service role for the Amplify app.</p>"
         },
         "environmentVariables":{
           "shape":"EnvironmentVariables",
@@ -746,6 +752,18 @@
         "repositoryCloneMethod":{
           "shape":"RepositoryCloneMethod",
           "documentation":"<note> <p>This is for internal use.</p> </note> <p>The Amplify service uses this parameter to specify the authentication protocol to use to access the Git repository for an Amplify app. Amplify specifies <code>TOKEN</code> for a GitHub repository, <code>SIGV4</code> for an Amazon Web Services CodeCommit repository, and <code>SSH</code> for GitLab and Bitbucket repositories.</p>"
+        },
+        "cacheConfig":{
+          "shape":"CacheConfig",
+          "documentation":"<p>The cache configuration for the Amplify app. If you don't specify the cache configuration <code>type</code>, Amplify uses the default <code>AMPLIFY_MANAGED</code> setting.</p>"
+        },
+        "webhookCreateTime":{
+          "shape":"webhookCreateTime",
+          "documentation":"<p>A timestamp of when Amplify created the webhook in your Git repository.</p>"
+        },
+        "wafConfiguration":{
+          "shape":"WafConfiguration",
+          "documentation":"<p>Describes the Firewall configuration for the Amplify app. Firewall support enables you to protect your hosted applications with a direct integration with WAF.</p>"
         }
       },
       "documentation":"<p>Represents the different branches of a repository for building, deploying, and hosting an Amplify app. </p>"
@@ -891,7 +909,7 @@
           "documentation":"<p>The Amazon Resource Name (ARN) for the CloudFormation stack.</p>"
         }
       },
-      "documentation":"<p>Describes the backend properties associated with an Amplify <code>Branch</code>.</p>"
+      "documentation":"<p>Describes the backend associated with an Amplify <code>Branch</code>.</p> <p>This property is available to Amplify Gen 2 apps only. When you deploy an application with Amplify Gen 2, you provision the app's backend infrastructure using Typescript code.</p>"
     },
     "BackendEnvironment":{
       "type":"structure",
@@ -927,7 +945,7 @@
           "documentation":"<p>The last updated date and time for a backend environment that is part of an Amplify app. </p>"
         }
       },
-      "documentation":"<p>Describes the backend environment for an Amplify app. </p>"
+      "documentation":"<p>Describes the backend environment associated with a <code>Branch</code> of a Gen 1 Amplify app. Amplify Gen 1 applications are created using Amplify Studio or the Amplify command line interface (CLI).</p>"
     },
     "BackendEnvironmentArn":{
       "type":"string",
@@ -1006,11 +1024,11 @@
         },
         "createTime":{
           "shape":"CreateTime",
-          "documentation":"<p> The creation date and time for a branch that is part of an Amplify app. </p>"
+          "documentation":"<p>A timestamp of when Amplify created the branch.</p>"
         },
         "updateTime":{
           "shape":"UpdateTime",
-          "documentation":"<p> The last updated date and time for a branch that is part of an Amplify app. </p>"
+          "documentation":"<p>A timestamp for the last updated time for a branch.</p>"
         },
         "environmentVariables":{
           "shape":"EnvironmentVariables",
@@ -1082,9 +1100,13 @@
         },
         "backendEnvironmentArn":{
           "shape":"BackendEnvironmentArn",
-          "documentation":"<p> The Amazon Resource Name (ARN) for a backend environment that is part of an Amplify app. </p>"
+          "documentation":"<p> The Amazon Resource Name (ARN) for a backend environment that is part of an Amplify app. </p> <p>This property is available to Amplify Gen 1 apps only. When you deploy an application with Amplify Gen 2, you provision the app's backend infrastructure using Typescript code.</p>"
         },
-        "backend":{"shape":"Backend"}
+        "backend":{"shape":"Backend"},
+        "computeRoleArn":{
+          "shape":"ComputeRoleArn",
+          "documentation":"<p>The Amazon Resource Name (ARN) of the IAM role for a branch of an SSR app. The Compute role allows the Amplify Hosting compute service to securely access specific Amazon Web Services resources based on the role's permissions. For more information about the SSR Compute role, see <a href=\"https://docs.aws.amazon.com/latest/userguide/amplify-SSR-compute-role.html\">Adding an SSR Compute role</a> in the <i>Amplify User Guide</i>.</p>"
+        }
       },
       "documentation":"<p> The branch for an Amplify app, which maps to a third-party repository branch. </p>"
     },
@@ -1112,13 +1134,31 @@
       "pattern":"(?s).+",
       "sensitive":true
     },
+    "CacheConfig":{
+      "type":"structure",
+      "required":["type"],
+      "members":{
+        "type":{
+          "shape":"CacheConfigType",
+          "documentation":"<p>The type of cache configuration to use for an Amplify app.</p> <p>The <code>AMPLIFY_MANAGED</code> cache configuration automatically applies an optimized cache configuration for your app based on its platform, routing rules, and rewrite rules. This is the default setting.</p> <p>The <code>AMPLIFY_MANAGED_NO_COOKIES</code> cache configuration type is the same as <code>AMPLIFY_MANAGED</code>, except that it excludes all cookies from the cache key.</p>"
+        }
+      },
+      "documentation":"<p>Describes the cache configuration for an Amplify app.</p> <p>For more information about how Amplify applies an optimal cache configuration for your app based on the type of content that is being served, see <a href=\"https://docs.aws.amazon.com/amplify/latest/userguide/managing-cache-configuration\">Managing cache configuration</a> in the <i>Amplify User guide</i>.</p>"
+    },
+    "CacheConfigType":{
+      "type":"string",
+      "enum":[
+        "AMPLIFY_MANAGED",
+        "AMPLIFY_MANAGED_NO_COOKIES"
+      ]
+    },
     "Certificate":{
       "type":"structure",
       "required":["type"],
       "members":{
         "type":{
           "shape":"CertificateType",
-          "documentation":"<p>The type of SSL/TLS certificate that you want to use.</p> <p>Specify <code>AMPLIFY_MANAGED</code> to use the default certificate that Amplify provisions for you.</p> <p>Specify <code>CUSTOM</code> to use your own certificate that you have already added to Certificate Manager in your Amazon Web Services account. Make sure you request (or import) the certificate in the US East (N. Virginia) Region (us-east-1). For more information about using ACM, see <a href=\"https://docs.aws.amazon.com/acm/latest/userguide/import-certificate.html\">Importing certificates into Certificate Manager</a> in the <i>ACM User guide</i> .</p>"
+          "documentation":"<p>The type of SSL/TLS certificate that you want to use.</p> <p>Specify <code>AMPLIFY_MANAGED</code> to use the default certificate that Amplify provisions for you.</p> <p>Specify <code>CUSTOM</code> to use your own certificate that you have already added to Certificate Manager in your Amazon Web Services account. Make sure you request (or import) the certificate in the US East (N. Virginia) Region (us-east-1). For more information about using ACM, see <a href=\"https://docs.aws.amazon.com/acm/latest/userguide/import-certificate.html\">Importing certificates into Certificate Manager</a> in the <i>ACM User guide</i>.</p>"
         },
         "customCertificateArn":{
           "shape":"CertificateArn",
@@ -1175,6 +1215,12 @@
       "pattern":"(?s).*"
     },
     "CommitTime":{"type":"timestamp"},
+    "ComputeRoleArn":{
+      "type":"string",
+      "max":1000,
+      "min":0,
+      "pattern":"(?s).*"
+    },
     "Condition":{
       "type":"string",
       "max":2048,
@@ -1200,11 +1246,15 @@
         },
         "platform":{
           "shape":"Platform",
-          "documentation":"<p>The platform for the Amplify app. For a static app, set the platform type to <code>WEB</code>. For a dynamic server-side rendered (SSR) app, set the platform type to <code>WEB_COMPUTE</code>. For an app requiring Amplify Hosting's original SSR support only, set the platform type to <code>WEB_DYNAMIC</code>.</p>"
+          "documentation":"<p>The platform for the Amplify app. For a static app, set the platform type to <code>WEB</code>. For a dynamic server-side rendered (SSR) app, set the platform type to <code>WEB_COMPUTE</code>. For an app requiring Amplify Hosting's original SSR support only, set the platform type to <code>WEB_DYNAMIC</code>.</p> <p>If you are deploying an SSG only app with Next.js version 14 or later, you must set the platform type to <code>WEB_COMPUTE</code> and set the artifacts <code>baseDirectory</code> to <code>.next</code> in the application's build settings. For an example of the build specification settings, see <a href=\"https://docs.aws.amazon.com/amplify/latest/userguide/deploy-nextjs-app.html#build-setting-detection-ssg-14\">Amplify build settings for a Next.js 14 SSG application</a> in the <i>Amplify Hosting User Guide</i>.</p>"
+        },
+        "computeRoleArn":{
+          "shape":"ComputeRoleArn",
+          "documentation":"<p>The Amazon Resource Name (ARN) of the IAM role to assign to an SSR app. The SSR Compute role allows the Amplify Hosting compute service to securely access specific Amazon Web Services resources based on the role's permissions. For more information about the SSR Compute role, see <a href=\"https://docs.aws.amazon.com/latest/userguide/amplify-SSR-compute-role.html\">Adding an SSR Compute role</a> in the <i>Amplify User Guide</i>.</p>"
         },
         "iamServiceRoleArn":{
           "shape":"ServiceRoleArn",
-          "documentation":"<p>The AWS Identity and Access Management (IAM) service role for an Amplify app. </p>"
+          "documentation":"<p>The Amazon Resource Name (ARN) of the IAM service role for the Amplify app.</p>"
         },
         "oauthToken":{
           "shape":"OauthToken",
@@ -1261,6 +1311,10 @@
         "autoBranchCreationConfig":{
           "shape":"AutoBranchCreationConfig",
           "documentation":"<p>The automated branch creation configuration for an Amplify app. </p>"
+        },
+        "cacheConfig":{
+          "shape":"CacheConfig",
+          "documentation":"<p>The cache configuration for the Amplify app.</p>"
         }
       },
       "documentation":"<p>The request structure used to create apps in Amplify. </p>"
@@ -1390,11 +1444,15 @@
         },
         "backendEnvironmentArn":{
           "shape":"BackendEnvironmentArn",
-          "documentation":"<p>The Amazon Resource Name (ARN) for a backend environment that is part of an Amplify app. </p>"
+          "documentation":"<p>The Amazon Resource Name (ARN) for a backend environment that is part of a Gen 1 Amplify app. </p> <p>This field is available to Amplify Gen 1 apps only where the backend is created using Amplify Studio or the Amplify command line interface (CLI).</p>"
         },
         "backend":{
           "shape":"Backend",
-          "documentation":"<p>The backend for a <code>Branch</code> of an Amplify app. Use for a backend created from an CloudFormation stack.</p>"
+          "documentation":"<p>The backend for a <code>Branch</code> of an Amplify app. Use for a backend created from an CloudFormation stack.</p> <p>This field is available to Amplify Gen 2 apps only. When you deploy an application with Amplify Gen 2, you provision the app's backend infrastructure using Typescript code.</p>"
+        },
+        "computeRoleArn":{
+          "shape":"ComputeRoleArn",
+          "documentation":"<p>The Amazon Resource Name (ARN) of the IAM role to assign to a branch of an SSR app. The SSR Compute role allows the Amplify Hosting compute service to securely access specific Amazon Web Services resources based on the role's permissions. For more information about the SSR Compute role, see <a href=\"https://docs.aws.amazon.com/latest/userguide/amplify-SSR-compute-role.html\">Adding an SSR Compute role</a> in the <i>Amplify User Guide</i>.</p>"
         }
       },
       "documentation":"<p> The request structure for the create branch request. </p>"
@@ -2238,6 +2296,7 @@
     "JobStatus":{
       "type":"string",
       "enum":[
+        "CREATED",
         "PENDING",
         "PROVISIONING",
         "RUNNING",
@@ -2282,7 +2341,7 @@
         },
         "commitTime":{
           "shape":"CommitTime",
-          "documentation":"<p> The commit date and time for the job. </p>"
+          "documentation":"<p>The commit date and time for the job. </p>"
         },
         "startTime":{
           "shape":"StartTime",
@@ -2298,7 +2357,15 @@
         },
         "jobType":{
           "shape":"JobType",
-          "documentation":"<p> The type for the job. If the value is <code>RELEASE</code>, the job was manually released from its source by using the <code>StartJob</code> API. If the value is <code>RETRY</code>, the job was manually retried using the <code>StartJob</code> API. If the value is <code>WEB_HOOK</code>, the job was automatically triggered by webhooks. </p>"
+          "documentation":"<p> The type for the job. If the value is <code>RELEASE</code>, the job was manually released from its source by using the <code>StartJob</code> API. This value is available only for apps that are connected to a repository.</p> <p>If the value is <code>RETRY</code>, the job was manually retried using the <code>StartJob</code> API. If the value is <code>WEB_HOOK</code>, the job was automatically triggered by webhooks. If the value is <code>MANUAL</code>, the job is for a manually deployed app. Manually deployed apps are not connected to a Git repository.</p>"
+        },
+        "sourceUrl":{
+          "shape":"SourceUrl",
+          "documentation":"<p>The source URL for the files to deploy. The source URL can be either an HTTP GET URL that is publicly accessible and downloads a single .zip file, or an Amazon S3 bucket and prefix.</p>"
+        },
+        "sourceUrlType":{
+          "shape":"SourceUrlType",
+          "documentation":"<p>The type of source specified by the <code>sourceURL</code>. If the value is <code>ZIP</code>, the source is a .zip file. If the value is <code>BUCKET_PREFIX</code>, the source is an Amazon S3 bucket and prefix. If no value is specified, the default is <code>ZIP</code>.</p>"
         }
       },
       "documentation":"<p> Describes the summary for an execution job for an Amplify app. </p>"
@@ -2333,7 +2400,7 @@
           "locationName":"nextToken"
         },
         "maxResults":{
-          "shape":"MaxResults",
+          "shape":"MaxResultsForListApps",
           "documentation":"<p>The maximum number of records to list in a single response. </p>",
           "location":"querystring",
           "locationName":"maxResults"
@@ -2661,6 +2728,11 @@
     },
     "MaxResults":{
       "type":"integer",
+      "max":50,
+      "min":0
+    },
+    "MaxResultsForListApps":{
+      "type":"integer",
       "max":100,
       "min":0
     },
@@ -2778,7 +2850,14 @@
     "SourceUrl":{
       "type":"string",
       "max":3000,
-      "pattern":"(?s).*"
+      "pattern":"^(s3|https|http)://.*"
+    },
+    "SourceUrlType":{
+      "type":"string",
+      "enum":[
+        "ZIP",
+        "BUCKET_PREFIX"
+      ]
     },
     "StackArn":{
       "type":"string",
@@ -2817,17 +2896,21 @@
         },
         "branchName":{
           "shape":"BranchName",
-          "documentation":"<p>The name of the branch to use for the job. </p>",
+          "documentation":"<p>The name of the branch to use for the deployment job. </p>",
           "location":"uri",
           "locationName":"branchName"
         },
         "jobId":{
           "shape":"JobId",
-          "documentation":"<p>The job ID for this deployment, generated by the create deployment request. </p>"
+          "documentation":"<p>The job ID for this deployment that is generated by the <code>CreateDeployment</code> request. </p>"
         },
         "sourceUrl":{
           "shape":"SourceUrl",
-          "documentation":"<p>The source URL for this deployment, used when calling start deployment without create deployment. The source URL can be any HTTP GET URL that is publicly accessible and downloads a single .zip file. </p>"
+          "documentation":"<p>The source URL for the deployment that is used when calling <code>StartDeployment</code> without <code>CreateDeployment</code>. The source URL can be either an HTTP GET URL that is publicly accessible and downloads a single .zip file, or an Amazon S3 bucket and prefix.</p>"
+        },
+        "sourceUrlType":{
+          "shape":"SourceUrlType",
+          "documentation":"<p>The type of source specified by the <code>sourceURL</code>. If the value is <code>ZIP</code>, the source is a .zip file. If the value is <code>BUCKET_PREFIX</code>, the source is an Amazon S3 bucket and prefix. If no value is specified, the default is <code>ZIP</code>.</p>"
         }
       },
       "documentation":"<p>The request structure for the start a deployment request. </p>"
@@ -3208,11 +3291,15 @@
         },
         "platform":{
           "shape":"Platform",
-          "documentation":"<p>The platform for the Amplify app. For a static app, set the platform type to <code>WEB</code>. For a dynamic server-side rendered (SSR) app, set the platform type to <code>WEB_COMPUTE</code>. For an app requiring Amplify Hosting's original SSR support only, set the platform type to <code>WEB_DYNAMIC</code>.</p>"
+          "documentation":"<p>The platform for the Amplify app. For a static app, set the platform type to <code>WEB</code>. For a dynamic server-side rendered (SSR) app, set the platform type to <code>WEB_COMPUTE</code>. For an app requiring Amplify Hosting's original SSR support only, set the platform type to <code>WEB_DYNAMIC</code>.</p> <p>If you are deploying an SSG only app with Next.js version 14 or later, you must set the platform type to <code>WEB_COMPUTE</code>.</p>"
+        },
+        "computeRoleArn":{
+          "shape":"ComputeRoleArn",
+          "documentation":"<p>The Amazon Resource Name (ARN) of the IAM role to assign to an SSR app. The SSR Compute role allows the Amplify Hosting compute service to securely access specific Amazon Web Services resources based on the role's permissions. For more information about the SSR Compute role, see <a href=\"https://docs.aws.amazon.com/latest/userguide/amplify-SSR-compute-role.html\">Adding an SSR Compute role</a> in the <i>Amplify User Guide</i>.</p>"
         },
         "iamServiceRoleArn":{
           "shape":"ServiceRoleArn",
-          "documentation":"<p>The AWS Identity and Access Management (IAM) service role for an Amplify app. </p>"
+          "documentation":"<p>The Amazon Resource Name (ARN) of the IAM service role for the Amplify app.</p>"
         },
         "environmentVariables":{
           "shape":"EnvironmentVariables",
@@ -3269,6 +3356,10 @@
         "accessToken":{
           "shape":"AccessToken",
           "documentation":"<p>The personal access token for a GitHub repository for an Amplify app. The personal access token is used to authorize access to a GitHub repository using the Amplify GitHub App. The token is not stored.</p> <p>Use <code>accessToken</code> for GitHub repositories only. To authorize access to a repository provider such as Bitbucket or CodeCommit, use <code>oauthToken</code>.</p> <p>You must specify either <code>accessToken</code> or <code>oauthToken</code> when you update an app.</p> <p>Existing Amplify apps deployed from a GitHub repository using OAuth continue to work with CI/CD. However, we strongly recommend that you migrate these apps to use the GitHub App. For more information, see <a href=\"https://docs.aws.amazon.com/amplify/latest/userguide/setting-up-GitHub-access.html#migrating-to-github-app-auth\">Migrating an existing OAuth app to the Amplify GitHub App</a> in the <i>Amplify User Guide</i> .</p>"
+        },
+        "cacheConfig":{
+          "shape":"CacheConfig",
+          "documentation":"<p>The cache configuration for the Amplify app.</p>"
         }
       },
       "documentation":"<p>The request structure for the update app request. </p>"
@@ -3361,11 +3452,15 @@
         },
         "backendEnvironmentArn":{
           "shape":"BackendEnvironmentArn",
-          "documentation":"<p>The Amazon Resource Name (ARN) for a backend environment that is part of an Amplify app. </p>"
+          "documentation":"<p>The Amazon Resource Name (ARN) for a backend environment that is part of a Gen 1 Amplify app. </p> <p>This field is available to Amplify Gen 1 apps only where the backend is created using Amplify Studio or the Amplify command line interface (CLI).</p>"
         },
         "backend":{
           "shape":"Backend",
-          "documentation":"<p>The backend for a <code>Branch</code> of an Amplify app. Use for a backend created from an CloudFormation stack.</p>"
+          "documentation":"<p>The backend for a <code>Branch</code> of an Amplify app. Use for a backend created from an CloudFormation stack.</p> <p>This field is available to Amplify Gen 2 apps only. When you deploy an application with Amplify Gen 2, you provision the app's backend infrastructure using Typescript code.</p>"
+        },
+        "computeRoleArn":{
+          "shape":"ComputeRoleArn",
+          "documentation":"<p>The Amazon Resource Name (ARN) of the IAM role to assign to a branch of an SSR app. The SSR Compute role allows the Amplify Hosting compute service to securely access specific Amazon Web Services resources based on the role's permissions. For more information about the SSR Compute role, see <a href=\"https://docs.aws.amazon.com/latest/userguide/amplify-SSR-compute-role.html\">Adding an SSR Compute role</a> in the <i>Amplify User Guide</i>.</p>"
         }
       },
       "documentation":"<p>The request structure for the update branch request. </p>"
@@ -3484,6 +3579,40 @@
       "max":1000
     },
     "Verified":{"type":"boolean"},
+    "WafConfiguration":{
+      "type":"structure",
+      "members":{
+        "webAclArn":{
+          "shape":"WebAclArn",
+          "documentation":"<p>The Amazon Resource Name (ARN) for the web ACL associated with an Amplify app.</p>"
+        },
+        "wafStatus":{
+          "shape":"WafStatus",
+          "documentation":"<p>The status of the process to associate or disassociate a web ACL to an Amplify app.</p>"
+        },
+        "statusReason":{
+          "shape":"StatusReason",
+          "documentation":"<p>The reason for the current status of the Firewall configuration.</p>"
+        }
+      },
+      "documentation":"<p>Describes the Firewall configuration for a hosted Amplify application. Firewall support enables you to protect your web applications with a direct integration with WAF. For more information about using WAF protections for an Amplify application, see <a href=\"https://docs.aws.amazon.com/amplify/latest/userguide/WAF-integration.html\">Firewall support for hosted sites</a> in the <i>Amplify User Guide</i>. </p>"
+    },
+    "WafStatus":{
+      "type":"string",
+      "enum":[
+        "ASSOCIATING",
+        "ASSOCIATION_FAILED",
+        "ASSOCIATION_SUCCESS",
+        "DISASSOCIATING",
+        "DISASSOCIATION_FAILED"
+      ]
+    },
+    "WebAclArn":{
+      "type":"string",
+      "max":512,
+      "min":0,
+      "pattern":"^arn:aws:wafv2:.*"
+    },
     "Webhook":{
       "type":"structure",
       "required":[
@@ -3518,11 +3647,11 @@
         },
         "createTime":{
           "shape":"CreateTime",
-          "documentation":"<p>The create date and time for a webhook. </p>"
+          "documentation":"<p>A timestamp of when Amplify created the webhook in your Git repository.</p>"
         },
         "updateTime":{
           "shape":"UpdateTime",
-          "documentation":"<p>Updates the date and time for a webhook. </p>"
+          "documentation":"<p>A timestamp of when Amplify updated the webhook in your Git repository.</p>"
         }
       },
       "documentation":"<p>Describes a webhook that connects repository events to an Amplify app. </p>"
@@ -3543,7 +3672,8 @@
     "Webhooks":{
       "type":"list",
       "member":{"shape":"Webhook"}
-    }
+    },
+    "webhookCreateTime":{"type":"timestamp"}
   },
   "documentation":"<p>Amplify enables developers to develop and deploy cloud-powered mobile and web apps. Amplify Hosting provides a continuous delivery and hosting service for web applications. For more information, see the <a href=\"https://docs.aws.amazon.com/amplify/latest/userguide/welcome.html\">Amplify Hosting User Guide</a>. The Amplify Framework is a comprehensive set of SDKs, libraries, tools, and documentation for client app development. For more information, see the <a href=\"https://docs.amplify.aws/\">Amplify Framework.</a> </p>"
 }

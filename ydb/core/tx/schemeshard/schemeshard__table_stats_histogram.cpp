@@ -415,6 +415,16 @@ bool TTxPartitionHistogram::Execute(TTransactionContext& txc, const TActorContex
 
     TSerializedCellVec splitKey = getSplitBoundary(rec.GetTableStats(), GetKeyColumnTypes(*tableInfo));
 
+    const auto specialType = tableInfo->TableDescription.GetPartitionConfig().GetSpecialTableType();
+    if (specialType == NKikimrSchemeOp::ESpecialTableType::ESpecialTableTypeFulltextCompact ||
+        specialType == NKikimrSchemeOp::ESpecialTableType::ESpecialTableTypeFulltextCompactRelevance) {
+        const auto prefixSize = tableInfo->KeyColumnIds.size() - NTableIndex::NFulltext::CompactTableKeySize;
+        if (splitKey.GetCells().size() > prefixSize + 1) {
+            // For now, only allow to split compact fulltext index table by prefix + __ydb_token
+            splitKey = TSerializedCellVec(splitKey.GetCells().Slice(0, prefixSize + 1));
+        }
+    }
+
     if (splitKey.GetBuffer().empty()) {
         LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
             "TTxPartitionHistogram Failed to find proper split key for"

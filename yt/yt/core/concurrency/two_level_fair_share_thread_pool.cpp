@@ -1,14 +1,13 @@
 #include "two_level_fair_share_thread_pool.h"
 #include "notify_manager.h"
 #include "private.h"
-#include "profiling_helpers.h"
+#include "helpers.h"
 #include "scheduler_thread.h"
 #include "thread_pool_detail.h"
 
 #include <yt/yt/core/actions/current_invoker.h>
 
 #include <yt/yt/core/misc/finally.h>
-#include <yt/yt/core/misc/hazard_ptr.h>
 #include <yt/yt/core/misc/heap.h>
 #include <yt/yt/core/misc/mpsc_stack.h>
 #include <yt/yt/core/misc/ring_queue.h>
@@ -341,13 +340,6 @@ public:
     { }
 
     ~TBucket();
-
-    void RunCallback(const TClosure& callback, TCpuInstant cpuInstant)
-    {
-        YT_LOG_TRACE("Executing callback (EnqueuedAt: %v)", cpuInstant);
-        TCurrentInvokerGuard currentInvokerGuard(this);
-        callback.Run();
-    }
 
     bool IsSerialized() const override
     {
@@ -705,8 +697,10 @@ public:
 
         TAction action;
         action.EnqueuedAt = cpuInstant;
-        // Callback keeps raw ptr to bucket to minimize bucket ref count.
-        action.Callback = BIND(&TBucket::RunCallback, Unretained(bucket), std::move(callback), cpuInstant);
+        // Store the callback as-is; the bucket is installed as the current invoker
+        // around execution (see DoOnExecute) instead of wrapping every callback in a
+        // freshly allocated closure. BucketHolder keeps the bucket alive meanwhile.
+        action.Callback = std::move(callback);
         action.BucketHolder = MakeStrong(bucket);
         action.EnqueuedThreadCookie = ThreadCookie();
 
@@ -759,7 +753,8 @@ public:
             }
 
             YT_VERIFY(fetchNext);
-            MaybeRunMaintenance(&threadState, GetCpuInstant(), /*flush*/ true);
+
+            // NB: Hazard pointer reclamation is driven by Wait (the parking primitive).
             Wait(cookie, isStopping);
         }
     }
@@ -829,7 +824,6 @@ private:
         int LastActionsInQueue;
         TDuration TimeFromStart;
         TDuration TimeFromEnqueue;
-        TCpuInstant LastMaintenanceInstant = {};
     };
 
     static_assert(sizeof(TThreadState) >= CacheLineSize);
@@ -1211,7 +1205,7 @@ private:
                 WaitTimeObservers_.Fire(waitTime);
             }
 
-            MaybeRunMaintenance(&threadState, action.StartedAt, /*flush*/ false);
+            ReclaimHazardPointersPeriodically(action.StartedAt, /*force*/ false);
 
             CumulativeSchedulingTimeCounter_.Add(CpuDurationToDuration(GetCpuInstant() - cpuInstant));
 
@@ -1230,6 +1224,7 @@ private:
                 SpinLockPause();
 
                 if (request.load(std::memory_order::acquire) == ERequest::None) {
+                    SetCurrentInvoker(threadState.Action.BucketHolder.Get());
                     return std::move(threadState.Action.Callback);
                 } else if (!MainLock_.IsLocked() && MainLock_.TryAcquire()) {
                     break;
@@ -1255,18 +1250,8 @@ private:
 
         NotifyAfterFetch(endInstant, newMinEnqueuedAt);
 
+        SetCurrentInvoker(threadState.Action.BucketHolder.Get());
         return std::move(threadState.Action.Callback);
-    }
-
-    static void MaybeRunMaintenance(TThreadState* threadState, TCpuInstant now, bool flush)
-    {
-        YT_ASSERT(threadState);
-
-        constexpr i64 MaintenancePeriod = 1'000'000'000;
-        if (flush || now > threadState->LastMaintenanceInstant + MaintenancePeriod) {
-            ReclaimHazardPointers(false);
-            threadState->LastMaintenanceInstant  = now;
-        }
     }
 };
 
@@ -1309,6 +1294,11 @@ protected:
 
     TClosure OnExecute() override
     {
+        // Reset the invoker installed for the previously executed callback
+        // (mirrors TSchedulerThread::EndExecute); DoOnExecute installs the bucket
+        // as the current invoker for the next callback.
+        SetCurrentInvoker(nullptr);
+
         bool fetchNext = !TSchedulerThread::IsStopping() || TSchedulerThread::GracefulStop_;
 
         return Queue_->OnExecute(Index_, fetchNext, [&] {

@@ -14,6 +14,7 @@
 #include <ydb/library/yql/dq/common/dq_common.h>
 #include <ydb/library/yql/providers/pq/common/pq_events_processor.h>
 #include <ydb/library/yql/providers/pq/proto/dq_io_state.pb.h>
+#include <ydb/library/yverify_stream/yverify_stream.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/federated_topic/federated_topic.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/credentials/credentials.h>
@@ -262,7 +263,7 @@ public:
             ContinuationToken = std::nullopt;
         }
 
-        while (HandleNewPQEvents()) { } // Write messages while new continuationTokens are arriving
+        while (HandleNewPQEvents()) {} // Write messages while new continuationTokens are arriving
 
         if (FreeSpace <= 0) {
             ShouldNotifyNewFreeSpace = true;
@@ -308,11 +309,15 @@ private:
     )
 
     void Handle(TEvPrivate::TEvPqEventsReady::TPtr&) {
+        SINK_LOG_T("New PQ write session events arrived");
+
         if (!Inited) {
             Init();
             Inited = true;
         }
-        while (HandleNewPQEvents()) { }
+
+        while (HandleNewPQEvents()) {}
+
         SubscribeOnNextEvent();
     }
 
@@ -381,6 +386,7 @@ private:
 
     void CreateSessionIfNotExists() {
         if (!WriteSession) {
+            SINK_LOG_T("Create new PQ write session");
             WriteSession = GetFederatedTopicClient().CreateWriteSession(GetWriteSessionSettings());
             SubscribeOnNextEvent();
         }
@@ -390,6 +396,8 @@ private:
         if (!WriteSession) {
             return;
         }
+
+        SINK_LOG_T("Subscribe on next event");
 
         NActors::TActorSystem* actorSystem = NActors::TActivationContext::ActorSystem();
         EventFuture = WriteSession->WaitEvent().Subscribe([actorSystem, selfId = SelfId()](const auto&){
@@ -403,6 +411,8 @@ private:
         }
 
         auto events = WriteSession->GetEvents();
+        SINK_LOG_T("Extracted #" << events.size() << " PQ write session events");
+
         for (auto& event : events) {
             auto issues = std::visit(TTopicEventProcessor{*this}, event);
             if (issues) {
@@ -417,6 +427,7 @@ private:
                 ShouldNotifyNewFreeSpace = false;
             }
         }
+
         CheckFinished();
         return !events.empty();
     }
@@ -442,6 +453,7 @@ private:
         if (EnableDeduplication) {
             seqNo = NextSeqNo;
         }
+        SINK_LOG_T("Write message into PQ session: " << Buffer.front());
         WriteSession->Write(std::move(token), Buffer.front(), seqNo);
         auto itemSize = GetItemSize(Buffer.front());
         WaitingAcks.emplace(itemSize, TInstant::Now(), NextSeqNo);
@@ -485,6 +497,7 @@ private:
                     Self.Metrics.AlreadyWritten->Inc();
                 }
 
+                Y_VALIDATE(!Self.WaitingAcks.empty(), "Got unexpected ack with seq no: " << it->SeqNo);
                 const auto& ackInfo = Self.WaitingAcks.front();
                 Self.Metrics.LastAckLatency->Set((TInstant::Now() - ackInfo.StartTime).MilliSeconds());
                 Self.Metrics.InFlyData->Dec();
@@ -509,6 +522,7 @@ private:
 
         std::optional<TIssues> operator()(NYdb::NTopic::TWriteSessionEvent::TReadyToAcceptEvent& ev) {
             //Y_ABORT_UNLESS(!Self.ContinuationToken);
+            LOG_T(Self.LogPrefix << "Received continuation token, buffer size: " << Self.Buffer.size());
 
             if (*Self.Metrics.FirstContinuationTokenMs == 0) {
                 Self.Metrics.FirstContinuationTokenMs->Set((TInstant::Now() - Self.StartTime).MilliSeconds());
@@ -528,6 +542,7 @@ private:
 
     void CheckFinished() {
         if (Finished && Buffer.empty() && WaitingAcks.empty()) {
+            SINK_LOG_T("Notify PQ sink finished");
             Callbacks->OnAsyncOutputFinished(OutputIndex);
         }
     }

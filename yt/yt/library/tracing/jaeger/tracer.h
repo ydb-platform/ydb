@@ -72,9 +72,9 @@ struct TJaegerTracerConfig
     std::optional<double> SubsamplingRate;
 
     // ServiceName is required by jaeger. When ServiceName is missing, tracer is disabled.
-    std::optional<TString> ServiceName;
+    std::optional<std::string> ServiceName;
 
-    THashMap<TString, TString> ProcessTags;
+    THashMap<std::string, std::string> ProcessTags;
 
     bool EnablePidTag;
 

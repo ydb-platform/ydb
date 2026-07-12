@@ -27,6 +27,10 @@ namespace NKikimr::NKqp {
 TExprNode::TPtr ConvertToPhysical(TOpRoot& root, TRBOContext& rboCtx) {
     TExprContext& ctx = rboCtx.ExprCtx;
 
+    if (rboCtx.NeedToLog()) {
+        rboCtx.TraceLog.stage("Physical AST generation");
+    }
+
     THashMap<ui32, TExprNode::TPtr> stages;
     THashMap<ui32, TVector<TExprNode::TPtr>> stageArgs;
     THashMap<ui32, TPositionHandle> stagePos;
@@ -131,6 +135,10 @@ TExprNode::TPtr ConvertToPhysical(TOpRoot& root, TRBOContext& rboCtx) {
             .Done().Ptr();
             // clang-format on
 
+            if (limit->GetOutputIUs() != limit->GetInput()->GetOutputIUs()) {
+                currentStageBody = NPhysicalConvertionUtils::ExtractMembers(currentStageBody, ctx, limit->GetOutputIUs());
+            }
+
             if (!limit->IsSingleConsumer()) {
                 currentStageBody = NPhysicalConvertionUtils::BuildMultiConsumerHandler(currentStageBody, limit->GetNumOfConsumers(), ctx, op->Pos);
             }
@@ -173,13 +181,39 @@ TExprNode::TPtr ConvertToPhysical(TOpRoot& root, TRBOContext& rboCtx) {
             YQL_CLOG(TRACE, CoreDq) << "Converted Join " << opStageId;
         } else if (op->Kind == EOperator::UnionAll) {
             auto unionAll = CastOperator<TOpUnionAll>(op);
+            const auto unionOutput = unionAll->GetOutputIUs();
 
             auto [leftArg, leftInput] = graph.GenerateStageInput(stageInputCounter, op->Pos, ctx);
             stageArgs[opStageId].push_back(leftArg);
 
             auto [rightArg, rightInput] = graph.GenerateStageInput(stageInputCounter, op->Pos, ctx);
             stageArgs[opStageId].push_back(rightArg);
-            TVector<TExprNode::TPtr> extendArgs{leftArg, rightArg};
+
+            auto projectInput = [&](TExprNode::TPtr input, const TIntrusivePtr<IOperator>& inputOp) {
+                const auto inputOutput = inputOp->GetOutputIUs();
+                THashSet<TInfoUnit, TInfoUnit::THashFunction> inputOutputSet;
+                inputOutputSet.insert(inputOutput.begin(), inputOutput.end());
+
+                TVector<std::pair<TString, TString>> renames;
+                renames.reserve(unionAll->Columns.size());
+                bool identity = inputOutput.size() == unionOutput.size();
+                for (size_t i = 0; i < unionAll->Columns.size(); ++i) {
+                    const auto& column = unionAll->Columns[i];
+                    Y_ENSURE(inputOutputSet.contains(column), "UnionAll column " << column.GetFullName() << " is not visible");
+                    renames.emplace_back(column.GetFullName(), column.GetFullName());
+                    identity = identity && inputOutput[i] == column;
+                }
+
+                if (identity) {
+                    return input;
+                }
+                return NPhysicalConvertionUtils::BuildRenameMap(input, renames, ctx);
+            };
+
+            TVector<TExprNode::TPtr> extendArgs{
+                projectInput(leftArg, unionAll->GetLeftInput()),
+                projectInput(rightArg, unionAll->GetRightInput())
+            };
 
             if (unionAll->Ordered) {
                 // clang-format off

@@ -2,6 +2,7 @@
 
 #include "kqp_rbo.h"
 
+#include <ydb/core/kqp/opt/cbo/solver/kqp_opt_predicate_selectivity.h>
 #include <ydb/core/kqp/opt/kqp_column_statistics_utils.h>
 #include <ydb/library/actors/core/actorsystem_fwd.h>
 
@@ -28,6 +29,7 @@ struct TKqlTransformContext;
 class IOperator;
 class TExpression;
 class TOpRoot;
+class TOpJoin;
 struct TPhysicalOpProps;
 
 namespace NOpt {
@@ -47,8 +49,9 @@ public:
 
 private:
     NYql::TTypeAnnotationContext& TypeCtx;
-    const NOpt::TKqpOptimizeContext& KqpCtx;
+    NOpt::TKqpOptimizeContext& KqpCtx;
     ui64 UniqueSourceIdCounter = 0;
+    bool RboTraceRewriteSelectStarted = false;
 };
 
 TAutoPtr<NYql::IGraphTransformer> CreateKqpRewriteSelectTransformer(const TIntrusivePtr<NOpt::TKqpOptimizeContext>& kqpCtx,
@@ -74,6 +77,7 @@ private:
     void CollectTablesAndColumnsNames(NYql::TExprContext& ctx);
     void CollectTablesAndColumnsNames(const TIntrusivePtr<IOperator>& op);
     void CollectTablesAndColumnsNames(const TExpression& expr, const TPhysicalOpProps& props);
+    void CollectJoinKeysColumns(const TIntrusivePtr<TOpJoin>& join, const TPhysicalOpProps& props);
     bool IsSuitableToCollectStatistics(const TIntrusivePtr<IOperator>& op) const;
     void ApplyColumnStatistics();
     void InitializeRBOOptimizationStages();
@@ -92,7 +96,7 @@ private:
     TString Cluster;
     TString Database;
     NActors::TActorSystem* ActorSystem;
-    std::optional<TColumnStatisticsResponse> ColumnStatisticsResponse;
+    std::shared_ptr<TColumnStatisticsSharedState> SharedState;
     NThreading::TFuture<void> ColumnStatisticsReadiness;
     THashMap<TString, THashSet<TString>> CMColumnsByTableName;
     THashMap<TString, THashSet<TString>> HistColumnsByTableName;
@@ -122,7 +126,7 @@ private:
 
 TAutoPtr<NYql::IGraphTransformer> CreateKqpRBOCleanupTransformer(NYql::TTypeAnnotationContext& typeCtx);
 
-NYql::TExprNode::TPtr RewriteSelect(const NYql::TExprNode::TPtr& node, NYql::TExprContext& ctx, const NYql::TTypeAnnotationContext& typeCtx, const NOpt::TKqpOptimizeContext& kqpCtx,
-                              ui64& uniqueSourceIdCounter, bool pgSyntax = false);
+TExprNode::TPtr RewriteSelect(const TExprNode::TPtr& node, TExprContext& ctx, const TTypeAnnotationContext& typeCtx, const TKqpOptimizeContext& kqpCtx,
+                              ui64& uniqueSourceIdCounter, THashMap<const TExprNode*, TExprNode::TPtr>& translated, bool generateRoot = false);
 
 } // namespace NKikimr::NKqp

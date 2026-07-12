@@ -28,7 +28,7 @@ CREATE RESOURCE POOL olap WITH (
 )
 ```
 
-Ознакомиться с полным перечнем параметров пулов ресурсов можно в справке по [{#T}](../yql/reference/syntax/create-resource-pool.md#parameters). Часть параметров является глобальными для всей базы данных (например, `CONCURRENT_QUERY_LIMIT`, `QUEUE_SIZE`, `DATABASE_LOAD_CPU_THRESHOLD`), а другие — применяются только к одному вычислительному узлу (например, `QUERY_CPU_LIMIT_PERCENT_PER_NODE`, `TOTAL_CPU_LIMIT_PERCENT_PER_NODE`, `QUERY_MEMORY_LIMIT_PERCENT_PER_NODE`). Между всеми пулами может разделяться CPU в случае переподписки на одном вычислительном узле с помощью `RESOURCES_WEIGHT`.
+Ознакомиться с полным перечнем параметров пулов ресурсов можно в справке по [{#T}](../yql/reference/syntax/create-resource-pool.md#parameters). Часть параметров является глобальными для всей базы данных (например, `CONCURRENT_QUERY_LIMIT`, `QUEUE_SIZE`, `DATABASE_LOAD_CPU_THRESHOLD`), а другие — применяются только к одному вычислительному узлу (например, `QUERY_CPU_LIMIT_PERCENT_PER_NODE`, `TOTAL_CPU_LIMIT_PERCENT_PER_NODE`, `TOTAL_MEMORY_LIMIT_PERCENT_PER_NODE`). Между всеми пулами может разделяться CPU в случае переподписки на одном вычислительном узле с помощью `RESOURCES_WEIGHT`.
 
 ![resource_pools](../_assets/resource_pool.png)
 
@@ -95,7 +95,7 @@ CREATE RESOURCE POOL default WITH (
     QUEUE_SIZE=-1,
     DATABASE_LOAD_CPU_THRESHOLD=-1,
     RESOURCES_WEIGHT=-1,
-    QUERY_MEMORY_LIMIT_PERCENT_PER_NODE=-1,
+    TOTAL_MEMORY_LIMIT_PERCENT_PER_NODE=-1,
     QUERY_CPU_LIMIT_PERCENT_PER_NODE=-1,
     TOTAL_CPU_LIMIT_PERCENT_PER_NODE=-1
 )

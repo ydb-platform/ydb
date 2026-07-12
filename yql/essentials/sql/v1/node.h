@@ -204,6 +204,7 @@ public:
     virtual bool SetYqlSelectWindowName(TContext& ctx, TString name);
     void UseAsInner();
     void DisableSort();
+    void PreserveSort();
     virtual bool UsedSubquery() const;
     virtual bool IsSelect() const;
     virtual bool HasSelectResult() const;
@@ -301,6 +302,7 @@ protected:
     mutable TNodeState State_;
     bool AsInner_ = false;
     bool DisableSort_ = false;
+    bool PreserveSort_ = false;
 };
 using TNodePtr = INode::TPtr;
 
@@ -741,7 +743,7 @@ enum class ESampleMode {
 class TDeferredAtom {
 public:
     TDeferredAtom();
-    TDeferredAtom(TPosition pos, const TString& str);
+    TDeferredAtom(TPosition pos, const TString& str, ui32 flags = NYql::TAstNodeFlags::ArbitraryContent);
     TDeferredAtom(TNodePtr node, TContext& ctx);
     const TString* GetLiteral() const;
     bool GetLiteral(TString& value, TContext& ctx) const;
@@ -1107,7 +1109,13 @@ private:
 protected:
     IAggregation(TPosition pos, TString name, TString func, EAggregateMode mode);
     TAstNode* Translate(TContext& ctx) const override;
+
+    TStringBuf GetGroupByPhase(ISource* src) const;
+    bool IsOverStatePhase(ISource* src) const;
+    bool IsManyPhase(ISource* src) const;
+    bool IsFinalizingPhase(ISource* src) const;
     TNodePtr WrapIfOverState(const TNodePtr& input, bool overState, bool many, TContext& ctx) const;
+
     TNodePtr GetExtractor(bool many, TContext& ctx) const;
 
     // `YqlSelect` aggregation needs a lambda without a `row` parameter
@@ -1229,7 +1237,7 @@ struct TStringContent {
     TString Content;
     NYql::NUdf::EDataSlot Type = NYql::NUdf::EDataSlot::String;
     TMaybe<TString> PgType;
-    ui32 Flags = NYql::TNodeFlags::Default;
+    ui32 Flags = NYql::TAstNodeFlags::Default;
 };
 
 TMaybe<TStringContent> StringContent(TContext& ctx, TPosition pos, const TString& input);
@@ -1335,6 +1343,17 @@ struct TIndexDescription {
     TIndexSettings IndexSettings;
 };
 
+struct TStatisticsDescription {
+    explicit TStatisticsDescription(TIdentifier name)
+        : Name(std::move(name))
+    {
+    }
+
+    TIdentifier Name;
+    TVector<TIdentifier> Columns;
+    TVector<TIdentifier> Types; // raw parsed type identifiers; validated later
+};
+
 struct TChangefeedSettings {
     struct TLocalSinkSettings {
         // no special settings
@@ -1374,6 +1393,7 @@ struct TCreateTableParameters {
     TVector<TIdentifier> PartitionByColumns;
     TVector<std::pair<TIdentifier, bool>> OrderByColumns;
     TVector<TIndexDescription> Indexes;
+    TVector<TStatisticsDescription> Statistics;
     TVector<TFamilyEntry> ColumnFamilies;
     TVector<TChangefeedDescription> Changefeeds;
     TTableSettings TableSettings;
@@ -1410,6 +1430,8 @@ struct TAlterTableParameters {
     TVector<TIndexDescription> AddIndexes;
     TVector<TIndexDescription> AlterIndexes;
     TVector<TIdentifier> DropIndexes;
+    TVector<TStatisticsDescription> AddStatistics;
+    TVector<TIdentifier> DropStatistics;
     TMaybe<std::pair<TIdentifier, TIdentifier>> RenameIndexTo;
     TMaybe<TIdentifier> RenameTo;
     TVector<TChangefeedDescription> AddChangefeeds;
@@ -1428,6 +1450,8 @@ struct TAlterTableParameters {
                AddIndexes.empty() &&
                AlterIndexes.empty() &&
                DropIndexes.empty() &&
+               AddStatistics.empty() &&
+               DropStatistics.empty() &&
                !RenameIndexTo.Defined() &&
                !RenameTo.Defined() &&
                AddChangefeeds.empty() &&
@@ -1494,6 +1518,8 @@ struct TTopicConsumerSettings {
     TNodePtr MaxProcessingAttempts;
     TNodePtr DeadLetterPolicy;
     TNodePtr DeadLetterQueue;
+    TNodePtr ReceiveMessageWaitTime;
+    TNodePtr ReceiveMessageDelay;
 };
 
 struct TTopicConsumerDescription {
@@ -1609,9 +1635,9 @@ TString TypeByAlias(const TString& alias, bool normalize = true);
 
 TNodePtr BuildList(TPosition pos, TVector<TNodePtr> nodes = {});
 TNodePtr BuildQuote(TPosition pos, TNodePtr expr);
-TNodePtr BuildAtom(TPosition pos, const TString& content, ui32 flags = NYql::TNodeFlags::ArbitraryContent,
+TNodePtr BuildAtom(TPosition pos, const TString& content, ui32 flags = NYql::TAstNodeFlags::ArbitraryContent,
                    bool isOptionalArg = false);
-TNodePtr BuildQuotedAtom(TPosition pos, const TString& content, ui32 flags = NYql::TNodeFlags::ArbitraryContent);
+TNodePtr BuildQuotedAtom(TPosition pos, const TString& content, ui32 flags = NYql::TAstNodeFlags::ArbitraryContent);
 
 TNodePtr BuildLiteralNull(TPosition pos);
 TNodePtr BuildLiteralVoid(TPosition pos);
@@ -1735,8 +1761,8 @@ TNodePtr BuildAlterAsyncReplication(TPosition pos, const TString& id,
                                     std::map<TString, TNodePtr>&& settings,
                                     const TObjectOperatorContext& context);
 TNodePtr BuildDropAsyncReplication(TPosition pos, const TString& id, bool cascade, const TObjectOperatorContext& context);
-TNodePtr BuildCreateTransfer(TPosition pos, const TString& id, const TString&& source, const TString&& target,
-                             const TString&& transformLambda,
+TNodePtr BuildCreateTransfer(TPosition pos, const TString& id, const TString& source, const TString& target,
+                             const TString& transformLambda,
                              std::map<TString, TNodePtr>&& settings,
                              const TObjectOperatorContext& context);
 TNodePtr BuildAlterTransfer(TPosition pos, const TString& id, std::optional<TString>&& transformLambda,
@@ -1744,6 +1770,7 @@ TNodePtr BuildAlterTransfer(TPosition pos, const TString& id, std::optional<TStr
                             const TObjectOperatorContext& context);
 TNodePtr BuildDropTransfer(TPosition pos, const TString& id, bool cascade, const TObjectOperatorContext& context);
 TNodePtr BuildWriteResult(TPosition pos, const TString& label, TNodePtr settings);
+TNodePtr BuildMaterialize(TPosition pos, TSourcePtr source, const TString& serviceId, TNodePtr cluster, TTableHints hints, TString alias, TScopedStatePtr scoped);
 TNodePtr BuildCommitClusters(TPosition pos);
 TNodePtr BuildRollbackClusters(TPosition pos);
 TNodePtr BuildQuery(TPosition pos, const TVector<TNodePtr>& blocks, bool topLevel, TScopedStatePtr scoped, bool useSeq);
@@ -1823,4 +1850,9 @@ void EnumerateBuiltins(const std::function<void(std::string_view name, std::stri
 bool Parseui32(TNodePtr from, ui32& to);
 TNodePtr GroundWithExpr(const TNodePtr& ground, const TNodePtr& expr);
 const TString* DeriveCommonSourceName(const TVector<TNodePtr>& nodes);
+
+// Strips system columns (the built-in "_yql_" prefix via RemoveSystemMembers) and, additionally,
+// any columns matching the provided extra system column prefixes (e.g. provider-specific
+// "__ydb_"-prefixed topic metadata). Keeps explicitly referenced columns intact.
+TNodePtr RemoveSystemColumns(TNodePtr input, const TVector<TString>& extraSystemColumnPrefixes);
 } // namespace NSQLTranslationV1

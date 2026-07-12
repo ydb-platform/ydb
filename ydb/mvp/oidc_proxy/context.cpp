@@ -24,13 +24,13 @@ TContext::TContext(const NHttp::THttpIncomingRequestPtr& request)
     , RequestedAddress(GetRequestedUrl(request, NavigationRequest))
 {}
 
-TString TContext::GetState(const TString& key) const {
+TString TContext::GetState(const TString& key, bool includeRequestedAddress) const {
     TState payload;
     payload.AntiForgeryToken = State;
-    payload.ExpirationTime = TInstant::Now() + TOpenIdConnectSettings::DEFAULT_AUTH_STATE_LIFETIME;
-    if (!NavigationRequest) {
-        payload.CookieSuffix = TString(TOpenIdConnectSettings::YDB_OIDC_COOKIE_BACKGROUND_SUFFIX);
+    if (includeRequestedAddress) {
+        payload.RequestedAddress = RequestedAddress;
     }
+    payload.ExpirationTime = TInstant::Now() + TOpenIdConnectSettings::DEFAULT_AUTH_STATE_LIFETIME;
     return EncodeState(payload, key);
 }
 
@@ -43,11 +43,18 @@ TString TContext::GetRequestedAddress() const {
 }
 
 TString TContext::CreateYdbOidcCookie(const TString& secret) const {
-    return TStringBuilder() << CreateNameYdbOidcCookie(NavigationRequest ? TStringBuf() : TOpenIdConnectSettings::YDB_OIDC_COOKIE_BACKGROUND_SUFFIX) << "="
-                            << GenerateCookie(secret) << ";"
-                            " Path=" << GetAuthCallbackUrl() << ";"
-                            " Max-Age=" << TOpenIdConnectSettings::DEFAULT_AUTH_STATE_LIFETIME.Seconds() << ";"
-                            " SameSite=None; Secure";
+    const TString cookieValue = GenerateCookie(secret);
+    if (cookieValue.size() > TOpenIdConnectSettings::MAX_AUTH_FLOW_COOKIE_VALUE_SIZE) {
+        return {};
+    }
+
+    return TStringBuilder()
+        << TOpenIdConnectSettings::YDB_OIDC_COOKIE << "=" << cookieValue << "; "
+        << "Path=" << GetAuthCallbackUrl() << "; "
+        << "Max-Age=" << TOpenIdConnectSettings::DEFAULT_AUTH_STATE_LIFETIME.Seconds() << "; "
+        << "Secure; "
+        << "HttpOnly; "
+        << "SameSite=None";
 }
 
 TString TContext::GenerateCookie(const TString& key) const {

@@ -107,6 +107,7 @@ namespace NKikimr {
             const TEntryPointDbgInfo LastEntryPointDbgInfo;
             const TSyncLogHeader Header;
             const std::optional<TPhantomFlagStorageData> PhantomFlagStorageData;
+            const std::unordered_map<ui32, ui32> ChunksToExtract;
 
         private:
             TSyncLogSnapshot(TDiskRecLogSnapshotPtr diskSnapPtr,
@@ -115,7 +116,8 @@ namespace NKikimr {
                              ui32 appendBlockSize,
                              const TEntryPointDbgInfo &lastEntryPointDbgInfo,
                              const TSyncLogHeader &header,
-                             const std::optional<TPhantomFlagStorageData>& phantomFlagStorageData);
+                             const std::optional<TPhantomFlagStorageData>& phantomFlagStorageData,
+                             const std::unordered_map<ui32, ui32>& chunksToExtract);
 
             friend class TSyncLog;
         };
@@ -203,8 +205,9 @@ namespace NKikimr {
                 std::function<void(const TString&)> logger);
             // trim log by removing chunks over some quota, i.e. we got
             // too many chunks allocated for SyncLog and want to remove numChunksToDel;
-            // the function returns chunks to delete (i.e. free)
-            TVector<ui32> TrimLogByRemovingChunks(ui32 numChunksToDel, std::shared_ptr<IActorNotify> notifier);
+            // the function returns the indexes and the number of used pages of
+            // chunks to delete (i.e. free)
+            TVector<TDeletedChunk> TrimLogByRemovingChunks(ui32 numChunksToDel, std::shared_ptr<IActorNotify> notifier);
 
 
             ////////////////////////////////////////////////////////////////////////
@@ -248,6 +251,9 @@ namespace NKikimr {
             void UpdatePhantomFlagStorageData(std::optional<TPhantomFlagStorageData>&& data);
             TPhantomFlagStorageData GetPhantomFlagStorageData() const;
 
+            std::unordered_map<ui32, ui32> GetChunksToExtract() const;
+            void UpdateChunksToExtract(const std::unordered_map<ui32, ui32>& chunksToExtract);
+
         private:
             // part of the log on disk
             TDiskRecLog DiskRecLog;
@@ -259,6 +265,8 @@ namespace NKikimr {
             // info about last serialized data written to the log as an entry point
             TEntryPointDbgInfo LastEntryPointDbgInfo;
             std::optional<TPhantomFlagStorageData> PhantomFlagStorageData;
+            // chunkIdx -> UsedPagesNum
+            std::unordered_map<ui32, ui32> ChunksToExtract;
 
             TSyncLog(const TSyncLogHeader &header,
                      TDiskRecLog &&diskRecLog,

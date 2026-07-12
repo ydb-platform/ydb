@@ -227,6 +227,7 @@ namespace {
             entry.Columns.clear();
             entry.NotNullColumns.clear();
             entry.Indexes.clear();
+            entry.MultiColumnStatistics.clear();
             entry.Sequences.clear();
             entry.CdcStreams.clear();
             entry.RTMRVolumeInfo.Drop();
@@ -756,6 +757,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
             Columns.clear();
             KeyColumnTypes.clear();
             NotNullColumns.clear();
+            SetNotNullInProgressColumns.clear();
             Indexes.clear();
             Sequences.clear();
             CdcStreams.clear();
@@ -784,6 +786,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
             SysViewInfo.Drop();
             SecretInfo.Drop();
             StreamingQueryInfo.Drop();
+            TestShardSetInfo.Drop();
         }
 
         void FillTableInfo(const NKikimrSchemeOp::TPathDescription& pathDesc) {
@@ -798,6 +801,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
                 column.PType = typeInfoMod.TypeInfo;
                 column.PTypeMod = typeInfoMod.TypeMod;
                 column.IsBuildInProgress = columnDesc.GetIsBuildInProgress();
+                column.SetNotNullInProgress = columnDesc.GetSetNotNullInProgress();
 
                 if (columnDesc.HasDefaultFromSequence()) {
                     column.SetDefaultFromSequence();
@@ -810,6 +814,11 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
                 if (columnDesc.GetNotNull()) {
                     column.IsNotNullColumn = true;
                     NotNullColumns.insert(columnDesc.GetName());
+                }
+
+                if (columnDesc.GetSetNotNullInProgress()) {
+                    column.SetNotNullInProgress = true;
+                    SetNotNullInProgressColumns.insert(columnDesc.GetName());
                 }
             }
 
@@ -824,6 +833,11 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
             Indexes.reserve(tableDesc.TableIndexesSize());
             for (const auto& index : tableDesc.GetTableIndexes()) {
                 Indexes.push_back(index);
+            }
+
+            MultiColumnStatistics.reserve(tableDesc.MultiColumnStatisticsSize());
+            for (const auto& statistics : tableDesc.GetMultiColumnStatistics()) {
+                MultiColumnStatistics.push_back(statistics);
             }
 
             Sequences.reserve(tableDesc.SequencesSize());
@@ -891,6 +905,11 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
                 Y_ABORT_UNLESS(column != nullptr);
                 column->KeyOrder = i;
                 KeyColumnTypes[i] = column->PType;
+            }
+
+            MultiColumnStatistics.reserve(desc.MultiColumnStatisticsSize());
+            for (const auto& statistics : desc.GetMultiColumnStatistics()) {
+                MultiColumnStatistics.push_back(statistics);
             }
 
             if (pathDesc.HasDomainDescription()) {
@@ -1329,6 +1348,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
             DESCRIPTION_PART(SysViewInfo);
             DESCRIPTION_PART(SecretInfo);
             DESCRIPTION_PART(StreamingQueryInfo);
+            DESCRIPTION_PART(TestShardSetInfo);
 
             #undef DESCRIPTION_PART
 
@@ -1687,6 +1707,10 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
                 Kind = TNavigate::KindStreamingQuery;
                 FillInfo(Kind, StreamingQueryInfo, std::move(*pathDesc.MutableStreamingQueryDescription()));
                 break;
+            case NKikimrSchemeOp::EPathTypeTestShardSet:
+                Kind = TNavigate::KindTestShardSet;
+                FillInfo(Kind, TestShardSetInfo, std::move(*pathDesc.MutableTestShardSetDescription()));
+                break;
             case NKikimrSchemeOp::EPathTypeInvalid:
                 Y_DEBUG_ABORT("Invalid path type");
                 break;
@@ -1774,6 +1798,9 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
                         break;
                     case NKikimrSchemeOp::EPathTypeStreamingQuery:
                         ListNodeEntry->Children.emplace_back(name, pathId, TNavigate::KindStreamingQuery);
+                        break;
+                    case NKikimrSchemeOp::EPathTypeTestShardSet:
+                        ListNodeEntry->Children.emplace_back(name, pathId, TNavigate::KindTestShardSet);
                         break;
                     case NKikimrSchemeOp::EPathTypeTableIndex:
                     case NKikimrSchemeOp::EPathTypeInvalid:
@@ -1990,7 +2017,9 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
             entry.Self = Self;
             entry.Columns = Columns;
             entry.NotNullColumns = NotNullColumns;
+            entry.SetNotNullInProgressColumns = SetNotNullInProgressColumns;
             entry.Indexes = Indexes;
+            entry.MultiColumnStatistics = MultiColumnStatistics;
             entry.CdcStreams = CdcStreams;
             entry.Sequences = Sequences;
             entry.DomainDescription = DomainDescription;
@@ -2015,6 +2044,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
             entry.SecretInfo = SecretInfo;
             entry.TableKind = TableKind;
             entry.StreamingQueryInfo = StreamingQueryInfo;
+            entry.TestShardSetInfo = TestShardSetInfo;
         }
 
         bool CheckColumns(TResolveContext* context, TResolve::TEntry& entry,
@@ -2269,7 +2299,9 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
         THashMap<ui32, TSysTables::TTableColumnInfo> Columns;
         TVector<NScheme::TTypeInfo> KeyColumnTypes;
         THashSet<TString> NotNullColumns;
+        THashSet<TString> SetNotNullInProgressColumns;
         TVector<NKikimrSchemeOp::TIndexDescription> Indexes;
+        TVector<NKikimrSchemeOp::TMultiColumnStatisticsDescription> MultiColumnStatistics;
         TVector<NKikimrSchemeOp::TCdcStreamDescription> CdcStreams;
         TVector<NKikimrSchemeOp::TSequenceDescription> Sequences;
         std::shared_ptr<const TPartitioning> Partitioning;
@@ -2331,6 +2363,9 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
 
         // StreamingQuery specific
         TIntrusivePtr<TNavigate::TStreamingQueryInfo> StreamingQueryInfo;
+
+        // TestShardSet specific
+        TIntrusivePtr<TNavigate::TTestShardSetInfo> TestShardSetInfo;
 
     }; // TCacheItem
 

@@ -8,9 +8,11 @@
 #include <yql/essentials/public/udf/arrow/block_item_comparator.h>
 #include <yql/essentials/public/udf/arrow/block_item_hasher.h>
 #include <yql/essentials/public/udf/arrow/dispatch_traits.h>
+#include <yql/essentials/public/udf/arrow/dense_union.h>
 
 #include <library/cpp/containers/stack_vector/stack_vec.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node_impl.h>
+#include <yql/essentials/minikql/arrow/arrow_util.h>
 #include <yql/essentials/minikql/mkql_runtime_version.h>
 #include <yql/essentials/minikql/mkql_node_printer.h>
 #include <yql/essentials/parser/pg_catalog/catalog.h>
@@ -1555,14 +1557,16 @@ bool ConvertArrowTypeImpl(NUdf::EDataSlot slot, std::shared_ptr<arrow::DataType>
             return true;
         }
         case NUdf::EDataSlot::Uuid: {
-            return false;
+            type = arrow::fixed_size_binary(UuidBinarySize);
+            return true;
         }
         case NUdf::EDataSlot::Decimal: {
             type = arrow::fixed_size_binary(sizeof(NYql::NUdf::TUnboxedValuePod));
             return true;
         }
         case NUdf::EDataSlot::DyNumber: {
-            return false;
+            type = arrow::binary();
+            return true;
         }
     }
 }
@@ -1645,6 +1649,36 @@ bool ConvertArrowTypeImpl(TType* itemType, std::shared_ptr<arrow::DataType>& typ
         return true;
     }
 
+    if (unpacked->IsVariant()) {
+        auto variantType = AS_TYPE(TVariantType, unpacked);
+        const ui32 alternativesCount = variantType->GetAlternativesCount();
+        if (alternativesCount > NYql::NUdf::DenseUnionMaxAlternativesCount) {
+            if (onFail) {
+                onFail(unpacked);
+            }
+            return false;
+        }
+        auto innerType = variantType->GetUnderlyingType();
+        const bool isStruct = innerType->IsStruct();
+        auto* asStruct = isStruct ? AS_TYPE(TStructType, innerType) : nullptr;
+        auto* asTuple = isStruct ? nullptr : AS_TYPE(TTupleType, innerType);
+        std::vector<std::shared_ptr<arrow::Field>> fields;
+        fields.reserve(alternativesCount);
+        for (ui32 i = 0; i < alternativesCount; ++i) {
+            auto* altType = SkipTaggedType(isStruct ? asStruct->GetMemberType(i) : asTuple->GetElementType(i));
+            std::shared_ptr<arrow::DataType> childType;
+            if (!ConvertArrowTypeImpl(altType, childType, onFail, output)) {
+                return false;
+            }
+            TString fieldName = isStruct
+                                    ? TString(asStruct->GetMemberName(i))
+                                    : "field_" + ToString(i);
+            fields.emplace_back(std::make_shared<arrow::Field>(fieldName, childType, altType->IsOptional()));
+        }
+        type = arrow::dense_union(fields);
+        return true;
+    }
+
     if (unpacked->IsPg()) {
         auto pgType = AS_TYPE(TPgType, unpacked);
         const auto& desc = NYql::NPg::LookupType(pgType->GetTypeId());
@@ -1694,19 +1728,19 @@ bool ConvertArrowTypeImpl(TType* itemType, std::shared_ptr<arrow::DataType>& typ
 } // namespace
 
 bool ConvertArrowType(TType* itemType, std::shared_ptr<arrow::DataType>& type, const TArrowConvertFailedCallback& onFail) {
-    return ConvertArrowTypeImpl(itemType, type, onFail, false);
+    return ConvertArrowTypeImpl(itemType, type, onFail, /*output=*/false);
 }
 
 bool ConvertArrowType(NUdf::EDataSlot slot, std::shared_ptr<arrow::DataType>& type) {
-    return ConvertArrowTypeImpl(slot, type, false);
+    return ConvertArrowTypeImpl(slot, type, /*output=*/false);
 }
 
 bool ConvertArrowOutputType(TType* itemType, std::shared_ptr<arrow::DataType>& type, const TArrowConvertFailedCallback& onFail) {
-    return ConvertArrowTypeImpl(itemType, type, onFail, true);
+    return ConvertArrowTypeImpl(itemType, type, onFail, /*output=*/true);
 }
 
 bool ConvertArrowOutputType(NUdf::EDataSlot slot, std::shared_ptr<arrow::DataType>& type) {
-    return ConvertArrowTypeImpl(slot, type, true);
+    return ConvertArrowTypeImpl(slot, type, /*output=*/true);
 }
 
 void TArrowType::Export(ArrowSchema* out) const {
@@ -2289,7 +2323,7 @@ void TTypeInfoHelper::DoCallable(const NMiniKQL::TCallableType* ct, NUdf::ITypeV
         TCallablePayload payload(ct->GetPayload());
         v->OnCallable(returnType, argsCount, argsTypes.data(), optionalArgsCount, &payload);
     } else {
-        v->OnCallable(returnType, argsCount, argsTypes.data(), optionalArgsCount, nullptr);
+        v->OnCallable(returnType, argsCount, argsTypes.data(), optionalArgsCount, /*payload=*/nullptr);
     }
 }
 
@@ -2579,6 +2613,25 @@ size_t CalcMaxBlockItemSize(const TType* type) {
         return result;
     }
 
+    if (type->IsVariant()) {
+        auto variantType = AS_TYPE(TVariantType, type);
+        auto innerType = variantType->GetUnderlyingType();
+        size_t result = 0;
+        if (innerType->IsStruct()) {
+            auto structType = AS_TYPE(TStructType, innerType);
+            for (ui32 i = 0; i < structType->GetMembersCount(); i++) {
+                result = std::max(result, CalcMaxBlockItemSize(structType->GetMemberType(i)));
+            }
+        } else {
+            MKQL_ENSURE(innerType->IsTuple(), "Variant underlying type must be Struct or Tuple");
+            auto tupleType = AS_TYPE(TTupleType, innerType);
+            for (ui32 i = 0; i < tupleType->GetElementsCount(); ++i) {
+                result = std::max(result, CalcMaxBlockItemSize(tupleType->GetElementType(i)));
+            }
+        }
+        return result;
+    }
+
     if (type->IsPg()) {
         auto pgType = AS_TYPE(TPgType, type);
         const auto& desc = NYql::NPg::LookupType(pgType->GetTypeId());
@@ -2650,14 +2703,13 @@ size_t CalcMaxBlockItemSize(const TType* type) {
             case NUdf::EDataSlot::TzTimestamp64:
                 return sizeof(typename NUdf::TDataType<NUdf::TTzTimestamp64>::TLayout) + sizeof(NYql::NUdf::TTimezoneId);
             case NUdf::EDataSlot::Uuid: {
-                MKQL_ENSURE(false, "Unsupported data slot: " << slot);
+                return UuidBinarySize;
             }
             case NUdf::EDataSlot::Decimal: {
                 return sizeof(NYql::NDecimal::TInt128);
             }
-            case NUdf::EDataSlot::DyNumber: {
-                MKQL_ENSURE(false, "Unsupported data slot: " << slot);
-            }
+            case NUdf::EDataSlot::DyNumber:
+                return sizeof(arrow::BinaryType::offset_type);
         }
     }
 
@@ -2668,6 +2720,7 @@ struct TComparatorTraits {
     using TResult = NUdf::IBlockItemComparator;
     template <bool Nullable>
     using TTuple = NUdf::TTupleBlockItemComparator<Nullable>;
+    using TVariant = NUdf::TVariantBlockItemComparator;
     template <typename T, bool Nullable>
     using TFixedSize = NUdf::TFixedSizeBlockItemComparator<T, Nullable>;
     template <typename TStringType, bool Nullable, NUdf::EDataSlot TOriginal = NUdf::EDataSlot::String>
@@ -2709,6 +2762,7 @@ struct THasherTraits {
     using TResult = NUdf::IBlockItemHasher;
     template <bool Nullable>
     using TTuple = NUdf::TTupleBlockItemHasher<Nullable>;
+    using TVariant = NUdf::TVariantBlockItemHasher;
     template <typename T, bool Nullable>
     using TFixedSize = NUdf::TFixedSizeBlockItemHasher<T, Nullable>;
     template <typename TStringType, bool Nullable, NUdf::EDataSlot TOriginal = NUdf::EDataSlot::String>
@@ -2746,23 +2800,23 @@ struct THasherTraits {
 };
 
 NUdf::IBlockItemComparator::TPtr TBlockTypeHelper::MakeComparator(NUdf::TType* type) const {
-    return NUdf::DispatchByArrowTraits<TComparatorTraits>(TTypeInfoHelper(), type, nullptr).release();
+    return NUdf::DispatchByArrowTraits<TComparatorTraits>(TTypeInfoHelper(), type, /*pgBuilder=*/nullptr).release();
 }
 
 NUdf::IBlockItemHasher::TPtr TBlockTypeHelper::MakeHasher(NUdf::TType* type) const {
-    return NUdf::DispatchByArrowTraits<THasherTraits>(TTypeInfoHelper(), type, nullptr).release();
+    return NUdf::DispatchByArrowTraits<THasherTraits>(TTypeInfoHelper(), type, /*pgBuilder=*/nullptr).release();
 }
 
 TType* TTypeBuilder::NewVoidType() const {
-    return TRuntimeNode(Env_.GetVoidLazy(), true).GetStaticType();
+    return TRuntimeNode(Env_.GetVoidLazy(), /*isImmediate=*/true).GetStaticType();
 }
 
 TType* TTypeBuilder::NewNullType() const {
     if (UseNullType_) {
-        return TRuntimeNode(Env_.GetNullLazy(), true).GetStaticType();
+        return TRuntimeNode(Env_.GetNullLazy(), /*isImmediate=*/true).GetStaticType();
     }
     TCallableBuilder callableBuilder(Env_, "Null", NewOptionalType(NewVoidType()));
-    return TRuntimeNode(callableBuilder.Build(), false).GetStaticType();
+    return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false).GetStaticType();
 }
 
 TType* TTypeBuilder::NewEmptyStructType() const {
@@ -2850,7 +2904,7 @@ TType* TTypeBuilder::NewArrayType(const TArrayRef<TType* const>& elements) const
 }
 
 TType* TTypeBuilder::NewEmptyMultiType() const {
-    return TMultiType::Create(0, nullptr, Env_);
+    return TMultiType::Create(0, /*elements=*/nullptr, Env_);
 }
 
 TType* TTypeBuilder::NewMultiType(const TArrayRef<TType* const>& elements) const {

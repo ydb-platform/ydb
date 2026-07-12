@@ -30,14 +30,4 @@ TStatementName TStatementName::FromAltDescription(const TString& alt) {
     return name;
 }
 
-TVector<TStatementName> StatementNames(const TRule_sql_query& rule) {
-    auto statements = Statements(rule);
-
-    TVector<TStatementName> names(Reserve(statements.size()));
-    for (const auto* statement : statements) {
-        names.emplace_back(TStatementName::From(*statement));
-    }
-    return names;
-}
-
 } // namespace NSQLTranslationV1

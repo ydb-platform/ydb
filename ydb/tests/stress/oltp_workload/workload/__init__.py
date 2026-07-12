@@ -5,6 +5,7 @@ import threading
 
 from ydb.tests.stress.oltp_workload.workload.type.fulltext_index import WorkloadFulltextIndex
 from ydb.tests.stress.oltp_workload.workload.type.vector_index import WorkloadVectorIndex
+from ydb.tests.stress.oltp_workload.workload.type.json_index import WorkloadJsonIndex
 from ydb.tests.stress.oltp_workload.workload.type.insert_delete_all_types import WorkloadInsertDeleteAllTypes
 from ydb.tests.stress.oltp_workload.workload.type.select_partition import WorkloadSelectPartition
 from ydb.tests.stress.oltp_workload.workload.type.secondary_index import WorkloadSecondaryIndex
@@ -40,6 +41,7 @@ class WorkloadRunner:
             WorkloadInsertDeleteAllTypes(self.client, self.name, stop),
             WorkloadFulltextIndex(self.client, self.name, stop),
             WorkloadVectorIndex(self.client, self.name, stop),
+            WorkloadJsonIndex(self.client, self.name, stop),
             WorkloadSelectPartition(self.client, self.name, stop),
             WorkloadSecondaryIndex(self.client, self.name, stop),
             WorkloadBloomFilterIndex(self.client, self.name, stop),

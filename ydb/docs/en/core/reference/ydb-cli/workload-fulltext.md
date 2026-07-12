@@ -13,7 +13,7 @@ The Markov model assumes that each next word depends on one or more previous wor
 
 Subcommands:
 
-```
+```text
 fulltext            YDB fulltext workload
 ├─ init               Initialize tables for the workload
 ├─ import             Load data and build a fulltext index
@@ -78,21 +78,25 @@ Example:
 ### Generating synthetic data {#load-generator}
 
 Generate random text data using a Markov chain model and load it into the table. You must first [build the model](#model) or download a pre-built one.
- - To load an already built model:
-     ```bash
-     wget https://storage.yandexcloud.net/ydb-public/markov_dict.tsv.gz
-     ```
- - To create your own model from Wikipedia data:
-     ```python
-     from datasets import load_dataset
 
-     ds = load_dataset(
-        "rumbleFTW/wikipedia-20220301-en-raw",
-        split="train[:1000000]",
-        streaming=False,
-        )
-     ds.to_csv('wikipedia_sample.csv.gz', compression='gzip', index=False)
-     ```
+- To load an already built model:
+
+    ```bash
+    wget https://storage.yandexcloud.net/ydb-public/markov_dict.tsv.gz
+    ```
+
+- To create your own model from Wikipedia data:
+
+    ```python
+    from datasets import load_dataset
+
+    ds = load_dataset(
+       "rumbleFTW/wikipedia-20220301-en-raw",
+       split="train[:1000000]",
+       streaming=False,
+       )
+    ds.to_csv('wikipedia_sample.csv.gz', compression='gzip', index=False)
+    ```
 
 ```bash
 {{ ydb-cli }} workload fulltext import generator
@@ -188,11 +192,15 @@ Drop tables created for load testing:
 ### Example with a generated dataset
 
 1. Download or train Markov chain model:
+
    - Download the model from S3:
+
      ```bash
      wget https://storage.yandexcloud.net/ydb-public/markov_dict.tsv.gz
      ```
+
    - Train the model from Wikipedia dataset:
+
      ```python
      from datasets import load_dataset
 
@@ -225,8 +233,10 @@ Drop tables created for load testing:
     ```bash
     {{ ydb-cli }} workload fulltext run select --model markov_dict.tsv.gz
     ```
+
     Output example:
-    ```
+
+    ```text
     Window      Txs Txs/Sec Retries Errors  p50(ms) p95(ms) p99(ms) pMax(ms)
     1            23 23      0       0       242     407     453     453
     2            18 18      0       1       611     807     915     915
@@ -259,8 +269,10 @@ Drop tables created for load testing:
     ```bash
     {{ ydb-cli }} workload fulltext run upsert --model markov_dict.tsv.gz
     ```
+
     Output example:
-    ```
+
+    ```text
     Window      Txs Txs/Sec Retries Errors  p50(ms) p95(ms) p99(ms) pMax(ms)
     1           255 255     0       0       31      34      117     123
     2           279 279     0       0       32      37      42      45
@@ -276,6 +288,7 @@ Drop tables created for load testing:
     Total       Txs Txs/Sec Retries Errors  p50(ms) p95(ms) p99(ms) pMax(ms)
     10         2781 278.1   0       0       32      38      41      123
     ```
+
 6. Clean up:
 
     ```bash
@@ -308,8 +321,10 @@ Drop tables created for load testing:
     ```bash
     {{ ydb-cli }} workload fulltext run select --quality
     ```
+
     Output example:
-    ```
+
+    ```text
     Search quality measurement...
     Search quality measurement completed for 100 queries in 1 seconds.
     nDCG@10:  0.270
@@ -329,13 +344,16 @@ Drop tables created for load testing:
     Total       Txs Txs/Sec Retries Errors  p50(ms) p95(ms) p99(ms) pMax(ms)
     10          242 24.2    0       18      259     915     991     999
     ```
+
 5. Run the upsert workload:
 
     ```bash
     {{ ydb-cli }} workload fulltext run upsert
     ```
+
     Output example:
-    ```
+
+    ```text
     Window      Txs Txs/Sec Retries Errors  p50(ms) p95(ms) p99(ms) pMax(ms)
     1           255 255     0       0       31      34      117     123
     2           279 279     0       0       32      37      42      45
@@ -351,6 +369,7 @@ Drop tables created for load testing:
     Total       Txs Txs/Sec Retries Errors  p50(ms) p95(ms) p99(ms) pMax(ms)
     10         2781 278.1   0       0       32      38      41      123
     ```
+
 6. Clean up:
 
     ```bash

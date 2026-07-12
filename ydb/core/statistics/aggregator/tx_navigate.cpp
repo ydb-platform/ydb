@@ -2,6 +2,8 @@
 
 #include <ydb/core/tx/datashard/datashard.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::STATISTICS
+
 namespace NKikimr::NStat {
 
 struct TStatisticsAggregator::TTxNavigate : public TTxBase {
@@ -16,7 +18,8 @@ struct TStatisticsAggregator::TTxNavigate : public TTxBase {
     TTxType GetTxType() const override { return TXTYPE_NAVIGATE; }
 
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
-        SA_LOG_D("[" << Self->TabletID() << "] TTxNavigate::Execute");
+        YDB_LOG_DEBUG("TTxNavigate::Execute",
+            {"tabletId", Self->TabletID()});
 
         NIceDb::TNiceDb db(txc.DB);
 
@@ -29,7 +32,8 @@ struct TStatisticsAggregator::TTxNavigate : public TTxBase {
             if (entry.Status == NSchemeCache::TSchemeCacheNavigate::EStatus::PathErrorUnknown) {
                 Self->DeleteStatisticsFromTable();
             } else {
-                Self->FinishTraversal(db, /*finishAllForceTraversalTables=*/true);
+                // Navigate failure -> traversal cannot proceed; mark the operation FAILED.
+                Self->FinishTraversal(db, Ydb::Table::AnalyzeState::STATE_FAILED);
             }
             return true;
         }
@@ -69,7 +73,8 @@ struct TStatisticsAggregator::TTxNavigate : public TTxBase {
     }
 
     void Complete(const TActorContext&) override {
-        SA_LOG_D("[" << Self->TabletID() << "] TTxNavigate::Complete");
+        YDB_LOG_DEBUG("TTxNavigate::Complete",
+            {"tabletId", Self->TabletID()});
 
         if (Cancelled) {
             return;

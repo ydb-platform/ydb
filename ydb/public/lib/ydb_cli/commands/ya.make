@@ -14,6 +14,7 @@ SRCS(
     ydb_benchmark.cpp
     ydb_bridge.cpp
     ydb_cluster.cpp
+    ydb_database_attribute.cpp
     ydb_config.cpp
     ydb_debug.cpp
     ydb_diagnostics.cpp
@@ -69,6 +70,7 @@ PEERDIR(
     ydb/public/lib/ydb_cli/dump/files
     ydb/public/lib/ydb_cli/import
     ydb/public/lib/ydb_cli/topic
+    ydb/public/sdk/cpp/src/client/cms
     ydb/public/sdk/cpp/src/client/config
     ydb/public/sdk/cpp/src/client/coordination
     ydb/public/sdk/cpp/src/client/debug
@@ -81,6 +83,7 @@ PEERDIR(
     ydb/public/sdk/cpp/src/client/proto
     ydb/public/sdk/cpp/src/client/scheme
     ydb/public/sdk/cpp/src/client/table
+    ydb/public/sdk/cpp/src/client/test_shard
     ydb/public/sdk/cpp/src/client/topic
     ydb/public/sdk/cpp/src/client/types/credentials/login
     ydb/public/sdk/cpp/src/library/operation_id

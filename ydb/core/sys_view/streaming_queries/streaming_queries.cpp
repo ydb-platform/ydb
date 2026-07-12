@@ -88,7 +88,7 @@ struct TEvPrivate {
     };
 };
 
-class TStreamingQueryFetcherActor final : public TQueryBase {
+class TStreamingQueryFetcherActor final : public TQueryBase, public TQueryRetryActorMixin<TStreamingQueryFetcherActor, TEvPrivate::TEvFetchStreamingQueriesResult> {
     using TBase = TQueryBase;
 
     static constexpr ui64 MAX_STREAMING_QUERIES_COUNT = 1000;
@@ -106,8 +106,6 @@ public:
         std::optional<TString> PageToken;
         ui64 FreeSpace = 0;
     };
-
-    using TRetry = TQueryRetryActor<TStreamingQueryFetcherActor, TEvPrivate::TEvFetchStreamingQueriesResult, TString, TSettings>;
 
     TStreamingQueryFetcherActor(const TString& databaseId, const TSettings& settings)
         : TBase(NKikimrServices::SYSTEM_VIEWS)
@@ -751,18 +749,19 @@ public:
 
         const auto& event = *ev->Get();
         const bool ready = event.Ready;
-        const auto status = event.Status;
-        if (!ready && status != Ydb::StatusIds::SUCCESS && status != Ydb::StatusIds::NOT_FOUND) {
+        const auto operationStatus = event.Status;
+        if (const auto requestStatus = event.RequestStatus; requestStatus != Ydb::StatusIds::SUCCESS) {
             const auto& issues = event.Issues;
-            LOG_E("Get script execution info " << ev->Sender << " failed " << status << ", issues: " << issues.ToOneLineString());
-            ReplyErrorAndDie(status, NKqp::AddRootIssue(TStringBuilder() << "Failed to get last script execution info for query '" << path << "'", issues));
+            LOG_E("Get script execution info " << ev->Sender << " failed " << requestStatus << ", issues: " << issues.ToOneLineString() << ", operation status: " << operationStatus << ", ready: " << ready);
+            ReplyErrorAndDie(requestStatus, NKqp::AddRootIssue(TStringBuilder() << "Failed to get last script execution info for query '" << path << "'", issues));
             return;
         }
 
         ResolvedQueriesCount = std::max(ResolvedQueriesCount, ev->Cookie + 1);
-        LOG_D("Get script execution info " << ev->Sender << " finished " << status << ", ready: " << ready << ", query path: " << path << ", remains #" << InflightScriptExecutionInfoResolve);
+        const bool entryExists = event.ExecutionEntryExists;
+        LOG_D("Get script execution info " << ev->Sender << " finished operation status " << operationStatus << ", ready: " << ready << ", entry exists: " << entryExists << ", query path: " << path << ", remains #" << InflightScriptExecutionInfoResolve);
 
-        if (ready || status != Ydb::StatusIds::NOT_FOUND) {
+        if (entryExists) {
             const auto it = QueriesBatch.find(path);
             if (it == QueriesBatch.end()) {
                 InternalError(TStringBuilder() << "Resolve script execution info for query '" << path << "' which is not in current batch");
@@ -773,7 +772,7 @@ public:
             info.Issues = NKqp::SerializeIssues(event.Issues);
             info.RetryCount = event.RetryCount;
 
-            if (!ready || status != Ydb::StatusIds::SUCCESS) {
+            if (!ready || operationStatus != Ydb::StatusIds::SUCCESS) {
                 info.LastFailAt = event.LastFailAt;
                 info.SuspendedUntil = event.SuspendedUntil;
             }
@@ -790,9 +789,9 @@ public:
             if (info.SuspendedUntil) {
                 info.Status = "SUSPENDED";
             } else if (ready) {
-                if (status == Ydb::StatusIds::SUCCESS) {
+                if (operationStatus == Ydb::StatusIds::SUCCESS) {
                     info.Status = "COMPLETED";
-                } else if (status == Ydb::StatusIds::CANCELLED) {
+                } else if (!info.Run) {
                     info.Status = "STOPPED";
                 } else {
                     info.Status = "FAILED";
@@ -910,9 +909,7 @@ private:
                 }
             }
 
-            auto event = std::make_unique<NKqp::TEvGetScriptExecutionOperation>(DatabaseName, NKqp::OperationIdFromExecutionId(executionId), BUILTIN_ACL_METADATA);
-            event->CheckLeaseState = false;
-            Send(kqpProxyId, std::move(event), 0, i);
+            Send(kqpProxyId, std::make_unique<NKqp::TEvGetScriptExecutionOperation>(DatabaseName, NKqp::OperationIdFromExecutionId(executionId), BUILTIN_ACL_METADATA, /* failOnNotFound */ false), /* flags */ 0, i);
 
             LOG_D("Resolving script execution info for query '" << path << "', execution id: " << executionId);
             InflightScriptExecutionInfoResolve++;
@@ -987,7 +984,7 @@ private:
             }
         }
 
-        const auto& fetcher = Register(new TStreamingQueryFetcherActor::TRetry(SelfId(), DatabaseId, settings));
+        const auto& fetcher = Register(TStreamingQueryFetcherActor::MakeRetry(SelfId(), DatabaseId, settings));
         LOG_D("Start streaming query fetcher " << fetcher);
     }
 

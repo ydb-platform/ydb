@@ -94,10 +94,11 @@ struct Schema : NIceDb::Schema {
         };
         struct Statistics : Column<120, NScheme::NTypeIds::String> { using Type = NKikimrHive::TTabletStatistics; };
         struct DataCentersPreference : Column<121, NScheme::NTypeIds::String> { using Type = NKikimrHive::TDataCentersPreference; };
-        struct AllowedDataCenterIds : Column<122, NScheme::NTypeIds::String> { using Type = TVector<TString>; };
+        //struct AllowedDataCenterIds : Column<122, NScheme::NTypeIds::String> { using Type = TVector<TString>; };
 
         struct BalancerPolicy : Column<123, NScheme::NTypeIds::Uint64> { using Type = NKikimrHive::EBalancerPolicy; static constexpr NKikimrHive::EBalancerPolicy Default = NKikimrHive::EBalancerPolicy::POLICY_BALANCE; };
         struct StoppedByTenant : Column<124, NScheme::NTypeIds::Bool> {};
+        struct NewAllowedDataCenterIds : Column<125, NScheme::NTypeIds::String> { using Type = NKikimrHive::TDataCentersGroup; };
 
         using TKey = TableKey<ID>;
         using TColumns = TableColumns<
@@ -124,7 +125,7 @@ struct Schema : NIceDb::Schema {
             ReassignReason,
             Statistics,
             DataCentersPreference,
-            AllowedDataCenterIds,
+            NewAllowedDataCenterIds,
             BalancerPolicy,
             StoppedByTenant
         >;
@@ -142,12 +143,13 @@ struct Schema : NIceDb::Schema {
         struct LocalNodeOnly : Column<9, NScheme::NTypeIds::Bool> { static constexpr bool Default = false; };
         struct FollowerCountPerDataCenter : Column<10, NScheme::NTypeIds::Bool> { static constexpr bool Default = false; };
         struct RequireDifferentNodes : Column<11, NScheme::NTypeIds::Bool> {};
-        struct AllowedDataCenterIds : Column<12, NScheme::NTypeIds::String> { using Type = TVector<TString>; };
+        //struct AllowedDataCenterIds : Column<12, NScheme::NTypeIds::String> { using Type = TVector<TString>; };
+        struct NewAllowedDataCenterIds : Column<13, NScheme::NTypeIds::String> { using Type = NKikimrHive::TDataCentersGroup; };
 
         using TKey = TableKey<TabletID, GroupID>;
         using TColumns = TableColumns<TabletID, GroupID, FollowerCount, AllowLeaderPromotion, AllowClientRead,
                                       AllowedNodes, AllowedDataCenters, RequireAllDataCenters, LocalNodeOnly,
-                                      FollowerCountPerDataCenter, RequireDifferentNodes, AllowedDataCenterIds>;
+                                      FollowerCountPerDataCenter, RequireDifferentNodes, NewAllowedDataCenterIds>;
     };
 
     struct TabletFollowerTablet : Table<10> {

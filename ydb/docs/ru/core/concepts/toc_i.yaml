@@ -6,7 +6,10 @@ items:
     path: analytics/toc_p.yaml
     mode: link
 - name: Архитектура
-  href: architecture.md
+  href: architecture/index.md
+  include:
+    path: architecture/toc_p.yaml
+    mode: link
 - name: Соединение с БД
   href: connect.md
 - name: Схемные объекты
@@ -24,14 +27,12 @@ items:
 - name: Транзакции
   href: transactions.md
 - name: Вторичные индексы
-  href: secondary_indexes.md  
+  href: secondary_indexes.md
 - name: Change Data Capture (CDC)
   href: cdc.md
   when: feature_changefeed
 - name: Time to Live (TTL) и вытеснение данных во внешнее хранилище
   href: ttl.md
-- name: Скан запросы
-  href: scan_query.md
 - name: Ограничения базы данных
   href: limits-ydb.md
 - name: Резервное копирование и восстановление

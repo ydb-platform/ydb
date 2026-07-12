@@ -6,6 +6,7 @@
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
 #include <yql/essentials/minikql/mkql_stats_registry.h>
 #include <yql/essentials/minikql/mkql_node.h>
+#include <yql/essentials/minikql/runtime_settings/runtime_settings.h>
 
 #include <yt/cpp/mapreduce/interface/io.h>
 
@@ -146,6 +147,10 @@ public:
         IsTableContent_ = true;
     }
 
+    void SetDatumValidationMode(EDatumValidationMode mode) {
+        DatumValidationMode_ = mode;
+    }
+
     void SetInputBlockRepresentation(EBlockRepresentation type) {
         InputBlockRepresentation_ = type;
     }
@@ -166,6 +171,7 @@ public:
     bool UseBlockInput_ = false;
     bool UseBlockOutput_ = false;
     bool IsTableContent_ = false;
+    EDatumValidationMode DatumValidationMode_ = DefaultDatumValidationMode;
     TString OptLLVM_;
     TSystemFields SystemFields_;
 
@@ -283,22 +289,28 @@ TMaybe<NKikimr::NUdf::TUnboxedValue> ParseYsonValueInTableFormat(const NKikimr::
     const TStringBuf& yson, NKikimr::NMiniKQL::TType* type, ui64 nativeYtTypeFlags, IOutputStream* err);
 TMaybe<NKikimr::NUdf::TUnboxedValue> ParseYsonNode(const NKikimr::NMiniKQL::THolderFactory& holderFactory,
     const NYT::TNode& node, NKikimr::NMiniKQL::TType* type, ui64 nativeYtTypeFlags, IOutputStream* err);
-extern "C" void ReadYsonContainerValue(NKikimr::NMiniKQL::TType* type, ui64 nativeYtTypeFlags,
+extern "C" void ReadYsonContainerValue(NKikimr::NMiniKQL::TType* type,
     const NKikimr::NMiniKQL::THolderFactory& holderFactory, NKikimr::NUdf::TUnboxedValue& value, NCommon::TInputBuf& buf,
     bool wrapOptional);
 extern "C" void ReadContainerNativeYtValue(NKikimr::NMiniKQL::TType* type, ui64 nativeYtTypeFlags,
     const NKikimr::NMiniKQL::THolderFactory& holderFactory, NKikimr::NUdf::TUnboxedValue& value, NCommon::TInputBuf& buf,
     bool wrapOptional);
 void WriteYsonValueInTableFormat(NCommon::TOutputBuf& buf, NKikimr::NMiniKQL::TType* type, ui64 nativeYtTypeFlags, const NKikimr::NUdf::TUnboxedValuePod& value, bool topLevel);
-extern "C" void WriteYsonContainerValue(NKikimr::NMiniKQL::TType* type, ui64 nativeYtTypeFlags,
+extern "C" void WriteYsonContainerValue(NKikimr::NMiniKQL::TType* type,
     const NKikimr::NUdf::TUnboxedValuePod& value, NCommon::TOutputBuf& buf);
 
-void SkipSkiffField(NKikimr::NMiniKQL::TType* type, ui64 nativeYtTypeFlags, NCommon::TInputBuf& buf);
-NKikimr::NUdf::TUnboxedValue ReadSkiffNativeYtValue(NKikimr::NMiniKQL::TType* type, ui64 nativeYtTypeFlags,
+void SkipSkiffData(NKikimr::NMiniKQL::TType* type, ui64 nativeYtTypeFlags, NCommon::TInputBuf& buf);
+void SkipSkiffValue(NKikimr::NMiniKQL::TType* type, ui64 nativeYtTypeFlags, NCommon::TInputBuf& buf);
+void SkipSkiffComplexValue(NKikimr::NMiniKQL::TType* type, ui64 nativeYtTypeFlags, NCommon::TInputBuf& buf);
+NKikimr::NUdf::TUnboxedValue ReadSkiffValue(NKikimr::NMiniKQL::TType* type, ui64 nativeYtTypeFlags,
+    const NKikimr::NMiniKQL::THolderFactory& holderFactory, NCommon::TInputBuf& buf, bool withDefVal);
+NKikimr::NUdf::TUnboxedValue ReadSkiffComplexValue(NKikimr::NMiniKQL::TType* type, ui64 nativeYtTypeFlags,
     const NKikimr::NMiniKQL::THolderFactory& holderFactory, NCommon::TInputBuf& buf);
 NKikimr::NUdf::TUnboxedValue ReadSkiffData(NKikimr::NMiniKQL::TType* type, ui64 nativeYtTypeFlags, NCommon::TInputBuf& buf);
 void WriteSkiffData(NKikimr::NMiniKQL::TType* type, ui64 nativeYtTypeFlags, const NKikimr::NUdf::TUnboxedValuePod& value, NCommon::TOutputBuf& buf);
-void WriteSkiffNativeYtValue(NKikimr::NMiniKQL::TType* type, ui64 nativeYtTypeFlags,
+void WriteSkiffValue(NKikimr::NMiniKQL::TType* type, ui64 nativeYtTypeFlags,
+    const NKikimr::NUdf::TUnboxedValuePod& value, NCommon::TOutputBuf& buf, bool wasOptional);
+void WriteSkiffComplexValue(NKikimr::NMiniKQL::TType* type, ui64 nativeYtTypeFlags,
     const NKikimr::NUdf::TUnboxedValuePod& value, NCommon::TOutputBuf& buf);
 extern "C" void WriteContainerNativeYtValue(NKikimr::NMiniKQL::TType* type, ui64 nativeYtTypeFlags,
     const NKikimr::NUdf::TUnboxedValuePod& value, NCommon::TOutputBuf& buf);

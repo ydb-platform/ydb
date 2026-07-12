@@ -70,7 +70,6 @@ TString GetSecretName(const NYql::TCreateObjectSettings& settings, const TString
     externalDataSourceDesc.SetSourceType(GetOrEmpty(settings, "source_type"));
     externalDataSourceDesc.SetLocation(GetOrEmpty(settings, "location"));
     externalDataSourceDesc.SetInstallation(GetOrEmpty(settings, "installation"));
-    externalDataSourceDesc.SetReplaceIfExists(settings.GetReplaceIfExists());
 
     const TString& authMethod = GetOrEmpty(settings, "auth_method");
     if (authMethod == "NONE") {
@@ -260,6 +259,7 @@ TYqlConclusionStatus TExternalDataSourceManager::PrepareCreateExternalDataSource
     schemeTx.SetWorkingDir(workingDir);
     schemeTx.SetOperationType(NKikimrSchemeOp::ESchemeOpCreateExternalDataSource);
     schemeTx.SetFailedOnAlreadyExists(!settings.GetExistingOk());
+    schemeTx.SetReplaceIfExists(settings.GetReplaceIfExists());
 
     return FillCreateExternalDataSourceDesc(
         *schemeTx.MutableCreateExternalDataSource(), name, settings, context.GetExternalData().GetActorSystem());

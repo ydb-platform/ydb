@@ -6,6 +6,7 @@
 
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/core/protos/fs_settings.pb.h>
+#include <ydb/core/tx/schemeshard/olap/operations/local_index_helpers.h>
 #include <ydb/core/protos/s3_settings.pb.h>
 #include <ydb/core/protos/table_stats.pb.h>  // for TStoragePoolsStats
 #include <ydb/core/scheme/scheme_types_proto.h>
@@ -31,6 +32,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
     THashMap<TPathId, TVector<TPathId>> CdcStreamScansToResume;
     TVector<TPathId> RestoreTablesToUnmark;
     TVector<ui64> IncrementalBackupsToResume;
+    TVector<ui64> FullBackupsToResume;
     bool Broken = false;
 
     explicit TTxInit(TSelf *self)
@@ -321,7 +323,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
         return true;
     }
 
-    typedef std::tuple<TPathId, ui32, ui64, TString, TString, TString, ui64, TString, bool, TString, bool, TString, TString, bool, TString> TTableRec;
+    typedef std::tuple<TPathId, ui32, ui64, TString, TString, TString, ui64, TString, bool, TString, bool, TString, TString, bool, TString, TString> TTableRec;
     typedef TDeque<TTableRec> TTableRows;
 
     template <typename SchemaTable, typename TRowSet>
@@ -340,7 +342,8 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
             rowSet.template GetValueOrDefault<typename SchemaTable::OwnerActorId>(""),
             rowSet.template GetValueOrDefault<typename SchemaTable::IncrementalBackupConfig>(),
             rowSet.template GetValueOrDefault<typename SchemaTable::IsRestore>(false),
-            rowSet.template GetValueOrDefault<typename SchemaTable::DetailedMetricsSettings>()
+            rowSet.template GetValueOrDefault<typename SchemaTable::DetailedMetricsSettings>(),
+            rowSet.template GetValueOrDefault<typename SchemaTable::MultiColumnStatistics>()
         );
     }
 
@@ -380,7 +383,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
         return true;
     }
 
-    typedef std::tuple<TPathId, ui32, TString, NScheme::TTypeInfo, TString, ui32, ui64, ui64, ui32, ETableColumnDefaultKind, TString, bool, bool> TColumnRec;
+    typedef std::tuple<TPathId, ui32, TString, NScheme::TTypeInfo, TString, ui32, ui64, ui64, ui32, ETableColumnDefaultKind, TString, bool, bool, bool> TColumnRec;
     typedef TDeque<TColumnRec> TColumnRows;
 
     template <typename SchemaTable, typename TRowSet>
@@ -414,7 +417,8 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
             rowSet.template GetValue<typename SchemaTable::DefaultKind>(),
             rowSet.template GetValue<typename SchemaTable::DefaultValue>(),
             rowSet.template GetValueOrDefault<typename SchemaTable::NotNull>(false),
-            rowSet.template GetValueOrDefault<typename SchemaTable::IsBuildInProgress>(false)
+            rowSet.template GetValueOrDefault<typename SchemaTable::IsBuildInProgress>(false),
+            rowSet.template GetValueOrDefault<typename SchemaTable::SetNotNullInProgress>(false)
         );
     }
 
@@ -846,7 +850,8 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 rowSet.GetValueOrDefault<Schema::SharedShards::OwnerPathId>(Self->TabletID()),
                 rowSet.GetValue<Schema::SharedShards::LocalPathId>()
             );
-            Self->SharedShards[shardIdx].insert(pathId);
+            const auto currentTxId = TTxId(rowSet.GetValueOrDefault<Schema::SharedShards::LastTxId>(0));
+            Self->SharedShards[shardIdx][pathId] = currentTxId;
             if (!rowSet.Next()) {
                 return false;
             }
@@ -1407,6 +1412,28 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
             Self->IsOldArgonHashFormatMigrationCompleted = isOldArgonHashFormatMigrationCompletedVal;
         }
 
+        {
+            ui64 sweepStatusVal = 0;
+            RETURN_IF_NO_PRECHARGED(Self->ReadSysValue(db, Schema::SysParam_TablePartitionsFormatSweepStatus, sweepStatusVal));
+            switch (sweepStatusVal) {
+                case 1:
+                    Self->TablePartitionsFormatSweep.Status = TSchemeShard::TTablePartitionsFormatSweepState::EStatus::Running;
+                    break;
+                case 2:
+                    Self->TablePartitionsFormatSweep.Status = TSchemeShard::TTablePartitionsFormatSweepState::EStatus::Paused;
+                    break;
+                default:
+                    Self->TablePartitionsFormatSweep.Status = TSchemeShard::TTablePartitionsFormatSweepState::EStatus::Idle;
+                    break;
+            }
+        }
+
+        if (Self->TablePartitionsFormatSweep.Status != TSchemeShard::TTablePartitionsFormatSweepState::EStatus::Idle) {
+            ui64 sweepTargetVal = 0;
+            RETURN_IF_NO_PRECHARGED(Self->ReadSysValue(db, Schema::SysParam_TablePartitionsFormatSweepTarget, sweepTargetVal));
+            Self->TablePartitionsFormatSweep.TargetIsShardIdx = (sweepTargetVal != 0);
+        }
+
 #undef RETURN_IF_NO_PRECHARGED
 
         if (!Self->IsSchemeShardConfigured()) {
@@ -1644,7 +1671,11 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     domainInfo->SetSecurityStateVersion(rowset.GetValueOrDefault<Schema::SubDomains::SecurityStateVersion>());
                     domainInfo->SetDiskQuotaExceeded(rowset.GetValueOrDefault<Schema::SubDomains::DiskQuotaExceeded>(false));
                     if (domainInfo->GetDiskQuotaExceeded()) {
-                        Self->ChangeDiskSpaceQuotaExceeded(+1);
+                        Self->ChangeSimpleCounter(COUNTER_DISK_SPACE_QUOTA_EXCEEDED, +1);
+                    }
+                    domainInfo->SetSmallBlobsQuotaExceeded(rowset.GetValueOrDefault<Schema::SubDomains::SmallBlobsQuotaExceeded>(false));
+                    if (domainInfo->GetSmallBlobsQuotaExceeded()) {
+                        Self->ChangeSimpleCounter(COUNTER_SMALL_BLOBS_QUOTA_EXCEEDED, +1);
                     }
 
                     if (rowset.HaveValue<Schema::SubDomains::AuditSettings>()) {
@@ -1923,6 +1954,13 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     Y_ABORT_UNLESS(parseOk);
                 }
 
+                if (const auto statistics = std::get<15>(rec)) {
+                    NKikimrSchemeOp::TTableDescription statisticsHolder;
+                    bool parseOk = ParseFromStringNoSizeLimit(statisticsHolder, statistics);
+                    Y_ABORT_UNLESS(parseOk);
+                    tableInfo->MutableMultiColumnStatistics()->Swap(statisticsHolder.MutableMultiColumnStatistics());
+                }
+
                 if (const auto replicationConfig = std::get<9>(rec)) {
                     bool parseOk = ParseFromStringNoSizeLimit(tableInfo->MutableReplicationConfig(), replicationConfig);
                     Y_ABORT_UNLESS(parseOk);
@@ -2159,6 +2197,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 auto defaultValue = std::get<10>(rec);
                 auto notNull = std::get<11>(rec);
                 auto isBuildInProgress = std::get<12>(rec);
+                auto setNotNullInProgress = std::get<13>(rec);
 
                 Y_VERIFY_S(Self->PathsById.contains(pathId), "Path doesn't exist, pathId: " << pathId);
                 Y_VERIFY_S(Self->PathsById.at(pathId)->IsTable() || Self->PathsById.at(pathId)->IsExternalTable(), "Path is not a table or external table, pathId: " << pathId);
@@ -2173,6 +2212,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 colInfo.DefaultValue = defaultValue;
                 colInfo.NotNull = notNull;
                 colInfo.IsBuildInProgress = isBuildInProgress;
+                colInfo.SetNotNullInProgress = setNotNullInProgress;
 
                 if (auto it = Self->Tables.find(pathId); it != Self->Tables.end()) {
                     TTableInfo::TPtr tableInfo = it->second;
@@ -2219,6 +2259,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 auto defaultValue = std::get<10>(rec);
                 auto notNull = std::get<11>(rec);
                 auto isBuildInProgress = std::get<12>(rec);
+                auto setNotNullInProgress = std::get<13>(rec);
 
                 Y_VERIFY_S(Self->PathsById.contains(pathId), "Path doesn't exist, pathId: " << pathId);
                 Y_VERIFY_S(Self->PathsById.at(pathId)->IsTable(), "Path is not a table, pathId: " << pathId);
@@ -2240,6 +2281,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 colInfo.DefaultValue = defaultValue;
                 colInfo.NotNull = notNull;
                 colInfo.IsBuildInProgress = isBuildInProgress;
+                colInfo.SetNotNullInProgress = setNotNullInProgress;
                 tableInfo->AlterData->Columns[colId] = colInfo;
             }
         }
@@ -2326,11 +2368,12 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
 
             for (const auto& [shardIdx, paths]: Self->SharedShards) {
                 Y_ABORT_UNLESS(Self->ShardInfos.contains(shardIdx));
-                for (const auto& path: paths) {
+                for (const auto& [path, lastTxId]: paths) {
                     LOG_TRACE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                             "TTxInit for Shared Shards"
                             << ", read: " << shardIdx
                             << ", PathId: " << path
+                            << ", LastTxId: " << lastTxId
                             << ", at schemeshard: " << Self->TabletID());
                 }
             }
@@ -2390,6 +2433,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                         TTableInfo::TPtr tableInfo = Self->Tables.at(prevTableId);
                         Self->SetPartitioning(prevTableId, tableInfo, std::move(partitions));
                         partitions.clear();
+                        Self->TabletCounters->Simple()[COUNTER_FORMAT_POSITION_TABLE_COUNT].Add(1);
                     }
 
                     prevTableId = tableId;
@@ -2422,7 +2466,110 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 Y_ABORT_UNLESS(Self->Tables.contains(prevTableId));
                 TTableInfo::TPtr tableInfo = Self->Tables.at(prevTableId);
                 Self->SetPartitioning(prevTableId, tableInfo, std::move(partitions));
+                partitions.clear();
+                Self->TabletCounters->Simple()[COUNTER_FORMAT_POSITION_TABLE_COUNT].Add(1);
             }
+        }
+
+        // Read partitions from ShardIdx-keyed format (new tables only, mutually exclusive with above)
+        // Depends on TTableInfo::Columns filled.
+        {
+            auto rowSet = db.Table<Schema::TablePartitionsByShardIdx>().Range().Select();
+            if (!rowSet.IsReady()) {
+                return false;
+            }
+
+            LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "TTxInit for TablePartitionsByShardIdx" << ", at schemeshard: " << Self->TabletID());
+
+            auto flushPartitions = [this](const TPathId& tablePathId, TVector<TTableShardInfo>&& partitions) {
+                if (!tablePathId) {
+                    return;
+                }
+                Y_ABORT_UNLESS(!partitions.empty(), "tablePathId %s", ToString(tablePathId).c_str());
+                Y_ABORT_UNLESS(Self->Tables.contains(tablePathId), "tablePathId %s", ToString(tablePathId).c_str());
+                TTableInfo::TPtr tableInfo = Self->Tables.at(tablePathId);
+                Y_ABORT_UNLESS(!tableInfo->Columns.empty(), "tablePathId %s", ToString(tablePathId).c_str());
+                // tables must not have mixed format partitions
+                Y_ABORT_UNLESS(tableInfo->GetPartitions().empty(), "tablePathId %s", ToString(tablePathId).c_str());
+
+                // Build key column type list for border comparison
+                TVector<NScheme::TTypeInfo> keyColTypeIds;
+                for (const auto& [colId, col] : tableInfo->Columns) {
+                    if (col.KeyOrder == (ui32)-1) {
+                        continue;
+                    }
+                    if (keyColTypeIds.size() <= col.KeyOrder) {
+                        keyColTypeIds.resize(col.KeyOrder + 1);
+                    }
+                    keyColTypeIds[col.KeyOrder] = col.PType;
+                }
+
+                // Sort by RangeEnd; empty EndOfRange = last partition, goes to the end
+                std::sort(partitions.begin(), partitions.end(),
+                    [&](const TTableShardInfo& a, const TTableShardInfo& b) {
+                        if (a.EndOfRange.empty()) {
+                            return false;
+                        }
+                        if (b.EndOfRange.empty()) {
+                            return true;
+                        }
+                        TSerializedCellVec ca(a.EndOfRange);
+                        TSerializedCellVec cb(b.EndOfRange);
+                        return CompareBorders<true, true>(ca.GetCells(), cb.GetCells(), true, true, keyColTypeIds) < 0;
+                    }
+                );
+
+                Self->SetPartitioning(tablePathId, tableInfo, std::move(partitions));
+                tableInfo->PartitionsInShardIdxFormat = true;
+                Self->TabletCounters->Simple()[COUNTER_FORMAT_SHARDIDX_TABLE_COUNT].Add(1);
+            };
+
+            const auto now = ctx.Now();
+
+            TPathId prevPathId;
+            TVector<TTableShardInfo> partitions;
+
+            while (!rowSet.EndOfSet()) {
+                const TPathId pathId(
+                    rowSet.GetValue<Schema::TablePartitionsByShardIdx::OwnerPathId>(),
+                    rowSet.GetValue<Schema::TablePartitionsByShardIdx::LocalPathId>()
+                );
+                const TShardIdx shardIdx(
+                    rowSet.GetValue<Schema::TablePartitionsByShardIdx::OwnerShardIdx>(),
+                    rowSet.GetValue<Schema::TablePartitionsByShardIdx::LocalShardIdx>()
+                );
+
+                if (pathId != prevPathId) {
+                    flushPartitions(prevPathId, std::move(partitions));
+                    partitions.clear();
+                    prevPathId = pathId;
+                }
+
+                TString rangeEnd = rowSet.GetValue<Schema::TablePartitionsByShardIdx::RangeEnd>();
+                ui64 lastCondErase = rowSet.GetValueOrDefault<Schema::TablePartitionsByShardIdx::LastCondErase>(0);
+                ui64 nextCondErase = rowSet.GetValueOrDefault<Schema::TablePartitionsByShardIdx::NextCondErase>(0);
+
+                TTableShardInfo shardInfo(shardIdx, rangeEnd, lastCondErase, nextCondErase);
+
+                if (Self->TTLEnabledTables.contains(pathId)) {
+                    auto& lag = shardInfo.LastCondEraseLag;
+                    if (now >= shardInfo.LastCondErase) {
+                        lag = now - shardInfo.LastCondErase;
+                    } else {
+                        lag = TDuration::Zero();
+                    }
+                    Self->TabletCounters->Percentile()[COUNTER_NUM_SHARDS_BY_TTL_LAG].IncrementFor(lag->Seconds());
+                }
+
+                partitions.push_back(std::move(shardInfo));
+
+                if (!rowSet.Next()) {
+                    return false;
+                }
+            }
+            // for the last table
+            flushPartitions(prevPathId, std::move(partitions));
+            partitions.clear();
         }
 
         // Read partition config patches
@@ -2569,6 +2716,113 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
 
             if (prevTableId) {
                 Y_ABORT_UNLESS(Self->Tables.contains(prevTableId));
+                TTableInfo::TPtr tableInfo = Self->Tables.at(prevTableId);
+                if (!tableInfo->IsBackup && !tableInfo->IsShardsStatsDetached()) {
+                    Self->ResolveDomainInfo(prevTableId)->AggrDiskSpaceUsage(Self, tableInfo->GetStats().Aggregated);
+                }
+            }
+        }
+
+        // Read partition stats (ShardIdx format)
+        {
+            using T = Schema::TablePartitionStatsByShardIdx;
+            auto rowSet = db.Table<T>().Range().Select();
+            if (!rowSet.IsReady()) {
+                return false;
+            }
+
+            TPathId prevTableId;
+            TInstant now = AppData()->TimeProvider->Now();
+            while (!rowSet.EndOfSet()) {
+                const TPathId tableId = TPathId(
+                    rowSet.GetValue<T::OwnerPathId>(),
+                    rowSet.GetValue<T::LocalPathId>());
+                const TShardIdx shardIdx = TShardIdx(
+                    rowSet.GetValue<T::OwnerShardIdx>(),
+                    rowSet.GetValue<T::LocalShardIdx>());
+
+                if (tableId != prevTableId) {
+                    // Aggregate the previous table's newly updated stats.
+                    // (Tables also processed by the positional block get re-aggregated here;
+                    // that is acceptable since the domain aggregate will self-correct on the
+                    // first live stats update from any shard.)
+                    if (prevTableId && Self->Tables.contains(prevTableId)) {
+                        TTableInfo::TPtr prevTableInfo = Self->Tables.at(prevTableId);
+                        if (!prevTableInfo->IsBackup && !prevTableInfo->IsShardsStatsDetached()) {
+                            Self->ResolveDomainInfo(prevTableId)->AggrDiskSpaceUsage(Self, prevTableInfo->GetStats().Aggregated);
+                        }
+                    }
+                    prevTableId = tableId;
+                }
+
+                if (!Self->Tables.contains(tableId)) {
+                    if (!rowSet.Next()) {
+                        return false;
+                    }
+                    continue;
+                }
+                TTableInfo::TPtr tableInfo = Self->Tables.at(tableId);
+                if (!tableInfo->GetPartitionStore().contains(shardIdx)) {
+                    if (!rowSet.Next()) {
+                        return false;
+                    }
+                    continue;
+                }
+
+                TPartitionStats stats;
+                stats.SeqNo = TMessageSeqNo(
+                    rowSet.GetValue<T::SeqNoGeneration>(),
+                    rowSet.GetValue<T::SeqNoRound>());
+                stats.RowCount = rowSet.GetValue<T::RowCount>();
+                stats.DataSize = rowSet.GetValue<T::DataSize>();
+                stats.IndexSize = rowSet.GetValue<T::IndexSize>();
+                stats.ByKeyFilterSize = rowSet.GetValue<T::ByKeyFilterSize>();
+                if (rowSet.HaveValue<T::StoragePoolsStats>()) {
+                    NKikimrTableStats::TStoragePoolsStats proto;
+                    Y_ABORT_UNLESS(ParseFromStringNoSizeLimit(proto, rowSet.GetValue<T::StoragePoolsStats>()));
+                    for (const auto& poolUsage : proto.GetPoolsUsage()) {
+                        stats.StoragePoolsStats.emplace(
+                            poolUsage.GetPoolKind(),
+                            TPartitionStats::TStoragePoolStats{poolUsage.GetDataSize(), poolUsage.GetIndexSize()});
+                    }
+                }
+                stats.LastAccessTime = TInstant::FromValue(rowSet.GetValue<T::LastAccessTime>());
+                stats.LastUpdateTime = TInstant::FromValue(rowSet.GetValue<T::LastUpdateTime>());
+                stats.ImmediateTxCompleted = rowSet.GetValue<T::ImmediateTxCompleted>();
+                stats.PlannedTxCompleted = rowSet.GetValue<T::PlannedTxCompleted>();
+                stats.TxRejectedByOverload = rowSet.GetValue<T::TxRejectedByOverload>();
+                stats.TxRejectedBySpace = rowSet.GetValue<T::TxRejectedBySpace>();
+                stats.TxCompleteLag = TDuration::FromValue(rowSet.GetValue<T::TxCompleteLag>());
+                stats.InFlightTxCount = rowSet.GetValue<T::InFlightTxCount>();
+                stats.RowUpdates = rowSet.GetValue<T::RowUpdates>();
+                stats.RowDeletes = rowSet.GetValue<T::RowDeletes>();
+                stats.RowReads = rowSet.GetValue<T::RowReads>();
+                stats.RangeReads = rowSet.GetValue<T::RangeReads>();
+                stats.RangeReadRows = rowSet.GetValue<T::RangeReadRows>();
+                stats.SetCurrentRawCpuUsage(rowSet.GetValue<T::CPU>(), now);
+                stats.Memory = rowSet.GetValue<T::Memory>();
+                stats.Network = rowSet.GetValue<T::Network>();
+                stats.Storage = rowSet.GetValue<T::Storage>();
+                stats.ReadThroughput = rowSet.GetValue<T::ReadThroughput>();
+                stats.WriteThroughput = rowSet.GetValue<T::WriteThroughput>();
+                stats.ReadIops = rowSet.GetValue<T::ReadIops>();
+                stats.WriteIops = rowSet.GetValue<T::WriteIops>();
+                stats.SearchHeight = rowSet.GetValueOrDefault<T::SearchHeight>();
+                stats.FullCompactionTs = rowSet.GetValueOrDefault<T::FullCompactionTs>();
+                stats.MemDataSize = rowSet.GetValueOrDefault<T::MemDataSize>();
+                stats.LocksAcquired = rowSet.GetValueOrDefault<T::LocksAcquired>();
+                stats.LocksWholeShard = rowSet.GetValueOrDefault<T::LocksWholeShard>();
+                stats.LocksBroken = rowSet.GetValueOrDefault<T::LocksBroken>();
+
+                TDiskSpaceUsageDelta unusedDelta;
+                tableInfo->UpdateShardStats(&unusedDelta, shardIdx, stats, now);
+
+                if (!rowSet.Next()) {
+                    return false;
+                }
+            }
+
+            if (prevTableId && Self->Tables.contains(prevTableId)) {
                 TTableInfo::TPtr tableInfo = Self->Tables.at(prevTableId);
                 if (!tableInfo->IsBackup && !tableInfo->IsShardsStatsDetached()) {
                     Self->ResolveDomainInfo(prevTableId)->AggrDiskSpaceUsage(Self, tableInfo->GetStats().Aggregated);
@@ -2750,7 +3004,16 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 auto it = Self->Topics.find(pathId);
                 Y_ABORT_UNLESS(it != Self->Topics.end());
 
-                alterData->TotalPartitionCount = it->second->GetTotalPartitionCountWithAlter();
+                alterData->TotalPartitionCount = 0;
+                alterData->ActivePartitionCount = 0;
+                for (const auto& [_, partition] : it->second->Partitions) {
+                    if (partition->AlterVersion <= alterData->AlterVersion) {
+                        ++alterData->TotalPartitionCount;
+                        if (partition->Status == NKikimrPQ::ETopicPartitionStatus::Active) {
+                            ++alterData->ActivePartitionCount;
+                        }
+                    }
+                }
                 alterData->BalancerTabletID = it->second->BalancerTabletID;
                 alterData->BalancerShardIdx = it->second->BalancerShardIdx;
                 it->second->AlterData = alterData;
@@ -3043,7 +3306,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                                    << ", index pathId: " << pathId
                                    << ", parent pathId: " << path->ParentPathId);
                     TPathElement::TPtr parent = Self->PathsById.at(path->ParentPathId);
-                    Y_VERIFY_S(parent->IsTable(), "Parent path is not a table"
+                    Y_VERIFY_S(parent->IsTable() || parent->IsColumnTable(), "Parent path is not a table or column table"
                                    << ", index pathId: " << pathId
                                    << ", parent pathId: " << path->ParentPathId);
 
@@ -3688,7 +3951,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     srcPath->DbRefCount++;
                 }
 
-                if (txState.TxType == TTxState::TxMoveTable || txState.TxType == TTxState::TxMoveTableIndex || txState.TxType == TTxState::TxMoveSequence) {
+                if (txState.TxType == TTxState::TxMoveTable || txState.TxType == TTxState::TxMoveTableIndex || txState.TxType == TTxState::TxMoveSequence || txState.TxType == TTxState::TxMoveLocalIndex) {
                     Y_ABORT_UNLESS(txState.SourcePathId);
                     TPathElement::TPtr srcPath = Self->PathsById.at(txState.SourcePathId);
                     Y_VERIFY_S(srcPath, "Null path element, pathId: " << txState.SourcePathId);
@@ -3855,6 +4118,161 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
             }
         }
 
+        // Read olap stores
+        {
+            auto rowset = db.Table<Schema::OlapStores>().Select();
+            if (!rowset.IsReady()) {
+                return false;
+            }
+
+            while (!rowset.EndOfSet()) {
+                TPathId pathId = Self->MakeLocalId(rowset.GetValue<Schema::OlapStores::PathId>());
+                ui64 alterVersion = rowset.GetValue<Schema::OlapStores::AlterVersion>();
+                NKikimrSchemeOp::TColumnStoreDescription description;
+                Y_ABORT_UNLESS(description.ParseFromString(rowset.GetValue<Schema::OlapStores::Description>()));
+                NKikimrSchemeOp::TColumnStoreSharding sharding;
+                Y_ABORT_UNLESS(sharding.ParseFromString(rowset.GetValue<Schema::OlapStores::Sharding>()));
+
+                TOlapStoreInfo::TPtr storeInfo = std::make_shared<TOlapStoreInfo>(alterVersion, std::move(sharding));
+                storeInfo->ParseFromLocalDB(description);
+                Self->OlapStores[pathId] = storeInfo;
+                Self->IncrementPathDbRefCount(pathId);
+                Self->SetPartitioning(pathId, Self->OlapStores[pathId]);
+
+                if (!rowset.Next()) {
+                    return false;
+                }
+            }
+        }
+
+        // Read olap stores (alters)
+        {
+            auto rowset = db.Table<Schema::OlapStoresAlters>().Select();
+            if (!rowset.IsReady()) {
+                return false;
+            }
+
+            while (!rowset.EndOfSet()) {
+                TPathId pathId = Self->MakeLocalId(rowset.GetValue<Schema::OlapStoresAlters::PathId>());
+                ui64 alterVersion = rowset.GetValue<Schema::OlapStoresAlters::AlterVersion>();
+                NKikimrSchemeOp::TColumnStoreDescription description;
+                Y_ABORT_UNLESS(description.ParseFromString(rowset.GetValue<Schema::OlapStoresAlters::Description>()));
+                NKikimrSchemeOp::TColumnStoreSharding sharding;
+                Y_ABORT_UNLESS(sharding.ParseFromString(rowset.GetValue<Schema::OlapStoresAlters::Sharding>()));
+                TMaybe<NKikimrSchemeOp::TAlterColumnStore> alterBody;
+                if (rowset.HaveValue<Schema::OlapStoresAlters::AlterBody>()) {
+                    Y_ABORT_UNLESS(alterBody.ConstructInPlace().ParseFromString(rowset.GetValue<Schema::OlapStoresAlters::AlterBody>()));
+                }
+
+                Y_VERIFY_S(Self->OlapStores.contains(pathId),
+                    "Cannot load alter for olap store " << pathId);
+
+                TOlapStoreInfo::TPtr storeInfo = std::make_shared<TOlapStoreInfo>(alterVersion, std::move(sharding), std::move(alterBody));
+                storeInfo->ParseFromLocalDB(description);
+                Self->OlapStores[pathId]->AlterData = storeInfo;
+
+                if (!rowset.Next()) {
+                    return false;
+                }
+            }
+        }
+
+        // Read olap tables
+        {
+            auto rowset = db.Table<Schema::ColumnTables>().Select();
+            if (!rowset.IsReady()) {
+                return false;
+            }
+
+            while (!rowset.EndOfSet()) {
+                TPathId pathId = Self->MakeLocalId(rowset.GetValue<Schema::ColumnTables::PathId>());
+                ui64 alterVersion = rowset.GetValue<Schema::ColumnTables::AlterVersion>();
+                NKikimrSchemeOp::TColumnTableDescription description;
+                Y_ABORT_UNLESS(description.ParseFromString(rowset.GetValue<Schema::ColumnTables::Description>()));
+                Y_ABORT_UNLESS(description.MutableSharding()->ParseFromString(rowset.GetValue<Schema::ColumnTables::Sharding>()));
+                if (rowset.HaveValue<Schema::ColumnTables::MultiColumnStatistics>()) {
+                    NKikimrSchemeOp::TColumnTableDescription statisticsHolder;
+                    Y_ABORT_UNLESS(ParseFromStringNoSizeLimit(statisticsHolder,
+                        rowset.GetValue<Schema::ColumnTables::MultiColumnStatistics>()));
+                    description.MutableMultiColumnStatistics()->Swap(statisticsHolder.MutableMultiColumnStatistics());
+                }
+                TMaybe<NKikimrSchemeOp::TColumnStoreSharding> storeSharding;
+                if (rowset.HaveValue<Schema::ColumnTables::StandaloneSharding>()) {
+                    Y_ABORT_UNLESS(storeSharding.ConstructInPlace().ParseFromString(
+                        rowset.GetValue<Schema::ColumnTables::StandaloneSharding>()));
+                }
+
+                auto tableInfo = Self->ColumnTables.BuildNew(pathId, std::make_shared<TColumnTableInfo>(alterVersion,
+                    std::move(description), std::move(storeSharding)));
+                Self->IncrementPathDbRefCount(pathId);
+
+                if (!tableInfo->IsStandalone()) {
+                    auto itStore = Self->OlapStores.find(tableInfo->GetOlapStorePathIdVerified());
+                    if (itStore != Self->OlapStores.end()) {
+                        itStore->second->ColumnTables.insert(pathId);
+                        if (pathsUnderOperation.contains(pathId)) {
+                            itStore->second->ColumnTablesUnderOperation.insert(pathId);
+                        }
+                    }
+                }
+
+                if (rowset.HaveValue<Schema::ColumnTables::IsRestore>()) {
+                    tableInfo->IsRestore = rowset.GetValue<Schema::ColumnTables::IsRestore>();
+                }
+
+                if (rowset.HaveValue<Schema::ColumnTables::IsReadOnly>()) {
+                    tableInfo->IsReadOnly = rowset.GetValue<Schema::ColumnTables::IsReadOnly>();
+                }
+
+                if (!rowset.Next()) {
+                    return false;
+                }
+            }
+        }
+
+        // Read olap tables (alters)
+        {
+            auto rowset = db.Table<Schema::ColumnTablesAlters>().Select();
+            if (!rowset.IsReady()) {
+                return false;
+            }
+
+            while (!rowset.EndOfSet()) {
+                TPathId pathId = Self->MakeLocalId(rowset.GetValue<Schema::ColumnTablesAlters::PathId>());
+                ui64 alterVersion = rowset.GetValue<Schema::ColumnTablesAlters::AlterVersion>();
+                NKikimrSchemeOp::TColumnTableDescription description;
+                Y_ABORT_UNLESS(description.ParseFromString(rowset.GetValue<Schema::ColumnTablesAlters::Description>()));
+                Y_ABORT_UNLESS(description.MutableSharding()->ParseFromString(rowset.GetValue<Schema::ColumnTablesAlters::Sharding>()));
+                if (rowset.HaveValue<Schema::ColumnTablesAlters::MultiColumnStatistics>()) {
+                    NKikimrSchemeOp::TColumnTableDescription statisticsHolder;
+                    Y_ABORT_UNLESS(ParseFromStringNoSizeLimit(statisticsHolder,
+                        rowset.GetValue<Schema::ColumnTablesAlters::MultiColumnStatistics>()));
+                    description.MutableMultiColumnStatistics()->Swap(statisticsHolder.MutableMultiColumnStatistics());
+                }
+                TMaybe<NKikimrSchemeOp::TAlterColumnTable> alterBody;
+                if (rowset.HaveValue<Schema::ColumnTablesAlters::AlterBody>()) {
+                    Y_ABORT_UNLESS(alterBody.ConstructInPlace().ParseFromString(rowset.GetValue<Schema::ColumnTablesAlters::AlterBody>()));
+                }
+                TMaybe<NKikimrSchemeOp::TColumnStoreSharding> storeSharding;
+                if (rowset.HaveValue<Schema::ColumnTablesAlters::StandaloneSharding>()) {
+                    Y_ABORT_UNLESS(storeSharding.ConstructInPlace().ParseFromString(
+                        rowset.GetValue<Schema::ColumnTablesAlters::StandaloneSharding>()));
+                }
+
+                Y_VERIFY_S(Self->ColumnTables.contains(pathId),
+                    "Cannot load alter for olap table " << pathId);
+
+                TColumnTableInfo::TPtr alterData = std::make_shared<TColumnTableInfo>(alterVersion,
+                    std::move(description), std::move(storeSharding), std::move(alterBody));
+                auto ctInfo = Self->ColumnTables.TakeVerified(pathId);
+                ctInfo->AlterData = alterData;
+
+                if (!rowset.Next()) {
+                    return false;
+                }
+            }
+        }
+
         // Read tx's shards
         {
             TTxShardsRows txShardsRows;
@@ -3902,7 +4320,8 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     }
                 } else { // remove that branch since we sure in persisting SourcePathId
                     // Figure out source path id for the Tx (for CopyTable)
-                    if (Self->ShardInfos.at(shardIdx).PathId != txState->TargetPathId &&
+                    if (!Self->SharedShards.contains(shardIdx) &&
+                        Self->ShardInfos.at(shardIdx).PathId != txState->TargetPathId &&
                         !txState->SourcePathId &&
                         txState->TxType != TTxState::TxForceDropSubDomain &&
                         txState->TxType != TTxState::TxForceDropExtSubDomain &&
@@ -3915,7 +4334,8 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                         txState->TxType != TTxState::TxCreateReplication &&
                         txState->TxType != TTxState::TxAlterReplication &&
                         txState->TxType != TTxState::TxDropReplication &&
-                        txState->TxType != TTxState::TxDropReplicationCascade)
+                        txState->TxType != TTxState::TxDropReplicationCascade
+                    )
                     {
                         Y_VERIFY_S(txState->TxType == TTxState::TxCopyTable || txState->TxType == TTxState::TxReadOnlyCopyColumnTable, "Only CopyTable Tx can have participating shards from a different table"
                                        << ", txId: " << operationId.GetTxId()
@@ -4064,44 +4484,53 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
 
                 Y_ABORT_UNLESS(tableName.size() > 0);
 
-                TTableInfo::TPtr tableInfo = Self->Tables.at(pathId);
-                Y_ABORT_UNLESS(tableInfo.Get() != nullptr);
+                auto fillBackupSettings = [&](auto& tableInfo) {
+                    tableInfo->BackupSettings.SetTableName(tableName);
+                    tableInfo->BackupSettings.SetNeedToBill(needToBill);
+                    tableInfo->BackupSettings.SetNumberOfRetries(nRetries);
+                    tableInfo->BackupSettings.SetEnableChecksums(enableChecksums);
+                    tableInfo->BackupSettings.SetEnablePermissions(enablePermissions);
 
-                tableInfo->BackupSettings.SetTableName(tableName);
-                tableInfo->BackupSettings.SetNeedToBill(needToBill);
-                tableInfo->BackupSettings.SetNumberOfRetries(nRetries);
-                tableInfo->BackupSettings.SetEnableChecksums(enableChecksums);
-                tableInfo->BackupSettings.SetEnablePermissions(enablePermissions);
-
-                if (ytSerializedSettings) {
-                    auto settings = tableInfo->BackupSettings.MutableYTSettings();
-                    Y_ABORT_UNLESS(ParseFromStringNoSizeLimit(*settings, ytSerializedSettings));
-                } else if (s3SerializedSettings) {
-                    auto settings = tableInfo->BackupSettings.MutableS3Settings();
-                    Y_ABORT_UNLESS(ParseFromStringNoSizeLimit(*settings, s3SerializedSettings));
-                } else if (fsSerializedSettings) {
-                    auto settings = tableInfo->BackupSettings.MutableFSSettings();
-                    Y_ABORT_UNLESS(ParseFromStringNoSizeLimit(*settings, fsSerializedSettings));
-                } else {
-                    Y_ABORT("Unknown settings");
-                }
-
-                if (scanSettings) {
-                    auto settings = tableInfo->BackupSettings.MutableScanSettings();
-                    Y_ABORT_UNLESS(ParseFromStringNoSizeLimit(*settings, scanSettings));
-                }
-
-                if (tableDesc) {
-                    auto desc = tableInfo->BackupSettings.MutableTable();
-                    Y_ABORT_UNLESS(ParseFromStringNoSizeLimit(*desc, tableDesc));
-                }
-
-                if (changefeedUnderlyingTopics) {
-                    NKikimrSchemeOp::TChangefeedUnderlyingTopics wrapperOverTopics;
-                    Y_ABORT_UNLESS(ParseFromStringNoSizeLimit(wrapperOverTopics, changefeedUnderlyingTopics));
-                    for (const auto& topic : wrapperOverTopics.GetChangefeedUnderlyingTopics()) {
-                        *tableInfo->BackupSettings.AddChangefeedUnderlyingTopics() = topic;
+                    if (ytSerializedSettings) {
+                        auto settings = tableInfo->BackupSettings.MutableYTSettings();
+                        Y_ABORT_UNLESS(ParseFromStringNoSizeLimit(*settings, ytSerializedSettings));
+                    } else if (s3SerializedSettings) {
+                        auto settings = tableInfo->BackupSettings.MutableS3Settings();
+                        Y_ABORT_UNLESS(ParseFromStringNoSizeLimit(*settings, s3SerializedSettings));
+                    } else if (fsSerializedSettings) {
+                        auto settings = tableInfo->BackupSettings.MutableFSSettings();
+                        Y_ABORT_UNLESS(ParseFromStringNoSizeLimit(*settings, fsSerializedSettings));
+                    } else {
+                        Y_ABORT("Unknown settings");
                     }
+
+                    if (scanSettings) {
+                        auto settings = tableInfo->BackupSettings.MutableScanSettings();
+                        Y_ABORT_UNLESS(ParseFromStringNoSizeLimit(*settings, scanSettings));
+                    }
+
+                    if (tableDesc) {
+                        auto desc = tableInfo->BackupSettings.MutableTable();
+                        Y_ABORT_UNLESS(ParseFromStringNoSizeLimit(*desc, tableDesc));
+                    }
+
+                    if (changefeedUnderlyingTopics) {
+                        NKikimrSchemeOp::TChangefeedUnderlyingTopics wrapperOverTopics;
+                        Y_ABORT_UNLESS(ParseFromStringNoSizeLimit(wrapperOverTopics, changefeedUnderlyingTopics));
+                        for (const auto& topic : wrapperOverTopics.GetChangefeedUnderlyingTopics()) {
+                            *tableInfo->BackupSettings.AddChangefeedUnderlyingTopics() = topic;
+                        }
+                    }
+                };
+
+                if (auto it = Self->Tables.find(pathId); it != Self->Tables.end()) {
+                    fillBackupSettings(it->second);
+                } else if (Self->ColumnTables.contains(pathId)) {
+                    auto tableInfo = Self->ColumnTables.at(pathId).GetPtr();
+                    fillBackupSettings(tableInfo);
+                } else {
+                    Y_ABORT_S("Cannot find table for backup settings"
+                        << ", pathId: " << pathId);
                 }
 
                 LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "Loaded backup settings"
@@ -4123,9 +4552,17 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     rowSet.GetValue<Schema::RestoreTasks::LocalPathId>());
                 auto task = rowSet.GetValue<Schema::RestoreTasks::Task>();
 
-                TTableInfo::TPtr tableInfo = Self->Tables.at(pathId);
-                Y_ABORT_UNLESS(tableInfo.Get() != nullptr);
-                Y_ABORT_UNLESS(ParseFromStringNoSizeLimit(tableInfo->RestoreSettings, task));
+                if (auto it = Self->Tables.find(pathId); it != Self->Tables.end()) {
+                    TTableInfo::TPtr tableInfo = it->second;
+                    Y_ABORT_UNLESS(tableInfo.Get() != nullptr);
+                    Y_ABORT_UNLESS(ParseFromStringNoSizeLimit(tableInfo->RestoreSettings, task));
+                } else if (Self->ColumnTables.contains(pathId)) {
+                    auto tableInfo = Self->ColumnTables.at(pathId).GetPtr();
+                    Y_ABORT_UNLESS(ParseFromStringNoSizeLimit(tableInfo->RestoreSettings, task));
+                } else {
+                    Y_ABORT_S("Cannot find table for restore task"
+                        << ", pathId: " << pathId);
+                }
 
                 LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                             "Loaded restore task"
@@ -4168,7 +4605,6 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 auto& sid = *securityState.AddSids();
                 sid.SetName(rowset.GetValue<Schema::LoginSids::SidName>());
                 sid.SetType(rowset.GetValue<Schema::LoginSids::SidType>());
-                sid.SetArgonHash(rowset.GetValue<Schema::LoginSids::SidHash>());
                 sid.SetPasswordHashes(rowset.GetValue<Schema::LoginSids::PasswordHashes>());
                 sid.SetCreatedAt(rowset.GetValueOrDefault<Schema::LoginSids::CreatedAt>());
                 sid.SetFailedLoginAttemptCount(rowset.GetValueOrDefault<Schema::LoginSids::FailedAttemptCount>());
@@ -4202,6 +4638,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
         }
         Self->LoginProvider.UpdateSecurityState(std::move(securityState));
 
+        // Read completed backup/restore history
         {
             TShardBackupStatusRows backupStatuses;
             if (!LoadBackupStatuses(db, backupStatuses)) {
@@ -4249,7 +4686,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 info.StartDateTime = startTime;
                 info.DataTotalSize = dataSize;
 
-                if (!Self->Tables.FindPtr(pathId)) {
+                if (!Self->Tables.FindPtr(pathId) && !Self->ColumnTables.contains(pathId)) {
                     LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                                 "Skip record in CompletedBackups"
                                     << ", pathId: " << pathId
@@ -4393,6 +4830,9 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 break;
             case ETabletType::BackupController:
                 Self->TabletCounters->Simple()[COUNTER_BACKUP_CONTROLLER_TABLET_COUNT].Add(1);
+                break;
+            case ETabletType::TestShard:
+                Self->TabletCounters->Simple()[COUNTER_TEST_SHARD_COUNT].Add(1);
                 break;
             default:
                 LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
@@ -5076,6 +5516,153 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
             }
         }
 
+        // Read SetColumnConstraint operations
+        {
+            THashMap<TIndexBuildId, std::shared_ptr<TSetColumnConstraintOperationInfo>> loadedOperations;
+
+            {
+                auto rowset = db.Table<Schema::SetColumnConstraint>().Range().Select();
+                if (!rowset.IsReady()) {
+                    return false;
+                }
+
+                while (!rowset.EndOfSet()) {
+                    auto operationInfo = std::make_shared<TSetColumnConstraintOperationInfo>();
+
+                    TIndexBuildId operationId = TIndexBuildId(rowset.GetValue<Schema::SetColumnConstraint::OperationId>());
+                    operationInfo->Id = operationId;
+
+                    operationInfo->TablePathId = TPathId(
+                        rowset.GetValue<Schema::SetColumnConstraint::TableOwnerId>(),
+                        rowset.GetValue<Schema::SetColumnConstraint::TableLocalId>()
+                    );
+
+                    {
+                        TPath tablePath = TPath::Init(operationInfo->TablePathId, Self);
+                        operationInfo->DomainPathId = tablePath.GetPathIdForDomain();
+                    }
+
+                    TString serializedColumns = rowset.GetValue<Schema::SetColumnConstraint::SerializedColumnNames>();
+                    operationInfo->SetNotNullColumns = DeserializeSetColumnConstraintColumnNames(serializedColumns);
+
+                    operationInfo->ValidationFailed = rowset.GetValueOrDefault<Schema::SetColumnConstraint::ValidationFailed>(false);
+                    operationInfo->OperationState = TSetColumnConstraintOperationInfo::EOperationState(
+                        rowset.GetValue<Schema::SetColumnConstraint::OperationState>()
+                    );
+
+                    operationInfo->StartTime = TInstant::Seconds(rowset.GetValueOrDefault<Schema::SetColumnConstraint::StartTime>(0));
+                    operationInfo->EndTime = TInstant::Seconds(rowset.GetValueOrDefault<Schema::SetColumnConstraint::EndTime>(0));
+                    if (rowset.HaveValue<Schema::SetColumnConstraint::UserSID>()) {
+                        operationInfo->UserSID = rowset.GetValue<Schema::SetColumnConstraint::UserSID>();
+                    }
+
+                    TTxId subStateTxId = rowset.GetValueOrDefault<Schema::SetColumnConstraint::SubStateTxId>(TTxId());
+                    NKikimrScheme::EStatus subStateTxStatus = rowset.GetValueOrDefault<Schema::SetColumnConstraint::SubStateTxStatus>(NKikimrScheme::StatusSuccess);
+                    bool subStateTxDone = rowset.GetValueOrDefault<Schema::SetColumnConstraint::SubStateTxDone>(false);
+
+                    // LockTxId is stored separately so it survives SubStateTxId overwrites in later phases
+                    operationInfo->LockTxId = rowset.GetValueOrDefault<Schema::SetColumnConstraint::LockTxId>(TTxId());
+
+                    switch (operationInfo->OperationState) {
+                        case TSetColumnConstraintOperationInfo::EOperationState::Locking:
+                            // We set the operationInfo->LockTxId value above in the code
+                            operationInfo->LockTxStatus = subStateTxStatus;
+                            operationInfo->LockTxDone = subStateTxDone;
+                            if (subStateTxId && !subStateTxDone) {
+                                Self->TxIdToSetColumnConstraintOperations[subStateTxId] = operationId;
+                            }
+                            break;
+                        case TSetColumnConstraintOperationInfo::EOperationState::LockingNullWrites:
+                            operationInfo->LockNullWritesTxId = subStateTxId;
+                            operationInfo->LockNullWritesTxStatus = subStateTxStatus;
+                            operationInfo->LockNullWritesTxDone = subStateTxDone;
+                            if (subStateTxId && !subStateTxDone) {
+                                Self->TxIdToSetColumnConstraintOperations[subStateTxId] = operationId;
+                            }
+                            break;
+                        case TSetColumnConstraintOperationInfo::EOperationState::Validating:
+                            // No active sub-state tx; shards handle validation
+                            break;
+                        case TSetColumnConstraintOperationInfo::EOperationState::Finishing:
+                            operationInfo->UnlockNullWritesTxId = subStateTxId;
+                            operationInfo->UnlockNullWritesTxStatus = subStateTxStatus;
+                            operationInfo->UnlockNullWritesTxDone = subStateTxDone;
+                            if (subStateTxId && !subStateTxDone) {
+                                Self->TxIdToSetColumnConstraintOperations[subStateTxId] = operationId;
+                            }
+                            break;
+                        case TSetColumnConstraintOperationInfo::EOperationState::Unlocking:
+                            operationInfo->UnlockTxId = subStateTxId;
+                            operationInfo->UnlockTxStatus = subStateTxStatus;
+                            operationInfo->UnlockTxDone = subStateTxDone;
+                            if (subStateTxId && !subStateTxDone) {
+                                Self->TxIdToSetColumnConstraintOperations[subStateTxId] = operationId;
+                            }
+                            break;
+                        case TSetColumnConstraintOperationInfo::EOperationState::Done:
+                        case TSetColumnConstraintOperationInfo::EOperationState::Invalid:
+                            break;
+                    }
+
+                    loadedOperations[operationId] = operationInfo;
+
+                    if (!rowset.Next()) {
+                        return false;
+                    }
+                }
+            }
+
+            // Read per-shard validation statuses in SetColumnConstraint
+            {
+                auto rowset = db.Table<Schema::SetColumnConstraintShardStatus>().Range().Select();
+                if (!rowset.IsReady()) {
+                    return false;
+                }
+
+                while (!rowset.EndOfSet()) {
+                    TIndexBuildId operationId = TIndexBuildId(rowset.GetValue<Schema::SetColumnConstraintShardStatus::OperationId>());
+                    TShardIdx shardIdx(
+                        rowset.GetValue<Schema::SetColumnConstraintShardStatus::OwnerShardIdx>(),
+                        rowset.GetValue<Schema::SetColumnConstraintShardStatus::LocalShardIdx>()
+                    );
+                    auto validateStatus = rowset.GetValue<Schema::SetColumnConstraintShardStatus::Status>();
+                    TString issue = rowset.GetValueOrDefault<Schema::SetColumnConstraintShardStatus::Issue>(TString{});
+
+                    auto* opPtr = loadedOperations.FindPtr(operationId);
+                    if (!opPtr) {
+                        LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                            "SetColumnConstraint shard status: operation not found, id# " << operationId);
+                        if (!rowset.Next()) {
+                            return false;
+                        }
+                        continue;
+                    }
+                    auto& operationInfo = **opPtr;
+
+                    TValidateColumnConstraintShardStatus shardStatus(TSerializedTableRange{}, "");
+                    shardStatus.ValidateStatus = validateStatus;
+                    shardStatus.DebugMessage = issue;
+
+                    operationInfo.ValidationShards.emplace(shardIdx, std::move(shardStatus));
+                    operationInfo.DoneValidationShards.insert(shardIdx);
+
+                    if (!rowset.Next()) {
+                        return false;
+                    }
+                }
+            }
+
+            for (auto& [id, operationInfo] : loadedOperations) {
+                Self->AddSetColumnConstraintOperation(operationInfo);
+                OnComplete.ToProgress(id);
+            }
+
+            LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                "SetColumnConstraint"
+                    << ", records: " << Self->SetColumnConstraintOperations.size()
+                    << ", at schemeshard: " << Self->TabletID());
+        }
+
         // Read snapshot tables
         {
             ui64 records = 0;
@@ -5160,145 +5747,6 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                      "LongLocks: "
                          << " records: " << Self->LockedPaths.size()
                          << ", at schemeshard: " << Self->TabletID());
-
-        // Read olap stores
-        {
-            auto rowset = db.Table<Schema::OlapStores>().Select();
-            if (!rowset.IsReady()) {
-                return false;
-            }
-
-            while (!rowset.EndOfSet()) {
-                TPathId pathId = Self->MakeLocalId(rowset.GetValue<Schema::OlapStores::PathId>());
-                ui64 alterVersion = rowset.GetValue<Schema::OlapStores::AlterVersion>();
-                NKikimrSchemeOp::TColumnStoreDescription description;
-                Y_ABORT_UNLESS(description.ParseFromString(rowset.GetValue<Schema::OlapStores::Description>()));
-                NKikimrSchemeOp::TColumnStoreSharding sharding;
-                Y_ABORT_UNLESS(sharding.ParseFromString(rowset.GetValue<Schema::OlapStores::Sharding>()));
-
-                TOlapStoreInfo::TPtr storeInfo = std::make_shared<TOlapStoreInfo>(alterVersion, std::move(sharding));
-                storeInfo->ParseFromLocalDB(description);
-                Self->OlapStores[pathId] = storeInfo;
-                Self->IncrementPathDbRefCount(pathId);
-                Self->SetPartitioning(pathId, Self->OlapStores[pathId]);
-
-                if (!rowset.Next()) {
-                    return false;
-                }
-            }
-        }
-
-        // Read olap stores (alters)
-        {
-            auto rowset = db.Table<Schema::OlapStoresAlters>().Select();
-            if (!rowset.IsReady()) {
-                return false;
-            }
-
-            while (!rowset.EndOfSet()) {
-                TPathId pathId = Self->MakeLocalId(rowset.GetValue<Schema::OlapStoresAlters::PathId>());
-                ui64 alterVersion = rowset.GetValue<Schema::OlapStoresAlters::AlterVersion>();
-                NKikimrSchemeOp::TColumnStoreDescription description;
-                Y_ABORT_UNLESS(description.ParseFromString(rowset.GetValue<Schema::OlapStoresAlters::Description>()));
-                NKikimrSchemeOp::TColumnStoreSharding sharding;
-                Y_ABORT_UNLESS(sharding.ParseFromString(rowset.GetValue<Schema::OlapStoresAlters::Sharding>()));
-                TMaybe<NKikimrSchemeOp::TAlterColumnStore> alterBody;
-                if (rowset.HaveValue<Schema::OlapStoresAlters::AlterBody>()) {
-                    Y_ABORT_UNLESS(alterBody.ConstructInPlace().ParseFromString(rowset.GetValue<Schema::OlapStoresAlters::AlterBody>()));
-                }
-
-                Y_VERIFY_S(Self->OlapStores.contains(pathId),
-                    "Cannot load alter for olap store " << pathId);
-
-                TOlapStoreInfo::TPtr storeInfo = std::make_shared<TOlapStoreInfo>(alterVersion, std::move(sharding), std::move(alterBody));
-                storeInfo->ParseFromLocalDB(description);
-                Self->OlapStores[pathId]->AlterData = storeInfo;
-
-                if (!rowset.Next()) {
-                    return false;
-                }
-            }
-        }
-
-        // Read olap tables
-        {
-            auto rowset = db.Table<Schema::ColumnTables>().Select();
-            if (!rowset.IsReady()) {
-                return false;
-            }
-
-            while (!rowset.EndOfSet()) {
-                TPathId pathId = Self->MakeLocalId(rowset.GetValue<Schema::ColumnTables::PathId>());
-                ui64 alterVersion = rowset.GetValue<Schema::ColumnTables::AlterVersion>();
-                NKikimrSchemeOp::TColumnTableDescription description;
-                Y_ABORT_UNLESS(description.ParseFromString(rowset.GetValue<Schema::ColumnTables::Description>()));
-                Y_ABORT_UNLESS(description.MutableSharding()->ParseFromString(rowset.GetValue<Schema::ColumnTables::Sharding>()));
-                TMaybe<NKikimrSchemeOp::TColumnStoreSharding> storeSharding;
-                if (rowset.HaveValue<Schema::ColumnTables::StandaloneSharding>()) {
-                    Y_ABORT_UNLESS(storeSharding.ConstructInPlace().ParseFromString(
-                        rowset.GetValue<Schema::ColumnTables::StandaloneSharding>()));
-                }
-
-                auto tableInfo = Self->ColumnTables.BuildNew(pathId, std::make_shared<TColumnTableInfo>(alterVersion,
-                    std::move(description), std::move(storeSharding)));
-                Self->IncrementPathDbRefCount(pathId);
-
-                if (!tableInfo->IsStandalone()) {
-                    auto itStore = Self->OlapStores.find(tableInfo->GetOlapStorePathIdVerified());
-                    if (itStore != Self->OlapStores.end()) {
-                        itStore->second->ColumnTables.insert(pathId);
-                        if (pathsUnderOperation.contains(pathId)) {
-                            itStore->second->ColumnTablesUnderOperation.insert(pathId);
-                        }
-                    }
-                }
-
-                if (rowset.HaveValue<Schema::ColumnTables::IsRestore>()) {
-                    tableInfo->IsRestore = rowset.GetValue<Schema::ColumnTables::IsRestore>();
-                }
-
-                if (!rowset.Next()) {
-                    return false;
-                }
-            }
-        }
-
-        // Read olap tables (alters)
-        {
-            auto rowset = db.Table<Schema::ColumnTablesAlters>().Select();
-            if (!rowset.IsReady()) {
-                return false;
-            }
-
-            while (!rowset.EndOfSet()) {
-                TPathId pathId = Self->MakeLocalId(rowset.GetValue<Schema::ColumnTablesAlters::PathId>());
-                ui64 alterVersion = rowset.GetValue<Schema::ColumnTablesAlters::AlterVersion>();
-                NKikimrSchemeOp::TColumnTableDescription description;
-                Y_ABORT_UNLESS(description.ParseFromString(rowset.GetValue<Schema::ColumnTablesAlters::Description>()));
-                Y_ABORT_UNLESS(description.MutableSharding()->ParseFromString(rowset.GetValue<Schema::ColumnTablesAlters::Sharding>()));
-                TMaybe<NKikimrSchemeOp::TAlterColumnTable> alterBody;
-                if (rowset.HaveValue<Schema::ColumnTablesAlters::AlterBody>()) {
-                    Y_ABORT_UNLESS(alterBody.ConstructInPlace().ParseFromString(rowset.GetValue<Schema::ColumnTablesAlters::AlterBody>()));
-                }
-                TMaybe<NKikimrSchemeOp::TColumnStoreSharding> storeSharding;
-                if (rowset.HaveValue<Schema::ColumnTablesAlters::StandaloneSharding>()) {
-                    Y_ABORT_UNLESS(storeSharding.ConstructInPlace().ParseFromString(
-                        rowset.GetValue<Schema::ColumnTablesAlters::StandaloneSharding>()));
-                }
-
-                Y_VERIFY_S(Self->ColumnTables.contains(pathId),
-                    "Cannot load alter for olap table " << pathId);
-
-                TColumnTableInfo::TPtr alterData = std::make_shared<TColumnTableInfo>(alterVersion,
-                    std::move(description), std::move(storeSharding), std::move(alterBody));
-                auto ctInfo = Self->ColumnTables.TakeVerified(pathId);
-                ctInfo->AlterData = alterData;
-
-                if (!rowset.Next()) {
-                    return false;
-                }
-            }
-        }
 
         // Read sequences
         {
@@ -5441,6 +5889,49 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
         {
             if (!Self->BackgroundSessionsManager->LoadIdempotency(txc)) {
                 return false;
+            }
+        }
+
+        // Read test shard sets
+        {
+            auto rowset = db.Table<Schema::TestShardSet>().Select();
+            if (!rowset.IsReady()) {
+                return false;
+            }
+
+            while (!rowset.EndOfSet()) {
+                TPathId pathId = Self->MakeLocalId(rowset.GetValue<Schema::TestShardSet::PathId>());
+                ui64 alterVersion = rowset.GetValue<Schema::TestShardSet::AlterVersion>();
+                TString serializedTestShards = rowset.GetValue<Schema::TestShardSet::TestShards>();
+                TString serializedCmdInitialize = rowset.GetValue<Schema::TestShardSet::CmdInitialize>();
+
+                TTestShardSetInfo::TPtr testShardSetInfo = new TTestShardSetInfo(alterVersion);
+
+                if (!serializedTestShards.empty()) {
+                    NKikimrSchemeOp::TTestShardSetDescription description;
+                    Y_PROTOBUF_SUPPRESS_NODISCARD description.ParseFromString(serializedTestShards);
+                    for (const auto& shardDesc : description.GetShards()) {
+                        TLocalShardIdx localShardIdx(ui64(shardDesc.GetShardIdx()));
+                        TShardIdx shardIdx(Self->TabletID(), localShardIdx);
+                        TTabletId tabletId(ui64(shardDesc.GetTabletId()));
+                        if (auto* shardInfo = Self->ShardInfos.FindPtr(shardIdx)) {
+                            tabletId = shardInfo->TabletID;
+                        }
+                        testShardSetInfo->TestShards[shardIdx] = tabletId;
+                    }
+                }
+
+                if (!serializedCmdInitialize.empty()) {
+                    Y_PROTOBUF_SUPPRESS_NODISCARD testShardSetInfo->CmdInitialize.ParseFromString(serializedCmdInitialize);
+                }
+
+                Self->TestShardSets[pathId] = testShardSetInfo;
+                Self->IncrementPathDbRefCount(pathId);
+                Self->TabletCounters->Simple()[COUNTER_TEST_SHARD_SET_COUNT].Add(1);
+
+                if (!rowset.Next()) {
+                    return false;
+                }
             }
         }
 
@@ -5799,6 +6290,81 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
             }
         }
 
+        {
+            {
+                auto rowset = db.Table<Schema::FullBackups>().Range().Select();
+                if (!rowset.IsReady()) {
+                    return false;
+                }
+
+                while (!rowset.EndOfSet()) {
+                    ui64 id = rowset.GetValue<Schema::FullBackups::Id>();
+                    auto domainPathId = TPathId(rowset.GetValueOrDefault<Schema::FullBackups::DomainPathOwnerId>(selfId),
+                                                rowset.GetValue<Schema::FullBackups::DomainPathId>());
+
+                    TFullBackupInfo::TPtr backupInfo = new TFullBackupInfo(id, domainPathId);
+
+                    backupInfo->State = static_cast<TFullBackupInfo::EState>(rowset.GetValue<Schema::FullBackups::State>());
+
+                    backupInfo->StartTime = TInstant::Seconds(rowset.GetValueOrDefault<Schema::FullBackups::StartTime>());
+                    backupInfo->EndTime = TInstant::Seconds(rowset.GetValueOrDefault<Schema::FullBackups::EndTime>());
+                    if (rowset.HaveValue<Schema::FullBackups::UserSID>()) {
+                        backupInfo->UserSID = rowset.GetValue<Schema::FullBackups::UserSID>();
+                    }
+                    if (rowset.HaveValue<Schema::FullBackups::FinalIssues>()) {
+                        backupInfo->FinalIssues = rowset.GetValue<Schema::FullBackups::FinalIssues>();
+                    }
+                    backupInfo->BackupCollectionPathId = TPathId(
+                        rowset.GetValueOrDefault<Schema::FullBackups::BackupCollectionPathOwnerId>(selfId),
+                        rowset.GetValueOrDefault<Schema::FullBackups::BackupCollectionLocalPathId>());
+
+                    backupInfo->ExpectedItemCount =
+                        rowset.GetValueOrDefault<Schema::FullBackups::ExpectedItemCount>(0);
+
+                    Self->FullBackups[id] = backupInfo;
+
+                    if (!backupInfo->IsFinished()) {
+                        FullBackupsToResume.push_back(backupInfo->Id);
+                        // Only in-progress ops block concurrent backups on the same collection.
+                        if (backupInfo->BackupCollectionPathId) {
+                            Self->BCPathToFullBackup[backupInfo->BackupCollectionPathId] = backupInfo->Id;
+                        }
+                    }
+
+                    if (!rowset.Next()) {
+                        return false;
+                    }
+                }
+            }
+
+            {
+                auto rowset = db.Table<Schema::FullBackupItems>().Range().Select();
+                if (!rowset.IsReady()) {
+                    return false;
+                }
+
+                while (!rowset.EndOfSet()) {
+                    ui64 id = rowset.GetValue<Schema::FullBackupItems::Id>();
+                    Y_VERIFY_S(Self->FullBackups.contains(id), "Full backup is not found"
+                               << ": id# " << id);
+
+                    TFullBackupInfo::TPtr info = Self->FullBackups.at(id);
+
+                    TPathId pathId = TPathId(rowset.GetValue<Schema::FullBackupItems::PathOwnerId>(),
+                                             rowset.GetValue<Schema::FullBackupItems::PathId>());
+
+                    auto& item = info->Items[pathId];
+
+                    item.State = static_cast<TFullBackupInfo::TItem::EState>(rowset.GetValue<Schema::FullBackupItems::State>());
+                    item.PathId = pathId;
+
+                    if (!rowset.Next()) {
+                        return false;
+                    }
+                }
+            }
+        }
+
         { // Read secrets
             auto rowset = db.Table<Schema::Secrets>().Range().Select();
             if (!rowset.IsReady()) {
@@ -5955,12 +6521,20 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
             TPath resolvedPath = TPath::Resolve(tablePath, Self);
             if (resolvedPath.IsResolved() && Self->PathsById.contains(resolvedPath.Base()->PathId)) {
                 auto targetPathElement = Self->PathsById.at(resolvedPath.Base()->PathId);
+                Y_VERIFY_S(!targetPathElement->Dropped(),
+                    "RestoreIncrementalRestoreOpPathStates: path is dropped but data restore is in-flight"
+                    << ", pathId: " << resolvedPath.Base()->PathId
+                    << ", StepDropped: " << targetPathElement->StepDropped);
                 targetPathElement->PathState = TPathElement::EPathState::EPathStateIncomingIncrementalRestore;
             }
         }
 
         if (Self->PathsById.contains(backupCollectionPathId)) {
             auto sourcePath = Self->PathsById.at(backupCollectionPathId);
+            Y_VERIFY_S(!sourcePath->Dropped(),
+                "RestoreIncrementalRestoreOpPathStates: path is dropped but data restore is in-flight"
+                << ", pathId: " << backupCollectionPathId
+                << ", StepDropped: " << sourcePath->StepDropped);
             sourcePath->PathState = TPathElement::EPathState::EPathStateOutgoingIncrementalRestore;
 
             TPath backupCollectionPath = TPath::Init(backupCollectionPathId, Self);
@@ -5980,6 +6554,10 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                             TPath fullBackupTableResolvedPath = TPath::Resolve(fullBackupTablePath, Self);
                             if (fullBackupTableResolvedPath.IsResolved() && Self->PathsById.contains(fullBackupTableResolvedPath.Base()->PathId)) {
                                 auto backupTablePathElement = Self->PathsById.at(fullBackupTableResolvedPath.Base()->PathId);
+                                Y_VERIFY_S(!backupTablePathElement->Dropped(),
+                                    "RestoreIncrementalRestoreOpPathStates: path is dropped but data restore is in-flight"
+                                    << ", pathId: " << fullBackupTableResolvedPath.Base()->PathId
+                                    << ", StepDropped: " << backupTablePathElement->StepDropped);
                                 backupTablePathElement->PathState = TPathElement::EPathState::EPathStateOutgoingIncrementalRestore;
                             }
                         }
@@ -5999,6 +6577,10 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                             TPath incrBackupTableResolvedPath = TPath::Resolve(incrBackupTablePath, Self);
                             if (incrBackupTableResolvedPath.IsResolved() && Self->PathsById.contains(incrBackupTableResolvedPath.Base()->PathId)) {
                                 auto backupTablePathElement = Self->PathsById.at(incrBackupTableResolvedPath.Base()->PathId);
+                                Y_VERIFY_S(!backupTablePathElement->Dropped(),
+                                    "RestoreIncrementalRestoreOpPathStates: path is dropped but data restore is in-flight"
+                                    << ", pathId: " << incrBackupTableResolvedPath.Base()->PathId
+                                    << ", StepDropped: " << backupTablePathElement->StepDropped);
                                 backupTablePathElement->PathState = TPathElement::EPathState::EPathStateAwaitingOutgoingIncrementalRestore;
                             }
                         }
@@ -6036,6 +6618,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
             for (const auto& name : op.GetIncrementalBackupTrimmedNames()) {
                 backupNames.push_back(name);
             }
+            RestoreIncrementalRestoreOpPathStates(op);
             onComplete.Send(Self->SelfId(),
                 new TEvPrivate::TEvRunIncrementalRestore(backupCollectionPathId, opId, backupNames));
         }
@@ -6097,13 +6680,10 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
             .BlockStoreVolumesToClean = std::move(BlockStoreVolumesToClean),
             .RestoreTablesToUnmark = std::move(RestoreTablesToUnmark),
             .IncrementalBackupIds = std::move(IncrementalBackupsToResume),
+            .FullBackupIds = std::move(FullBackupsToResume),
         });
 
-        Self->ProcessForcedCompactionQueues();
-        if (Self->ForcedCompactionsDoneShardsToPersist || Self->CancellingForcedCompactions) {
-            // for cleanup and to progress cancelling forced compactions after restart
-            Self->Execute(Self->CreateTxProgressForcedCompaction(), ctx);
-        }
+        Self->ScheduleForcedCompactionProgress(ctx);
     }
 };
 

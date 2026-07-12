@@ -6,6 +6,9 @@
 #include <yql/essentials/public/udf/udf_type_inspection.h>
 #include <yql/essentials/public/udf/udf_type_ops.h>
 #include <yql/essentials/public/udf/udf_type_size_check.h>
+#include <yql/essentials/public/udf/udf_data_type.h>
+
+#include <util/generic/guid.h>
 
 namespace NYql::NUdf {
 
@@ -68,12 +71,24 @@ public:
     }
 };
 
-template <typename TStringType, bool Nullable>
-class TStringBlockItemHasher: public TBlockItemHasherBase<TStringBlockItemHasher<TStringType, Nullable>, Nullable> {
+template <bool Nullable>
+class TStringBlockItemHasherBase: public TBlockItemHasherBase<TStringBlockItemHasherBase<Nullable>, Nullable> {
 public:
     ui64 DoHash(TBlockItem value) const {
         return GetStringHash(value.AsStringRef());
     }
+};
+
+template <typename TStringType, bool Nullable>
+class TStringBlockItemHasher: public TStringBlockItemHasherBase<Nullable> {
+};
+
+template <bool Nullable>
+class TUuidBlockItemHasher: public TStringBlockItemHasherBase<Nullable> {
+};
+
+template <bool Nullable>
+class TFixedSizeBlockItemHasher<TGUID, Nullable>: public TUuidBlockItemHasher<Nullable> {
 };
 
 class TSingularTypeBlockItemHaser: public TBlockItemHasherBase<TSingularTypeBlockItemHaser, /*Nullable=*/false> {
@@ -101,6 +116,22 @@ public:
             result = CombineHashes(result, Children_[i]->Hash(elements[i]));
         }
         return result;
+    }
+
+private:
+    const TVector<std::unique_ptr<IBlockItemHasher>> Children_;
+};
+
+class TVariantBlockItemHasher: public TBlockItemHasherBase<TVariantBlockItemHasher, false> {
+public:
+    explicit TVariantBlockItemHasher(TVector<std::unique_ptr<IBlockItemHasher>>&& children)
+        : Children_(std::move(children))
+    {
+    }
+
+    ui64 DoHash(TBlockItem value) const {
+        const ui64 idx = value.GetVariantIndex();
+        return CombineHashes(idx, Children_[idx]->Hash(value.GetVariantItem()));
     }
 
 private:

@@ -51,8 +51,8 @@ public:
 
 struct TMethodInfo
 {
-    TString Service;
-    TString Method;
+    std::string Service;
+    std::string Method;
     double WaitingTimeoutFraction = 0;
 };
 
@@ -60,7 +60,7 @@ using TMethodInfoList = std::vector<TMethodInfo>;
 
 constexpr auto MeanWaitTimeThreshold = TDuration::MilliSeconds(20);
 
-TOverloadControllerConfigPtr CreateConfig(const THashMap<TString, TMethodInfoList>& schema)
+TOverloadControllerConfigPtr CreateConfig(const THashMap<std::string, TMethodInfoList>& schema)
 {
     auto config = New<TOverloadControllerConfig>();
     config->Enabled = true;

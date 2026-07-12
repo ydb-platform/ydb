@@ -3,8 +3,6 @@
 #include <ydb/library/actors/interconnect/rdma/mem_pool.h>
 #include <ydb/library/actors/protos/interconnect.pb.h>
 
-#include <util/generic/bitops.h>
-
 namespace NActors {
     TString EventPBBaseToString(const TString& header, const TString& dbgStr) {
         TString res;
@@ -61,8 +59,8 @@ namespace NActors {
     }
 
     void TCoroutineChunkSerializer::Produce(const void *data, size_t size) {
-        Y_ABORT_UNLESS(size <= SizeRemain);
-        SizeRemain -= size;
+        Y_ABORT_UNLESS(size <= TotalSizeRemain);
+        TotalSizeRemain -= size;
         TotalSerializedDataSize += size;
 
         if (!Chunks.empty()) {
@@ -82,13 +80,13 @@ namespace NActors {
         Y_ABORT_UNLESS(size >= 0);
         NSan::CheckMemIsInitialized(data, size);
         while (size) {
-            if (const size_t bytesToAppend = Min<size_t>(size, SizeRemain)) {
+            if (const size_t bytesToAppend = Min<size_t>(size, TotalSizeRemain, Buffer.size())) {
                 const void *produce = data;
                 if ((reinterpret_cast<uintptr_t>(data) & 63) + bytesToAppend <= 64 &&
                         (Chunks.empty() || data != Chunks.back().first + Chunks.back().second)) {
-                    memcpy(BufferPtr, data, bytesToAppend);
-                    produce = BufferPtr;
-                    BufferPtr += bytesToAppend;
+                    memcpy(Buffer.data(), data, bytesToAppend);
+                    produce = Buffer.data();
+                    Buffer = Buffer.SubSpan(bytesToAppend, Max<size_t>());
                 }
                 Produce(produce, bytesToAppend);
                 data = static_cast<const char*>(data) + bytesToAppend;
@@ -106,16 +104,24 @@ namespace NActors {
     bool TCoroutineChunkSerializer::Next(void** data, int* size) {
         Y_ABORT_UNLESS(!CancelFlag);
         Y_ABORT_UNLESS(!AbortFlag);
-        if (!SizeRemain) {
+
+        // number of bytes we can allocate right now
+        size_t maxBytes = Min(Buffer.size(), TotalSizeRemain);
+
+        if (!maxBytes) {
             InnerContext.SwitchTo(BufFeedContext);
             if (CancelFlag || AbortFlag) {
                 return false;
             }
+
+            // recalculate actual value as it has changed
+            maxBytes = Min(Buffer.size(), TotalSizeRemain);
         }
-        Y_ABORT_UNLESS(SizeRemain);
-        *data = BufferPtr;
-        *size = SizeRemain;
-        BufferPtr += SizeRemain;
+
+        Y_ABORT_UNLESS(maxBytes);
+        *data = Buffer.data();
+        *size = maxBytes;
+        Buffer = Buffer.SubSpan(maxBytes, Max<size_t>());
         Produce(*data, *size);
         return true;
     }
@@ -128,14 +134,14 @@ namespace NActors {
         Y_ABORT_UNLESS(!Chunks.empty());
         TChunk& buf = Chunks.back();
         Y_ABORT_UNLESS((size_t)count <= buf.second, "count# %d buf.second# %zu", count, buf.second);
-        Y_ABORT_UNLESS(buf.first + buf.second == BufferPtr, "buf# %p:%zu BufferPtr# %p SizeRemain# %zu NumChunks# %zu",
-            buf.first, buf.second, BufferPtr, SizeRemain, Chunks.size());
+        Y_ABORT_UNLESS(buf.first + buf.second == Buffer.data(), "buf# %p:%zu Buffer.data# %p Buffer.size# %zu"
+            " NumChunks# %zu", buf.first, buf.second, Buffer.data(), Buffer.size(), Chunks.size());
         buf.second -= count;
         if (!buf.second) {
             Chunks.pop_back();
         }
-        BufferPtr -= count;
-        SizeRemain += count;
+        Buffer = {Buffer.data() - count, Buffer.size() + count};
+        TotalSizeRemain += count;
         TotalSerializedDataSize -= count;
     }
 
@@ -160,16 +166,25 @@ namespace NActors {
     }
 
     std::span<TCoroutineChunkSerializer::TChunk> TCoroutineChunkSerializer::FeedBuf(void* data, size_t size) {
+        TMutableContiguousSpan buffer(static_cast<char*>(data), size);
+        return FeedBuf(&buffer, size);
+    }
+
+    std::span<TCoroutineChunkSerializer::TChunk> TCoroutineChunkSerializer::FeedBuf(TMutableContiguousSpan *buffer,
+            size_t totalSize) {
         // fill in base params
-        BufferPtr = static_cast<char*>(data);
-        SizeRemain = size;
-        Y_DEBUG_ABORT_UNLESS(size);
+        Buffer = *buffer;
+        TotalSizeRemain = totalSize;
+        Y_DEBUG_ABORT_UNLESS(TotalSizeRemain);
 
         // transfer control to the coroutine
         Y_ABORT_UNLESS(Event);
         Chunks.clear();
         Resume();
 
+        Y_DEBUG_ABORT_UNLESS(Buffer.data() >= buffer->data() &&
+            Buffer.data() + Buffer.size() <= buffer->data() + buffer->size());
+        *buffer = Buffer;
         return Chunks;
     }
 
@@ -463,7 +478,10 @@ namespace NActors {
     }
 
     TEventSerializationInfo CreateSerializationInfoImpl(size_t preserializedSize, bool allowExternalDataChannel,
-            const TVector<TRope> &payload, ssize_t recordSize, size_t payloadAlignment) {
+            const TVector<TRope> &payload, ssize_t recordSize, size_t payloadAlignment, size_t payloadHeaderSize) {
+        Y_DEBUG_ABORT_UNLESS(payloadAlignment == 0 || IsPowerOf2(payloadAlignment));
+        Y_DEBUG_ABORT_UNLESS(payloadAlignment == 0 || payloadHeaderSize % payloadAlignment == 0);
+
         TEventSerializationInfo info;
         info.IsExtendedFormat = static_cast<bool>(payload);
 
@@ -474,14 +492,15 @@ namespace NActors {
                 for (const TRope& rope : payload) {
                     headerLen += SerializeNumber(rope.size(), temp);
                 }
-                info.Sections.push_back(TEventSectionInfo{0, headerLen, 0, 0, true, false});
+                info.Sections.push_back(TEventSectionInfo{0, headerLen, 0, 0, true /*IsInline*/, false /*IsRdma*/});
+
                 for (const TRope& rope : payload) {
-                    info.Sections.push_back(TEventSectionInfo{0, rope.size(), 0, payloadAlignment, false, IsRdma(rope)});
+                    info.Sections.push_back(TEventSectionInfo{payloadHeaderSize, rope.size(), 0, payloadAlignment, false /*IsInline*/, IsRdma(rope)});
                 }
             }
 
             const size_t byteSize = Max<ssize_t>(0, recordSize) + preserializedSize;
-            info.Sections.push_back(TEventSectionInfo{0, byteSize, 0, 0, true, false}); // protobuf itself
+            info.Sections.push_back(TEventSectionInfo{0, byteSize, 0, 0, true /*IsInline*/, false /*IsRdma*/}); // protobuf itself
 
 #ifndef NDEBUG
             size_t total = 0;
@@ -491,8 +510,6 @@ namespace NActors {
             size_t serialized = CalculateSerializedSizeImpl(payload, recordSize);
             Y_ENSURE(total == serialized, "total# " << total << " serialized# " << serialized
                 << " byteSize# " << byteSize << " payload.size# " << payload.size());
-
-            Y_ENSURE(payloadAlignment == 0 || IsPowerOf2(payloadAlignment));
 #endif
         }
 

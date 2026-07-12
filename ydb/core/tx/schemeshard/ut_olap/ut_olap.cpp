@@ -1,12 +1,14 @@
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
+#include <ydb/core/tx/schemeshard/ut_helpers/local_indexes.h>
+#include <ydb/core/tx/schemeshard/ut_helpers/olap_helpers.h>
 #include <ydb/core/tx/columnshard/columnshard.h>
 #include <ydb/core/tx/columnshard/test_helper/columnshard_ut_common.h>
 #include <ydb/core/tx/columnshard/hooks/testing/controller.h>
+#include <ydb/core/tx/columnshard/engines/changes/abstract/abstract.h>
 #include <ydb/core/formats/arrow/arrow_helpers.h>
 #include <ydb/core/formats/arrow/arrow_batch_builder.h>
 #include <ydb/core/protos/table_stats.pb.h>
 #include <ydb/core/protos/long_tx_service_config.pb.h>
-#include <ydb/core/tx/long_tx_service/public/snapshot_registry.h>
 
 using namespace NKikimr::NSchemeShard;
 using namespace NKikimr;
@@ -18,6 +20,27 @@ namespace {
 
 namespace NTypeIds = NScheme::NTypeIds;
 using TTypeInfo = NScheme::TTypeInfo;
+
+// A ColumnShard test controller that can pause compaction after every single compaction wave. The shard
+// re-schedules compaction as soon as one completes, so once enabled it would normally collapse all portions
+// in one go; disabling the Compaction background from inside the completion hook breaks that cascade, letting
+// a test run compaction exactly one wave at a time (see StoreStatsSmallBlobsQuotaImpl).
+class TPauseAfterCompactionController: public NYDBTest::NColumnShard::TController {
+private:
+    using TBase = NYDBTest::NColumnShard::TController;
+
+protected:
+    bool DoOnWriteIndexComplete(const NOlap::TColumnEngineChanges& change, const ::NKikimr::NColumnShard::TColumnShard& shard) override {
+        const bool result = TBase::DoOnWriteIndexComplete(change, shard);
+        if (PauseCompactionAfterEachWave && change.TypeString() == "CS::GENERAL") {
+            DisableBackground(EBackground::Compaction);
+        }
+        return result;
+    }
+
+public:
+    bool PauseCompactionAfterEachWave = false;
+};
 
 static const TString defaultStoreSchema = R"(
     Name: "OlapStore"
@@ -94,6 +117,37 @@ NLs::TCheckFunc LsCheckDiskQuotaExceeded(
     };
 }
 
+// A single flag covers both the volume and the count small-blobs quota
+bool GetSmallBlobsQuotaExceeded(const NKikimrScheme::TEvDescribeSchemeResult& record) {
+    const auto& state = record.GetPathDescription().GetDomainDescription().GetDomainState();
+    return state.GetSmallBlobsQuotaExceeded();
+}
+
+NLs::TCheckFunc LsCheckSmallBlobsQuotaExceeded(
+    bool expectExceeded = true,
+    const TString& debugHint = ""
+) {
+    return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
+        auto& desc = record.GetPathDescription().GetDomainDescription();
+        UNIT_ASSERT_VALUES_EQUAL_C(
+            GetSmallBlobsQuotaExceeded(record),
+            expectExceeded,
+            debugHint << ", subdomain's disk space usage:\n" << desc.GetDiskSpaceUsage().DebugString()
+        );
+    };
+}
+
+void CheckSmallBlobsQuotaExceedance(TTestActorRuntime& runtime,
+                                    ui64 schemeShard,
+                                    const TString& pathToSubdomain,
+                                    bool expectExceeded,
+                                    const TString& debugHint = ""
+) {
+    TestDescribeResult(DescribePath(runtime, schemeShard, pathToSubdomain), {
+        LsCheckSmallBlobsQuotaExceeded(expectExceeded, debugHint)
+    });
+}
+
 void CheckQuotaExceedance(TTestActorRuntime& runtime,
                           ui64 schemeShard,
                           const TString& pathToSubdomain,
@@ -131,6 +185,309 @@ NKikimrTxDataShard::TEvPeriodicTableStats WaitTableStats(TTestActorRuntime& runt
 
     return stats;
 }
+
+// Drives a ColumnShard subdomain past one of its small-blobs quotas and back, verifying that writes are
+// rejected while the quota is exceeded and accepted again once compaction + cleanup bring the usage back down.
+// checkCount picks which quota to exercise: the count quota when true, the volume quota when false.
+void StoreStatsSmallBlobsQuotaImpl(bool checkCount) {
+    TTestBasicRuntime runtime;
+
+    TTestEnvOptions opts;
+    // Report partition stats to SchemeShard without batching, so the small-blobs usage (and hence the
+    // "quota exceeded" flag) is published promptly instead of after a batch timeout
+    opts.DisableStatsBatching(true);
+    opts.EnablePersistentPartitionStats(true);
+
+    TTestEnv env(runtime, opts);
+    runtime.SetLogPriority(NKikimrServices::TX_COLUMNSHARD, NActors::NLog::PRI_DEBUG);
+    runtime.SetLogPriority(NKikimrServices::TX_COLUMNSHARD_COMPACTION, NActors::NLog::PRI_DEBUG);
+    // The optimizer's add path classifies a portion as compactable only once the *real* wall clock
+    // (TInstant::Now() inside the optimizer) has passed the portion's snapshot time, but the snapshot is
+    // stamped with the runtime's *virtual* clock. SimulateSleep advances the virtual clock far faster than
+    // the real clock, so fresh portions would look like they are timestamped in the future and never become
+    // compaction-eligible. Starting the virtual clock well behind wall-clock now() keeps portion snapshots
+    // safely in the (real) past for the whole test.
+    runtime.UpdateCurrentTime(TInstant::Now() - TDuration::Seconds(600));
+
+    auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<TPauseAfterCompactionController>();
+    // Keep compaction off until the quota is exceeded, so each write accumulates as its own small portion.
+    csController->DisableBackground(NKikimr::NYDBTest::ICSController::EBackground::Compaction);
+    csController->SetOverridePeriodicWakeupActivationPeriod(TDuration::Seconds(1));
+    // Keep the cleanup floor close to the plan step so compaction-replaced portions become collectable ~1s
+    // after they are replaced (see the recovery loop below).
+    csController->SetOverrideMaxReadStaleness(TDuration::Seconds(1));
+
+    auto& appData = runtime.GetAppData();
+    // Use the l-buckets optimizer: it merges identical-key portions in a single bucket and, unlike the
+    // tiling (LSM) optimizer, honours CompactionMemoryLimit when sizing a compaction task - which is how we
+    // throttle recovery to a couple of portions per wave below.
+    appData.ColumnShardConfig.SetDefaultCompactionPreset("l-buckets");
+    appData.FeatureFlags.SetEnableSmallBlobsQuotaEnforcement(true);
+
+    // Each identical upsert batch lands as one small portion contributing ~perPortionBytes of small-blobs
+    // volume and 1 to the small-blobs count (every blob is "small", see the 1 GB threshold below).
+    const ui64 perPortionBytes = 1'225'216;
+    // Place the hard quota at hardPortions worth of small blobs and use a wide hysteresis band (soft = half
+    // of hard). The wide band plus a gradual, one-portion-at-a-time reduction (see CompactionMemoryLimit
+    // below) makes usage clearly step through the soft..hard band both on the way up and on the way down, so
+    // all four hysteresis transitions are observable.
+    const ui64 hardPortions = 20;
+    const double softRatio = 0.5;
+
+    auto* smallBlobsQuota = &appData.SmallBlobsQuotaConfig;
+    smallBlobsQuota->SetSoftRatio(softRatio);
+    // Treat every blob as "small" (1 GB threshold) so all written data counts toward the small-blobs quotas.
+    smallBlobsQuota->SetSmallBlobSizeThresholdBytes(1'000'000'000);
+    // Both quotas scale as (diskHardQuota / 10TiB) * per10TiB, and the 1 GiB disk hard quota set below makes
+    // that factor exactly 1/10240, so per10TiB = X * 10240 yields a hard quota of exactly X. We set count
+    // and volume so both are crossed by the *same* number of portions (hardPortions); the quota not under
+    // test is disabled (per10TiB = 0, i.e. unlimited) so exactly one limit is exercised.
+    if (checkCount) {
+        smallBlobsQuota->SetCountPer10TiB(hardPortions * 10240);
+        smallBlobsQuota->SetVolumeBytesPer10TiB(0);
+    } else {
+        smallBlobsQuota->SetCountPer10TiB(0);
+        smallBlobsQuota->SetVolumeBytesPer10TiB(hardPortions * perPortionBytes * 10240);
+    }
+
+    // The reported small-blobs usage that SchemeShard compares to the quotas above, in the same units.
+    const ui64 hardQuota = checkCount ? hardPortions : hardPortions * perPortionBytes;
+    const ui64 softQuota = static_cast<ui64>(hardQuota * softRatio);
+
+    // Throttle compaction to a couple of input portions per task (the optimizer always merges at least 2).
+    // Recovery then collapses the written portions a few at a time - lowering the active small-blobs usage in
+    // small steps - instead of merging everything in a single task. That gradual descent, combined with the
+    // wide soft..hard band, is what lets usage be observed inside the band on the way down (transition 3).
+    appData.ColumnShardConfig.SetCompactionMemoryLimit(1);
+
+    // Use the local scan-snapshot guard (not the registry one) so the cleanup floor is simply
+    // GetOutdatedStep() - MaxReadStaleness, i.e. it tracks the plan step directly. The registry guard's
+    // default window is ~60s wide and ignores MaxReadStaleness, which is much harder to drive here.
+    appData.FeatureFlags.SetEnableSnapshotsLocking(false);
+
+    // apply config via reboot
+    TActorId sender = runtime.AllocateEdgeActor();
+    GracefulRestartTablet(runtime, TTestTxConfig::SchemeShard, sender);
+
+    // Disk hard quota of 1 GiB - large enough that it is never approached here (the write burst peaks at a
+    // few tens of MB), so this test exercises only the small-blobs quota. 1 GiB also makes the small-blobs
+    // quota scaling above exact (1 GiB / 10 TiB = 1/10240).
+    constexpr const char* databaseDescription = R"(
+        DatabaseQuotas {
+            data_size_hard_quota: 1073741824
+            data_size_soft_quota: 1000000000
+        }
+    )";
+
+    ui64 txId = 100;
+
+    TestCreateSubDomain(runtime, ++txId,  "/MyRoot", TStringBuilder() << R"(
+            Name: "SomeDatabase"
+        )" << databaseDescription
+    );
+
+    const TString& olapSchema = defaultStoreSchema;
+
+    const auto expectedStorePathId = GetNextLocalPathId(runtime, txId);
+    TestCreateOlapStore(runtime, ++txId, "/MyRoot/SomeDatabase", olapSchema);
+    env.TestWaitNotification(runtime, txId);
+
+    TestLs(runtime, "/MyRoot/SomeDatabase/OlapStore", false, NLs::PathExist);
+    TestLsPathId(runtime, expectedStorePathId, NLs::PathStringEqual("/MyRoot/SomeDatabase/OlapStore"));
+
+    TString tableSchema = R"(
+        Name: "ColumnTable"
+        ColumnShardCount: 1
+    )";
+
+    const auto expectedTablePathId = GetNextLocalPathId(runtime, txId);
+    TestCreateColumnTable(runtime, ++txId, "/MyRoot/SomeDatabase/OlapStore", tableSchema);
+    env.TestWaitNotification(runtime, txId);
+
+    ui64 pathId = 0;
+    ui64 shardId = 0;
+    NTxUT::TPlanStep planStep;
+    auto checkFn = [&](const NKikimrScheme::TEvDescribeSchemeResult& record) {
+        auto& self = record.GetPathDescription().GetSelf();
+        pathId = self.GetPathId();
+        txId = self.GetCreateTxId() + 1;
+        planStep = NTxUT::TPlanStep{self.GetCreateStep()};
+        auto& sharding = record.GetPathDescription().GetColumnTableDescription().GetSharding();
+        UNIT_ASSERT_VALUES_EQUAL(sharding.ColumnShardsSize(), 1);
+        shardId = sharding.GetColumnShards()[0];
+        UNIT_ASSERT_VALUES_EQUAL(record.GetPath(), "/MyRoot/SomeDatabase/OlapStore/ColumnTable");
+    };
+
+    TestLsPathId(runtime, expectedTablePathId, checkFn);
+    UNIT_ASSERT(shardId);
+    UNIT_ASSERT(pathId);
+    UNIT_ASSERT(planStep.Val());
+
+    CheckSmallBlobsQuotaExceedance(runtime, TTestTxConfig::SchemeShard, "/MyRoot/SomeDatabase", false, DEBUG_HINT);
+
+    ui64 writeId = 0;
+    const ui32 rowsInBatch = 100000;
+    const TString data = NTxUT::MakeTestBlob({0, rowsInBatch}, defaultYdbSchema, {}, {"timestamp"});
+
+    // Follow the exact small-blobs usage the shard reports to SchemeShard - this is the value the quota
+    // check compares against the hard/soft quotas, so it lets us pin down which side of the band we are on.
+    ui64 reportedSmallBlobsCount = 0;
+    ui64 reportedSmallBlobsVolume = 0;
+    auto statsObserver = runtime.AddObserver<TEvDataShard::TEvPeriodicTableStats>([&](const auto& ev) {
+        const auto& record = ev->Get()->Record;
+        if (record.GetDatashardId() == shardId) {
+            reportedSmallBlobsCount = record.GetTableStats().GetSmallBlobsCount();
+            reportedSmallBlobsVolume = record.GetTableStats().GetSmallBlobsVolumeBytes();
+        }
+    });
+    const auto usage = [&]() { return checkCount ? reportedSmallBlobsCount : reportedSmallBlobsVolume; };
+    const auto inBand = [&](const ui64 u) { return softQuota <= u && u <= hardQuota; };
+
+    // The quota uses hysteresis: the "exceeded" flag is raised only when usage rises strictly above the hard
+    // quota, and cleared only when usage falls strictly below the soft quota; inside the [soft, hard] band it
+    // keeps its previous value. We walk usage up across the band and then back down across it, checking all
+    // four transitions:
+    //   (1) usage reaches the band on the way up           -> still not blocked
+    //   (2) usage rises above the hard quota               -> blocked
+    //   (3) usage falls back into the band on the way down  -> still blocked
+    //   (4) usage falls below the soft quota               -> unblocked
+
+    // Phase up. Write identical upsert batches - each lands as its own small portion (compaction is still
+    // off) - until SchemeShard reports the quota exceeded. The "exceeded" flag travels back through
+    // SchemeShard asynchronously, so it flips a few batches after the limit is actually crossed; we submit a
+    // batch only while it still reads "not exceeded", so every batch issued here is expected to succeed.
+    bool sawBandNotBlockedGoingUp = false;
+    int batches = 0;
+    while (!GetSmallBlobsQuotaExceeded(DescribePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot/SomeDatabase"))) {
+        UNIT_ASSERT_C(++batches <= 100, "small-blobs quota was never exceeded; " << DEBUG_HINT);
+        std::vector<ui64> writeIds;
+        ++txId;
+        UNIT_ASSERT_C(
+            NTxUT::WriteData(runtime, sender, shardId, ++writeId, pathId, data, defaultYdbSchema, &writeIds, NEvWrite::EModificationType::Upsert, txId),
+            DEBUG_HINT);
+        planStep = NTxUT::ProposeCommit(runtime, sender, shardId, txId, writeIds, txId);
+        NTxUT::PlanCommit(runtime, sender, shardId, planStep, {txId});
+        runtime.SimulateSleep(TDuration::Seconds(1));   // let the stats and the quota flag propagate
+        // (1) Usage is rising, so SchemeShard's view lags below the shard's: whenever the shard is already in
+        // the band, SchemeShard still sees "not exceeded". Catching such a sample proves reaching the soft
+        // quota does not block writes.
+        if (inBand(usage())) {
+            sawBandNotBlockedGoingUp = true;
+        }
+    }
+    // (2) Above the hard quota -> blocked.
+    CheckSmallBlobsQuotaExceedance(runtime, TTestTxConfig::SchemeShard, "/MyRoot/SomeDatabase", true, DEBUG_HINT);
+    UNIT_ASSERT_C(sawBandNotBlockedGoingUp, "usage never observed inside the soft..hard band while unblocked; " << DEBUG_HINT);
+
+    // The quota calibration above (perPortionBytes -> VolumeBytesPer10TiB and the hard/soft volume quotas) assumes
+    // each identical batch produces a portion of ~perPortionBytes of small blobs. Cross-check that assumption
+    // against what the shard actually reports (volume / count == per-portion volume, independent of which quota is
+    // under test) so that a change in Arrow serialization/encoding fails here with a clear message instead of
+    // silently miscalibrating the test into a hang or premature exit.
+    UNIT_ASSERT_C(reportedSmallBlobsCount > 0, DEBUG_HINT);
+    const ui64 actualPerPortionBytes = reportedSmallBlobsVolume / reportedSmallBlobsCount;
+    UNIT_ASSERT_C(actualPerPortionBytes > perPortionBytes * 0.9 && actualPerPortionBytes < perPortionBytes * 1.1,
+        "per-portion small-blobs volume " << actualPerPortionBytes << " deviates >10% from the hardcoded perPortionBytes "
+            << perPortionBytes << "; update the constant (and the quota calibration); " << DEBUG_HINT);
+
+    {   // With the quota exceeded, a further write must be refused. The shard does not reject it outright - it
+        // throttles it by holding the request in its write queue (the same way it handles the local
+        // BadPortions/compaction overload) and only fails it with OVERLOADED once the request timeout elapses. We
+        // pass a short timeout so the blocked write fails fast instead of waiting in the queue indefinitely.
+        std::vector<ui64> writeIds;
+        ++txId;
+        AFL_VERIFY(!NTxUT::WriteData(runtime, sender, shardId, ++writeId, pathId, data, defaultYdbSchema, &writeIds,
+            NEvWrite::EModificationType::Upsert, txId, TDuration::Seconds(1)));
+        NTxUT::ProposeCommitFail(runtime, sender, shardId, txId, writeIds, txId);
+    }
+
+    {   // Enforcement is gated by EnableSmallBlobsQuotaEnforcement. With the flag off, the very same write must go
+        // through even though the quota is still exceeded (the shard simply stops consulting the quota). We restore
+        // the flag right after so the rest of the test keeps exercising enforcement.
+        runtime.GetAppData().FeatureFlags.SetEnableSmallBlobsQuotaEnforcement(false);
+        std::vector<ui64> writeIds;
+        ++txId;
+        UNIT_ASSERT_C(NTxUT::WriteData(runtime, sender, shardId, ++writeId, pathId, data, defaultYdbSchema, &writeIds,
+                          NEvWrite::EModificationType::Upsert, txId),
+            "write must be accepted while enforcement is disabled; " << DEBUG_HINT);
+        planStep = NTxUT::ProposeCommit(runtime, sender, shardId, txId, writeIds, txId);
+        NTxUT::PlanCommit(runtime, sender, shardId, planStep, {txId});
+        runtime.GetAppData().FeatureFlags.SetEnableSmallBlobsQuotaEnforcement(true);
+    }
+
+    {   // Persistence across restarts. The "exceeded" flags live in the SubDomains table (SchemeShard) and in the
+        // shard's local state, so neither a SchemeShard nor a ColumnShard restart may silently reset them - writes
+        // must stay blocked. Restart SchemeShard first and confirm it reloaded the persisted flag...
+        GracefulRestartTablet(runtime, TTestTxConfig::SchemeShard, sender);
+        CheckSmallBlobsQuotaExceedance(runtime, TTestTxConfig::SchemeShard, "/MyRoot/SomeDatabase", true, DEBUG_HINT);
+
+        // ...then restart the ColumnShard and confirm it reloaded its persisted flag and still refuses writes.
+        GracefulRestartTablet(runtime, shardId, sender);
+        std::vector<ui64> writeIds;
+        ++txId;
+        AFL_VERIFY(!NTxUT::WriteData(runtime, sender, shardId, ++writeId, pathId, data, defaultYdbSchema, &writeIds,
+            NEvWrite::EModificationType::Upsert, txId, TDuration::Seconds(1)));
+        NTxUT::ProposeCommitFail(runtime, sender, shardId, txId, writeIds, txId);
+    }
+
+    // Phase down. Compaction (throttled to a couple of portions per task) merges the tiny upsert portions a
+    // few at a time and marks the originals for removal; background cleanup then physically drops those
+    // replaced portions and GC frees their blobs, lowering the active small-blobs usage in small steps.
+    //
+    // We must observe a *settled* usage that lies inside the band: while a wave is in flight the shard reports
+    // the blobs still pending deletion on top of the active portions, which briefly inflates the usage far
+    // above the band. So we step one wave at a time - re-enable compaction for a single wave (the controller
+    // disables it again as soon as that wave completes), then let cleanup + GC fully drain - and only then
+    // sample. That gives a clean, monotonically decreasing active-portion usage that lands inside the band.
+    //
+    // (Cleanup collects a replaced portion only once the cleanup floor (plan step - MaxReadStaleness) passes
+    // its remove-step. In production the coordinator advances mediator time continuously, keeping the floor
+    // moving; here the data path bypasses the coordinator, so we advance the plan step ourselves with empty
+    // PlanCommits - the test-level equivalent of the coordinator ticking - which also wakes the shard to run
+    // its background cycle.)
+    const auto tick = [&]() {
+        NTxUT::PlanCommit(runtime, sender, shardId, NTxUT::TPlanStep{runtime.GetTimeProvider()->Now().MilliSeconds()}, {});
+        runtime.SimulateSleep(TDuration::Seconds(1));
+    };
+    // The controller disables compaction again after each compaction wave, so re-enabling it lets exactly one
+    // throttled wave (~2 portions -> 1) run per loop iteration; cleanup + GC then drain in the settle ticks.
+    csController->PauseCompactionAfterEachWave = true;
+    bool sawBandStillBlockedGoingDown = false;
+    bool recovered = false;
+    for (int i = 0; i < 60 && !recovered; ++i) {
+        // One throttled compaction wave...
+        csController->EnableBackground(NKikimr::NYDBTest::ICSController::EBackground::Compaction);
+        tick();
+        // ...then let cleanup + GC drain so the reported usage reflects only the active portions again.
+        for (int j = 0; j < 5; ++j) {
+            tick();
+        }
+        const bool exceeded = GetSmallBlobsQuotaExceeded(DescribePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot/SomeDatabase"));
+        // (3) Usage is back inside the band but not yet below the soft quota -> still blocked.
+        if (exceeded && inBand(usage())) {
+            sawBandStillBlockedGoingDown = true;
+        }
+        recovered = !exceeded;
+    }
+    // (4) Below the soft quota -> unblocked.
+    UNIT_ASSERT_C(recovered, DEBUG_HINT);
+    CheckSmallBlobsQuotaExceedance(runtime, TTestTxConfig::SchemeShard, "/MyRoot/SomeDatabase", false, DEBUG_HINT);
+    UNIT_ASSERT_C(sawBandStillBlockedGoingDown, "usage never observed inside the soft..hard band while blocked; " << DEBUG_HINT);
+
+    {   // Quota recovered - writes should be accepted again
+        std::vector<ui64> writeIds;
+        ++txId;
+        bool writeResult =
+            NTxUT::WriteData(runtime, sender, shardId, ++writeId, pathId, data, defaultYdbSchema, &writeIds, NEvWrite::EModificationType::Upsert, txId);
+        UNIT_ASSERT_C(writeResult, DEBUG_HINT);
+        planStep = NTxUT::ProposeCommit(runtime, sender, shardId, txId, writeIds, txId);
+        TSet<ui64> txIds = { txId };
+        NTxUT::PlanCommit(runtime, sender, shardId, planStep, txIds);
+    }
+
+    statsObserver.Remove();
+}
+
 }}
 
 Y_UNIT_TEST_SUITE(TOlap) {
@@ -258,6 +615,140 @@ Y_UNIT_TEST_SUITE(TOlap) {
 
         TestLs(runtime, "/MyRoot/MyDir/MyTable", false, NLs::PathNotExist);
         TestLsPathId(runtime, expectedTablePathId, NLs::PathStringEqual(""));
+    }
+
+    Y_UNIT_TEST(MultiColumnStatistics) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        auto checkMultiColumnStatistics = [&](const TSet<TString>& expectedNames) {
+            auto descr = DescribePrivatePath(runtime, "/MyRoot/ColumnTable");
+            const auto& tableDesc = descr.GetPathDescription().GetColumnTableDescription();
+            TSet<TString> names;
+            for (const auto& stat : tableDesc.GetMultiColumnStatistics()) {
+                names.insert(stat.GetName());
+                // column names must be resolved to ids on persist
+                UNIT_ASSERT_VALUES_EQUAL(stat.ColumnNamesSize(), stat.ColumnIdsSize());
+                UNIT_ASSERT(stat.ColumnNamesSize() > 0);
+                UNIT_ASSERT(stat.TypesSize() > 0);
+                for (const auto type : stat.GetTypes()) {
+                    UNIT_ASSERT_EQUAL(
+                        static_cast<NKikimrSchemeOp::EMultiColumnStatisticsType>(type),
+                        NKikimrSchemeOp::EMultiColumnStatisticsType::COUNT_MIN_SKETCH);
+                }
+            }
+            UNIT_ASSERT_VALUES_EQUAL(names, expectedNames);
+        };
+
+        auto checkStatisticsColumns = [&](const TString& statName, const TVector<TString>& expectedColumns) {
+            auto descr = DescribePrivatePath(runtime, "/MyRoot/ColumnTable");
+            const auto& tableDesc = descr.GetPathDescription().GetColumnTableDescription();
+            for (const auto& stat : tableDesc.GetMultiColumnStatistics()) {
+                if (stat.GetName() != statName) {
+                    continue;
+                }
+                TVector<TString> columns(stat.GetColumnNames().begin(), stat.GetColumnNames().end());
+                UNIT_ASSERT_VALUES_EQUAL(columns, expectedColumns);
+                return;
+            }
+            UNIT_FAIL("MultiColumnStatistics '" << statName << "' not found");
+        };
+
+        TestCreateColumnTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "ColumnTable"
+            ColumnShardCount: 1
+            Schema {
+                Columns { Name: "timestamp" Type: "Timestamp" NotNull: true }
+                Columns { Name: "key1" Type: "Uint32" }
+                Columns { Name: "data" Type: "Utf8" }
+                KeyColumnNames: [ "timestamp" ]
+            }
+            MultiColumnStatistics { Name: "s1" ColumnNames: "key1" ColumnNames: "data" Types: COUNT_MIN_SKETCH }
+        )");
+        env.TestWaitNotification(runtime, txId);
+        checkMultiColumnStatistics({"s1"});
+
+        // MultiColumnStatistics must survive a SchemeShard restart (persist -> load round-trip).
+        GracefulRestartTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+        checkMultiColumnStatistics({"s1"});
+
+        // ADD STATISTICS
+        // A stats-only alter is a SchemeShard-local state change: it completes synchronously
+        // (StatusSuccess), without a shard round-trip (StatusAccepted).
+        TestAlterColumnTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "ColumnTable"
+            UpsertMultiColumnStatistics { Name: "s2" ColumnNames: "data" Types: COUNT_MIN_SKETCH }
+        )", {NKikimrScheme::StatusSuccess});
+        env.TestWaitNotification(runtime, txId);
+        checkMultiColumnStatistics({"s1", "s2"});
+
+        // DROP STATISTICS
+        TestAlterColumnTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "ColumnTable"
+            DropMultiColumnStatistics: "s2"
+        )", {NKikimrScheme::StatusSuccess});
+        env.TestWaitNotification(runtime, txId);
+        checkMultiColumnStatistics({"s1"});
+
+        // Validation: referencing an unknown column must fail.
+        TestAlterColumnTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "ColumnTable"
+            UpsertMultiColumnStatistics { Name: "bad" ColumnNames: "missing" Types: COUNT_MIN_SKETCH }
+        )", {NKikimrScheme::StatusSchemeError, NKikimrScheme::StatusInvalidParameter});
+
+        // True upsert: re-adding an existing name overwrites its definition instead of failing.
+        checkStatisticsColumns("s1", {"key1", "data"});
+        TestAlterColumnTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "ColumnTable"
+            UpsertMultiColumnStatistics { Name: "s1" ColumnNames: "data" Types: COUNT_MIN_SKETCH }
+        )", {NKikimrScheme::StatusSuccess});
+        env.TestWaitNotification(runtime, txId);
+        checkMultiColumnStatistics({"s1"});
+        checkStatisticsColumns("s1", {"data"});
+    }
+
+    Y_UNIT_TEST(MultiColumnStatisticsWithoutTypesMeansAllTypes) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        auto checkMultiColumnStatistics = [&](const TString& expectedName) {
+            auto descr = DescribePrivatePath(runtime, "/MyRoot/ColumnTableNoTypes");
+            const auto& tableDesc = descr.GetPathDescription().GetColumnTableDescription();
+            UNIT_ASSERT_VALUES_EQUAL(tableDesc.MultiColumnStatisticsSize(), 1);
+            const auto& stat = tableDesc.GetMultiColumnStatistics(0);
+            UNIT_ASSERT_VALUES_EQUAL(stat.GetName(), expectedName);
+            UNIT_ASSERT_VALUES_EQUAL(stat.TypesSize(), 0);
+        };
+
+        // CREATE with a MultiColumnStatistics entry that has no Types.
+        TestCreateColumnTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "ColumnTableNoTypes"
+            ColumnShardCount: 1
+            Schema {
+                Columns { Name: "timestamp" Type: "Timestamp" NotNull: true }
+                Columns { Name: "data" Type: "Utf8" }
+                KeyColumnNames: [ "timestamp" ]
+            }
+            MultiColumnStatistics { Name: "s1" ColumnNames: "data" }
+        )");
+        env.TestWaitNotification(runtime, txId);
+        checkMultiColumnStatistics("s1");
+
+        // ALTER ADD STATISTICS: also with no Types.
+        TestAlterColumnTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "ColumnTableNoTypes"
+            DropMultiColumnStatistics: "s1"
+        )", {NKikimrScheme::StatusSuccess});
+        env.TestWaitNotification(runtime, txId);
+
+        TestAlterColumnTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "ColumnTableNoTypes"
+            UpsertMultiColumnStatistics { Name: "s2" ColumnNames: "data" }
+        )", {NKikimrScheme::StatusSuccess});
+        env.TestWaitNotification(runtime, txId);
+        checkMultiColumnStatistics("s2");
     }
 
     Y_UNIT_TEST(CreateTable) {
@@ -1042,15 +1533,9 @@ Y_UNIT_TEST_SUITE(TOlap) {
         appData.SchemeShardConfig.SetStatsMaxBatchSize(0);
         runtime.GetAppData().ColumnShardConfig.SetDefaultCompactionPreset("tiling");
 
-        {
-            auto builder = CreateImmutableSnapshotRegistryBuilder();
-            auto holder = CreateImmutableSnapshotRegistryHolder();
-            holder->Set(std::move(*builder).Build());
-            appData.SnapshotRegistryHolder = holder;
-            appData.LongTxServiceConfig.SetLocalSnapshotPromotionTimeSeconds(1);
-            appData.LongTxServiceConfig.SetSnapshotsExchangeIntervalSeconds(1);
-            appData.LongTxServiceConfig.SetSnapshotsRegistryUpdateIntervalSeconds(1);
-        }
+        // No LongTxService keeps a live registry here, so install a stand-in whose OldestCollectionTime
+        // tracks the clock; otherwise the cleanup floor stays at 0 and deleted data is never collected.
+        NKikimr::NTxUT::InstallTimingBasedSnapshotRegistry(runtime);
 
         // apply config via reboot
         TActorId sender = runtime.AllocateEdgeActor();
@@ -1211,6 +1696,26 @@ Y_UNIT_TEST_SUITE(TOlap) {
         CheckQuotaExceedance(runtime, TTestTxConfig::SchemeShard, "/MyRoot/SomeDatabase", false, DEBUG_HINT);
     }
 
+    Y_UNIT_TEST(StoreStatsSmallBlobsCountQuota) {
+        StoreStatsSmallBlobsQuotaImpl(/*checkCount=*/true);
+    }
+
+    Y_UNIT_TEST(StoreStatsSmallBlobsVolumeQuota) {
+        StoreStatsSmallBlobsQuotaImpl(/*checkCount=*/false);
+    }
+
+    Y_UNIT_TEST(MoveNonExistentTable) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        TestMkDir(runtime, ++txId, "/MyRoot", "MyDir");
+        env.TestWaitNotification(runtime, txId);
+
+        TestMoveTable(runtime, ++txId, "/MyRoot/MyDir/non_existent", "/MyRoot/MyDir/something",
+            {NKikimrScheme::StatusPathDoesNotExist});
+    }
+
     Y_UNIT_TEST(MoveTableStats) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
@@ -1286,9 +1791,164 @@ Y_UNIT_TEST_SUITE(TOlap) {
 
         UNIT_ASSERT(checkStat(movedTablePath));
     }
+
+    Y_UNIT_TEST(MoveTableStatsQuota) {
+        TTestBasicRuntime runtime;
+
+        TTestEnvOptions opts;
+        opts.DisableStatsBatching(true);
+        opts.EnablePersistentPartitionStats(true);
+        opts.EnableTopicDiskSubDomainQuota(false);
+
+        TTestEnv env(runtime, opts);
+        runtime.GetAppData().FeatureFlags.SetEnableMoveColumnTable(true);
+        runtime.SetLogPriority(NKikimrServices::TX_COLUMNSHARD, NActors::NLog::PRI_DEBUG);
+        runtime.UpdateCurrentTime(TInstant::Now() - TDuration::Seconds(600));
+
+        auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
+        csController->DisableBackground(NKikimr::NYDBTest::ICSController::EBackground::Compaction);
+        csController->SetOverridePeriodicWakeupActivationPeriod(TDuration::Seconds(1));
+        csController->SetOverrideLagForCompactionBeforeTierings(TDuration::Seconds(1));
+        csController->SetOverrideMaxReadStaleness(TDuration::Seconds(1));
+
+        auto& appData = runtime.GetAppData();
+        appData.SchemeShardConfig.SetStatsBatchTimeoutMs(0);
+        appData.SchemeShardConfig.SetStatsMaxBatchSize(0);
+
+        TActorId sender = runtime.AllocateEdgeActor();
+        GracefulRestartTablet(runtime, TTestTxConfig::SchemeShard, sender);
+
+        constexpr const char* databaseDescription = R"(
+            DatabaseQuotas {
+                data_size_hard_quota: 1000000
+                data_size_soft_quota: 900000
+            }
+        )";
+
+        ui64 txId = 100;
+
+        TestCreateSubDomain(runtime, ++txId,  "/MyRoot", TStringBuilder() << R"(
+                Name: "SomeDatabase"
+            )" << databaseDescription
+        );
+
+        const TString tableSchema = R"(
+            Name: "ColumnTable"
+            ColumnShardCount: 1
+            Schema {
+                Columns { Name: "timestamp" Type: "Timestamp" NotNull: true }
+                Columns { Name: "data" Type: "Utf8" }
+                KeyColumnNames: "timestamp"
+            }
+        )";
+
+        TestCreateColumnTable(runtime, ++txId, "/MyRoot/SomeDatabase/", tableSchema);
+        env.TestWaitNotification(runtime, txId);
+
+        ui64 pathId = 0;
+        ui64 shardId = 0;
+        NTxUT::TPlanStep planStep;
+        {
+            auto checkFn = [&](const NKikimrScheme::TEvDescribeSchemeResult& record) {
+                auto& self = record.GetPathDescription().GetSelf();
+                pathId = self.GetPathId();
+                txId = self.GetCreateTxId() + 1;
+                planStep = NTxUT::TPlanStep{self.GetCreateStep()};
+                auto& sharding = record.GetPathDescription().GetColumnTableDescription().GetSharding();
+                UNIT_ASSERT_VALUES_EQUAL(sharding.ColumnShardsSize(), 1);
+                shardId = sharding.GetColumnShards()[0];
+            };
+            TestDescribeResult(DescribePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot/SomeDatabase/ColumnTable"), {checkFn});
+        }
+        UNIT_ASSERT(shardId);
+        UNIT_ASSERT(pathId);
+        UNIT_ASSERT(planStep.Val());
+
+        CheckQuotaExceedance(runtime, TTestTxConfig::SchemeShard, "/MyRoot/SomeDatabase", false, DEBUG_HINT);
+
+        ui32 rowsInBatch = 100000;
+        ui64 writeId = 0;
+
+        {   // Write data directly into shard to exceed quota
+            TActorId sender = runtime.AllocateEdgeActor();
+            TString data = NTxUT::MakeTestBlob({0, rowsInBatch}, defaultYdbSchema, {}, { "timestamp" });
+            TSet<ui64> txIds;
+            for (ui32 i = 0; i < 100; ++i) {
+                std::vector<ui64> writeIds;
+                ++txId;
+                NTxUT::WriteData(runtime, sender, shardId, ++writeId, pathId, data, defaultYdbSchema, &writeIds, NEvWrite::EModificationType::Upsert, txId);
+                planStep = NTxUT::ProposeCommit(runtime, sender, shardId, txId, writeIds, txId);
+                txIds.insert(txId);
+            }
+
+            NTxUT::PlanCommit(runtime, sender, shardId, planStep, txIds);
+
+            WaitTableStats(runtime, shardId);
+            CheckQuotaExceedance(runtime, TTestTxConfig::SchemeShard, "/MyRoot/SomeDatabase", true, DEBUG_HINT);
+        }
+
+        ui64 totalBytesBefore = 0;
+        {
+            auto description = DescribePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot/SomeDatabase");
+            auto& diskSpaceUsage = description.GetPathDescription().GetDomainDescription().GetDiskSpaceUsage();
+            totalBytesBefore = diskSpaceUsage.GetTables().GetTotalSize();
+            UNIT_ASSERT_GT_C(totalBytesBefore, 0, DEBUG_HINT);
+        }
+
+        ++txId;
+        TestMoveTable(runtime, txId, "/MyRoot/SomeDatabase/ColumnTable", "/MyRoot/SomeDatabase/MovedColumnTable");
+        env.TestWaitNotification(runtime, txId);
+
+        TestLs(runtime, "/MyRoot/SomeDatabase/ColumnTable", false, NLs::PathNotExist);
+
+        WaitTableStats(runtime, shardId);
+
+        CheckQuotaExceedance(runtime, TTestTxConfig::SchemeShard, "/MyRoot/SomeDatabase", true, DEBUG_HINT);
+
+        {
+            auto description = DescribePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot/SomeDatabase");
+            auto& diskSpaceUsage = description.GetPathDescription().GetDomainDescription().GetDiskSpaceUsage();
+            ui64 totalBytesAfter = diskSpaceUsage.GetTables().GetTotalSize();
+            UNIT_ASSERT_GT_C(totalBytesAfter, 0, DEBUG_HINT << ", DiskSpaceTablesTotalBytes should not be zero after move");
+            UNIT_ASSERT_VALUES_EQUAL_C(totalBytesAfter, totalBytesBefore,
+                DEBUG_HINT << ", DiskSpaceTablesTotalBytes should be preserved after move");
+        }
+
+        TestDropColumnTable(runtime, ++txId, "/MyRoot/SomeDatabase", "MovedColumnTable");
+        env.TestWaitNotification(runtime, txId);
+
+        TestLs(runtime, "/MyRoot/SomeDatabase/MovedColumnTable", false, NLs::PathNotExist);
+
+        {
+            auto description = DescribePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot/SomeDatabase");
+            auto& diskSpaceUsage = description.GetPathDescription().GetDomainDescription().GetDiskSpaceUsage();
+            ui64 totalBytesAfterDrop = diskSpaceUsage.GetTables().GetTotalSize();
+            UNIT_ASSERT_VALUES_EQUAL_C(totalBytesAfterDrop, 0,
+                DEBUG_HINT << ", DiskSpaceTablesTotalBytes should be zero after drop");
+        }
+
+        CheckQuotaExceedance(runtime, TTestTxConfig::SchemeShard, "/MyRoot/SomeDatabase", false, DEBUG_HINT);
+    }
 }
 
 Y_UNIT_TEST_SUITE(TOlapNaming) {
+
+    static TString AlterUpsertBloomFilterIndex(const TString& tableName, const TString& indexName,
+            const TString& columnName, double falsePositiveProbability) {
+        return TStringBuilder() << R"(
+            Name: ")" << tableName << R"("
+            AlterSchema {
+                UpsertIndexes {
+                    Name: ")" << indexName << R"("
+                    ClassName: "BLOOM_FILTER"
+                    BloomFilter {
+                        ColumnNames: [")" << columnName << R"("]
+                        FalsePositiveProbability: )" << falsePositiveProbability << R"(
+                    }
+                }
+            }
+        )";
+    }
 
     Y_UNIT_TEST(CreateColumnTableOk) {
         TTestBasicRuntime runtime;
@@ -1458,5 +2118,1107 @@ Y_UNIT_TEST_SUITE(TOlapNaming) {
         )", {NKikimrScheme::StatusSchemeError});
 
         env.TestWaitNotification(runtime, txId);
+    }
+
+    Y_UNIT_TEST(LocalIndexesLifecycle) {
+        TTestBasicRuntime runtime;
+        TTestEnvOptions options;
+        TTestEnv env(runtime, options);
+        runtime.GetAppData().FeatureFlags.SetEnableLocalIndexAsSchemeObject(true);
+        ui64 txId = 100;
+
+        TestCreateColumnTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "TestTable"
+            ColumnShardCount: 1
+            Schema {
+                Columns { Name: "timestamp" Type: "Timestamp" NotNull: true }
+                Columns { Name: "key" Type: "Uint64" }
+                Columns { Name: "data" Type: "Utf8" }
+                KeyColumnNames: "timestamp"
+                Indexes {
+                    Id: 4
+                    Name: "bloom_key"
+                    ClassName: "BLOOM_FILTER"
+                    BloomFilter {
+                        ColumnIds: [2]
+                        FalsePositiveProbability: 0.01
+                    }
+                }
+                Indexes {
+                    Id: 5
+                    Name: "ngram_data"
+                    ClassName: "BLOOM_NGRAMM_FILTER"
+                    BloomNGrammFilter {
+                        ColumnId: 3
+                        NGrammSize: 3
+                        FalsePositiveProbability: 0.01
+                        CaseSensitive: true
+                    }
+                }
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestLs(runtime, "/MyRoot/TestTable", false, NLs::PathExist);
+
+        {
+            auto descr = DescribePath(runtime, "/MyRoot/TestTable");
+            TestDescribeResult(descr, {NLs::PathExist, NLs::ChildrenCount(2)});
+            const auto& children = descr.GetPathDescription().GetChildren();
+            bool foundBloomKey = false;
+            bool foundNgramData = false;
+            for (const auto& child : children) {
+                if (child.GetName() == "bloom_key") {
+                    foundBloomKey = true;
+                    UNIT_ASSERT_VALUES_EQUAL(child.GetPathType(), NKikimrSchemeOp::EPathTypeTableIndex);
+                }
+                if (child.GetName() == "ngram_data") {
+                    foundNgramData = true;
+                    UNIT_ASSERT_VALUES_EQUAL(child.GetPathType(), NKikimrSchemeOp::EPathTypeTableIndex);
+                }
+            }
+            UNIT_ASSERT_C(foundBloomKey, "bloom_key must be visible in table children");
+            UNIT_ASSERT_C(foundNgramData, "ngram_data must be visible in table children");
+        }
+
+        NLocalIndexes::CheckLocalIndexReady(runtime, "/MyRoot/TestTable", "bloom_key",
+            NKikimrSchemeOp::EIndexTypeLocalBloomFilter, {"key"});
+        NLocalIndexes::CheckLocalIndexReady(runtime, "/MyRoot/TestTable", "ngram_data",
+            NKikimrSchemeOp::EIndexTypeLocalBloomNgramFilter, {"data"});
+
+        NLocalIndexes::CheckIndexVersionsConsistent(runtime, "/MyRoot/TestTable", "bloom_key");
+        NLocalIndexes::CheckIndexVersionsConsistent(runtime, "/MyRoot/TestTable", "ngram_data");
+
+        {
+            auto descr = DescribePath(runtime, "/MyRoot");
+            const auto& children = descr.GetPathDescription().GetChildren();
+            bool foundSys = false;
+            bool foundTable = false;
+            for (const auto& child : children) {
+                if (child.GetName() == ".sys") {
+                    foundSys = true;
+                }
+                if (child.GetName() == "TestTable") {
+                    foundTable = true;
+                }
+            }
+            UNIT_ASSERT_C(foundSys, ".sys must be visible at root level");
+            UNIT_ASSERT_C(foundTable, "TestTable must be visible at root level");
+        }
+
+        {
+            auto descr = DescribePath(runtime, "/MyRoot/TestTable");
+            const auto& children = descr.GetPathDescription().GetChildren();
+            bool foundSys = false;
+            for (const auto& child : children) {
+                if (child.GetName() == ".sys") {
+                    foundSys = true;
+                    break;
+                }
+            }
+            UNIT_ASSERT_C(!foundSys, ".sys must not be visible under column table");
+        }
+
+        // Drop one of the two indexes and verify that only one remains
+        TestAlterColumnTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "TestTable"
+            AlterSchema {
+                DropIndexes: "bloom_key"
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        // Verify that only one index child remains
+        {
+            auto descr = DescribePath(runtime, "/MyRoot/TestTable");
+            TestDescribeResult(descr, {NLs::PathExist, NLs::ChildrenCount(1)});
+            const auto& children = descr.GetPathDescription().GetChildren();
+            UNIT_ASSERT_VALUES_EQUAL(children.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(children[0].GetName(), "ngram_data");
+            UNIT_ASSERT_VALUES_EQUAL(children[0].GetPathType(), NKikimrSchemeOp::EPathTypeTableIndex);
+        }
+
+        // Verify that only one index remains in the column table schema
+        {
+            auto descr = DescribePrivatePath(runtime, "/MyRoot/TestTable");
+            const auto& schema = descr.GetPathDescription().GetColumnTableDescription().GetSchema();
+            bool foundBloomKey = false;
+            bool foundNgramData = false;
+            for (const auto& idx : schema.GetIndexes()) {
+                if (idx.GetName() == "bloom_key") {
+                    foundBloomKey = true;
+                }
+                if (idx.GetName() == "ngram_data") {
+                    foundNgramData = true;
+                }
+            }
+            UNIT_ASSERT_C(!foundBloomKey, "bloom_key index should not exist after drop");
+            UNIT_ASSERT_C(foundNgramData, "ngram_data index must still exist");
+        }
+
+        // Verify that the dropped index scheme object no longer exists
+        {
+            auto descr = DescribePrivatePath(runtime, "/MyRoot/TestTable/bloom_key");
+            TestDescribeResult(descr, {NLs::PathNotExist});
+        }
+
+        // Verify that the remaining index scheme object still exists
+        NLocalIndexes::CheckLocalIndexReady(runtime, "/MyRoot/TestTable", "ngram_data",
+            NKikimrSchemeOp::EIndexTypeLocalBloomNgramFilter, {"data"});
+
+        NLocalIndexes::CheckIndexVersionsConsistent(runtime, "/MyRoot/TestTable", "ngram_data");
+
+        TestCreateColumnTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "TestTableLifecycle"
+            ColumnShardCount: 1
+            Schema {
+                Columns { Name: "timestamp" Type: "Timestamp" NotNull: true }
+                Columns { Name: "data" Type: "Utf8" }
+                KeyColumnNames: "timestamp"
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestLs(runtime, "/MyRoot/TestTableLifecycle", false, NLs::PathExist);
+
+        {
+            auto descr = DescribePrivatePath(runtime, "/MyRoot/TestTableLifecycle/bloom_data");
+            TestDescribeResult(descr, {NLs::PathNotExist});
+        }
+
+        TestAlterColumnTable(runtime, ++txId, "/MyRoot",
+            AlterUpsertBloomFilterIndex("TestTableLifecycle", "bloom_data", "data", 0.05));
+        env.TestWaitNotification(runtime, txId);
+
+        {
+            auto descr = DescribePath(runtime, "/MyRoot/TestTableLifecycle");
+            TestDescribeResult(descr, {NLs::PathExist, NLs::ChildrenCount(1)});
+            const auto& children = descr.GetPathDescription().GetChildren();
+            UNIT_ASSERT_VALUES_EQUAL(children.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(children[0].GetName(), "bloom_data");
+            UNIT_ASSERT_VALUES_EQUAL(children[0].GetPathType(), NKikimrSchemeOp::EPathTypeTableIndex);
+        }
+
+        NLocalIndexes::CheckLocalIndexReady(runtime, "/MyRoot/TestTableLifecycle", "bloom_data",
+            NKikimrSchemeOp::EIndexTypeLocalBloomFilter, {"data"});
+
+        NLocalIndexes::CheckIndexVersionsConsistent(runtime, "/MyRoot/TestTableLifecycle", "bloom_data");
+
+        TestAlterColumnTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "TestTableLifecycle"
+            AlterSchema {
+                DropIndexes: "bloom_data"
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        {
+            auto descr = DescribePrivatePath(runtime, "/MyRoot/TestTableLifecycle/bloom_data");
+            TestDescribeResult(descr, {NLs::PathNotExist});
+        }
+
+        {
+            auto descr = DescribePath(runtime, "/MyRoot/TestTableLifecycle");
+            TestDescribeResult(descr, {NLs::PathExist, NLs::ChildrenCount(0)});
+        }
+
+        TestAlterColumnTable(runtime, ++txId, "/MyRoot",
+            AlterUpsertBloomFilterIndex("TestTableLifecycle", "bloom_data_v2", "data", 0.01));
+        env.TestWaitNotification(runtime, txId);
+
+        {
+            auto descr = DescribePath(runtime, "/MyRoot/TestTableLifecycle");
+            TestDescribeResult(descr, {NLs::PathExist, NLs::ChildrenCount(1)});
+            UNIT_ASSERT_VALUES_EQUAL(descr.GetPathDescription().GetChildren(0).GetName(), "bloom_data_v2");
+        }
+
+        NLocalIndexes::CheckLocalIndexReady(runtime, "/MyRoot/TestTableLifecycle", "bloom_data_v2",
+            NKikimrSchemeOp::EIndexTypeLocalBloomFilter, {"data"});
+
+        NLocalIndexes::CheckIndexVersionsConsistent(runtime, "/MyRoot/TestTableLifecycle", "bloom_data_v2");
+
+        // Test dropping table with local index children - should succeed and drop indexes automatically
+        TestDropColumnTable(runtime, ++txId, "/MyRoot", "TestTableLifecycle");
+        env.TestWaitNotification(runtime, txId);
+
+        // Verify both table and local index are dropped
+        TestLs(runtime, "/MyRoot/TestTableLifecycle", false, NLs::PathNotExist);
+        {
+            auto descr = DescribePrivatePath(runtime, "/MyRoot/TestTableLifecycle/bloom_data_v2");
+            TestDescribeResult(descr, {NLs::PathNotExist});
+        }
+    }
+
+    Y_UNIT_TEST(LocalIndexesWithoutSchemeObjects) {
+        // Verify that bloom filter indexes work correctly without EnableLocalIndexAsSchemeObject.
+        // Column table bloom filters should be created in the column shard schema,
+        // but no scheme objects (EPathTypeTableIndex) should appear as table children.
+        TTestBasicRuntime runtime;
+        TTestEnvOptions options;
+        TTestEnv env(runtime, options);
+        runtime.GetAppData().FeatureFlags.SetEnableLocalIndexAsSchemeObject(false);
+        ui64 txId = 100;
+
+        // Part 1: CREATE TABLE with inline bloom filter index (flag=false)
+        // Bloom filter is stored in column shard schema; no scheme object children created.
+        TestCreateColumnTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "TestTableCreate"
+            ColumnShardCount: 1
+            Schema {
+                Columns { Name: "timestamp" Type: "Timestamp" NotNull: true }
+                Columns { Name: "key" Type: "Uint64" }
+                Columns { Name: "data" Type: "Utf8" }
+                KeyColumnNames: "timestamp"
+                Indexes {
+                    Id: 4
+                    Name: "bloom_key"
+                    ClassName: "BLOOM_FILTER"
+                    BloomFilter {
+                        ColumnIds: [2]
+                        FalsePositiveProbability: 0.01
+                    }
+                }
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        {
+            auto descr = DescribePath(runtime, "/MyRoot/TestTableCreate");
+            TestDescribeResult(descr, {NLs::PathExist, NLs::ChildrenCount(0)});
+        }
+
+        {
+            auto descr = DescribePrivatePath(runtime, "/MyRoot/TestTableCreate");
+            const auto& schema = descr.GetPathDescription().GetColumnTableDescription().GetSchema();
+            bool foundBloom = false;
+            for (const auto& idx : schema.GetIndexes()) {
+                if (idx.GetName() == "bloom_key" && idx.HasBloomFilter()) {
+                    foundBloom = true;
+                    break;
+                }
+            }
+            UNIT_ASSERT_C(foundBloom, "bloom_key index must exist in column table schema");
+        }
+
+        // Part 2: ALTER TABLE to add bloom filter indexes (flag=false)
+        // Bloom filters are stored in column shard schema; no scheme object children created.
+        TestCreateColumnTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "TestTableAlter"
+            ColumnShardCount: 1
+            Schema {
+                Columns { Name: "timestamp" Type: "Timestamp" NotNull: true }
+                Columns { Name: "data" Type: "Utf8" }
+                KeyColumnNames: "timestamp"
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestAlterColumnTable(runtime, ++txId, "/MyRoot",
+            AlterUpsertBloomFilterIndex("TestTableAlter", "bloom_data", "data", 0.05));
+        env.TestWaitNotification(runtime, txId);
+
+        {
+            auto descr = DescribePath(runtime, "/MyRoot/TestTableAlter");
+            TestDescribeResult(descr, {NLs::PathExist, NLs::ChildrenCount(0)});
+        }
+
+        {
+            auto descr = DescribePrivatePath(runtime, "/MyRoot/TestTableAlter");
+            const auto& schema = descr.GetPathDescription().GetColumnTableDescription().GetSchema();
+            bool foundBloom = false;
+            for (const auto& idx : schema.GetIndexes()) {
+                if (idx.GetName() == "bloom_data" && idx.HasBloomFilter()) {
+                    foundBloom = true;
+                    break;
+                }
+            }
+            UNIT_ASSERT_C(foundBloom, "bloom_data index must exist in column table schema");
+        }
+
+        TestAlterColumnTable(runtime, ++txId, "/MyRoot",
+            AlterUpsertBloomFilterIndex("TestTableAlter", "bloom_data_v2", "data", 0.01));
+        env.TestWaitNotification(runtime, txId);
+
+        {
+            auto descr = DescribePath(runtime, "/MyRoot/TestTableAlter");
+            TestDescribeResult(descr, {NLs::PathExist, NLs::ChildrenCount(0)});
+        }
+
+        {
+            auto descr = DescribePrivatePath(runtime, "/MyRoot/TestTableAlter");
+            const auto& schema = descr.GetPathDescription().GetColumnTableDescription().GetSchema();
+            bool foundBloomData = false;
+            bool foundBloomDataV2 = false;
+            for (const auto& idx : schema.GetIndexes()) {
+                if (idx.GetName() == "bloom_data") foundBloomData = true;
+                if (idx.GetName() == "bloom_data_v2") foundBloomDataV2 = true;
+            }
+            UNIT_ASSERT_C(foundBloomData, "bloom_data index must exist in column table schema");
+            UNIT_ASSERT_C(foundBloomDataV2, "bloom_data_v2 index must exist in column table schema");
+        }
+    }
+
+    // Verify migration: when EnableLocalIndexAsSchemeObject is turned on and SchemeShard
+    // restarts, existing column table local indexes get scheme objects created automatically
+    // by the LocalIndexMigrator actor running standard schema operations.
+    // Tests both CREATE TABLE inline indexes and ALTER TABLE added indexes.
+    Y_UNIT_TEST(LocalIndexMigration) {
+        TTestBasicRuntime runtime;
+        TTestEnvOptions options;
+        TTestEnv env(runtime, options);
+        // Start with flag=false: no scheme objects created
+        runtime.GetAppData().FeatureFlags.SetEnableLocalIndexAsSchemeObject(false);
+        ui64 txId = 100;
+
+        // Table 1: index created via inline schema in CREATE TABLE
+        TestCreateColumnTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "MigrationTableCreate"
+            ColumnShardCount: 1
+            Schema {
+                Columns { Name: "timestamp" Type: "Timestamp" NotNull: true }
+                Columns { Name: "key" Type: "Uint64" }
+                Columns { Name: "data" Type: "Utf8" }
+                KeyColumnNames: "timestamp"
+                Indexes {
+                    Id: 4
+                    Name: "bloom_key"
+                    ClassName: "BLOOM_FILTER"
+                    BloomFilter {
+                        ColumnIds: [2]
+                        FalsePositiveProbability: 0.01
+                    }
+                }
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        // Table 2: indexes created via ALTER TABLE
+        TestCreateColumnTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "MigrationTableAlter"
+            ColumnShardCount: 1
+            Schema {
+                Columns { Name: "timestamp" Type: "Timestamp" NotNull: true }
+                Columns { Name: "data" Type: "Utf8" }
+                KeyColumnNames: "timestamp"
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestAlterColumnTable(runtime, ++txId, "/MyRoot",
+            AlterUpsertBloomFilterIndex("MigrationTableAlter", "bloom_data", "data", 0.05));
+        env.TestWaitNotification(runtime, txId);
+
+        // Before migration: no scheme object children on either table
+        {
+            auto descr = DescribePath(runtime, "/MyRoot/MigrationTableCreate");
+            TestDescribeResult(descr, {NLs::PathExist, NLs::ChildrenCount(0)});
+        }
+        {
+            auto descr = DescribePath(runtime, "/MyRoot/MigrationTableAlter");
+            TestDescribeResult(descr, {NLs::PathExist, NLs::ChildrenCount(0)});
+        }
+
+        // Enable flag and restart SchemeShard to trigger migrator actor
+        runtime.GetAppData().FeatureFlags.SetEnableLocalIndexAsSchemeObject(true);
+        TActorId sender = runtime.AllocateEdgeActor();
+        GracefulRestartTablet(runtime, TTestTxConfig::SchemeShard, sender);
+
+        // The migrator runs schema operations asynchronously; allow time for
+        // TEvAllocateTxId / TEvModifySchemeTransaction / TEvNotifyTxCompletion round-trips.
+        runtime.SimulateSleep(TDuration::Seconds(5));
+
+        // After migration: inline-created index appears as scheme object
+        {
+            auto descr = DescribePath(runtime, "/MyRoot/MigrationTableCreate");
+            TestDescribeResult(descr, {NLs::PathExist, NLs::ChildrenCount(1)});
+            const auto& children = descr.GetPathDescription().GetChildren();
+            UNIT_ASSERT_VALUES_EQUAL(children[0].GetName(), "bloom_key");
+            UNIT_ASSERT_VALUES_EQUAL(children[0].GetPathType(), NKikimrSchemeOp::EPathTypeTableIndex);
+        }
+
+        NLocalIndexes::CheckLocalIndexReady(runtime, "/MyRoot/MigrationTableCreate", "bloom_key",
+            NKikimrSchemeOp::EIndexTypeLocalBloomFilter, {"key"});
+
+        // After migration: ALTER-created index appears as scheme object
+        {
+            auto descr = DescribePath(runtime, "/MyRoot/MigrationTableAlter");
+            TestDescribeResult(descr, {NLs::PathExist, NLs::ChildrenCount(1)});
+            const auto& children = descr.GetPathDescription().GetChildren();
+            UNIT_ASSERT_VALUES_EQUAL(children[0].GetName(), "bloom_data");
+            UNIT_ASSERT_VALUES_EQUAL(children[0].GetPathType(), NKikimrSchemeOp::EPathTypeTableIndex);
+        }
+
+        NLocalIndexes::CheckLocalIndexReady(runtime, "/MyRoot/MigrationTableAlter", "bloom_data",
+            NKikimrSchemeOp::EIndexTypeLocalBloomFilter, {"data"});
+
+        // Restart again to verify migration is idempotent (no duplicate scheme objects)
+        GracefulRestartTablet(runtime, TTestTxConfig::SchemeShard, sender);
+        runtime.SimulateSleep(TDuration::Seconds(5));
+
+        {
+            auto descr = DescribePath(runtime, "/MyRoot/MigrationTableCreate");
+            TestDescribeResult(descr, {NLs::PathExist, NLs::ChildrenCount(1)});
+        }
+        {
+            auto descr = DescribePath(runtime, "/MyRoot/MigrationTableAlter");
+            TestDescribeResult(descr, {NLs::PathExist, NLs::ChildrenCount(1)});
+        }
+
+        // Drop a migrated index via ALTER, verify scheme object is removed
+        TestAlterColumnTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "MigrationTableCreate"
+            AlterSchema {
+                DropIndexes: ["bloom_key"]
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        {
+            auto descr = DescribePath(runtime, "/MyRoot/MigrationTableCreate");
+            TestDescribeResult(descr, {NLs::PathExist, NLs::ChildrenCount(0)});
+        }
+    }
+
+    // Test migration with many local indexes (more than DefaultBatchSize of 20)
+    // to verify batch processing and TxId allocation works correctly.
+    Y_UNIT_TEST(LocalIndexMigrationManyIndexes) {
+        TTestBasicRuntime runtime;
+        TTestEnvOptions options;
+        TTestEnv env(runtime, options);
+        // Start with flag=false: no scheme objects created
+        runtime.GetAppData().FeatureFlags.SetEnableLocalIndexAsSchemeObject(false);
+
+        // Increase MaxTableIndices limit to allow many indexes (default is 20)
+        NSchemeShard::TSchemeLimits limits;
+        limits.MaxTableIndices = 200;
+        SetSchemeshardSchemaLimits(runtime, limits);
+
+        ui64 txId = 100;
+
+        // Create multiple tables with many local indexes each
+        // Total: 4 tables * 30 indexes = 120 indexes (above InitiateCachedTxIdsCount of 100)
+        for (int tableNum = 0; tableNum < 4; ++tableNum) {
+            TString tableName = Sprintf("ManyIndexesTable%d", tableNum);
+            TString tableSchema = Sprintf(R"(
+                Name: "%s"
+                ColumnShardCount: 1
+                Schema {
+                    Columns { Name: "timestamp" Type: "Timestamp" NotNull: true }
+                    Columns { Name: "key" Type: "Uint64" }
+                    Columns { Name: "data" Type: "Utf8" }
+                    KeyColumnNames: "timestamp"
+            )", tableName.c_str());
+
+            // Add 30 bloom filter indexes per table
+            for (int i = 0; i < 30; ++i) {
+                tableSchema += Sprintf(R"(
+                    Indexes {
+                        Id: %d
+                        Name: "bloom_%d"
+                        ClassName: "BLOOM_FILTER"
+                        BloomFilter {
+                            ColumnIds: [2]
+                            FalsePositiveProbability: 0.01
+                        }
+                    }
+                )", 4 + i, i);
+            }
+
+            tableSchema += "}";
+
+            TestCreateColumnTable(runtime, ++txId, "/MyRoot", tableSchema);
+            env.TestWaitNotification(runtime, txId);
+
+            // Before migration: no scheme object children
+            {
+                auto descr = DescribePath(runtime, Sprintf("/MyRoot/%s", tableName.c_str()));
+                TestDescribeResult(descr, {NLs::PathExist, NLs::ChildrenCount(0)});
+            }
+        }
+
+        // Track TEvWakeup events to verify TxId exhaustion
+        bool sawTxIdExhaustion = false;
+        auto observer = runtime.AddObserver<TEvents::TEvWakeup>([&](const auto&) {
+            sawTxIdExhaustion = true;
+        });
+
+        // Enable flag and restart SchemeShard to trigger migrator actor
+        runtime.GetAppData().FeatureFlags.SetEnableLocalIndexAsSchemeObject(true);
+        TActorId sender = runtime.AllocateEdgeActor();
+        GracefulRestartTablet(runtime, TTestTxConfig::SchemeShard, sender);
+
+        // The migrator runs schema operations asynchronously; allow time for
+        // TxId allocation and schema operations to complete.
+        // With 120 indexes across 4 tables, the migrator will process them as TxIds become available.
+        // This will trigger TxId exhaustion (cache has 100 TxIds initially), which can be seen in logs.
+        runtime.SimulateSleep(TDuration::Seconds(60));
+
+        // Verify that we encountered TxId exhaustion (TEvWakeup events)
+        UNIT_ASSERT_C(sawTxIdExhaustion, "Expected to see TxId exhaustion (TEvWakeup events) during migration");
+
+        // After migration: all indexes should appear as scheme objects
+        for (int tableNum = 0; tableNum < 4; ++tableNum) {
+            TString tableName = Sprintf("ManyIndexesTable%d", tableNum);
+            {
+                auto descr = DescribePath(runtime, Sprintf("/MyRoot/%s", tableName.c_str()));
+                TestDescribeResult(descr, {NLs::PathExist, NLs::ChildrenCount(30)});
+
+                const auto& children = descr.GetPathDescription().GetChildren();
+                UNIT_ASSERT_VALUES_EQUAL(children.size(), 30);
+
+                // Verify all indexes are present and have correct type
+                for (int i = 0; i < 30; ++i) {
+                    TString expectedName = Sprintf("bloom_%d", i);
+                    bool found = false;
+                    for (const auto& child : children) {
+                        if (child.GetName() == expectedName) {
+                            UNIT_ASSERT_VALUES_EQUAL(child.GetPathType(), NKikimrSchemeOp::EPathTypeTableIndex);
+                            found = true;
+                            break;
+                        }
+                    }
+                    UNIT_ASSERT_C(found, TStringBuilder() << "Index " << expectedName << " not found in table " << tableName);
+                }
+            }
+
+            // Verify a few sample indexes are ready
+            NLocalIndexes::CheckLocalIndexReady(runtime, Sprintf("/MyRoot/%s", tableName.c_str()), "bloom_0",
+                NKikimrSchemeOp::EIndexTypeLocalBloomFilter, {"key"});
+            NLocalIndexes::CheckLocalIndexReady(runtime, Sprintf("/MyRoot/%s", tableName.c_str()), "bloom_15",
+                NKikimrSchemeOp::EIndexTypeLocalBloomFilter, {"key"});
+            NLocalIndexes::CheckLocalIndexReady(runtime, Sprintf("/MyRoot/%s", tableName.c_str()), "bloom_29",
+                NKikimrSchemeOp::EIndexTypeLocalBloomFilter, {"key"});
+        }
+
+        // Restart again to verify migration is idempotent (no duplicate scheme objects)
+        GracefulRestartTablet(runtime, TTestTxConfig::SchemeShard, sender);
+        runtime.SimulateSleep(TDuration::Seconds(30));
+
+        for (int tableNum = 0; tableNum < 4; ++tableNum) {
+            TString tableName = Sprintf("ManyIndexesTable%d", tableNum);
+            auto descr = DescribePath(runtime, Sprintf("/MyRoot/%s", tableName.c_str()));
+            TestDescribeResult(descr, {NLs::PathExist, NLs::ChildrenCount(30)});
+        }
+    }
+
+    // Test orphaned index scheme object cleanup: when scheme object children exist
+    // but their corresponding indexes are removed from the column table schema,
+    // they should be cleaned up during initialization.
+    Y_UNIT_TEST(LocalIndexOrphanedCleanup) {
+        TTestBasicRuntime runtime;
+        TTestEnvOptions options;
+        TTestEnv env(runtime, options);
+        runtime.GetAppData().FeatureFlags.SetEnableLocalIndexAsSchemeObject(true);
+        ui64 txId = 100;
+
+        // Create column table with two bloom filter indexes
+        TestCreateColumnTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "CleanupTable"
+            ColumnShardCount: 1
+            Schema {
+                Columns { Name: "timestamp" Type: "Timestamp" NotNull: true }
+                Columns { Name: "key" Type: "Uint64" }
+                Columns { Name: "data" Type: "Utf8" }
+                KeyColumnNames: "timestamp"
+                Indexes {
+                    Id: 4
+                    Name: "bloom_key"
+                    ClassName: "BLOOM_FILTER"
+                    BloomFilter {
+                        ColumnIds: [2]
+                        FalsePositiveProbability: 0.01
+                    }
+                }
+                Indexes {
+                    Id: 5
+                    Name: "bloom_data"
+                    ClassName: "BLOOM_FILTER"
+                    BloomFilter {
+                        ColumnIds: [3]
+                        FalsePositiveProbability: 0.05
+                    }
+                }
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        // Verify initial state: two scheme object children
+        {
+            auto descr = DescribePath(runtime, "/MyRoot/CleanupTable");
+            TestDescribeResult(descr, {NLs::PathExist, NLs::ChildrenCount(2)});
+        }
+
+        NLocalIndexes::CheckIndexVersionsConsistent(runtime, "/MyRoot/CleanupTable", "bloom_key");
+        NLocalIndexes::CheckIndexVersionsConsistent(runtime, "/MyRoot/CleanupTable", "bloom_data");
+
+        // Remove one index from the schema (this removes it from column table schema
+        // but the scheme object child still exists, creating an orphan)
+        TestAlterColumnTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "CleanupTable"
+            AlterSchema {
+                DropIndexes: ["bloom_key"]
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        // Verify: bloom_key is gone from schema but scheme object still exists (orphaned)
+        {
+            auto descr = DescribePrivatePath(runtime, "/MyRoot/CleanupTable");
+            const auto& schema = descr.GetPathDescription().GetColumnTableDescription().GetSchema();
+            bool foundBloomKey = false;
+            bool foundBloomData = false;
+            for (const auto& idx : schema.GetIndexes()) {
+                if (idx.GetName() == "bloom_key") foundBloomKey = true;
+                if (idx.GetName() == "bloom_data") foundBloomData = true;
+            }
+            UNIT_ASSERT_C(!foundBloomKey, "bloom_key should be removed from schema");
+            UNIT_ASSERT_C(foundBloomData, "bloom_data should still exist in schema");
+        }
+
+        {
+            auto descr = DescribePath(runtime, "/MyRoot/CleanupTable");
+            // The scheme object child was removed by the ALTER operation
+            TestDescribeResult(descr, {NLs::PathExist, NLs::ChildrenCount(1)});
+            const auto& children = descr.GetPathDescription().GetChildren();
+            UNIT_ASSERT_VALUES_EQUAL(children[0].GetName(), "bloom_data");
+            UNIT_ASSERT_VALUES_EQUAL(children[0].GetPathType(), NKikimrSchemeOp::EPathTypeTableIndex);
+        }
+
+        // Verify the dropped index scheme object no longer exists
+        {
+            auto descr = DescribePrivatePath(runtime, "/MyRoot/CleanupTable/bloom_key");
+            TestDescribeResult(descr, {NLs::PathNotExist});
+        }
+
+        // Restart SchemeShard to verify orphaned cleanup doesn't break anything
+        TActorId sender = runtime.AllocateEdgeActor();
+        GracefulRestartTablet(runtime, TTestTxConfig::SchemeShard, sender);
+
+        // After restart: state should remain consistent
+        {
+            auto descr = DescribePath(runtime, "/MyRoot/CleanupTable");
+            TestDescribeResult(descr, {NLs::PathExist, NLs::ChildrenCount(1)});
+            const auto& children = descr.GetPathDescription().GetChildren();
+            UNIT_ASSERT_VALUES_EQUAL(children[0].GetName(), "bloom_data");
+            UNIT_ASSERT_VALUES_EQUAL(children[0].GetPathType(), NKikimrSchemeOp::EPathTypeTableIndex);
+        }
+
+        // Verify the remaining index still exists and is valid
+        NLocalIndexes::CheckLocalIndexReady(runtime, "/MyRoot/CleanupTable", "bloom_data",
+            NKikimrSchemeOp::EIndexTypeLocalBloomFilter, {"data"});
+
+        NLocalIndexes::CheckIndexVersionsConsistent(runtime, "/MyRoot/CleanupTable", "bloom_data");
+
+        // Test case: Re-create an index with the same name as the dropped one
+        // This verifies that RemoveChild was called during orphaned cleanup,
+        // allowing a new index with the same name to be created
+        TestAlterColumnTable(runtime, ++txId, "/MyRoot",
+            AlterUpsertBloomFilterIndex("CleanupTable", "bloom_key", "key", 0.02));
+        env.TestWaitNotification(runtime, txId);
+
+        // Verify the new index was created successfully
+        {
+            auto descr = DescribePath(runtime, "/MyRoot/CleanupTable");
+            TestDescribeResult(descr, {NLs::PathExist, NLs::ChildrenCount(2)});
+            const auto& children = descr.GetPathDescription().GetChildren();
+            UNIT_ASSERT_VALUES_EQUAL(children[0].GetName(), "bloom_data");
+            UNIT_ASSERT_VALUES_EQUAL(children[1].GetName(), "bloom_key");
+        }
+
+        // Verify the new index is valid
+        NLocalIndexes::CheckLocalIndexReady(runtime, "/MyRoot/CleanupTable", "bloom_key",
+            NKikimrSchemeOp::EIndexTypeLocalBloomFilter, {"key"});
+
+        NLocalIndexes::CheckIndexVersionsConsistent(runtime, "/MyRoot/CleanupTable", "bloom_key");
+        NLocalIndexes::CheckIndexVersionsConsistent(runtime, "/MyRoot/CleanupTable", "bloom_data");
+    }
+
+    Y_UNIT_TEST(MoveColumnTableLocalIndex) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableMoveIndex(true));
+        runtime.GetAppData().FeatureFlags.SetEnableLocalIndexAsSchemeObject(true);
+        ui64 txId = 100;
+
+        // Create column table with two bloom filter indexes
+        TestCreateColumnTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "TestTable"
+            ColumnShardCount: 1
+            Schema {
+                Columns { Name: "timestamp" Type: "Timestamp" NotNull: true }
+                Columns { Name: "key" Type: "Uint64" }
+                Columns { Name: "data" Type: "Utf8" }
+                KeyColumnNames: "timestamp"
+                Indexes {
+                    Id: 4
+                    Name: "bloom_key"
+                    ClassName: "BLOOM_FILTER"
+                    BloomFilter {
+                        ColumnIds: [2]
+                        FalsePositiveProbability: 0.01
+                    }
+                }
+                Indexes {
+                    Id: 5
+                    Name: "bloom_data"
+                    ClassName: "BLOOM_FILTER"
+                    BloomFilter {
+                        ColumnIds: [3]
+                        FalsePositiveProbability: 0.05
+                    }
+                }
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        // Verify initial state: two indexes
+        {
+            auto descr = DescribePath(runtime, "/MyRoot/TestTable");
+            TestDescribeResult(descr, {NLs::PathExist, NLs::ChildrenCount(2)});
+        }
+        NLocalIndexes::CheckLocalIndexReady(runtime, "/MyRoot/TestTable", "bloom_key",
+            NKikimrSchemeOp::EIndexTypeLocalBloomFilter, {"key"});
+
+        NLocalIndexes::CheckIndexVersionsConsistent(runtime, "/MyRoot/TestTable", "bloom_key");
+        NLocalIndexes::CheckIndexVersionsConsistent(runtime, "/MyRoot/TestTable", "bloom_data");
+
+        // Move bloom_key -> bloom_key_renamed
+        TestMoveIndex(runtime, ++txId, "/MyRoot/TestTable", "bloom_key", "bloom_key_renamed", false);
+        env.TestWaitNotification(runtime, txId);
+
+        // Verify: old path gone, new path exists
+        {
+            auto descr = DescribePath(runtime, "/MyRoot/TestTable");
+            TestDescribeResult(descr, {NLs::PathExist, NLs::ChildrenCount(2)});
+        }
+        {
+            auto descr = DescribePrivatePath(runtime, "/MyRoot/TestTable/bloom_key");
+            TestDescribeResult(descr, {NLs::PathNotExist});
+        }
+        NLocalIndexes::CheckLocalIndexReady(runtime, "/MyRoot/TestTable", "bloom_key_renamed",
+            NKikimrSchemeOp::EIndexTypeLocalBloomFilter, {"key"});
+
+        NLocalIndexes::CheckIndexVersionsConsistent(runtime, "/MyRoot/TestTable", "bloom_key_renamed");
+        NLocalIndexes::CheckIndexVersionsConsistent(runtime, "/MyRoot/TestTable", "bloom_data");
+
+        // Move non-existent index -> error
+        TestMoveIndex(runtime, ++txId, "/MyRoot/TestTable", "non_existent", "something", false,
+            {NKikimrScheme::StatusPathDoesNotExist});
+
+        // Move to existing name without overwrite -> error
+        TestMoveIndex(runtime, ++txId, "/MyRoot/TestTable", "bloom_key_renamed", "bloom_data", false,
+            {NKikimrScheme::StatusSchemeError});
+    }
+
+    Y_UNIT_TEST(AlterOwnerAfterReadOnlyCopy) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        TestMkDir(runtime, ++txId, "/MyRoot", "MyDir");
+        env.TestWaitNotification(runtime, txId);
+
+        TestCreateColumnTable(runtime, ++txId, "/MyRoot/MyDir", R"(
+            Name: "ColumnTable"
+            ColumnShardCount: 1
+            Schema {
+                Columns { Name: "key1" Type: "Uint32" NotNull: true }
+                Columns { Name: "key2" Type: "Utf8" NotNull: true }
+                Columns { Name: "Value" Type: "Utf8" }
+                KeyColumnNames: ["key1", "key2"]
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestCopyColumnTable(runtime, ++txId, "/MyRoot/MyDir", "Copy", "/MyRoot/MyDir/ColumnTable");
+        env.TestWaitNotification(runtime, txId);
+
+        TestLs(runtime, "/MyRoot/MyDir/Copy", false, NLs::All(
+            NLs::PathExist));
+
+        TestAlterColumnTable(runtime, ++txId, "/MyRoot/MyDir", R"(
+            Name: "ColumnTable"
+            AlterSchema {
+                AddColumns { Name: "add_1" Type: "Uint64" }
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        auto hasColumn = [](const NKikimrScheme::TEvDescribeSchemeResult& descr, const TString& columnName) {
+            const auto& schema = descr.GetPathDescription().GetColumnTableDescription().GetSchema();
+            for (const auto& col : schema.GetColumns()) {
+                if (col.GetName() == columnName) {
+                    return true;
+                }
+            }
+            return false;
+        };
+
+        {
+            auto descr = DescribePrivatePath(runtime, "/MyRoot/MyDir/ColumnTable");
+            UNIT_ASSERT(hasColumn(descr, "add_1"));
+            TestDescribeResult(descr, {NLs::HasColumnTableSchemaVersion(2)});
+        }
+        {
+            auto descr = DescribePrivatePath(runtime, "/MyRoot/MyDir/Copy");
+            UNIT_ASSERT(!hasColumn(descr, "add_1"));
+            TestDescribeResult(descr, {NLs::HasColumnTableSchemaVersion(1)});
+        }
+
+        TestAlterColumnTable(runtime, ++txId, "/MyRoot/MyDir", R"(
+            Name: "Copy"
+            AlterSchema {
+                AddColumns { Name: "add_2" Type: "Uint64" }
+            }
+        )", {{NKikimrScheme::StatusSchemeError, "path is a read-only copy column table; only Copy and Drop are allowed"}});
+
+        TestDropColumnTable(runtime, ++txId, "/MyRoot/MyDir", "Copy");
+        env.TestWaitNotification(runtime, txId);
+
+        TestDropColumnTable(runtime, ++txId, "/MyRoot/MyDir", "ColumnTable");
+        env.TestWaitNotification(runtime, txId);
+    }
+
+    // Case 1: dropping the read-only copy (non-owner) leaves the source's
+    // shard alive and only removes the copy's PathId from SharedShards.
+    Y_UNIT_TEST(DropCopySharedShardCleanup) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        TestMkDir(runtime, ++txId, "/MyRoot", "MyDir");
+        env.TestWaitNotification(runtime, txId);
+
+        TestCreateColumnTable(runtime, ++txId, "/MyRoot/MyDir", defaultTableSchema);
+        env.TestWaitNotification(runtime, txId);
+
+        UNIT_ASSERT_VALUES_EQUAL(CountSharedShardsRows(runtime), 0u);
+
+        const auto srcTabletIds = GetColumnShardTabletIds(runtime, "/MyRoot/MyDir/ColumnTable");
+        UNIT_ASSERT_VALUES_UNEQUAL(srcTabletIds.size(), 0u);
+
+        TestCopyColumnTable(runtime, ++txId, "/MyRoot/MyDir", "Copy", "/MyRoot/MyDir/ColumnTable");
+        env.TestWaitNotification(runtime, txId);
+
+        const auto dstTabletIds = GetColumnShardTabletIds(runtime, "/MyRoot/MyDir/Copy");
+        UNIT_ASSERT_VALUES_EQUAL(dstTabletIds, srcTabletIds);
+        UNIT_ASSERT_VALUES_EQUAL(CountSharedShardsRows(runtime), srcTabletIds.size());
+
+        const ui64 localShardIdx = ResolveLocalShardIdxByTabletId(runtime, srcTabletIds[0]);
+        UNIT_ASSERT_VALUES_UNEQUAL(localShardIdx, 0u);
+        const ui64 ownerBefore = GetShardOwnerLocalPathId(runtime, localShardIdx);
+
+        const ui32 shardsBefore = CountShardsTableRows(runtime);
+
+        TestDropColumnTable(runtime, ++txId, "/MyRoot/MyDir", "Copy");
+        env.TestWaitNotification(runtime, txId);
+
+        TestLs(runtime, "/MyRoot/MyDir/Copy", false, NLs::PathNotExist);
+        TestLs(runtime, "/MyRoot/MyDir/ColumnTable", false, NLs::PathExist);
+
+        UNIT_ASSERT_VALUES_EQUAL(CountShardsTableRows(runtime), shardsBefore);
+        UNIT_ASSERT_VALUES_EQUAL(GetShardOwnerLocalPathId(runtime, localShardIdx), ownerBefore);
+
+        UNIT_ASSERT_VALUES_EQUAL(CountSharedShardsRows(runtime), 0u);
+
+        TestDropColumnTable(runtime, ++txId, "/MyRoot/MyDir", "ColumnTable");
+        env.TestWaitNotification(runtime, txId);
+        TestLs(runtime, "/MyRoot/MyDir/ColumnTable", false, NLs::PathNotExist);
+    }
+
+    // Case 2: dropping the standalone owner with no sharers deletes the shard
+    // and leaves the SharedShards table empty.
+    Y_UNIT_TEST(DropOwnerNoSharersSharedShardsEmpty) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        TestMkDir(runtime, ++txId, "/MyRoot", "MyDir");
+        env.TestWaitNotification(runtime, txId);
+
+        TestCreateColumnTable(runtime, ++txId, "/MyRoot/MyDir", defaultTableSchema);
+        env.TestWaitNotification(runtime, txId);
+
+        UNIT_ASSERT_VALUES_EQUAL(CountSharedShardsRows(runtime), 0u);
+
+        // Drop the owner directly.
+        TestDropColumnTable(runtime, ++txId, "/MyRoot/MyDir", "ColumnTable");
+        env.TestWaitNotification(runtime, txId);
+
+        TestLs(runtime, "/MyRoot/MyDir/ColumnTable", false, NLs::PathNotExist);
+
+        // SharedShards table must remain empty: nothing to clean up.
+        UNIT_ASSERT_VALUES_EQUAL(CountSharedShardsRows(runtime), 0u);
+    }
+
+    // Case 3: dropping the owner while a copy (sharer) still exists must
+    // transfer ownership to the next PathId in the shared set and remove the
+    // (new owner, shardIdx) entry from SharedShards.
+    Y_UNIT_TEST(DropOwnerWithSharersTransfersOwnership) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        TestMkDir(runtime, ++txId, "/MyRoot", "MyDir");
+        env.TestWaitNotification(runtime, txId);
+
+        TestCreateColumnTable(runtime, ++txId, "/MyRoot/MyDir", defaultTableSchema);
+        env.TestWaitNotification(runtime, txId);
+
+        TestCopyColumnTable(runtime, ++txId, "/MyRoot/MyDir", "Copy", "/MyRoot/MyDir/ColumnTable");
+        env.TestWaitNotification(runtime, txId);
+
+        const auto srcTabletIds = GetColumnShardTabletIds(runtime, "/MyRoot/MyDir/ColumnTable");
+        const auto dstTabletIds = GetColumnShardTabletIds(runtime, "/MyRoot/MyDir/Copy");
+        UNIT_ASSERT_VALUES_UNEQUAL(srcTabletIds.size(), 0u);
+        UNIT_ASSERT_VALUES_EQUAL(srcTabletIds, dstTabletIds);
+
+        const ui64 localShardIdx = ResolveLocalShardIdxByTabletId(runtime, srcTabletIds[0]);
+        UNIT_ASSERT_VALUES_UNEQUAL(localShardIdx, 0u);
+
+        const ui64 ownerBefore = GetShardOwnerLocalPathId(runtime, localShardIdx);
+
+        // Resolve the copy's local path id via DescribePath.
+        ui64 copyLocalPathId = 0;
+        {
+            auto copyDesc = DescribePath(runtime, "/MyRoot/MyDir/Copy");
+            copyLocalPathId = copyDesc.GetPathDescription().GetSelf().GetPathId();
+        }
+        UNIT_ASSERT_VALUES_UNEQUAL(copyLocalPathId, 0u);
+        UNIT_ASSERT_VALUES_UNEQUAL(copyLocalPathId, ownerBefore);
+
+        // Sanity: SharedShards has one entry per shard before drop.
+        UNIT_ASSERT_VALUES_EQUAL(CountSharedShardsRows(runtime), srcTabletIds.size());
+
+        const ui32 shardsBefore = CountShardsTableRows(runtime);
+
+        // Drop the OWNER while the copy still exists.
+        TestDropColumnTable(runtime, ++txId, "/MyRoot/MyDir", "ColumnTable");
+        env.TestWaitNotification(runtime, txId);
+
+        TestLs(runtime, "/MyRoot/MyDir/ColumnTable", false, NLs::PathNotExist);
+        TestLs(runtime, "/MyRoot/MyDir/Copy", false, NLs::PathExist);
+
+        // Tablet was NOT deleted: shard is still in the Shards table.
+        UNIT_ASSERT_VALUES_EQUAL(CountShardsTableRows(runtime), shardsBefore);
+
+        // Ownership has been transferred to the copy.
+        UNIT_ASSERT_VALUES_EQUAL(GetShardOwnerLocalPathId(runtime, localShardIdx), copyLocalPathId);
+
+        // The (newOwner, shardIdx) pair must have been removed from
+        // SharedShards => no rows referencing this shard remain.
+        UNIT_ASSERT_VALUES_EQUAL(CountSharedShardsRows(runtime, localShardIdx), 0u);
+        UNIT_ASSERT_VALUES_EQUAL(CountSharedShardsRows(runtime), 0u);
+
+        // Final drop: now the (former-copy) is the sole owner with no sharers.
+        // This must take the case-2 branch and delete the shard.
+        TestDropColumnTable(runtime, ++txId, "/MyRoot/MyDir", "Copy");
+        env.TestWaitNotification(runtime, txId);
+        TestLs(runtime, "/MyRoot/MyDir/Copy", false, NLs::PathNotExist);
+
+        UNIT_ASSERT_VALUES_EQUAL(CountSharedShardsRows(runtime), 0u);
+    }
+
+    // Chained sharers (1 owner + 2 copies). Sequentially dropping the copies
+    // must remove their entries from SharedShards but never delete shards.
+    // Dropping the owner last must then delete the shards.
+    Y_UNIT_TEST(DropAllSharersThenOwnerCleansAllSharedShards) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        TestMkDir(runtime, ++txId, "/MyRoot", "MyDir");
+        env.TestWaitNotification(runtime, txId);
+
+        TestCreateColumnTable(runtime, ++txId, "/MyRoot/MyDir", defaultTableSchema);
+        env.TestWaitNotification(runtime, txId);
+
+        TestCopyColumnTable(runtime, ++txId, "/MyRoot/MyDir", "Copy1", "/MyRoot/MyDir/ColumnTable");
+        env.TestWaitNotification(runtime, txId);
+
+        TestCopyColumnTable(runtime, ++txId, "/MyRoot/MyDir", "Copy2", "/MyRoot/MyDir/ColumnTable");
+        env.TestWaitNotification(runtime, txId);
+
+        const auto tabletIds = GetColumnShardTabletIds(runtime, "/MyRoot/MyDir/ColumnTable");
+        UNIT_ASSERT_VALUES_UNEQUAL(tabletIds.size(), 0u);
+
+        // Each shard now has two sharers (Copy1 + Copy2).
+        UNIT_ASSERT_VALUES_EQUAL(CountSharedShardsRows(runtime), 2u * tabletIds.size());
+
+        const ui64 localShardIdx = ResolveLocalShardIdxByTabletId(runtime, tabletIds[0]);
+        UNIT_ASSERT_VALUES_UNEQUAL(localShardIdx, 0u);
+        const ui64 ownerBefore = GetShardOwnerLocalPathId(runtime, localShardIdx);
+
+        const ui32 shardsBefore = CountShardsTableRows(runtime);
+
+        // Drop Copy1 -> one sharer left per shard, owner unchanged.
+        TestDropColumnTable(runtime, ++txId, "/MyRoot/MyDir", "Copy1");
+        env.TestWaitNotification(runtime, txId);
+
+        UNIT_ASSERT_VALUES_EQUAL(CountShardsTableRows(runtime), shardsBefore);
+        UNIT_ASSERT_VALUES_EQUAL(GetShardOwnerLocalPathId(runtime, localShardIdx), ownerBefore);
+        UNIT_ASSERT_VALUES_EQUAL(CountSharedShardsRows(runtime), tabletIds.size());
+
+        // Drop Copy2 -> no sharers left, owner unchanged, shards still alive.
+        TestDropColumnTable(runtime, ++txId, "/MyRoot/MyDir", "Copy2");
+        env.TestWaitNotification(runtime, txId);
+
+        UNIT_ASSERT_VALUES_EQUAL(CountShardsTableRows(runtime), shardsBefore);
+        UNIT_ASSERT_VALUES_EQUAL(GetShardOwnerLocalPathId(runtime, localShardIdx), ownerBefore);
+        UNIT_ASSERT_VALUES_EQUAL(CountSharedShardsRows(runtime), 0u);
+
+        // Drop owner -> shards must be deleted now.
+        TestDropColumnTable(runtime, ++txId, "/MyRoot/MyDir", "ColumnTable");
+        env.TestWaitNotification(runtime, txId);
+
+        TestLs(runtime, "/MyRoot/MyDir/ColumnTable", false, NLs::PathNotExist);
+        UNIT_ASSERT_VALUES_EQUAL(CountSharedShardsRows(runtime), 0u);
+        // Shards rows for the (now deleted) column shards must be gone.
+        UNIT_ASSERT_VALUES_EQUAL(GetShardOwnerLocalPathId(runtime, localShardIdx), 0u);
+    }
+
+    // After reboot, SharedShards must be loaded back from the persisted table
+    // and the drop logic must still behave correctly.
+    Y_UNIT_TEST(DropCopyAfterRebootKeepsSharedShardsConsistent) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        TestMkDir(runtime, ++txId, "/MyRoot", "MyDir");
+        env.TestWaitNotification(runtime, txId);
+
+        TestCreateColumnTable(runtime, ++txId, "/MyRoot/MyDir", defaultTableSchema);
+        env.TestWaitNotification(runtime, txId);
+
+        TestCopyColumnTable(runtime, ++txId, "/MyRoot/MyDir", "Copy", "/MyRoot/MyDir/ColumnTable");
+        env.TestWaitNotification(runtime, txId);
+
+        const auto tabletIds = GetColumnShardTabletIds(runtime, "/MyRoot/MyDir/ColumnTable");
+        UNIT_ASSERT_VALUES_UNEQUAL(tabletIds.size(), 0u);
+        UNIT_ASSERT_VALUES_EQUAL(CountSharedShardsRows(runtime), tabletIds.size());
+
+        const ui64 localShardIdx = ResolveLocalShardIdxByTabletId(runtime, tabletIds[0]);
+        UNIT_ASSERT_VALUES_UNEQUAL(localShardIdx, 0u);
+        const ui64 ownerBefore = GetShardOwnerLocalPathId(runtime, localShardIdx);
+
+        // Reboot the SchemeShard - SharedShards map must be reloaded.
+        TActorId sender = runtime.AllocateEdgeActor();
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, sender);
+
+        // After reboot, the persisted SharedShards entries must still be there.
+        UNIT_ASSERT_VALUES_EQUAL(CountSharedShardsRows(runtime), tabletIds.size());
+        UNIT_ASSERT_VALUES_EQUAL(GetShardOwnerLocalPathId(runtime, localShardIdx), ownerBefore);
+
+        // Drop the copy after reboot: must still correctly clean up.
+        TestDropColumnTable(runtime, ++txId, "/MyRoot/MyDir", "Copy");
+        env.TestWaitNotification(runtime, txId);
+
+        UNIT_ASSERT_VALUES_EQUAL(CountSharedShardsRows(runtime), 0u);
+        UNIT_ASSERT_VALUES_EQUAL(GetShardOwnerLocalPathId(runtime, localShardIdx), ownerBefore);
+
+        // Final drop of the owner must succeed normally.
+        TestDropColumnTable(runtime, ++txId, "/MyRoot/MyDir", "ColumnTable");
+        env.TestWaitNotification(runtime, txId);
+        TestLs(runtime, "/MyRoot/MyDir/ColumnTable", false, NLs::PathNotExist);
+        UNIT_ASSERT_VALUES_EQUAL(GetShardOwnerLocalPathId(runtime, localShardIdx), 0u);
     }
 }

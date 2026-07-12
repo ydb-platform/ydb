@@ -3,6 +3,8 @@ items:
   href: monitoring.md
 - name: Logging
   href: logging.md
+- name: Minidumps
+  href: minidumps.md
 - name: System views
   href: system-views.md
 - name: Tracing

@@ -355,6 +355,8 @@ message TVersionedRowDigestExt
 {
     repeated int64 timestamp_count_log_histogram = 1;
     repeated uint64 earliest_nth_timestamp = 2;
+    repeated uint64 earliest_aggregate_or_delete_nth_timestamp = 6;
+
     optional bytes last_timestamp_digest = 3;
     optional bytes all_but_last_timestamp_digest = 4;
     optional bytes first_timestamp_digest = 5;

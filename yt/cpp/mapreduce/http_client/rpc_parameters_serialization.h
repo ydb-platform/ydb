@@ -225,6 +225,9 @@ TNode SerializeParamsForGetTablePartitions(
     const TVector<TRichYPath>& paths,
     const TGetTablePartitionsOptions& options);
 
+TNode SerializeParamsForCheckClusterLiveness(
+    const TCheckClusterLivenessOptions& options);
+
 TNode SerializeParamsForReadFile(
     const TTransactionId& transactionId,
     const TFileReaderOptions& options);
@@ -266,7 +269,8 @@ TNode SerializeParamsForAbortTransaction(
     const TTransactionId& transactionId);
 
 TNode SerializeParamsForCommitTransaction(
-    const TTransactionId& transactionId);
+    const TTransactionId& transactionId,
+    const TCommitTransactionOptions& options);
 
 TNode SerializeParamsForStartTransaction(
     const TTransactionId& parentTransactionId,

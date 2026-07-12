@@ -419,6 +419,10 @@ message TPQTabletConfig {
         optional string DeadLetterQueue = 17; // For MLP consumers
         optional uint32 DefaultDelayMessageTimeMs = 18 [default = 0]; // For MLP consumers
         optional uint32 DefaultReceiveMessageWaitTimeMs = 19 [default = 0]; // For MLP consumers
+        // For MLP (shared/SQS) consumers. The window during which a repeated read with the same
+        // receive-request-attempt-id replays the same messages. Default 5 minutes.
+        // Passed via the _sqs_read_request_attempt_id_period_ms consumer attribute.
+        optional uint32 ReadRequestAttemptIdPeriodMs = 20 [default = 300000];
 
         optional uint32 MetricsLevel = 21;
         // The ID of the Monitoring project that will be used as the value of `project` label for detailed metrics level.
@@ -503,6 +507,13 @@ message TPQTabletConfig {
     optional string TimestampType = 42;
 
     optional bool ContentBasedDeduplication = 43 [default = false];
+
+    // SQS/YMQ migration: queue metadata for exporting queue metrics from PQRB.
+    optional string SqsQueueName = 44 [default = ""];
+    optional string SqsAccountName = 45 [default = ""];
+    optional string SqsCloudId = 46 [default = ""];
+    optional string SqsFolderId = 47 [default = ""];
+    optional bool SqsExportMetrics = 48 [default = false];
 }
 
 message THeartbeat {
@@ -792,6 +803,8 @@ message TBatchHeader {
     }
     optional uint32 Format = 7; //for EPayloadFormat
     optional bool HasKinesis = 8;
+    optional uint32 ClientBlobCount = 9; // physical ClientBlob count; Count is offset span
+    optional uint64 OffsetDelta = 10;
 }
 
 message TUserInfo {

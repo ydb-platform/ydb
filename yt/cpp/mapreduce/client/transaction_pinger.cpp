@@ -28,14 +28,13 @@ class TSharedTransactionPinger
 {
 public:
     TSharedTransactionPinger(int poolThreadCount, IRawClientPtr rawClient)
-        : ThreadPool_(NConcurrency::CreateThreadPool(poolThreadCount, "tx_pinger_pool"))
-        , Invoker_(ThreadPool_->GetInvoker())
+        : PingerPool_(NConcurrency::CreateThreadPool(poolThreadCount, "tx_pinger_pool"))
         , RawClient_(std::move(rawClient))
     { }
 
     ~TSharedTransactionPinger() override
     {
-        ThreadPool_->Shutdown();
+        PingerPool_->Shutdown();
     }
 
     ITransactionPingerPtr GetChildTxPinger() override
@@ -53,14 +52,18 @@ public:
         auto periodic = std::make_shared<NConcurrency::TPeriodicExecutorPtr>(nullptr);
         // Have to use weak_ptr in order to break reference cycle
         // This weak_ptr holds pointer to periodic, which will contain this lambda
-        // Also we consider that lifetime of this lambda is no longer than lifetime of pingableTx
-        // because every pingableTx have to call RemoveTransaction before it is destroyed
-        auto pingRoutine = BIND([this, &pingableTx, periodic = std::weak_ptr{periodic}] {
+        // Don't capture pingableTx by reference: an in-flight ping may outlive it and race with its destruction
+        auto pingRoutine = BIND([this, rawClient = RawClient_, transactionId = pingableTx.GetId(), periodic = std::weak_ptr{periodic}] {
             auto strong_ptr = periodic.lock();
-            YT_VERIFY(strong_ptr);
-            DoPingTransaction(pingableTx, *strong_ptr);
+            // NB: RemoveTransaction calls (*periodic)->Stop() fire-and-forget and then drops the last shared_ptr,
+            //     so if this callback was queued but hadn't started yet, lock() returns null.
+            if (!strong_ptr) {
+                // The executor is being torn down — nothing to ping.
+                return;
+            }
+            DoPingTransaction(rawClient, transactionId, *strong_ptr);
         });
-        *periodic = New<NConcurrency::TPeriodicExecutor>(ThreadPool_->GetInvoker(), pingRoutine, opts);
+        *periodic = New<NConcurrency::TPeriodicExecutor>(PingerPool_->GetInvoker(), pingRoutine, opts);
         (*periodic)->Start();
 
         auto guard = Guard(SpinLock_);
@@ -88,26 +91,14 @@ public:
             periodic = std::move(it->second);
             Transactions_.erase(it);
         }
-        YT_UNUSED_FUTURE((*periodic)->Stop());
-    }
-
-    TFuture<void> AsyncAbortTransaction(const TTransactionId& transactionId) override
-    {
-        auto result = BIND([rawClient = RawClient_, transactionId = transactionId] {
-            TMutationId mutationId;
-            rawClient->AbortTransaction(mutationId, transactionId);
-        })
-            .AsyncVia(ThreadPool_->GetInvoker())
-            .Run();
-
-        return result;
+        NConcurrency::WaitUntilSet((*periodic)->Stop());
     }
 
 private:
-    void DoPingTransaction(const TPingableTransaction& pingableTx, NConcurrency::TPeriodicExecutorPtr periodic)
+    void DoPingTransaction(const IRawClientPtr& rawClient, const TTransactionId& transactionId, NConcurrency::TPeriodicExecutorPtr periodic)
     {
         try {
-            pingableTx.Ping();
+            rawClient->PingTransaction(transactionId);
         } catch (const TErrorResponse& e) {
             /// NB: No logging here, CheckError() already logged TErrorResponse.
             if (e.GetError().ContainsErrorCode(NYT::NClusterErrorCodes::NTransactionClient::NoSuchTransaction)) {
@@ -117,7 +108,7 @@ private:
             }
         } catch (const std::exception& e) {
             YT_LOG_ERROR("DoPingTransaction has failed (TransactionId: %v, Error: %v)",
-                GetGuidAsString(pingableTx.GetId()),
+                GetGuidAsString(transactionId),
                 e.what());
         }
     }
@@ -127,8 +118,7 @@ private:
     YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, SpinLock_);
     THashMap<TTransactionId, std::shared_ptr<NConcurrency::TPeriodicExecutorPtr>> Transactions_;
 
-    NConcurrency::IThreadPoolPtr ThreadPool_;
-    IInvokerPtr Invoker_;
+    NConcurrency::IThreadPoolPtr PingerPool_;
     IRawClientPtr RawClient_;
 };
 

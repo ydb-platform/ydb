@@ -15,6 +15,7 @@
 #include <yt/yt/core/misc/finally.h>
 
 #include <library/cpp/yt/coding/varint.h>
+#include <library/cpp/yt/string/stream.h>
 
 #include <util/generic/buffer.h>
 #include <util/generic/scope.h>
@@ -651,9 +652,9 @@ private:
         return inRoot && !description.Repeated && !description.IsOneofAlternative();
     }
 
-    TString GetPathString(int offset = 0)
+    std::string GetPathString(int offset = 0)
     {
-        TStringStream stream;
+        TStdStringStream stream;
         stream << "<root>";
         YT_VERIFY(std::ssize(Path_) >= offset);
         for (int i = 0; i < std::ssize(Path_) - offset; ++i) {
@@ -687,7 +688,7 @@ private:
     } Length_;
     ui32 ExpectedBytes_ = sizeof(ui32);
 
-    TString Data_;
+    std::string Data_;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

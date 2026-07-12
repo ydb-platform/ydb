@@ -99,6 +99,7 @@ struct TKiExploreTxResults {
     };
 
     bool ConcurrentResults = true;
+    bool IsolateEffects = false;
 
     THashSet<const TExprNode*> Ops;
     TVector<TExprBase> Sync;
@@ -180,8 +181,10 @@ struct TKiExploreTxResults {
             uncommittedChangesRead = HasWriteOps(tableMeta->Name);
         }
 
-        if (uncommittedChangesRead) {
+        if (uncommittedChangesRead || IsolateEffects) {
             AddQueryBlock();
+        }
+        if (uncommittedChangesRead) {
             SetBlockHasUncommittedChangesRead();
         }
     }
@@ -209,11 +212,13 @@ struct TKiExploreTxResults {
                 YQL_ENSURE(indexTables.size() >= 2, "K-means tree index should have at least 2 tables");
                 dataTable = indexTable = indexTables[1];
                 YQL_ENSURE(indexTable.EndsWith(NKikimr::NTableIndex::NKMeans::PostingTable));
-            } else if (index.Type == TIndexDescription::EType::GlobalFulltextPlain) {
+            } else if (index.Type == TIndexDescription::EType::GlobalFulltextPlain ||
+                index.Type == TIndexDescription::EType::GlobalFulltextCompact) {
                 YQL_ENSURE(indexTables.size() == 1, "Global fulltext plain index should have 1 table");
                 dataTable = indexTable = indexTables[0];
                 YQL_ENSURE(indexTable.EndsWith(NKikimr::NTableIndex::ImplTable));
-            } else if (index.Type == TIndexDescription::EType::GlobalFulltextRelevance) {
+            } else if (index.Type == TIndexDescription::EType::GlobalFulltextRelevance ||
+                index.Type == TIndexDescription::EType::GlobalFulltextCompactRelevance) {
                 YQL_ENSURE(indexTables.size() == 4, "Global fulltext relevance index should have 4 tables");
                 indexTable = indexTables[3];
                 YQL_ENSURE(indexTable.EndsWith(NKikimr::NTableIndex::ImplTable));
@@ -228,7 +233,8 @@ struct TKiExploreTxResults {
 
             if (!isUpdate) {
                 ops[indexTable] = TPrimitiveYdbOperation::Write;
-                if (index.Type == TIndexDescription::EType::GlobalFulltextRelevance) {
+                if (index.Type == TIndexDescription::EType::GlobalFulltextRelevance ||
+                    index.Type == TIndexDescription::EType::GlobalFulltextCompactRelevance) {
                     ops[dictTable] |= TPrimitiveYdbOperation::Read|TPrimitiveYdbOperation::Write;
                 }
             } else {
@@ -236,7 +242,8 @@ struct TKiExploreTxResults {
                     if (updateColumns.contains(column)) {
                         // delete old index values and upsert rows into index table
                         ops[indexTable] = TPrimitiveYdbOperation::Write;
-                        if (index.Type == TIndexDescription::EType::GlobalFulltextRelevance) {
+                        if (index.Type == TIndexDescription::EType::GlobalFulltextRelevance ||
+                            index.Type == TIndexDescription::EType::GlobalFulltextCompactRelevance) {
                             ops[dictTable] |= TPrimitiveYdbOperation::Read|TPrimitiveYdbOperation::Write;
                         }
                         break;
@@ -265,7 +272,7 @@ struct TKiExploreTxResults {
             }
         }
 
-        if (QueryBlocks.empty() || uncommittedChangesRead) {
+        if (QueryBlocks.empty() || uncommittedChangesRead || IsolateEffects) {
             AddQueryBlock();
         }
 
@@ -914,20 +921,14 @@ TVector<TKiDataQueryBlock> MakeKiDataQueryBlocks(TExprBase node, const TKiExplor
     return queryBlocks;
 }
 
-TString GetShowCreateType(const TExprNode& settings) {
-    if (HasSetting(settings, "showCreateTable")) {
-        return "showCreateTable";
-    }
-    if (HasSetting(settings, "showCreateView")) {
-        return "showCreateView";
-    }
-    return "";
+TStringBuf GetShowCreateType(const TExprNode& settings) {
+    return GetShowCreateSetting(settings);
 }
 
 } // anonymous namespace
 
 TExprNode::TPtr KiBuildQuery(TExprBase node, TExprContext& ctx, TStringBuf database, TIntrusivePtr<TKikimrTablesData> tablesData,
-    TTypeAnnotationContext& types, bool concurrentResults) {
+    TTypeAnnotationContext& types, bool concurrentResults, bool isolateEffects) {
     if (!node.Maybe<TCoCommit>().DataSink().Maybe<TKiDataSink>()) {
         return node.Ptr();
     }
@@ -936,79 +937,13 @@ TExprNode::TPtr KiBuildQuery(TExprBase node, TExprContext& ctx, TStringBuf datab
     auto settings = NCommon::ParseCommitSettings(commit, ctx);
     auto kiDataSink = commit.DataSink().Cast<TKiDataSink>();
 
-    TNodeOnNodeOwnedMap replaces;
-    std::unordered_set<std::string> pgDynTables = {"pg_tables", "tables", "pg_class"};
-    VisitExpr(node.Ptr(), [&replaces, &pgDynTables](const TExprNode::TPtr& input) -> bool {
-        if (input->IsCallable("PgTableContent")) {
-            TPgTableContent content(input);
-            if (pgDynTables.contains(content.Table().StringValue())) {
-                replaces[input.Get()] = nullptr;
-            }
-        }
-        return true;
-    });
-    if (!replaces.empty()) {
-        for (auto& [input, _] : replaces) {
-            TPgTableContent content(input);
-
-            TExprNode::TPtr path = ctx.NewCallable(
-                node.Pos(),
-                "String",
-                { ctx.NewAtom(node.Pos(), TStringBuilder() << "/" << database << "/.sys/" << content.Table().StringValue()) }
-            );
-            auto table = ctx.NewList(node.Pos(), {ctx.NewAtom(node.Pos(), "table"), path});
-            auto newKey = ctx.NewCallable(node.Pos(), "Key", {table});
-
-            auto ydbSysTableRead = Build<TCoRead>(ctx, node.Pos())
-                .World<TCoWorld>().Build()
-                .DataSource<TCoDataSource>()
-                    .Category(ctx.NewAtom(node.Pos(), KikimrProviderName))
-                    .FreeArgs()
-                        .Add(ctx.NewAtom(node.Pos(), "db"))
-                    .Build()
-                .Build()
-                .FreeArgs()
-                    .Add(newKey)
-                    .Add(ctx.NewCallable(node.Pos(), "Void", {}))
-                    .Add(ctx.NewList(node.Pos(), {}))
-                .Build()
-            .Done().Ptr();
-
-
-            auto readData = Build<TCoRight>(ctx, node.Pos())
-                .Input(ydbSysTableRead)
-            .Done().Ptr();
-
-            if (auto v = content.Columns().Maybe<TCoVoid>()) {
-                replaces[input] = readData;
-            } else {
-                auto extractMembers = Build<TCoExtractMembers>(ctx, node.Pos())
-                    .Input(readData)
-                    .Members(content.Columns().Ptr())
-                .Done().Ptr();
-
-                replaces[input] = extractMembers;
-            }
-        }
-        ctx.Step
-            .Repeat(TExprStep::ExprEval)
-            .Repeat(TExprStep::DiscoveryIO)
-            .Repeat(TExprStep::Epochs)
-            .Repeat(TExprStep::Intents)
-            .Repeat(TExprStep::LoadTablesMetadata)
-            .Repeat(TExprStep::RewriteIO);
-        auto res = ctx.ReplaceNodes(std::move(node.Ptr()), replaces);
-        return res;
-    }
-
     TNodeOnNodeOwnedMap showCreateReadReplacements;
     VisitExpr(node.Ptr(), [&showCreateReadReplacements](const TExprNode::TPtr& input) -> bool {
         TExprBase currentNode(input);
         if (auto maybeReadTable = currentNode.Maybe<TKiReadTable>()) {
             auto readTable = maybeReadTable.Cast();
             for (auto setting : readTable.Settings()) {
-                auto name = setting.Name().Value();
-                if (name == "showCreateTable" || name == "showCreateView") {
+                if (IsShowCreateSettingName(setting.Name().Value())) {
                     showCreateReadReplacements[input.Get()] = nullptr;
                 }
             }
@@ -1084,7 +1019,7 @@ TExprNode::TPtr KiBuildQuery(TExprBase node, TExprContext& ctx, TStringBuf datab
                             auto name = tuple.Cast().Name().Value();
                             if (name == "sysViewRewritten") {
                                 isSysViewRewritten = true;
-                            } else if (name == "showCreateTable" || name == "showCreateView") {
+                            } else if (IsShowCreateSettingName(name)) {
                                 isShowCreate = true;
                             }
                         }
@@ -1109,11 +1044,8 @@ TExprNode::TPtr KiBuildQuery(TExprBase node, TExprContext& ctx, TStringBuf datab
                     if (name == "sysViewRewritten") {
                         path = tuple.Cast().Value().Cast().Cast<TCoAtom>().StringValue();
                     }
-                    if (name == "showCreateTable") {
-                        pathType = "Table";
-                    }
-                    if (name == "showCreateView") {
-                        pathType = "View";
+                    if (auto pt = ShowCreateSettingToPathType(name); !pt.empty()) {
+                        pathType = TString(pt);
                     }
                 }
             }
@@ -1196,6 +1128,7 @@ TExprNode::TPtr KiBuildQuery(TExprBase node, TExprContext& ctx, TStringBuf datab
 
     TKiExploreTxResults txExplore;
     txExplore.ConcurrentResults = concurrentResults;
+    txExplore.IsolateEffects = isolateEffects;
     if (!ExploreTx(commit.World(), ctx, kiDataSink, txExplore, tablesData, types) || txExplore.HasErrors) {
         if (txExplore.HasErrors) {
             ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), "ExploreTx failed"));

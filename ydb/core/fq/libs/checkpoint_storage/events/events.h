@@ -89,15 +89,17 @@ struct TEvCheckpointStorage {
     };
 
     struct TEvCreateCheckpointResponse : NActors::TEventLocal<TEvCreateCheckpointResponse, EvCreateCheckpointResponse> {
-        TEvCreateCheckpointResponse(TCheckpointId checkpointId, NYql::TIssues issues, TString graphDescId)
+        TEvCreateCheckpointResponse(TCheckpointId checkpointId, NYql::TIssues issues, TString graphDescId, ui64 allCheckpointsSizeBytes)
             : CheckpointId(std::move(checkpointId))
             , Issues(std::move(issues))
-            , GraphDescId(std::move(graphDescId)) {
+            , GraphDescId(std::move(graphDescId))
+            , AllCheckpointsSizeBytes(allCheckpointsSizeBytes) {
         }
 
         TCheckpointId CheckpointId;
         NYql::TIssues Issues;
         TString GraphDescId;
+        ui64 AllCheckpointsSizeBytes = 0;
     };
 
     struct TEvSetCheckpointPendingCommitStatusRequest

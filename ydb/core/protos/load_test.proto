@@ -496,7 +496,8 @@ message TEvLoadTestRequest {
         // own in-flight map keyed by event cookie) and recovers
         // SizeBytes from the same map.
         message TNbsWriteResult {
-            optional uint32 Status = 1;
+            optional ENbsIoResultStatus Status = 1;
+            optional string Reason = 2;
         }
 
         // Load-actor -> worker: "read SizeBytes at this flat address";
@@ -510,12 +511,14 @@ message TEvLoadTestRequest {
         // TRope payload on the actor event and is referenced by PayloadId,
         // matching the DDisk TReadResult payload convention.
         message TNbsReadResult {
-            optional uint32 Status = 1;
+            optional ENbsIoResultStatus Status = 1;
 
             oneof Payload {
                 uint32 PayloadId = 2;
                 // <-- add RDMA here
             }
+
+            optional string Reason = 3;
         }
 
         // Per-Run workload-shaping configuration.
@@ -559,6 +562,20 @@ message TEvLoadTestRequest {
 
         optional TWorkloadConfig WorkloadConfig = 102;
         optional uint64 Tag = 100;
+
+        // One target tablet for a multi-tablet run. NodeId is the node that
+        // currently hosts the tablet (from Hive); the coordinator places the
+        // per-tablet load actor on that node so it is co-located with the tablet.
+        message TNbsTabletTarget {
+            optional uint64 TabletId = 1;
+            optional uint32 NodeId = 2;
+        }
+
+        // When non-empty the load runs in multi-tablet coordinator mode:
+        // CreateNbsDbgLikeLoadActor returns the coordinator actor, which fans
+        // the shared WorkloadConfig out to one single-tablet child run per
+        // target (each child sets NbsDbgLikeTabletId and clears Targets).
+        repeated TNbsTabletTarget Targets = 103;
     }
 
     message TInterconnectLoad {
@@ -614,6 +631,21 @@ enum ENbsLoadTabletStatus {
     NBSLT_INTERNAL_ERROR = 5;
 }
 
+// Per-IO result status for TNbsWriteResult / TNbsReadResult. The tablet sets
+// a descriptive Reason string alongside each non-OK status.
+enum ENbsIoResultStatus {
+    NBSIO_OK                   = 0;
+    NBSIO_NOT_CONFIGURED       = 1; // IoSizeBytes == 0, worker not yet set up
+    NBSIO_TABLET_NOT_READY     = 2; // Phase != Ready or routing state incomplete
+    NBSIO_INVALID_ADDRESS      = 3; // address decodes to wrong DBG / out of range / wrong size
+    NBSIO_MISSING_PAYLOAD      = 4; // write has no PayloadId or out-of-range PayloadId
+    NBSIO_QUORUM_LOST          = 5; // write quorum definitively lost
+    NBSIO_IO_ERROR             = 6; // underlying PB / DDisk returned non-OK status
+    NBSIO_READS_DISABLED       = 7; // DisableReplication=true, reads not supported
+    NBSIO_BACKPRESSURE         = 8; // LSN inflight cap reached
+    NBSIO_READ_DISPATCH_FAILED = 9; // no available PB or DDisk peer for read dispatch
+}
+
 message TEvNbsLoadTabletAllocateGroups {
     optional TEvLoadTestRequest.TNbsDbgLikeLoad.TAllocConfig AllocConfig = 1;
 }
@@ -643,6 +675,11 @@ message TEvNbsLoadTabletGetSummaryResult {
     optional uint32 NumDirectBlockGroups = 5;
     optional uint64 VChunkSizeBytes = 6;
     optional uint32 TargetNumVChunks = 7;
+    // Longest contiguous prefix [0, N) of allocated DBGs where every DBG has
+    // at least kPrimaryHostsPerDbg PB peers connected. Load actors must use
+    // this count (not NumDirectBlockGroups) as the effective DBG count so that
+    // they do not generate addresses for DBGs whose peers are not yet ready.
+    optional uint32 NumReadyDirectBlockGroups = 8;
 }
 
 message TEvLoadTestResponse {
@@ -660,6 +697,37 @@ message TEvNodeFinishResponse {
         repeated float Percentiles = 4;
     }
 
+    // Compact serialization of an NHdr::THistogram as (value, count) pairs for
+    // the recorded buckets. Reconstructed with RecordValues(value, count),
+    // which is exact within the histogram's resolution. Used to ship NBS-DBG
+    // latency histograms across nodes so a multi-tablet coordinator can merge
+    // them into an exact combined result.
+    message TNbsDbgLikeHistogram {
+        optional int64 Lowest = 1;
+        optional int64 Highest = 2;
+        optional int32 SignificantDigits = 3;
+        repeated int64 Values = 4 [packed = true];
+        repeated int64 Counts = 5 [packed = true];
+    }
+
+    // Per-tablet NBS-DBG-like measured stats, attached only by NBS-DBG-like
+    // runs so a coordinator on another node can merge them exactly. Empty for
+    // all other load types.
+    message TNbsDbgLikeNodeStats {
+        optional uint64 TabletId = 1;
+        optional uint32 NodeId = 2;
+        optional uint64 WritesOk = 3;
+        optional uint64 WriteBytes = 4;
+        optional uint64 WritesErr = 5;
+        optional uint64 ReadsOk = 6;
+        optional uint64 ReadBytes = 7;
+        optional uint64 ReadsErr = 8;
+        optional uint64 MeasuredMs = 9;
+        optional uint32 MaxInFlight = 10;
+        optional TNbsDbgLikeHistogram WriteLatencyUs = 11;
+        optional TNbsDbgLikeHistogram ReadLatencyUs = 12;
+    }
+
     optional string Uuid = 1;
     optional uint32 NodeId = 2;
     optional bool Success = 3;
@@ -668,4 +736,5 @@ message TEvNodeFinishResponse {
     optional TNodeStats Stats = 6;
     optional string LastHtmlPage = 7;
     optional string JsonResult = 8;
+    optional TNbsDbgLikeNodeStats NbsDbgLikeStats = 9;
 }

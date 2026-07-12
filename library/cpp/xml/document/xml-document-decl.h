@@ -29,10 +29,11 @@ namespace NXml {
         /**
         * create TDocument
         * @param source: filename, XML string, or name for the root element (depends on @src)
-        * @param src: source type: File | String | RootName
+        * @param type: source type: File | String | RootName
+        * @param parseOptions: XML parser options
         * throws if file not found or cannot be parsed
         */
-        TDocument(const TString& source, Source type = File);
+        TDocument(const TString& source, Source type = File, int parseOptions = XML_PARSE_NOCDATA);
 
     public:
         TDocument(const TDocument& that) = delete;
@@ -71,8 +72,8 @@ namespace NXml {
         }
 
     private:
-        void ParseFile(const TString& file);
-        void ParseString(TZtStringBuf xml);
+        void ParseFile(const TString& file, int parseOptions);
+        void ParseString(TZtStringBuf xml, int parseOptions);
 
         TDocument(TDocHolder doc)
             : Doc(std::move(doc))

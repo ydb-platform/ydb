@@ -34,6 +34,7 @@ public:
     static THostMask MakeEmpty();
     static THostMask MakeOne(THostIndex host);
     static THostMask MakeAll(size_t hostCount);
+    static THostMask MakeFromRoute(const THostRoute& route);
 
     void Set(THostIndex host);
     void Reset(THostIndex host);
@@ -56,6 +57,11 @@ public:
     [[nodiscard]] TVector<THostIndex> Hosts() const;
 
     bool operator==(const THostMask& other) const = default;
+
+    bool operator<(const THostMask& other) const
+    {
+        return Bits < other.Bits;
+    }
 
     [[nodiscard]] TString Print() const;
 

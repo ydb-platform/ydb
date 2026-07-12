@@ -2,12 +2,13 @@
 
 PY3_LIBRARY()
 
-VERSION(35.0.0)
+VERSION(36.0.2)
 
 LICENSE(Apache-2.0)
 
 PEERDIR(
     contrib/python/PyYAML
+    contrib/python/aiohttp
     contrib/python/certifi
     contrib/python/durationpy
     contrib/python/python-dateutil
@@ -20,9 +21,862 @@ PEERDIR(
 
 NO_LINT()
 
+NO_CHECK_IMPORTS(
+    kubernetes.aio.setup
+)
+
 PY_SRCS(
     TOP_LEVEL
     kubernetes/__init__.py
+    kubernetes/aio/__init__.py
+    kubernetes/aio/client/__init__.py
+    kubernetes/aio/client/api/__init__.py
+    kubernetes/aio/client/api/admissionregistration_api.py
+    kubernetes/aio/client/api/admissionregistration_v1_api.py
+    kubernetes/aio/client/api/admissionregistration_v1alpha1_api.py
+    kubernetes/aio/client/api/admissionregistration_v1beta1_api.py
+    kubernetes/aio/client/api/apiextensions_api.py
+    kubernetes/aio/client/api/apiextensions_v1_api.py
+    kubernetes/aio/client/api/apiregistration_api.py
+    kubernetes/aio/client/api/apiregistration_v1_api.py
+    kubernetes/aio/client/api/apis_api.py
+    kubernetes/aio/client/api/apps_api.py
+    kubernetes/aio/client/api/apps_v1_api.py
+    kubernetes/aio/client/api/authentication_api.py
+    kubernetes/aio/client/api/authentication_v1_api.py
+    kubernetes/aio/client/api/authorization_api.py
+    kubernetes/aio/client/api/authorization_v1_api.py
+    kubernetes/aio/client/api/autoscaling_api.py
+    kubernetes/aio/client/api/autoscaling_v1_api.py
+    kubernetes/aio/client/api/autoscaling_v2_api.py
+    kubernetes/aio/client/api/batch_api.py
+    kubernetes/aio/client/api/batch_v1_api.py
+    kubernetes/aio/client/api/certificates_api.py
+    kubernetes/aio/client/api/certificates_v1_api.py
+    kubernetes/aio/client/api/certificates_v1alpha1_api.py
+    kubernetes/aio/client/api/certificates_v1beta1_api.py
+    kubernetes/aio/client/api/coordination_api.py
+    kubernetes/aio/client/api/coordination_v1_api.py
+    kubernetes/aio/client/api/coordination_v1alpha2_api.py
+    kubernetes/aio/client/api/coordination_v1beta1_api.py
+    kubernetes/aio/client/api/core_api.py
+    kubernetes/aio/client/api/core_v1_api.py
+    kubernetes/aio/client/api/custom_objects_api.py
+    kubernetes/aio/client/api/discovery_api.py
+    kubernetes/aio/client/api/discovery_v1_api.py
+    kubernetes/aio/client/api/events_api.py
+    kubernetes/aio/client/api/events_v1_api.py
+    kubernetes/aio/client/api/flowcontrol_apiserver_api.py
+    kubernetes/aio/client/api/flowcontrol_apiserver_v1_api.py
+    kubernetes/aio/client/api/internal_apiserver_api.py
+    kubernetes/aio/client/api/internal_apiserver_v1alpha1_api.py
+    kubernetes/aio/client/api/logs_api.py
+    kubernetes/aio/client/api/networking_api.py
+    kubernetes/aio/client/api/networking_v1_api.py
+    kubernetes/aio/client/api/networking_v1beta1_api.py
+    kubernetes/aio/client/api/node_api.py
+    kubernetes/aio/client/api/node_v1_api.py
+    kubernetes/aio/client/api/openid_api.py
+    kubernetes/aio/client/api/policy_api.py
+    kubernetes/aio/client/api/policy_v1_api.py
+    kubernetes/aio/client/api/rbac_authorization_api.py
+    kubernetes/aio/client/api/rbac_authorization_v1_api.py
+    kubernetes/aio/client/api/resource_api.py
+    kubernetes/aio/client/api/resource_v1_api.py
+    kubernetes/aio/client/api/resource_v1alpha3_api.py
+    kubernetes/aio/client/api/resource_v1beta1_api.py
+    kubernetes/aio/client/api/resource_v1beta2_api.py
+    kubernetes/aio/client/api/scheduling_api.py
+    kubernetes/aio/client/api/scheduling_v1_api.py
+    kubernetes/aio/client/api/scheduling_v1alpha2_api.py
+    kubernetes/aio/client/api/storage_api.py
+    kubernetes/aio/client/api/storage_v1_api.py
+    kubernetes/aio/client/api/storage_v1beta1_api.py
+    kubernetes/aio/client/api/storagemigration_api.py
+    kubernetes/aio/client/api/storagemigration_v1beta1_api.py
+    kubernetes/aio/client/api/version_api.py
+    kubernetes/aio/client/api/well_known_api.py
+    kubernetes/aio/client/api_client.py
+    kubernetes/aio/client/configuration.py
+    kubernetes/aio/client/exceptions.py
+    kubernetes/aio/client/models/__init__.py
+    kubernetes/aio/client/models/admissionregistration_v1_service_reference.py
+    kubernetes/aio/client/models/admissionregistration_v1_webhook_client_config.py
+    kubernetes/aio/client/models/apiextensions_v1_service_reference.py
+    kubernetes/aio/client/models/apiextensions_v1_webhook_client_config.py
+    kubernetes/aio/client/models/apiregistration_v1_service_reference.py
+    kubernetes/aio/client/models/authentication_v1_token_request.py
+    kubernetes/aio/client/models/core_v1_endpoint_port.py
+    kubernetes/aio/client/models/core_v1_event.py
+    kubernetes/aio/client/models/core_v1_event_list.py
+    kubernetes/aio/client/models/core_v1_event_series.py
+    kubernetes/aio/client/models/core_v1_resource_claim.py
+    kubernetes/aio/client/models/discovery_v1_endpoint_port.py
+    kubernetes/aio/client/models/events_v1_event.py
+    kubernetes/aio/client/models/events_v1_event_list.py
+    kubernetes/aio/client/models/events_v1_event_series.py
+    kubernetes/aio/client/models/flowcontrol_v1_subject.py
+    kubernetes/aio/client/models/rbac_v1_subject.py
+    kubernetes/aio/client/models/resource_v1_resource_claim.py
+    kubernetes/aio/client/models/storage_v1_token_request.py
+    kubernetes/aio/client/models/v1_affinity.py
+    kubernetes/aio/client/models/v1_aggregation_rule.py
+    kubernetes/aio/client/models/v1_allocated_device_status.py
+    kubernetes/aio/client/models/v1_allocation_result.py
+    kubernetes/aio/client/models/v1_api_group.py
+    kubernetes/aio/client/models/v1_api_group_list.py
+    kubernetes/aio/client/models/v1_api_resource.py
+    kubernetes/aio/client/models/v1_api_resource_list.py
+    kubernetes/aio/client/models/v1_api_service.py
+    kubernetes/aio/client/models/v1_api_service_condition.py
+    kubernetes/aio/client/models/v1_api_service_list.py
+    kubernetes/aio/client/models/v1_api_service_spec.py
+    kubernetes/aio/client/models/v1_api_service_status.py
+    kubernetes/aio/client/models/v1_api_versions.py
+    kubernetes/aio/client/models/v1_app_armor_profile.py
+    kubernetes/aio/client/models/v1_apply_configuration.py
+    kubernetes/aio/client/models/v1_attached_volume.py
+    kubernetes/aio/client/models/v1_audit_annotation.py
+    kubernetes/aio/client/models/v1_aws_elastic_block_store_volume_source.py
+    kubernetes/aio/client/models/v1_azure_disk_volume_source.py
+    kubernetes/aio/client/models/v1_azure_file_persistent_volume_source.py
+    kubernetes/aio/client/models/v1_azure_file_volume_source.py
+    kubernetes/aio/client/models/v1_binding.py
+    kubernetes/aio/client/models/v1_bound_object_reference.py
+    kubernetes/aio/client/models/v1_capabilities.py
+    kubernetes/aio/client/models/v1_capacity_request_policy.py
+    kubernetes/aio/client/models/v1_capacity_request_policy_range.py
+    kubernetes/aio/client/models/v1_capacity_requirements.py
+    kubernetes/aio/client/models/v1_cel_device_selector.py
+    kubernetes/aio/client/models/v1_ceph_fs_persistent_volume_source.py
+    kubernetes/aio/client/models/v1_ceph_fs_volume_source.py
+    kubernetes/aio/client/models/v1_certificate_signing_request.py
+    kubernetes/aio/client/models/v1_certificate_signing_request_condition.py
+    kubernetes/aio/client/models/v1_certificate_signing_request_list.py
+    kubernetes/aio/client/models/v1_certificate_signing_request_spec.py
+    kubernetes/aio/client/models/v1_certificate_signing_request_status.py
+    kubernetes/aio/client/models/v1_cinder_persistent_volume_source.py
+    kubernetes/aio/client/models/v1_cinder_volume_source.py
+    kubernetes/aio/client/models/v1_client_ip_config.py
+    kubernetes/aio/client/models/v1_cluster_role.py
+    kubernetes/aio/client/models/v1_cluster_role_binding.py
+    kubernetes/aio/client/models/v1_cluster_role_binding_list.py
+    kubernetes/aio/client/models/v1_cluster_role_list.py
+    kubernetes/aio/client/models/v1_cluster_trust_bundle_projection.py
+    kubernetes/aio/client/models/v1_component_condition.py
+    kubernetes/aio/client/models/v1_component_status.py
+    kubernetes/aio/client/models/v1_component_status_list.py
+    kubernetes/aio/client/models/v1_condition.py
+    kubernetes/aio/client/models/v1_config_map.py
+    kubernetes/aio/client/models/v1_config_map_env_source.py
+    kubernetes/aio/client/models/v1_config_map_key_selector.py
+    kubernetes/aio/client/models/v1_config_map_list.py
+    kubernetes/aio/client/models/v1_config_map_node_config_source.py
+    kubernetes/aio/client/models/v1_config_map_projection.py
+    kubernetes/aio/client/models/v1_config_map_volume_source.py
+    kubernetes/aio/client/models/v1_container.py
+    kubernetes/aio/client/models/v1_container_extended_resource_request.py
+    kubernetes/aio/client/models/v1_container_image.py
+    kubernetes/aio/client/models/v1_container_port.py
+    kubernetes/aio/client/models/v1_container_resize_policy.py
+    kubernetes/aio/client/models/v1_container_restart_rule.py
+    kubernetes/aio/client/models/v1_container_restart_rule_on_exit_codes.py
+    kubernetes/aio/client/models/v1_container_state.py
+    kubernetes/aio/client/models/v1_container_state_running.py
+    kubernetes/aio/client/models/v1_container_state_terminated.py
+    kubernetes/aio/client/models/v1_container_state_waiting.py
+    kubernetes/aio/client/models/v1_container_status.py
+    kubernetes/aio/client/models/v1_container_user.py
+    kubernetes/aio/client/models/v1_controller_revision.py
+    kubernetes/aio/client/models/v1_controller_revision_list.py
+    kubernetes/aio/client/models/v1_counter.py
+    kubernetes/aio/client/models/v1_counter_set.py
+    kubernetes/aio/client/models/v1_cron_job.py
+    kubernetes/aio/client/models/v1_cron_job_list.py
+    kubernetes/aio/client/models/v1_cron_job_spec.py
+    kubernetes/aio/client/models/v1_cron_job_status.py
+    kubernetes/aio/client/models/v1_cross_version_object_reference.py
+    kubernetes/aio/client/models/v1_csi_driver.py
+    kubernetes/aio/client/models/v1_csi_driver_list.py
+    kubernetes/aio/client/models/v1_csi_driver_spec.py
+    kubernetes/aio/client/models/v1_csi_node.py
+    kubernetes/aio/client/models/v1_csi_node_driver.py
+    kubernetes/aio/client/models/v1_csi_node_list.py
+    kubernetes/aio/client/models/v1_csi_node_spec.py
+    kubernetes/aio/client/models/v1_csi_persistent_volume_source.py
+    kubernetes/aio/client/models/v1_csi_storage_capacity.py
+    kubernetes/aio/client/models/v1_csi_storage_capacity_list.py
+    kubernetes/aio/client/models/v1_csi_volume_source.py
+    kubernetes/aio/client/models/v1_custom_resource_column_definition.py
+    kubernetes/aio/client/models/v1_custom_resource_conversion.py
+    kubernetes/aio/client/models/v1_custom_resource_definition.py
+    kubernetes/aio/client/models/v1_custom_resource_definition_condition.py
+    kubernetes/aio/client/models/v1_custom_resource_definition_list.py
+    kubernetes/aio/client/models/v1_custom_resource_definition_names.py
+    kubernetes/aio/client/models/v1_custom_resource_definition_spec.py
+    kubernetes/aio/client/models/v1_custom_resource_definition_status.py
+    kubernetes/aio/client/models/v1_custom_resource_definition_version.py
+    kubernetes/aio/client/models/v1_custom_resource_subresource_scale.py
+    kubernetes/aio/client/models/v1_custom_resource_subresources.py
+    kubernetes/aio/client/models/v1_custom_resource_validation.py
+    kubernetes/aio/client/models/v1_daemon_endpoint.py
+    kubernetes/aio/client/models/v1_daemon_set.py
+    kubernetes/aio/client/models/v1_daemon_set_condition.py
+    kubernetes/aio/client/models/v1_daemon_set_list.py
+    kubernetes/aio/client/models/v1_daemon_set_spec.py
+    kubernetes/aio/client/models/v1_daemon_set_status.py
+    kubernetes/aio/client/models/v1_daemon_set_update_strategy.py
+    kubernetes/aio/client/models/v1_delete_options.py
+    kubernetes/aio/client/models/v1_deployment.py
+    kubernetes/aio/client/models/v1_deployment_condition.py
+    kubernetes/aio/client/models/v1_deployment_list.py
+    kubernetes/aio/client/models/v1_deployment_spec.py
+    kubernetes/aio/client/models/v1_deployment_status.py
+    kubernetes/aio/client/models/v1_deployment_strategy.py
+    kubernetes/aio/client/models/v1_device.py
+    kubernetes/aio/client/models/v1_device_allocation_configuration.py
+    kubernetes/aio/client/models/v1_device_allocation_result.py
+    kubernetes/aio/client/models/v1_device_attribute.py
+    kubernetes/aio/client/models/v1_device_capacity.py
+    kubernetes/aio/client/models/v1_device_claim.py
+    kubernetes/aio/client/models/v1_device_claim_configuration.py
+    kubernetes/aio/client/models/v1_device_class.py
+    kubernetes/aio/client/models/v1_device_class_configuration.py
+    kubernetes/aio/client/models/v1_device_class_list.py
+    kubernetes/aio/client/models/v1_device_class_spec.py
+    kubernetes/aio/client/models/v1_device_constraint.py
+    kubernetes/aio/client/models/v1_device_counter_consumption.py
+    kubernetes/aio/client/models/v1_device_request.py
+    kubernetes/aio/client/models/v1_device_request_allocation_result.py
+    kubernetes/aio/client/models/v1_device_selector.py
+    kubernetes/aio/client/models/v1_device_sub_request.py
+    kubernetes/aio/client/models/v1_device_taint.py
+    kubernetes/aio/client/models/v1_device_toleration.py
+    kubernetes/aio/client/models/v1_downward_api_projection.py
+    kubernetes/aio/client/models/v1_downward_api_volume_file.py
+    kubernetes/aio/client/models/v1_downward_api_volume_source.py
+    kubernetes/aio/client/models/v1_empty_dir_volume_source.py
+    kubernetes/aio/client/models/v1_endpoint.py
+    kubernetes/aio/client/models/v1_endpoint_address.py
+    kubernetes/aio/client/models/v1_endpoint_conditions.py
+    kubernetes/aio/client/models/v1_endpoint_hints.py
+    kubernetes/aio/client/models/v1_endpoint_slice.py
+    kubernetes/aio/client/models/v1_endpoint_slice_list.py
+    kubernetes/aio/client/models/v1_endpoint_subset.py
+    kubernetes/aio/client/models/v1_endpoints.py
+    kubernetes/aio/client/models/v1_endpoints_list.py
+    kubernetes/aio/client/models/v1_env_from_source.py
+    kubernetes/aio/client/models/v1_env_var.py
+    kubernetes/aio/client/models/v1_env_var_source.py
+    kubernetes/aio/client/models/v1_ephemeral_container.py
+    kubernetes/aio/client/models/v1_ephemeral_volume_source.py
+    kubernetes/aio/client/models/v1_event_source.py
+    kubernetes/aio/client/models/v1_eviction.py
+    kubernetes/aio/client/models/v1_exact_device_request.py
+    kubernetes/aio/client/models/v1_exec_action.py
+    kubernetes/aio/client/models/v1_exempt_priority_level_configuration.py
+    kubernetes/aio/client/models/v1_expression_warning.py
+    kubernetes/aio/client/models/v1_external_documentation.py
+    kubernetes/aio/client/models/v1_fc_volume_source.py
+    kubernetes/aio/client/models/v1_field_selector_attributes.py
+    kubernetes/aio/client/models/v1_field_selector_requirement.py
+    kubernetes/aio/client/models/v1_file_key_selector.py
+    kubernetes/aio/client/models/v1_flex_persistent_volume_source.py
+    kubernetes/aio/client/models/v1_flex_volume_source.py
+    kubernetes/aio/client/models/v1_flocker_volume_source.py
+    kubernetes/aio/client/models/v1_flow_distinguisher_method.py
+    kubernetes/aio/client/models/v1_flow_schema.py
+    kubernetes/aio/client/models/v1_flow_schema_condition.py
+    kubernetes/aio/client/models/v1_flow_schema_list.py
+    kubernetes/aio/client/models/v1_flow_schema_spec.py
+    kubernetes/aio/client/models/v1_flow_schema_status.py
+    kubernetes/aio/client/models/v1_for_node.py
+    kubernetes/aio/client/models/v1_for_zone.py
+    kubernetes/aio/client/models/v1_gce_persistent_disk_volume_source.py
+    kubernetes/aio/client/models/v1_git_repo_volume_source.py
+    kubernetes/aio/client/models/v1_glusterfs_persistent_volume_source.py
+    kubernetes/aio/client/models/v1_glusterfs_volume_source.py
+    kubernetes/aio/client/models/v1_group_resource.py
+    kubernetes/aio/client/models/v1_group_subject.py
+    kubernetes/aio/client/models/v1_group_version_for_discovery.py
+    kubernetes/aio/client/models/v1_grpc_action.py
+    kubernetes/aio/client/models/v1_horizontal_pod_autoscaler.py
+    kubernetes/aio/client/models/v1_horizontal_pod_autoscaler_list.py
+    kubernetes/aio/client/models/v1_horizontal_pod_autoscaler_spec.py
+    kubernetes/aio/client/models/v1_horizontal_pod_autoscaler_status.py
+    kubernetes/aio/client/models/v1_host_alias.py
+    kubernetes/aio/client/models/v1_host_ip.py
+    kubernetes/aio/client/models/v1_host_path_volume_source.py
+    kubernetes/aio/client/models/v1_http_get_action.py
+    kubernetes/aio/client/models/v1_http_header.py
+    kubernetes/aio/client/models/v1_http_ingress_path.py
+    kubernetes/aio/client/models/v1_http_ingress_rule_value.py
+    kubernetes/aio/client/models/v1_image_volume_source.py
+    kubernetes/aio/client/models/v1_image_volume_status.py
+    kubernetes/aio/client/models/v1_ingress.py
+    kubernetes/aio/client/models/v1_ingress_backend.py
+    kubernetes/aio/client/models/v1_ingress_class.py
+    kubernetes/aio/client/models/v1_ingress_class_list.py
+    kubernetes/aio/client/models/v1_ingress_class_parameters_reference.py
+    kubernetes/aio/client/models/v1_ingress_class_spec.py
+    kubernetes/aio/client/models/v1_ingress_list.py
+    kubernetes/aio/client/models/v1_ingress_load_balancer_ingress.py
+    kubernetes/aio/client/models/v1_ingress_load_balancer_status.py
+    kubernetes/aio/client/models/v1_ingress_port_status.py
+    kubernetes/aio/client/models/v1_ingress_rule.py
+    kubernetes/aio/client/models/v1_ingress_service_backend.py
+    kubernetes/aio/client/models/v1_ingress_spec.py
+    kubernetes/aio/client/models/v1_ingress_status.py
+    kubernetes/aio/client/models/v1_ingress_tls.py
+    kubernetes/aio/client/models/v1_ip_address.py
+    kubernetes/aio/client/models/v1_ip_address_list.py
+    kubernetes/aio/client/models/v1_ip_address_spec.py
+    kubernetes/aio/client/models/v1_ip_block.py
+    kubernetes/aio/client/models/v1_iscsi_persistent_volume_source.py
+    kubernetes/aio/client/models/v1_iscsi_volume_source.py
+    kubernetes/aio/client/models/v1_job.py
+    kubernetes/aio/client/models/v1_job_condition.py
+    kubernetes/aio/client/models/v1_job_list.py
+    kubernetes/aio/client/models/v1_job_spec.py
+    kubernetes/aio/client/models/v1_job_status.py
+    kubernetes/aio/client/models/v1_job_template_spec.py
+    kubernetes/aio/client/models/v1_json_patch.py
+    kubernetes/aio/client/models/v1_json_schema_props.py
+    kubernetes/aio/client/models/v1_key_to_path.py
+    kubernetes/aio/client/models/v1_label_selector.py
+    kubernetes/aio/client/models/v1_label_selector_attributes.py
+    kubernetes/aio/client/models/v1_label_selector_requirement.py
+    kubernetes/aio/client/models/v1_lease.py
+    kubernetes/aio/client/models/v1_lease_list.py
+    kubernetes/aio/client/models/v1_lease_spec.py
+    kubernetes/aio/client/models/v1_lifecycle.py
+    kubernetes/aio/client/models/v1_lifecycle_handler.py
+    kubernetes/aio/client/models/v1_limit_range.py
+    kubernetes/aio/client/models/v1_limit_range_item.py
+    kubernetes/aio/client/models/v1_limit_range_list.py
+    kubernetes/aio/client/models/v1_limit_range_spec.py
+    kubernetes/aio/client/models/v1_limit_response.py
+    kubernetes/aio/client/models/v1_limited_priority_level_configuration.py
+    kubernetes/aio/client/models/v1_linux_container_user.py
+    kubernetes/aio/client/models/v1_list_meta.py
+    kubernetes/aio/client/models/v1_load_balancer_ingress.py
+    kubernetes/aio/client/models/v1_load_balancer_status.py
+    kubernetes/aio/client/models/v1_local_object_reference.py
+    kubernetes/aio/client/models/v1_local_subject_access_review.py
+    kubernetes/aio/client/models/v1_local_volume_source.py
+    kubernetes/aio/client/models/v1_managed_fields_entry.py
+    kubernetes/aio/client/models/v1_match_condition.py
+    kubernetes/aio/client/models/v1_match_resources.py
+    kubernetes/aio/client/models/v1_modify_volume_status.py
+    kubernetes/aio/client/models/v1_mutating_admission_policy.py
+    kubernetes/aio/client/models/v1_mutating_admission_policy_binding.py
+    kubernetes/aio/client/models/v1_mutating_admission_policy_binding_list.py
+    kubernetes/aio/client/models/v1_mutating_admission_policy_binding_spec.py
+    kubernetes/aio/client/models/v1_mutating_admission_policy_list.py
+    kubernetes/aio/client/models/v1_mutating_admission_policy_spec.py
+    kubernetes/aio/client/models/v1_mutating_webhook.py
+    kubernetes/aio/client/models/v1_mutating_webhook_configuration.py
+    kubernetes/aio/client/models/v1_mutating_webhook_configuration_list.py
+    kubernetes/aio/client/models/v1_mutation.py
+    kubernetes/aio/client/models/v1_named_rule_with_operations.py
+    kubernetes/aio/client/models/v1_namespace.py
+    kubernetes/aio/client/models/v1_namespace_condition.py
+    kubernetes/aio/client/models/v1_namespace_list.py
+    kubernetes/aio/client/models/v1_namespace_spec.py
+    kubernetes/aio/client/models/v1_namespace_status.py
+    kubernetes/aio/client/models/v1_network_device_data.py
+    kubernetes/aio/client/models/v1_network_policy.py
+    kubernetes/aio/client/models/v1_network_policy_egress_rule.py
+    kubernetes/aio/client/models/v1_network_policy_ingress_rule.py
+    kubernetes/aio/client/models/v1_network_policy_list.py
+    kubernetes/aio/client/models/v1_network_policy_peer.py
+    kubernetes/aio/client/models/v1_network_policy_port.py
+    kubernetes/aio/client/models/v1_network_policy_spec.py
+    kubernetes/aio/client/models/v1_nfs_volume_source.py
+    kubernetes/aio/client/models/v1_node.py
+    kubernetes/aio/client/models/v1_node_address.py
+    kubernetes/aio/client/models/v1_node_affinity.py
+    kubernetes/aio/client/models/v1_node_allocatable_resource_claim_status.py
+    kubernetes/aio/client/models/v1_node_allocatable_resource_mapping.py
+    kubernetes/aio/client/models/v1_node_condition.py
+    kubernetes/aio/client/models/v1_node_config_source.py
+    kubernetes/aio/client/models/v1_node_config_status.py
+    kubernetes/aio/client/models/v1_node_daemon_endpoints.py
+    kubernetes/aio/client/models/v1_node_features.py
+    kubernetes/aio/client/models/v1_node_list.py
+    kubernetes/aio/client/models/v1_node_runtime_handler.py
+    kubernetes/aio/client/models/v1_node_runtime_handler_features.py
+    kubernetes/aio/client/models/v1_node_selector.py
+    kubernetes/aio/client/models/v1_node_selector_requirement.py
+    kubernetes/aio/client/models/v1_node_selector_term.py
+    kubernetes/aio/client/models/v1_node_spec.py
+    kubernetes/aio/client/models/v1_node_status.py
+    kubernetes/aio/client/models/v1_node_swap_status.py
+    kubernetes/aio/client/models/v1_node_system_info.py
+    kubernetes/aio/client/models/v1_non_resource_attributes.py
+    kubernetes/aio/client/models/v1_non_resource_policy_rule.py
+    kubernetes/aio/client/models/v1_non_resource_rule.py
+    kubernetes/aio/client/models/v1_object_field_selector.py
+    kubernetes/aio/client/models/v1_object_meta.py
+    kubernetes/aio/client/models/v1_object_reference.py
+    kubernetes/aio/client/models/v1_opaque_device_configuration.py
+    kubernetes/aio/client/models/v1_overhead.py
+    kubernetes/aio/client/models/v1_owner_reference.py
+    kubernetes/aio/client/models/v1_param_kind.py
+    kubernetes/aio/client/models/v1_param_ref.py
+    kubernetes/aio/client/models/v1_parent_reference.py
+    kubernetes/aio/client/models/v1_persistent_volume.py
+    kubernetes/aio/client/models/v1_persistent_volume_claim.py
+    kubernetes/aio/client/models/v1_persistent_volume_claim_condition.py
+    kubernetes/aio/client/models/v1_persistent_volume_claim_list.py
+    kubernetes/aio/client/models/v1_persistent_volume_claim_spec.py
+    kubernetes/aio/client/models/v1_persistent_volume_claim_status.py
+    kubernetes/aio/client/models/v1_persistent_volume_claim_template.py
+    kubernetes/aio/client/models/v1_persistent_volume_claim_volume_source.py
+    kubernetes/aio/client/models/v1_persistent_volume_list.py
+    kubernetes/aio/client/models/v1_persistent_volume_spec.py
+    kubernetes/aio/client/models/v1_persistent_volume_status.py
+    kubernetes/aio/client/models/v1_photon_persistent_disk_volume_source.py
+    kubernetes/aio/client/models/v1_pod.py
+    kubernetes/aio/client/models/v1_pod_affinity.py
+    kubernetes/aio/client/models/v1_pod_affinity_term.py
+    kubernetes/aio/client/models/v1_pod_anti_affinity.py
+    kubernetes/aio/client/models/v1_pod_certificate_projection.py
+    kubernetes/aio/client/models/v1_pod_condition.py
+    kubernetes/aio/client/models/v1_pod_disruption_budget.py
+    kubernetes/aio/client/models/v1_pod_disruption_budget_list.py
+    kubernetes/aio/client/models/v1_pod_disruption_budget_spec.py
+    kubernetes/aio/client/models/v1_pod_disruption_budget_status.py
+    kubernetes/aio/client/models/v1_pod_dns_config.py
+    kubernetes/aio/client/models/v1_pod_dns_config_option.py
+    kubernetes/aio/client/models/v1_pod_extended_resource_claim_status.py
+    kubernetes/aio/client/models/v1_pod_failure_policy.py
+    kubernetes/aio/client/models/v1_pod_failure_policy_on_exit_codes_requirement.py
+    kubernetes/aio/client/models/v1_pod_failure_policy_on_pod_conditions_pattern.py
+    kubernetes/aio/client/models/v1_pod_failure_policy_rule.py
+    kubernetes/aio/client/models/v1_pod_ip.py
+    kubernetes/aio/client/models/v1_pod_list.py
+    kubernetes/aio/client/models/v1_pod_os.py
+    kubernetes/aio/client/models/v1_pod_readiness_gate.py
+    kubernetes/aio/client/models/v1_pod_resource_claim.py
+    kubernetes/aio/client/models/v1_pod_resource_claim_status.py
+    kubernetes/aio/client/models/v1_pod_scheduling_gate.py
+    kubernetes/aio/client/models/v1_pod_scheduling_group.py
+    kubernetes/aio/client/models/v1_pod_security_context.py
+    kubernetes/aio/client/models/v1_pod_spec.py
+    kubernetes/aio/client/models/v1_pod_status.py
+    kubernetes/aio/client/models/v1_pod_template.py
+    kubernetes/aio/client/models/v1_pod_template_list.py
+    kubernetes/aio/client/models/v1_pod_template_spec.py
+    kubernetes/aio/client/models/v1_policy_rule.py
+    kubernetes/aio/client/models/v1_policy_rules_with_subjects.py
+    kubernetes/aio/client/models/v1_port_status.py
+    kubernetes/aio/client/models/v1_portworx_volume_source.py
+    kubernetes/aio/client/models/v1_preconditions.py
+    kubernetes/aio/client/models/v1_preferred_scheduling_term.py
+    kubernetes/aio/client/models/v1_priority_class.py
+    kubernetes/aio/client/models/v1_priority_class_list.py
+    kubernetes/aio/client/models/v1_priority_level_configuration.py
+    kubernetes/aio/client/models/v1_priority_level_configuration_condition.py
+    kubernetes/aio/client/models/v1_priority_level_configuration_list.py
+    kubernetes/aio/client/models/v1_priority_level_configuration_reference.py
+    kubernetes/aio/client/models/v1_priority_level_configuration_spec.py
+    kubernetes/aio/client/models/v1_priority_level_configuration_status.py
+    kubernetes/aio/client/models/v1_probe.py
+    kubernetes/aio/client/models/v1_projected_volume_source.py
+    kubernetes/aio/client/models/v1_queuing_configuration.py
+    kubernetes/aio/client/models/v1_quobyte_volume_source.py
+    kubernetes/aio/client/models/v1_rbd_persistent_volume_source.py
+    kubernetes/aio/client/models/v1_rbd_volume_source.py
+    kubernetes/aio/client/models/v1_replica_set.py
+    kubernetes/aio/client/models/v1_replica_set_condition.py
+    kubernetes/aio/client/models/v1_replica_set_list.py
+    kubernetes/aio/client/models/v1_replica_set_spec.py
+    kubernetes/aio/client/models/v1_replica_set_status.py
+    kubernetes/aio/client/models/v1_replication_controller.py
+    kubernetes/aio/client/models/v1_replication_controller_condition.py
+    kubernetes/aio/client/models/v1_replication_controller_list.py
+    kubernetes/aio/client/models/v1_replication_controller_spec.py
+    kubernetes/aio/client/models/v1_replication_controller_status.py
+    kubernetes/aio/client/models/v1_resource_attributes.py
+    kubernetes/aio/client/models/v1_resource_claim_consumer_reference.py
+    kubernetes/aio/client/models/v1_resource_claim_list.py
+    kubernetes/aio/client/models/v1_resource_claim_spec.py
+    kubernetes/aio/client/models/v1_resource_claim_status.py
+    kubernetes/aio/client/models/v1_resource_claim_template.py
+    kubernetes/aio/client/models/v1_resource_claim_template_list.py
+    kubernetes/aio/client/models/v1_resource_claim_template_spec.py
+    kubernetes/aio/client/models/v1_resource_field_selector.py
+    kubernetes/aio/client/models/v1_resource_health.py
+    kubernetes/aio/client/models/v1_resource_policy_rule.py
+    kubernetes/aio/client/models/v1_resource_pool.py
+    kubernetes/aio/client/models/v1_resource_quota.py
+    kubernetes/aio/client/models/v1_resource_quota_list.py
+    kubernetes/aio/client/models/v1_resource_quota_spec.py
+    kubernetes/aio/client/models/v1_resource_quota_status.py
+    kubernetes/aio/client/models/v1_resource_requirements.py
+    kubernetes/aio/client/models/v1_resource_rule.py
+    kubernetes/aio/client/models/v1_resource_slice.py
+    kubernetes/aio/client/models/v1_resource_slice_list.py
+    kubernetes/aio/client/models/v1_resource_slice_spec.py
+    kubernetes/aio/client/models/v1_resource_status.py
+    kubernetes/aio/client/models/v1_role.py
+    kubernetes/aio/client/models/v1_role_binding.py
+    kubernetes/aio/client/models/v1_role_binding_list.py
+    kubernetes/aio/client/models/v1_role_list.py
+    kubernetes/aio/client/models/v1_role_ref.py
+    kubernetes/aio/client/models/v1_rolling_update_daemon_set.py
+    kubernetes/aio/client/models/v1_rolling_update_deployment.py
+    kubernetes/aio/client/models/v1_rolling_update_stateful_set_strategy.py
+    kubernetes/aio/client/models/v1_rule_with_operations.py
+    kubernetes/aio/client/models/v1_runtime_class.py
+    kubernetes/aio/client/models/v1_runtime_class_list.py
+    kubernetes/aio/client/models/v1_scale.py
+    kubernetes/aio/client/models/v1_scale_io_persistent_volume_source.py
+    kubernetes/aio/client/models/v1_scale_io_volume_source.py
+    kubernetes/aio/client/models/v1_scale_spec.py
+    kubernetes/aio/client/models/v1_scale_status.py
+    kubernetes/aio/client/models/v1_scheduling.py
+    kubernetes/aio/client/models/v1_scope_selector.py
+    kubernetes/aio/client/models/v1_scoped_resource_selector_requirement.py
+    kubernetes/aio/client/models/v1_se_linux_options.py
+    kubernetes/aio/client/models/v1_seccomp_profile.py
+    kubernetes/aio/client/models/v1_secret.py
+    kubernetes/aio/client/models/v1_secret_env_source.py
+    kubernetes/aio/client/models/v1_secret_key_selector.py
+    kubernetes/aio/client/models/v1_secret_list.py
+    kubernetes/aio/client/models/v1_secret_projection.py
+    kubernetes/aio/client/models/v1_secret_reference.py
+    kubernetes/aio/client/models/v1_secret_volume_source.py
+    kubernetes/aio/client/models/v1_security_context.py
+    kubernetes/aio/client/models/v1_selectable_field.py
+    kubernetes/aio/client/models/v1_self_subject_access_review.py
+    kubernetes/aio/client/models/v1_self_subject_access_review_spec.py
+    kubernetes/aio/client/models/v1_self_subject_review.py
+    kubernetes/aio/client/models/v1_self_subject_review_status.py
+    kubernetes/aio/client/models/v1_self_subject_rules_review.py
+    kubernetes/aio/client/models/v1_self_subject_rules_review_spec.py
+    kubernetes/aio/client/models/v1_server_address_by_client_cidr.py
+    kubernetes/aio/client/models/v1_service.py
+    kubernetes/aio/client/models/v1_service_account.py
+    kubernetes/aio/client/models/v1_service_account_list.py
+    kubernetes/aio/client/models/v1_service_account_subject.py
+    kubernetes/aio/client/models/v1_service_account_token_projection.py
+    kubernetes/aio/client/models/v1_service_backend_port.py
+    kubernetes/aio/client/models/v1_service_cidr.py
+    kubernetes/aio/client/models/v1_service_cidr_list.py
+    kubernetes/aio/client/models/v1_service_cidr_spec.py
+    kubernetes/aio/client/models/v1_service_cidr_status.py
+    kubernetes/aio/client/models/v1_service_list.py
+    kubernetes/aio/client/models/v1_service_port.py
+    kubernetes/aio/client/models/v1_service_spec.py
+    kubernetes/aio/client/models/v1_service_status.py
+    kubernetes/aio/client/models/v1_session_affinity_config.py
+    kubernetes/aio/client/models/v1_shard_info.py
+    kubernetes/aio/client/models/v1_sleep_action.py
+    kubernetes/aio/client/models/v1_stateful_set.py
+    kubernetes/aio/client/models/v1_stateful_set_condition.py
+    kubernetes/aio/client/models/v1_stateful_set_list.py
+    kubernetes/aio/client/models/v1_stateful_set_ordinals.py
+    kubernetes/aio/client/models/v1_stateful_set_persistent_volume_claim_retention_policy.py
+    kubernetes/aio/client/models/v1_stateful_set_spec.py
+    kubernetes/aio/client/models/v1_stateful_set_status.py
+    kubernetes/aio/client/models/v1_stateful_set_update_strategy.py
+    kubernetes/aio/client/models/v1_status.py
+    kubernetes/aio/client/models/v1_status_cause.py
+    kubernetes/aio/client/models/v1_status_details.py
+    kubernetes/aio/client/models/v1_storage_class.py
+    kubernetes/aio/client/models/v1_storage_class_list.py
+    kubernetes/aio/client/models/v1_storage_os_persistent_volume_source.py
+    kubernetes/aio/client/models/v1_storage_os_volume_source.py
+    kubernetes/aio/client/models/v1_subject_access_review.py
+    kubernetes/aio/client/models/v1_subject_access_review_spec.py
+    kubernetes/aio/client/models/v1_subject_access_review_status.py
+    kubernetes/aio/client/models/v1_subject_rules_review_status.py
+    kubernetes/aio/client/models/v1_success_policy.py
+    kubernetes/aio/client/models/v1_success_policy_rule.py
+    kubernetes/aio/client/models/v1_sysctl.py
+    kubernetes/aio/client/models/v1_taint.py
+    kubernetes/aio/client/models/v1_tcp_socket_action.py
+    kubernetes/aio/client/models/v1_token_request_spec.py
+    kubernetes/aio/client/models/v1_token_request_status.py
+    kubernetes/aio/client/models/v1_token_review.py
+    kubernetes/aio/client/models/v1_token_review_spec.py
+    kubernetes/aio/client/models/v1_token_review_status.py
+    kubernetes/aio/client/models/v1_toleration.py
+    kubernetes/aio/client/models/v1_topology_selector_label_requirement.py
+    kubernetes/aio/client/models/v1_topology_selector_term.py
+    kubernetes/aio/client/models/v1_topology_spread_constraint.py
+    kubernetes/aio/client/models/v1_type_checking.py
+    kubernetes/aio/client/models/v1_typed_local_object_reference.py
+    kubernetes/aio/client/models/v1_typed_object_reference.py
+    kubernetes/aio/client/models/v1_uncounted_terminated_pods.py
+    kubernetes/aio/client/models/v1_user_info.py
+    kubernetes/aio/client/models/v1_user_subject.py
+    kubernetes/aio/client/models/v1_validating_admission_policy.py
+    kubernetes/aio/client/models/v1_validating_admission_policy_binding.py
+    kubernetes/aio/client/models/v1_validating_admission_policy_binding_list.py
+    kubernetes/aio/client/models/v1_validating_admission_policy_binding_spec.py
+    kubernetes/aio/client/models/v1_validating_admission_policy_list.py
+    kubernetes/aio/client/models/v1_validating_admission_policy_spec.py
+    kubernetes/aio/client/models/v1_validating_admission_policy_status.py
+    kubernetes/aio/client/models/v1_validating_webhook.py
+    kubernetes/aio/client/models/v1_validating_webhook_configuration.py
+    kubernetes/aio/client/models/v1_validating_webhook_configuration_list.py
+    kubernetes/aio/client/models/v1_validation.py
+    kubernetes/aio/client/models/v1_validation_rule.py
+    kubernetes/aio/client/models/v1_variable.py
+    kubernetes/aio/client/models/v1_volume.py
+    kubernetes/aio/client/models/v1_volume_attachment.py
+    kubernetes/aio/client/models/v1_volume_attachment_list.py
+    kubernetes/aio/client/models/v1_volume_attachment_source.py
+    kubernetes/aio/client/models/v1_volume_attachment_spec.py
+    kubernetes/aio/client/models/v1_volume_attachment_status.py
+    kubernetes/aio/client/models/v1_volume_attributes_class.py
+    kubernetes/aio/client/models/v1_volume_attributes_class_list.py
+    kubernetes/aio/client/models/v1_volume_device.py
+    kubernetes/aio/client/models/v1_volume_error.py
+    kubernetes/aio/client/models/v1_volume_mount.py
+    kubernetes/aio/client/models/v1_volume_mount_status.py
+    kubernetes/aio/client/models/v1_volume_node_affinity.py
+    kubernetes/aio/client/models/v1_volume_node_resources.py
+    kubernetes/aio/client/models/v1_volume_projection.py
+    kubernetes/aio/client/models/v1_volume_resource_requirements.py
+    kubernetes/aio/client/models/v1_volume_status.py
+    kubernetes/aio/client/models/v1_vsphere_virtual_disk_volume_source.py
+    kubernetes/aio/client/models/v1_watch_event.py
+    kubernetes/aio/client/models/v1_webhook_conversion.py
+    kubernetes/aio/client/models/v1_weighted_pod_affinity_term.py
+    kubernetes/aio/client/models/v1_windows_security_context_options.py
+    kubernetes/aio/client/models/v1alpha1_apply_configuration.py
+    kubernetes/aio/client/models/v1alpha1_cluster_trust_bundle.py
+    kubernetes/aio/client/models/v1alpha1_cluster_trust_bundle_list.py
+    kubernetes/aio/client/models/v1alpha1_cluster_trust_bundle_spec.py
+    kubernetes/aio/client/models/v1alpha1_json_patch.py
+    kubernetes/aio/client/models/v1alpha1_match_condition.py
+    kubernetes/aio/client/models/v1alpha1_match_resources.py
+    kubernetes/aio/client/models/v1alpha1_mutating_admission_policy.py
+    kubernetes/aio/client/models/v1alpha1_mutating_admission_policy_binding.py
+    kubernetes/aio/client/models/v1alpha1_mutating_admission_policy_binding_list.py
+    kubernetes/aio/client/models/v1alpha1_mutating_admission_policy_binding_spec.py
+    kubernetes/aio/client/models/v1alpha1_mutating_admission_policy_list.py
+    kubernetes/aio/client/models/v1alpha1_mutating_admission_policy_spec.py
+    kubernetes/aio/client/models/v1alpha1_mutation.py
+    kubernetes/aio/client/models/v1alpha1_named_rule_with_operations.py
+    kubernetes/aio/client/models/v1alpha1_param_kind.py
+    kubernetes/aio/client/models/v1alpha1_param_ref.py
+    kubernetes/aio/client/models/v1alpha1_server_storage_version.py
+    kubernetes/aio/client/models/v1alpha1_storage_version.py
+    kubernetes/aio/client/models/v1alpha1_storage_version_condition.py
+    kubernetes/aio/client/models/v1alpha1_storage_version_list.py
+    kubernetes/aio/client/models/v1alpha1_storage_version_status.py
+    kubernetes/aio/client/models/v1alpha1_variable.py
+    kubernetes/aio/client/models/v1alpha2_gang_scheduling_policy.py
+    kubernetes/aio/client/models/v1alpha2_lease_candidate.py
+    kubernetes/aio/client/models/v1alpha2_lease_candidate_list.py
+    kubernetes/aio/client/models/v1alpha2_lease_candidate_spec.py
+    kubernetes/aio/client/models/v1alpha2_pod_group.py
+    kubernetes/aio/client/models/v1alpha2_pod_group_list.py
+    kubernetes/aio/client/models/v1alpha2_pod_group_resource_claim.py
+    kubernetes/aio/client/models/v1alpha2_pod_group_resource_claim_status.py
+    kubernetes/aio/client/models/v1alpha2_pod_group_scheduling_constraints.py
+    kubernetes/aio/client/models/v1alpha2_pod_group_scheduling_policy.py
+    kubernetes/aio/client/models/v1alpha2_pod_group_spec.py
+    kubernetes/aio/client/models/v1alpha2_pod_group_status.py
+    kubernetes/aio/client/models/v1alpha2_pod_group_template.py
+    kubernetes/aio/client/models/v1alpha2_pod_group_template_reference.py
+    kubernetes/aio/client/models/v1alpha2_topology_constraint.py
+    kubernetes/aio/client/models/v1alpha2_typed_local_object_reference.py
+    kubernetes/aio/client/models/v1alpha2_workload.py
+    kubernetes/aio/client/models/v1alpha2_workload_list.py
+    kubernetes/aio/client/models/v1alpha2_workload_pod_group_template_reference.py
+    kubernetes/aio/client/models/v1alpha2_workload_spec.py
+    kubernetes/aio/client/models/v1alpha3_device_taint.py
+    kubernetes/aio/client/models/v1alpha3_device_taint_rule.py
+    kubernetes/aio/client/models/v1alpha3_device_taint_rule_list.py
+    kubernetes/aio/client/models/v1alpha3_device_taint_rule_spec.py
+    kubernetes/aio/client/models/v1alpha3_device_taint_rule_status.py
+    kubernetes/aio/client/models/v1alpha3_device_taint_selector.py
+    kubernetes/aio/client/models/v1alpha3_pool_status.py
+    kubernetes/aio/client/models/v1alpha3_resource_pool_status_request.py
+    kubernetes/aio/client/models/v1alpha3_resource_pool_status_request_list.py
+    kubernetes/aio/client/models/v1alpha3_resource_pool_status_request_spec.py
+    kubernetes/aio/client/models/v1alpha3_resource_pool_status_request_status.py
+    kubernetes/aio/client/models/v1beta1_allocated_device_status.py
+    kubernetes/aio/client/models/v1beta1_allocation_result.py
+    kubernetes/aio/client/models/v1beta1_apply_configuration.py
+    kubernetes/aio/client/models/v1beta1_basic_device.py
+    kubernetes/aio/client/models/v1beta1_capacity_request_policy.py
+    kubernetes/aio/client/models/v1beta1_capacity_request_policy_range.py
+    kubernetes/aio/client/models/v1beta1_capacity_requirements.py
+    kubernetes/aio/client/models/v1beta1_cel_device_selector.py
+    kubernetes/aio/client/models/v1beta1_cluster_trust_bundle.py
+    kubernetes/aio/client/models/v1beta1_cluster_trust_bundle_list.py
+    kubernetes/aio/client/models/v1beta1_cluster_trust_bundle_spec.py
+    kubernetes/aio/client/models/v1beta1_counter.py
+    kubernetes/aio/client/models/v1beta1_counter_set.py
+    kubernetes/aio/client/models/v1beta1_device.py
+    kubernetes/aio/client/models/v1beta1_device_allocation_configuration.py
+    kubernetes/aio/client/models/v1beta1_device_allocation_result.py
+    kubernetes/aio/client/models/v1beta1_device_attribute.py
+    kubernetes/aio/client/models/v1beta1_device_capacity.py
+    kubernetes/aio/client/models/v1beta1_device_claim.py
+    kubernetes/aio/client/models/v1beta1_device_claim_configuration.py
+    kubernetes/aio/client/models/v1beta1_device_class.py
+    kubernetes/aio/client/models/v1beta1_device_class_configuration.py
+    kubernetes/aio/client/models/v1beta1_device_class_list.py
+    kubernetes/aio/client/models/v1beta1_device_class_spec.py
+    kubernetes/aio/client/models/v1beta1_device_constraint.py
+    kubernetes/aio/client/models/v1beta1_device_counter_consumption.py
+    kubernetes/aio/client/models/v1beta1_device_request.py
+    kubernetes/aio/client/models/v1beta1_device_request_allocation_result.py
+    kubernetes/aio/client/models/v1beta1_device_selector.py
+    kubernetes/aio/client/models/v1beta1_device_sub_request.py
+    kubernetes/aio/client/models/v1beta1_device_taint.py
+    kubernetes/aio/client/models/v1beta1_device_toleration.py
+    kubernetes/aio/client/models/v1beta1_ip_address.py
+    kubernetes/aio/client/models/v1beta1_ip_address_list.py
+    kubernetes/aio/client/models/v1beta1_ip_address_spec.py
+    kubernetes/aio/client/models/v1beta1_json_patch.py
+    kubernetes/aio/client/models/v1beta1_lease_candidate.py
+    kubernetes/aio/client/models/v1beta1_lease_candidate_list.py
+    kubernetes/aio/client/models/v1beta1_lease_candidate_spec.py
+    kubernetes/aio/client/models/v1beta1_match_condition.py
+    kubernetes/aio/client/models/v1beta1_match_resources.py
+    kubernetes/aio/client/models/v1beta1_mutating_admission_policy.py
+    kubernetes/aio/client/models/v1beta1_mutating_admission_policy_binding.py
+    kubernetes/aio/client/models/v1beta1_mutating_admission_policy_binding_list.py
+    kubernetes/aio/client/models/v1beta1_mutating_admission_policy_binding_spec.py
+    kubernetes/aio/client/models/v1beta1_mutating_admission_policy_list.py
+    kubernetes/aio/client/models/v1beta1_mutating_admission_policy_spec.py
+    kubernetes/aio/client/models/v1beta1_mutation.py
+    kubernetes/aio/client/models/v1beta1_named_rule_with_operations.py
+    kubernetes/aio/client/models/v1beta1_network_device_data.py
+    kubernetes/aio/client/models/v1beta1_node_allocatable_resource_mapping.py
+    kubernetes/aio/client/models/v1beta1_opaque_device_configuration.py
+    kubernetes/aio/client/models/v1beta1_param_kind.py
+    kubernetes/aio/client/models/v1beta1_param_ref.py
+    kubernetes/aio/client/models/v1beta1_parent_reference.py
+    kubernetes/aio/client/models/v1beta1_pod_certificate_request.py
+    kubernetes/aio/client/models/v1beta1_pod_certificate_request_list.py
+    kubernetes/aio/client/models/v1beta1_pod_certificate_request_spec.py
+    kubernetes/aio/client/models/v1beta1_pod_certificate_request_status.py
+    kubernetes/aio/client/models/v1beta1_resource_claim.py
+    kubernetes/aio/client/models/v1beta1_resource_claim_consumer_reference.py
+    kubernetes/aio/client/models/v1beta1_resource_claim_list.py
+    kubernetes/aio/client/models/v1beta1_resource_claim_spec.py
+    kubernetes/aio/client/models/v1beta1_resource_claim_status.py
+    kubernetes/aio/client/models/v1beta1_resource_claim_template.py
+    kubernetes/aio/client/models/v1beta1_resource_claim_template_list.py
+    kubernetes/aio/client/models/v1beta1_resource_claim_template_spec.py
+    kubernetes/aio/client/models/v1beta1_resource_pool.py
+    kubernetes/aio/client/models/v1beta1_resource_slice.py
+    kubernetes/aio/client/models/v1beta1_resource_slice_list.py
+    kubernetes/aio/client/models/v1beta1_resource_slice_spec.py
+    kubernetes/aio/client/models/v1beta1_service_cidr.py
+    kubernetes/aio/client/models/v1beta1_service_cidr_list.py
+    kubernetes/aio/client/models/v1beta1_service_cidr_spec.py
+    kubernetes/aio/client/models/v1beta1_service_cidr_status.py
+    kubernetes/aio/client/models/v1beta1_storage_version_migration.py
+    kubernetes/aio/client/models/v1beta1_storage_version_migration_list.py
+    kubernetes/aio/client/models/v1beta1_storage_version_migration_spec.py
+    kubernetes/aio/client/models/v1beta1_storage_version_migration_status.py
+    kubernetes/aio/client/models/v1beta1_variable.py
+    kubernetes/aio/client/models/v1beta1_volume_attributes_class.py
+    kubernetes/aio/client/models/v1beta1_volume_attributes_class_list.py
+    kubernetes/aio/client/models/v1beta2_allocated_device_status.py
+    kubernetes/aio/client/models/v1beta2_allocation_result.py
+    kubernetes/aio/client/models/v1beta2_capacity_request_policy.py
+    kubernetes/aio/client/models/v1beta2_capacity_request_policy_range.py
+    kubernetes/aio/client/models/v1beta2_capacity_requirements.py
+    kubernetes/aio/client/models/v1beta2_cel_device_selector.py
+    kubernetes/aio/client/models/v1beta2_counter.py
+    kubernetes/aio/client/models/v1beta2_counter_set.py
+    kubernetes/aio/client/models/v1beta2_device.py
+    kubernetes/aio/client/models/v1beta2_device_allocation_configuration.py
+    kubernetes/aio/client/models/v1beta2_device_allocation_result.py
+    kubernetes/aio/client/models/v1beta2_device_attribute.py
+    kubernetes/aio/client/models/v1beta2_device_capacity.py
+    kubernetes/aio/client/models/v1beta2_device_claim.py
+    kubernetes/aio/client/models/v1beta2_device_claim_configuration.py
+    kubernetes/aio/client/models/v1beta2_device_class.py
+    kubernetes/aio/client/models/v1beta2_device_class_configuration.py
+    kubernetes/aio/client/models/v1beta2_device_class_list.py
+    kubernetes/aio/client/models/v1beta2_device_class_spec.py
+    kubernetes/aio/client/models/v1beta2_device_constraint.py
+    kubernetes/aio/client/models/v1beta2_device_counter_consumption.py
+    kubernetes/aio/client/models/v1beta2_device_request.py
+    kubernetes/aio/client/models/v1beta2_device_request_allocation_result.py
+    kubernetes/aio/client/models/v1beta2_device_selector.py
+    kubernetes/aio/client/models/v1beta2_device_sub_request.py
+    kubernetes/aio/client/models/v1beta2_device_taint.py
+    kubernetes/aio/client/models/v1beta2_device_taint_rule.py
+    kubernetes/aio/client/models/v1beta2_device_taint_rule_list.py
+    kubernetes/aio/client/models/v1beta2_device_taint_rule_spec.py
+    kubernetes/aio/client/models/v1beta2_device_taint_rule_status.py
+    kubernetes/aio/client/models/v1beta2_device_taint_selector.py
+    kubernetes/aio/client/models/v1beta2_device_toleration.py
+    kubernetes/aio/client/models/v1beta2_exact_device_request.py
+    kubernetes/aio/client/models/v1beta2_network_device_data.py
+    kubernetes/aio/client/models/v1beta2_node_allocatable_resource_mapping.py
+    kubernetes/aio/client/models/v1beta2_opaque_device_configuration.py
+    kubernetes/aio/client/models/v1beta2_resource_claim.py
+    kubernetes/aio/client/models/v1beta2_resource_claim_consumer_reference.py
+    kubernetes/aio/client/models/v1beta2_resource_claim_list.py
+    kubernetes/aio/client/models/v1beta2_resource_claim_spec.py
+    kubernetes/aio/client/models/v1beta2_resource_claim_status.py
+    kubernetes/aio/client/models/v1beta2_resource_claim_template.py
+    kubernetes/aio/client/models/v1beta2_resource_claim_template_list.py
+    kubernetes/aio/client/models/v1beta2_resource_claim_template_spec.py
+    kubernetes/aio/client/models/v1beta2_resource_pool.py
+    kubernetes/aio/client/models/v1beta2_resource_slice.py
+    kubernetes/aio/client/models/v1beta2_resource_slice_list.py
+    kubernetes/aio/client/models/v1beta2_resource_slice_spec.py
+    kubernetes/aio/client/models/v2_api_group_discovery.py
+    kubernetes/aio/client/models/v2_api_group_discovery_list.py
+    kubernetes/aio/client/models/v2_api_resource_discovery.py
+    kubernetes/aio/client/models/v2_api_subresource_discovery.py
+    kubernetes/aio/client/models/v2_api_version_discovery.py
+    kubernetes/aio/client/models/v2_container_resource_metric_source.py
+    kubernetes/aio/client/models/v2_container_resource_metric_status.py
+    kubernetes/aio/client/models/v2_cross_version_object_reference.py
+    kubernetes/aio/client/models/v2_external_metric_source.py
+    kubernetes/aio/client/models/v2_external_metric_status.py
+    kubernetes/aio/client/models/v2_horizontal_pod_autoscaler.py
+    kubernetes/aio/client/models/v2_horizontal_pod_autoscaler_behavior.py
+    kubernetes/aio/client/models/v2_horizontal_pod_autoscaler_condition.py
+    kubernetes/aio/client/models/v2_horizontal_pod_autoscaler_list.py
+    kubernetes/aio/client/models/v2_horizontal_pod_autoscaler_spec.py
+    kubernetes/aio/client/models/v2_horizontal_pod_autoscaler_status.py
+    kubernetes/aio/client/models/v2_hpa_scaling_policy.py
+    kubernetes/aio/client/models/v2_hpa_scaling_rules.py
+    kubernetes/aio/client/models/v2_metric_identifier.py
+    kubernetes/aio/client/models/v2_metric_spec.py
+    kubernetes/aio/client/models/v2_metric_status.py
+    kubernetes/aio/client/models/v2_metric_target.py
+    kubernetes/aio/client/models/v2_metric_value_status.py
+    kubernetes/aio/client/models/v2_object_metric_source.py
+    kubernetes/aio/client/models/v2_object_metric_status.py
+    kubernetes/aio/client/models/v2_pods_metric_source.py
+    kubernetes/aio/client/models/v2_pods_metric_status.py
+    kubernetes/aio/client/models/v2_resource_metric_source.py
+    kubernetes/aio/client/models/v2_resource_metric_status.py
+    kubernetes/aio/client/models/v2beta1_api_group_discovery.py
+    kubernetes/aio/client/models/v2beta1_api_group_discovery_list.py
+    kubernetes/aio/client/models/v2beta1_api_resource_discovery.py
+    kubernetes/aio/client/models/v2beta1_api_subresource_discovery.py
+    kubernetes/aio/client/models/v2beta1_api_version_discovery.py
+    kubernetes/aio/client/models/version_info.py
+    kubernetes/aio/client/rest.py
+    kubernetes/aio/config/__init__.py
+    kubernetes/aio/config/config_exception.py
+    kubernetes/aio/config/dateutil.py
+    kubernetes/aio/config/exec_provider.py
+    kubernetes/aio/config/google_auth.py
+    kubernetes/aio/config/incluster_config.py
+    kubernetes/aio/config/kube_config.py
+    kubernetes/aio/config/openid.py
+    kubernetes/aio/setup.py
     kubernetes/client/__init__.py
     kubernetes/client/api/__init__.py
     kubernetes/client/api/admissionregistration_api.py
@@ -82,7 +936,7 @@ PY_SRCS(
     kubernetes/client/api/resource_v1beta2_api.py
     kubernetes/client/api/scheduling_api.py
     kubernetes/client/api/scheduling_v1_api.py
-    kubernetes/client/api/scheduling_v1alpha1_api.py
+    kubernetes/client/api/scheduling_v1alpha2_api.py
     kubernetes/client/api/storage_api.py
     kubernetes/client/api/storage_v1_api.py
     kubernetes/client/api/storage_v1beta1_api.py
@@ -129,6 +983,7 @@ PY_SRCS(
     kubernetes/client/models/v1_api_service_status.py
     kubernetes/client/models/v1_api_versions.py
     kubernetes/client/models/v1_app_armor_profile.py
+    kubernetes/client/models/v1_apply_configuration.py
     kubernetes/client/models/v1_attached_volume.py
     kubernetes/client/models/v1_audit_annotation.py
     kubernetes/client/models/v1_aws_elastic_block_store_volume_source.py
@@ -306,6 +1161,7 @@ PY_SRCS(
     kubernetes/client/models/v1_http_ingress_path.py
     kubernetes/client/models/v1_http_ingress_rule_value.py
     kubernetes/client/models/v1_image_volume_source.py
+    kubernetes/client/models/v1_image_volume_status.py
     kubernetes/client/models/v1_ingress.py
     kubernetes/client/models/v1_ingress_backend.py
     kubernetes/client/models/v1_ingress_class.py
@@ -333,6 +1189,7 @@ PY_SRCS(
     kubernetes/client/models/v1_job_spec.py
     kubernetes/client/models/v1_job_status.py
     kubernetes/client/models/v1_job_template_spec.py
+    kubernetes/client/models/v1_json_patch.py
     kubernetes/client/models/v1_json_schema_props.py
     kubernetes/client/models/v1_key_to_path.py
     kubernetes/client/models/v1_label_selector.py
@@ -360,9 +1217,16 @@ PY_SRCS(
     kubernetes/client/models/v1_match_condition.py
     kubernetes/client/models/v1_match_resources.py
     kubernetes/client/models/v1_modify_volume_status.py
+    kubernetes/client/models/v1_mutating_admission_policy.py
+    kubernetes/client/models/v1_mutating_admission_policy_binding.py
+    kubernetes/client/models/v1_mutating_admission_policy_binding_list.py
+    kubernetes/client/models/v1_mutating_admission_policy_binding_spec.py
+    kubernetes/client/models/v1_mutating_admission_policy_list.py
+    kubernetes/client/models/v1_mutating_admission_policy_spec.py
     kubernetes/client/models/v1_mutating_webhook.py
     kubernetes/client/models/v1_mutating_webhook_configuration.py
     kubernetes/client/models/v1_mutating_webhook_configuration_list.py
+    kubernetes/client/models/v1_mutation.py
     kubernetes/client/models/v1_named_rule_with_operations.py
     kubernetes/client/models/v1_namespace.py
     kubernetes/client/models/v1_namespace_condition.py
@@ -381,6 +1245,8 @@ PY_SRCS(
     kubernetes/client/models/v1_node.py
     kubernetes/client/models/v1_node_address.py
     kubernetes/client/models/v1_node_affinity.py
+    kubernetes/client/models/v1_node_allocatable_resource_claim_status.py
+    kubernetes/client/models/v1_node_allocatable_resource_mapping.py
     kubernetes/client/models/v1_node_condition.py
     kubernetes/client/models/v1_node_config_source.py
     kubernetes/client/models/v1_node_config_status.py
@@ -444,6 +1310,7 @@ PY_SRCS(
     kubernetes/client/models/v1_pod_resource_claim.py
     kubernetes/client/models/v1_pod_resource_claim_status.py
     kubernetes/client/models/v1_pod_scheduling_gate.py
+    kubernetes/client/models/v1_pod_scheduling_group.py
     kubernetes/client/models/v1_pod_security_context.py
     kubernetes/client/models/v1_pod_spec.py
     kubernetes/client/models/v1_pod_status.py
@@ -554,6 +1421,7 @@ PY_SRCS(
     kubernetes/client/models/v1_service_spec.py
     kubernetes/client/models/v1_service_status.py
     kubernetes/client/models/v1_session_affinity_config.py
+    kubernetes/client/models/v1_shard_info.py
     kubernetes/client/models/v1_sleep_action.py
     kubernetes/client/models/v1_stateful_set.py
     kubernetes/client/models/v1_stateful_set_condition.py
@@ -623,17 +1491,16 @@ PY_SRCS(
     kubernetes/client/models/v1_volume_node_resources.py
     kubernetes/client/models/v1_volume_projection.py
     kubernetes/client/models/v1_volume_resource_requirements.py
+    kubernetes/client/models/v1_volume_status.py
     kubernetes/client/models/v1_vsphere_virtual_disk_volume_source.py
     kubernetes/client/models/v1_watch_event.py
     kubernetes/client/models/v1_webhook_conversion.py
     kubernetes/client/models/v1_weighted_pod_affinity_term.py
     kubernetes/client/models/v1_windows_security_context_options.py
-    kubernetes/client/models/v1_workload_reference.py
     kubernetes/client/models/v1alpha1_apply_configuration.py
     kubernetes/client/models/v1alpha1_cluster_trust_bundle.py
     kubernetes/client/models/v1alpha1_cluster_trust_bundle_list.py
     kubernetes/client/models/v1alpha1_cluster_trust_bundle_spec.py
-    kubernetes/client/models/v1alpha1_gang_scheduling_policy.py
     kubernetes/client/models/v1alpha1_json_patch.py
     kubernetes/client/models/v1alpha1_match_condition.py
     kubernetes/client/models/v1alpha1_match_resources.py
@@ -647,27 +1514,43 @@ PY_SRCS(
     kubernetes/client/models/v1alpha1_named_rule_with_operations.py
     kubernetes/client/models/v1alpha1_param_kind.py
     kubernetes/client/models/v1alpha1_param_ref.py
-    kubernetes/client/models/v1alpha1_pod_group.py
-    kubernetes/client/models/v1alpha1_pod_group_policy.py
     kubernetes/client/models/v1alpha1_server_storage_version.py
     kubernetes/client/models/v1alpha1_storage_version.py
     kubernetes/client/models/v1alpha1_storage_version_condition.py
     kubernetes/client/models/v1alpha1_storage_version_list.py
     kubernetes/client/models/v1alpha1_storage_version_status.py
-    kubernetes/client/models/v1alpha1_typed_local_object_reference.py
     kubernetes/client/models/v1alpha1_variable.py
-    kubernetes/client/models/v1alpha1_workload.py
-    kubernetes/client/models/v1alpha1_workload_list.py
-    kubernetes/client/models/v1alpha1_workload_spec.py
+    kubernetes/client/models/v1alpha2_gang_scheduling_policy.py
     kubernetes/client/models/v1alpha2_lease_candidate.py
     kubernetes/client/models/v1alpha2_lease_candidate_list.py
     kubernetes/client/models/v1alpha2_lease_candidate_spec.py
+    kubernetes/client/models/v1alpha2_pod_group.py
+    kubernetes/client/models/v1alpha2_pod_group_list.py
+    kubernetes/client/models/v1alpha2_pod_group_resource_claim.py
+    kubernetes/client/models/v1alpha2_pod_group_resource_claim_status.py
+    kubernetes/client/models/v1alpha2_pod_group_scheduling_constraints.py
+    kubernetes/client/models/v1alpha2_pod_group_scheduling_policy.py
+    kubernetes/client/models/v1alpha2_pod_group_spec.py
+    kubernetes/client/models/v1alpha2_pod_group_status.py
+    kubernetes/client/models/v1alpha2_pod_group_template.py
+    kubernetes/client/models/v1alpha2_pod_group_template_reference.py
+    kubernetes/client/models/v1alpha2_topology_constraint.py
+    kubernetes/client/models/v1alpha2_typed_local_object_reference.py
+    kubernetes/client/models/v1alpha2_workload.py
+    kubernetes/client/models/v1alpha2_workload_list.py
+    kubernetes/client/models/v1alpha2_workload_pod_group_template_reference.py
+    kubernetes/client/models/v1alpha2_workload_spec.py
     kubernetes/client/models/v1alpha3_device_taint.py
     kubernetes/client/models/v1alpha3_device_taint_rule.py
     kubernetes/client/models/v1alpha3_device_taint_rule_list.py
     kubernetes/client/models/v1alpha3_device_taint_rule_spec.py
     kubernetes/client/models/v1alpha3_device_taint_rule_status.py
     kubernetes/client/models/v1alpha3_device_taint_selector.py
+    kubernetes/client/models/v1alpha3_pool_status.py
+    kubernetes/client/models/v1alpha3_resource_pool_status_request.py
+    kubernetes/client/models/v1alpha3_resource_pool_status_request_list.py
+    kubernetes/client/models/v1alpha3_resource_pool_status_request_spec.py
+    kubernetes/client/models/v1alpha3_resource_pool_status_request_status.py
     kubernetes/client/models/v1beta1_allocated_device_status.py
     kubernetes/client/models/v1beta1_allocation_result.py
     kubernetes/client/models/v1beta1_apply_configuration.py
@@ -718,6 +1601,7 @@ PY_SRCS(
     kubernetes/client/models/v1beta1_mutation.py
     kubernetes/client/models/v1beta1_named_rule_with_operations.py
     kubernetes/client/models/v1beta1_network_device_data.py
+    kubernetes/client/models/v1beta1_node_allocatable_resource_mapping.py
     kubernetes/client/models/v1beta1_opaque_device_configuration.py
     kubernetes/client/models/v1beta1_param_kind.py
     kubernetes/client/models/v1beta1_param_ref.py
@@ -775,9 +1659,15 @@ PY_SRCS(
     kubernetes/client/models/v1beta2_device_selector.py
     kubernetes/client/models/v1beta2_device_sub_request.py
     kubernetes/client/models/v1beta2_device_taint.py
+    kubernetes/client/models/v1beta2_device_taint_rule.py
+    kubernetes/client/models/v1beta2_device_taint_rule_list.py
+    kubernetes/client/models/v1beta2_device_taint_rule_spec.py
+    kubernetes/client/models/v1beta2_device_taint_rule_status.py
+    kubernetes/client/models/v1beta2_device_taint_selector.py
     kubernetes/client/models/v1beta2_device_toleration.py
     kubernetes/client/models/v1beta2_exact_device_request.py
     kubernetes/client/models/v1beta2_network_device_data.py
+    kubernetes/client/models/v1beta2_node_allocatable_resource_mapping.py
     kubernetes/client/models/v1beta2_opaque_device_configuration.py
     kubernetes/client/models/v1beta2_resource_claim.py
     kubernetes/client/models/v1beta2_resource_claim_consumer_reference.py
@@ -791,6 +1681,11 @@ PY_SRCS(
     kubernetes/client/models/v1beta2_resource_slice.py
     kubernetes/client/models/v1beta2_resource_slice_list.py
     kubernetes/client/models/v1beta2_resource_slice_spec.py
+    kubernetes/client/models/v2_api_group_discovery.py
+    kubernetes/client/models/v2_api_group_discovery_list.py
+    kubernetes/client/models/v2_api_resource_discovery.py
+    kubernetes/client/models/v2_api_subresource_discovery.py
+    kubernetes/client/models/v2_api_version_discovery.py
     kubernetes/client/models/v2_container_resource_metric_source.py
     kubernetes/client/models/v2_container_resource_metric_status.py
     kubernetes/client/models/v2_cross_version_object_reference.py
@@ -815,6 +1710,11 @@ PY_SRCS(
     kubernetes/client/models/v2_pods_metric_status.py
     kubernetes/client/models/v2_resource_metric_source.py
     kubernetes/client/models/v2_resource_metric_status.py
+    kubernetes/client/models/v2beta1_api_group_discovery.py
+    kubernetes/client/models/v2beta1_api_group_discovery_list.py
+    kubernetes/client/models/v2beta1_api_resource_discovery.py
+    kubernetes/client/models/v2beta1_api_subresource_discovery.py
+    kubernetes/client/models/v2beta1_api_version_discovery.py
     kubernetes/client/models/version_info.py
     kubernetes/client/rest.py
     kubernetes/config/__init__.py
@@ -828,6 +1728,9 @@ PY_SRCS(
     kubernetes/dynamic/discovery.py
     kubernetes/dynamic/exceptions.py
     kubernetes/dynamic/resource.py
+    kubernetes/informer/__init__.py
+    kubernetes/informer/cache.py
+    kubernetes/informer/informer.py
     kubernetes/leaderelection/__init__.py
     kubernetes/leaderelection/electionconfig.py
     kubernetes/leaderelection/leaderelection.py
@@ -840,6 +1743,7 @@ PY_SRCS(
     kubernetes/utils/__init__.py
     kubernetes/utils/create_from_yaml.py
     kubernetes/utils/duration.py
+    kubernetes/utils/metrics.py
     kubernetes/utils/quantity.py
     kubernetes/watch/__init__.py
     kubernetes/watch/watch.py

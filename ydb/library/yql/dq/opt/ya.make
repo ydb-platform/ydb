@@ -1,8 +1,14 @@
 LIBRARY()
 
 PEERDIR(
+    ydb/library/yql/dq/common
+    ydb/library/yql/dq/expr_nodes
     ydb/library/yql/dq/opt/core
+    yql/essentials/ast
+    yql/essentials/core
     yql/essentials/core/cbo
+    yql/essentials/core/expr_nodes
+    yql/essentials/core/expr_nodes_gen
 )
 
 SRCS(

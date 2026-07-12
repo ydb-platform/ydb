@@ -1,6 +1,7 @@
 #pragma once
 
 #include <util/generic/ptr.h>
+#include <ydb/core/base/table_index.h>
 #include <ydb/core/tx/data_events/events.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
@@ -67,15 +68,37 @@ IDataBatcherPtr CreateColumnDataBatcher(
     std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc = nullptr,
     std::vector<ui32> readIndex = {});
 
+IDataBatcherPtr CreateStructOfRowsDataBatcher(
+    const TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> columns,
+    const TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> lookupColumns,
+    std::vector<ui32> writeIndex,
+    std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc = nullptr);
+
 class IDataBatchProjection : public TThrRefBase {
 public:
     virtual void AddRow(TConstArrayRef<TCell> row) = 0;
     virtual IDataBatchPtr Flush() = 0;
 };
 
+class IFulltextTokenizeProjection : public IDataBatchProjection {
+public:
+    virtual IDataBatchPtr FlushDocs() = 0;
+    virtual IDataBatchPtr FlushDict() = 0;
+    virtual IDataBatchPtr FlushStats() = 0;
+    virtual void SetGen(NTableIndex::NFulltext::TGen gen) = 0;
+};
+
 using IDataBatchProjectionPtr = TIntrusivePtr<IDataBatchProjection>;
 
 IDataBatchProjectionPtr CreateDataBatchProjection(
+    TConstArrayRef<ui32> indexes,
+    std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc);
+
+IDataBatchProjectionPtr CreateFulltextTokenizeProjection(
+    TConstArrayRef<NScheme::TTypeInfo> columnTypes,
+    bool withFreq,
+    bool added,
+    const Ydb::Table::FulltextIndexSettings& settings,
     TConstArrayRef<ui32> indexes,
     std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc);
 

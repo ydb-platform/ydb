@@ -221,6 +221,12 @@ public:
     bool External = false;
     TStringBuilder _Builder;
     TConnection* IngressConnection = nullptr;
+    std::vector<std::pair<ui64, ui64>> HotRegions;
+    ui64 CriticalCpuTotal = 0;
+    std::shared_ptr<TConnection> CriticalCpuConnection;
+    ui64 CriticalTimeTotal = 0;
+    std::shared_ptr<TConnection> CriticalTimeConnection;
+
 };
 
 class TClusterNode {
@@ -373,6 +379,10 @@ public:
     void PrintSvg(TStringBuilder& builder, ui64 maxTime, ui32 timelineDelta);
     void PrintStage(TStringBuilder& builder, std::shared_ptr<TStage>& stage, TConnection* c);
     void PrintNodes(TStringBuilder& builder, ui64 maxTime, ui32 timelineDelta);
+    void CalcHotPath();
+    void CalcCriticals(TStage& stage);
+    TString GetCriticalCpuGroups();
+    TString GetCriticalTimeGroups();
     const ui32 GroupId;
     TString NodeType;
     std::vector<std::shared_ptr<TStage>> Stages;

@@ -794,16 +794,14 @@ TExprNode::TListType GetNodesToCalculate(const TExprNode::TPtr& input) {
                     }
                     break;
                 }
-                case EYtSettingType::QLFilter: {
-                    for (const auto& p : section.Paths()) {
-                        TYtPathInfo pathInfo(p);
-                        if (pathInfo.QLFilter) {
-                            GetNodesToCalculateFromQLFilter(*pathInfo.QLFilter, needCalc, uniqNodes);
-                        }
-                    }
-                }
                 default:
                     break;
+                }
+            }
+            for (const auto& path: section.Paths()) {
+                const TYtPathInfo pathInfo(path);
+                if (pathInfo.QLFilter) {
+                    GetNodesToCalculateFromQLFilter(*pathInfo.QLFilter, needCalc, uniqNodes);
                 }
             }
         }
@@ -1601,8 +1599,8 @@ TYtPath CopyOrTrivialMap(TPositionHandle pos, TExprBase world, TYtDSink dataSink
     bool exactCopySort = false;
     bool hasAux = false;
     TVector<std::pair<TYqlRowSpecInfo::TPtr, bool>> rowSpecs;
-    const ui64 outNativeYtTypeFlags = outRowSpec ? outRowSpec->GetNativeYtTypeFlags() : (state->Configuration->UseNativeYtTypes.Get().GetOrElse(DEFAULT_USE_NATIVE_YT_TYPES) ? NTCF_ALL : NTCF_NONE);
-    TYtOutTableInfo outTable(scheme.Cast<TStructExprType>(), outNativeYtTypeFlags);
+    const ui64 nativeTypeCompatibility = GetNativeYtTypeCompatibility(dataSink.Cluster().StringValue(), *state->Configuration);
+    TYtOutTableInfo outTable(scheme.Cast<TStructExprType>(), nativeTypeCompatibility);
     outTable.RowSpec->SetConstraints(opts.Constraints);
     TMaybe<NYT::TNode> outNativeType;
     if (outRowSpec) {
@@ -1729,7 +1727,7 @@ TYtPath CopyOrTrivialMap(TPositionHandle pos, TExprBase world, TYtDSink dataSink
             for (size_t i = 0; i < section.Paths().Size(); ++i) {
                 auto path = section.Paths().Item(i);
                 if (rowSpecs[i].second) {
-                    TYtOutTableInfo mapOutTable(scheme.Cast<TStructExprType>(), outNativeYtTypeFlags);
+                    TYtOutTableInfo mapOutTable(scheme.Cast<TStructExprType>(), nativeTypeCompatibility);
                     if (outNativeType) {
                         mapOutTable.RowSpec->CopyTypeOrders(*outNativeType, useNativeYtDefaultColumnOrder);
                     }
@@ -2539,6 +2537,12 @@ bool CanReplaceParentOutputHash(const TExprNode& node) {
     }
 
     return true;
+}
+
+ui64 GetNativeYtTypeCompatibility(const TString& cluster, const TYtSettings& config) {
+    const auto useNativeYtTypes = config.UseNativeYtTypes.Get().GetOrElse(DEFAULT_USE_NATIVE_YT_TYPES);
+    const auto nativeTypeCompatibility = config.NativeYtTypeCompatibility.Get(cluster).GetOrElse(NTCF_LEGACY);
+    return useNativeYtTypes ? nativeTypeCompatibility : NTCF_NONE;
 }
 
 } // NYql

@@ -339,4 +339,7 @@ message TFeatureFlags {
     optional bool EnableNodeBrokerLongLease = 292 [default = false];
     optional bool EnableExportInParquet = 293 [default = false];
     optional bool EnableCutHistory = 294 [default = false];
+    optional bool EnableColumnshardInterval = 295 [default = false];
+    optional bool EnableColumnshardUuid = 296 [default = false];
+    optional bool EnableColumnshardDyNumber = 297 [default = false];
 }

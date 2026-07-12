@@ -364,6 +364,12 @@ public:
                         if (unit == arrow::TimeUnit::MICRO) {
                             arrow::util::get<std::shared_ptr<arrow::ArrayData>>(arg.value)->type = arrow::uint64();
                         }
+                    } else if (arg.kind() == arrow::Datum::ARRAY && arg.descr().type->id() == arrow::Type::DURATION) {
+                        auto duration_type = std::static_pointer_cast<arrow::DurationType>(arg.descr().type);
+                        arrow::TimeUnit::type unit = duration_type->unit();
+                        if (unit == arrow::TimeUnit::MICRO) {
+                            arrow::util::get<std::shared_ptr<arrow::ArrayData>>(arg.value)->type = arrow::int64();
+                        }
                     }
                 }
                 auto result = Function->Execute(*args, FunctionOptions.get(), GetContext());

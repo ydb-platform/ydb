@@ -70,6 +70,11 @@ class TestDataType(RestartToAnotherVersionFixture):
         if min(self.versions) >= (25, 4):
             extra_feature_flags.append("enable_columnshard_bool")
 
+        if min(self.versions) >= (26, 3):
+            extra_feature_flags.append("enable_columnshard_interval")
+            extra_feature_flags.append("enable_columnshard_uuid")
+            extra_feature_flags.append("enable_columnshard_dynumber")
+
         yield from self.setup_cluster(
             extra_feature_flags=extra_feature_flags,
             column_shard_config={

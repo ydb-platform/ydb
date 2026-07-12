@@ -34,6 +34,12 @@ Y_UNIT_TEST_SUITE(KqpUuidColumnShard) {
         std::optional<TString> Uid;
     };
 
+    TKikimrSettings CreateKikimrSettingsWithUuidSupport() {
+        NKikimrConfig::TFeatureFlags featureFlags;
+        featureFlags.SetEnableColumnshardUuid(true);
+        return TKikimrSettings().SetWithSampleTables(false).SetFeatureFlags(featureFlags);
+    }
+
     void CreateDataShardTable(TTestHelper& helper, const TString& name) {
         auto& session = helper.GetSession();
         auto res = session
@@ -302,9 +308,7 @@ Y_UNIT_TEST_SUITE(KqpUuidColumnShard) {
         const auto Load = Arg<2>();
 
         const TString tableName = "/Root/Table1";
-        TKikimrSettings runnerSettings;
-        runnerSettings.WithSampleTables = false;
-        TTestHelper helper(runnerSettings);
+        TTestHelper helper(CreateKikimrSettingsWithUuidSupport());
         TTestHelper::TColumnTable col;
         TVector<TTestHelper::TColumnSchema> schema;
         PrepareBase(helper, Table, tableName, &col, &schema);
@@ -329,9 +333,7 @@ Y_UNIT_TEST_SUITE(KqpUuidColumnShard) {
         const auto Load = Arg<2>();
 
         const TString tableName = "/Root/Table1";
-        TKikimrSettings runnerSettings;
-        runnerSettings.WithSampleTables = false;
-        TTestHelper helper(runnerSettings);
+        TTestHelper helper(CreateKikimrSettingsWithUuidSupport());
         TTestHelper::TColumnTable col;
         TVector<TTestHelper::TColumnSchema> schema;
         PrepareBase(helper, Table, tableName, &col, &schema);
@@ -355,9 +357,7 @@ Y_UNIT_TEST_SUITE(KqpUuidColumnShard) {
         const auto Load = Arg<2>();
 
         const TString tableName = "/Root/Table1";
-        TKikimrSettings runnerSettings;
-        runnerSettings.WithSampleTables = false;
-        TTestHelper helper(runnerSettings);
+        TTestHelper helper(CreateKikimrSettingsWithUuidSupport());
         TTestHelper::TColumnTable col;
         TVector<TTestHelper::TColumnSchema> schema;
         PrepareBase(helper, Table, tableName, &col, &schema);
@@ -376,9 +376,7 @@ Y_UNIT_TEST_SUITE(KqpUuidColumnShard) {
         const auto Load = Arg<2>();
 
         const TString tableName = "/Root/Table1";
-        TKikimrSettings runnerSettings;
-        runnerSettings.WithSampleTables = false;
-        TTestHelper helper(runnerSettings);
+        TTestHelper helper(CreateKikimrSettingsWithUuidSupport());
         TTestHelper::TColumnTable col;
         TVector<TTestHelper::TColumnSchema> schema;
         PrepareBase(helper, Table, tableName, &col, &schema);
@@ -408,9 +406,7 @@ Y_UNIT_TEST_SUITE(KqpUuidColumnShard) {
         const auto Load = Arg<2>();
 
         const TString tableName = "/Root/Table1";
-        TKikimrSettings runnerSettings;
-        runnerSettings.WithSampleTables = false;
-        TTestHelper helper(runnerSettings);
+        TTestHelper helper(CreateKikimrSettingsWithUuidSupport());
         TTestHelper::TColumnTable col;
         TVector<TTestHelper::TColumnSchema> schema;
         PrepareBase(helper, Table, tableName, &col, &schema);
@@ -432,9 +428,7 @@ Y_UNIT_TEST_SUITE(KqpUuidColumnShard) {
         const auto Load = Arg<2>();
 
         const TString tableName = "/Root/Table1";
-        TKikimrSettings runnerSettings;
-        runnerSettings.WithSampleTables = false;
-        TTestHelper helper(runnerSettings);
+        TTestHelper helper(CreateKikimrSettingsWithUuidSupport());
         TTestHelper::TColumnTable col;
         TVector<TTestHelper::TColumnSchema> schema;
         PrepareBase(helper, Table, tableName, &col, &schema);
@@ -452,9 +446,7 @@ Y_UNIT_TEST_SUITE(KqpUuidColumnShard) {
         const auto Load = Arg<2>();
 
         const TString tableName = "/Root/Table1";
-        TKikimrSettings runnerSettings;
-        runnerSettings.WithSampleTables = false;
-        TTestHelper helper(runnerSettings);
+        TTestHelper helper(CreateKikimrSettingsWithUuidSupport());
         TTestHelper::TColumnTable col;
         TVector<TTestHelper::TColumnSchema> schema;
         PrepareBase(helper, Table, tableName, &col, &schema);
@@ -482,9 +474,7 @@ Y_UNIT_TEST_SUITE(KqpUuidColumnShard) {
 
         const TString t1 = "/Root/Table1";
         const TString t2 = "/Root/Table2";
-        TKikimrSettings runnerSettings;
-        runnerSettings.WithSampleTables = false;
-        TTestHelper helper(runnerSettings);
+        TTestHelper helper(CreateKikimrSettingsWithUuidSupport());
         TTestHelper::TColumnTable col1, col2;
         TVector<TTestHelper::TColumnSchema> s1, s2;
         if (Table == ETableKind::COLUMNSHARD) {
@@ -541,9 +531,7 @@ Y_UNIT_TEST_SUITE(KqpUuidColumnShard) {
 
         const TString t1 = "/Root/Table1";
         const TString t2 = "/Root/Table2";
-        TKikimrSettings runnerSettings;
-        runnerSettings.WithSampleTables = false;
-        TTestHelper helper(runnerSettings);
+        TTestHelper helper(CreateKikimrSettingsWithUuidSupport());
         TTestHelper::TColumnTable col1, col2;
         TVector<TTestHelper::TColumnSchema> s1, s2;
         if (Table == ETableKind::COLUMNSHARD) {
@@ -582,9 +570,7 @@ Y_UNIT_TEST_SUITE(KqpUuidColumnShard) {
         const auto Load = Arg<2>();
 
         const TString tableName = "/Root/Table1";
-        TKikimrSettings runnerSettings;
-        runnerSettings.WithSampleTables = false;
-        TTestHelper helper(runnerSettings);
+        TTestHelper helper(CreateKikimrSettingsWithUuidSupport());
         TTestHelper::TColumnTable col;
         TVector<TTestHelper::TColumnSchema> schema;
         PrepareBase(helper, Table, tableName, &col, &schema);
@@ -610,9 +596,7 @@ Y_UNIT_TEST_SUITE(KqpUuidColumnShard) {
         const auto Load = Arg<2>();
 
         const TString tableName = "/Root/Table1";
-        TKikimrSettings runnerSettings;
-        runnerSettings.WithSampleTables = false;
-        TTestHelper helper(runnerSettings);
+        TTestHelper helper(CreateKikimrSettingsWithUuidSupport());
         TTestHelper::TColumnTable col;
         TVector<TTestHelper::TColumnSchema> schema;
         PrepareBase(helper, Table, tableName, &col, &schema);
@@ -628,9 +612,7 @@ Y_UNIT_TEST_SUITE(KqpUuidColumnShard) {
         const auto Scan = Arg<0>();
         const auto Load = Arg<1>();
 
-        TKikimrSettings runnerSettings;
-        runnerSettings.WithSampleTables = false;
-        TTestHelper helper(runnerSettings);
+        TTestHelper helper(CreateKikimrSettingsWithUuidSupport());
 
         TVector<TTestHelper::TColumnSchema> schema = {
             TTestHelper::TColumnSchema().SetName("uid").SetType(NScheme::NTypeIds::Uuid).SetNullable(false),
@@ -685,8 +667,7 @@ Y_UNIT_TEST_SUITE(KqpUuidColumnShard) {
         const auto Scan = Arg<0>();
         const auto Load = Arg<1>();
 
-        TKikimrSettings runnerSettings;
-        runnerSettings.WithSampleTables = false;
+        auto runnerSettings = CreateKikimrSettingsWithUuidSupport();
         runnerSettings.AppConfig.MutableTableServiceConfig()->SetEnableHtapTx(true);
         TTestHelper helper(runnerSettings);
 
@@ -777,9 +758,7 @@ Y_UNIT_TEST_SUITE(KqpUuidColumnShard) {
         const auto Table = Arg<1>();
 
         const TString tableName = "/Root/Table1";
-        TKikimrSettings runnerSettings;
-        runnerSettings.WithSampleTables = false;
-        TTestHelper helper(runnerSettings);
+        TTestHelper helper(CreateKikimrSettingsWithUuidSupport());
         TTestHelper::TColumnTable col;
         TVector<TTestHelper::TColumnSchema> schema;
         PrepareBase(helper, Table, tableName, &col, &schema);

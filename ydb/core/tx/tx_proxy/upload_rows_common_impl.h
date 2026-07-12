@@ -791,23 +791,6 @@ private:
                     if (!ExtractBatch(errorMessage)) {
                         return ReplyWithError(Ydb::StatusIds::BAD_REQUEST, errorMessage, ctx);
                     }
-                    if (!ColumnsToConvertInplace.empty()) {
-                        auto convertResult = NArrow::InplaceConvertColumns(Batch, ColumnsToConvertInplace);
-                        if (!convertResult.ok()) {
-                            return ReplyWithError(Ydb::StatusIds::BAD_REQUEST,
-                                TStringBuilder() << "Cannot convert arrow batch inplace:" << convertResult.status().ToString(), ctx);
-                        }
-                        Batch = *convertResult;
-                    }
-                    // Explicit types conversion
-                    if (!ColumnsToConvert.empty()) {
-                        auto convertResult = NArrow::ConvertColumns(Batch, ColumnsToConvert, IsInfinityInJsonAllowed());
-                        if (!convertResult.ok()) {
-                            return ReplyWithError(Ydb::StatusIds::BAD_REQUEST,
-                                TStringBuilder() << "Cannot convert arrow batch:" << convertResult.status().ToString(), ctx);
-                        }
-                        Batch = *convertResult;
-                    }
                 } else {
                     // TUploadColumnsRPCPublic::ExtractBatch() - NOT converted JsonDocument, DynNumbers, ...
                     if (!ExtractBatch(errorMessage)) {
@@ -835,6 +818,25 @@ private:
         TString error;
         if (!IsTimestampColumnsArePositive(Batch, error)) {
             return ReplyWithError(Ydb::StatusIds::BAD_REQUEST, error, ctx);
+        }
+
+        if (isColumnTable && Batch) {
+            if (!ColumnsToConvertInplace.empty()) {
+                auto convertResult = NArrow::InplaceConvertColumns(Batch, ColumnsToConvertInplace);
+                if (!convertResult.ok()) {
+                    return ReplyWithError(Ydb::StatusIds::BAD_REQUEST,
+                        TStringBuilder() << "Cannot convert arrow batch inplace:" << convertResult.status().ToString(), ctx);
+                }
+                Batch = *convertResult;
+            }
+            if (!ColumnsToConvert.empty()) {
+                auto convertResult = NArrow::ConvertColumns(Batch, ColumnsToConvert, IsInfinityInJsonAllowed());
+                if (!convertResult.ok()) {
+                    return ReplyWithError(Ydb::StatusIds::BAD_REQUEST,
+                        TStringBuilder() << "Cannot convert arrow batch:" << convertResult.status().ToString(), ctx);
+                }
+                Batch = *convertResult;
+            }
         }
 
         if (Batch) {

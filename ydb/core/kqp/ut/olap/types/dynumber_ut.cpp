@@ -41,6 +41,12 @@ Y_UNIT_TEST_SUITE(KqpDyNumberColumnShard) {
         return TString(str);
     }
 
+    TKikimrSettings CreateKikimrSettingsWithDyNumberSupport() {
+        NKikimrConfig::TFeatureFlags featureFlags;
+        featureFlags.SetEnableColumnshardDyNumber(true);
+        return TKikimrSettings().SetWithSampleTables(false).SetFeatureFlags(featureFlags);
+    }
+
     static void AppendDyNumber(arrow::BinaryBuilder& builder, const TStringBuf& str) {
         Y_ABORT_UNLESS(builder.Append(str.data(), str.size()).ok());
     }
@@ -205,9 +211,7 @@ Y_UNIT_TEST_SUITE(KqpDyNumberColumnShard) {
         const auto Load = Arg<2>();
 
         const TString tableName = "/Root/ColumnTableTest";
-        TKikimrSettings runnerSettings;
-        runnerSettings.WithSampleTables = false;
-        TTestHelper helper(runnerSettings);
+        TTestHelper helper(CreateKikimrSettingsWithDyNumberSupport());
         TTestHelper::TColumnTable col;
         TVector<TTestHelper::TColumnSchema> schema;
         PrepareBase(helper, Table, tableName, &col, &schema);
@@ -240,9 +244,7 @@ Y_UNIT_TEST_SUITE(KqpDyNumberColumnShard) {
         const auto Load = Arg<2>();
 
         const TString tableName = "/Root/ColumnTableTest";
-        TKikimrSettings runnerSettings;
-        runnerSettings.WithSampleTables = false;
-        TTestHelper helper(runnerSettings);
+        TTestHelper helper(CreateKikimrSettingsWithDyNumberSupport());
         TTestHelper::TColumnTable col;
         TVector<TTestHelper::TColumnSchema> schema;
         PrepareBase(helper, Table, tableName, &col, &schema);
@@ -276,9 +278,7 @@ Y_UNIT_TEST_SUITE(KqpDyNumberColumnShard) {
         const auto Load = Arg<2>();
 
         const TString tableName = "/Root/ColumnTableTest";
-        TKikimrSettings runnerSettings;
-        runnerSettings.WithSampleTables = false;
-        TTestHelper helper(runnerSettings);
+        TTestHelper helper(CreateKikimrSettingsWithDyNumberSupport());
         TTestHelper::TColumnTable col;
         TVector<TTestHelper::TColumnSchema> schema;
         PrepareBase(helper, Table, tableName, &col, &schema);
@@ -302,9 +302,7 @@ Y_UNIT_TEST_SUITE(KqpDyNumberColumnShard) {
         const auto Load = Arg<2>();
 
         const TString tableName = "/Root/ColumnTableTest";
-        TKikimrSettings runnerSettings;
-        runnerSettings.WithSampleTables = false;
-        TTestHelper helper(runnerSettings);
+        TTestHelper helper(CreateKikimrSettingsWithDyNumberSupport());
         TTestHelper::TColumnTable col;
         TVector<TTestHelper::TColumnSchema> schema;
         PrepareBase(helper, Table, tableName, &col, &schema);
@@ -347,9 +345,7 @@ Y_UNIT_TEST_SUITE(KqpDyNumberColumnShard) {
         const auto Load = Arg<2>();
 
         const TString tableName = "/Root/ColumnTableTest";
-        TKikimrSettings runnerSettings;
-        runnerSettings.WithSampleTables = false;
-        TTestHelper helper(runnerSettings);
+        TTestHelper helper(CreateKikimrSettingsWithDyNumberSupport());
         TTestHelper::TColumnTable col;
         TVector<TTestHelper::TColumnSchema> schema;
         PrepareBase(helper, Table, tableName, &col, &schema);
@@ -376,9 +372,7 @@ Y_UNIT_TEST_SUITE(KqpDyNumberColumnShard) {
         const auto Load = Arg<2>();
 
         const TString tableName = "/Root/ColumnTableTest";
-        TKikimrSettings runnerSettings;
-        runnerSettings.WithSampleTables = false;
-        TTestHelper helper(runnerSettings);
+        TTestHelper helper(CreateKikimrSettingsWithDyNumberSupport());
         TTestHelper::TColumnTable col;
         TVector<TTestHelper::TColumnSchema> schema;
         PrepareBase(helper, Table, tableName, &col, &schema);
@@ -400,9 +394,7 @@ Y_UNIT_TEST_SUITE(KqpDyNumberColumnShard) {
         const auto Load = Arg<2>();
 
         const TString tableName = "/Root/ColumnTableTest";
-        TKikimrSettings runnerSettings;
-        runnerSettings.WithSampleTables = false;
-        TTestHelper helper(runnerSettings);
+        TTestHelper helper(CreateKikimrSettingsWithDyNumberSupport());
         TTestHelper::TColumnTable col;
         TVector<TTestHelper::TColumnSchema> schema;
         PrepareBase(helper, Table, tableName, &col, &schema);
@@ -425,9 +417,7 @@ Y_UNIT_TEST_SUITE(KqpDyNumberColumnShard) {
         const auto Table = Arg<1>();
         const auto Load = Arg<2>();
 
-        TKikimrSettings runnerSettings;
-        runnerSettings.WithSampleTables = false;
-        TTestHelper helper(runnerSettings);
+        TTestHelper helper(CreateKikimrSettingsWithDyNumberSupport());
 
         const TString t1 = "/Root/Table1";
         const TString t2 = "/Root/Table2";
@@ -561,9 +551,7 @@ Y_UNIT_TEST_SUITE(KqpDyNumberColumnShard) {
         const auto Table = Arg<1>();
         const auto Load = Arg<2>();
 
-        TKikimrSettings runnerSettings;
-        runnerSettings.WithSampleTables = false;
-        TTestHelper helper(runnerSettings);
+        TTestHelper helper(CreateKikimrSettingsWithDyNumberSupport());
 
         const TString t1 = "/Root/Table1";
         const TString t2 = "/Root/Table2";
@@ -619,9 +607,7 @@ Y_UNIT_TEST_SUITE(KqpDyNumberColumnShard) {
         const auto Load = Arg<2>();
 
         const TString tableName = "/Root/ColumnTableTest";
-        TKikimrSettings runnerSettings;
-        runnerSettings.WithSampleTables = false;
-        TTestHelper helper(runnerSettings);
+        TTestHelper helper(CreateKikimrSettingsWithDyNumberSupport());
         TTestHelper::TColumnTable col;
         TVector<TTestHelper::TColumnSchema> schema;
         PrepareBase(helper, Table, tableName, &col, &schema);
@@ -653,9 +639,7 @@ Y_UNIT_TEST_SUITE(KqpDyNumberColumnShard) {
         const auto Load = Arg<2>();
 
         const TString tableName = "/Root/ColumnTableTest";
-        TKikimrSettings runnerSettings;
-        runnerSettings.WithSampleTables = false;
-        TTestHelper helper(runnerSettings);
+        TTestHelper helper(CreateKikimrSettingsWithDyNumberSupport());
         TTestHelper::TColumnTable col;
         TVector<TTestHelper::TColumnSchema> schema;
         PrepareBase(helper, Table, tableName, &col, &schema);
@@ -681,9 +665,7 @@ Y_UNIT_TEST_SUITE(KqpDyNumberColumnShard) {
         const auto Scan = Arg<0>();
         const auto Load = Arg<1>();
 
-        TKikimrSettings runnerSettings;
-        runnerSettings.WithSampleTables = false;
-        TTestHelper helper(runnerSettings);
+        TTestHelper helper(CreateKikimrSettingsWithDyNumberSupport());
 
         TVector<TTestHelper::TColumnSchema> schema = {
             TTestHelper::TColumnSchema().SetName("dyn").SetType(NScheme::NTypeIds::DyNumber).SetNullable(false),
@@ -739,8 +721,7 @@ Y_UNIT_TEST_SUITE(KqpDyNumberColumnShard) {
         const auto Scan = Arg<0>();
         const auto Load = Arg<1>();
 
-        TKikimrSettings runnerSettings;
-        runnerSettings.WithSampleTables = false;
+        auto runnerSettings = CreateKikimrSettingsWithDyNumberSupport();
         runnerSettings.AppConfig.MutableTableServiceConfig()->SetEnableHtapTx(true);
         TTestHelper helper(runnerSettings);
 

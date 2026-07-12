@@ -29,11 +29,17 @@ Y_UNIT_TEST_SUITE(KqpIntervalColumnShard) {
     struct TRow {
         i32 Id;
         i64 IntVal;
-        std::optional<i64> Ival;  // Interval stored as i64 microseconds
+        std::optional<i64> Ival;
     };
 
     constexpr i64 MaxValidInterval = (i64)(86400000000ULL * 49673U - 1);
     constexpr i64 MinValidInterval = -MaxValidInterval;
+
+    TKikimrSettings CreateKikimrSettingsWithIntervalSupport() {
+        NKikimrConfig::TFeatureFlags featureFlags;
+        featureFlags.SetEnableColumnshardInterval(true);
+        return TKikimrSettings().SetWithSampleTables(false).SetFeatureFlags(featureFlags);
+    }
 
     void CreateDataShardTable(TTestHelper& helper, const TString& name) {
         auto& session = helper.GetSession();
@@ -63,8 +69,10 @@ Y_UNIT_TEST_SUITE(KqpIntervalColumnShard) {
             } else {
                 builder.EmptyOptional(EPrimitiveType::Interval);
             }
+
             builder.EndStruct();
         }
+
         builder.EndList();
         auto result = helper.GetKikimr().GetTableClient().BulkUpsert(name, builder.Build()).GetValueSync();
         UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
@@ -77,8 +85,10 @@ Y_UNIT_TEST_SUITE(KqpIntervalColumnShard) {
             if (r.Ival.has_value()) {
                 builder << *r.Ival;
             }
+
             builder << '\n';
         }
+
         auto result = helper.GetKikimr().GetTableClient().BulkUpsert(name, EDataFormat::CSV, builder).GetValueSync();
         UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
     }
@@ -113,8 +123,7 @@ Y_UNIT_TEST_SUITE(KqpIntervalColumnShard) {
         auto batch = MakeArrowBatch(rows);
         TString strBatch = NArrow::SerializeBatchNoCompression(batch);
         TString strSchema = NArrow::SerializeSchema(*batch->schema());
-        auto result =
-            helper.GetKikimr().GetTableClient().BulkUpsert(name, NYdb::NTable::EDataFormat::ApacheArrow, strBatch, strSchema).GetValueSync();
+        auto result = helper.GetKikimr().GetTableClient().BulkUpsert(name, NYdb::NTable::EDataFormat::ApacheArrow, strBatch, strSchema).GetValueSync();
         UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
     }
 
@@ -131,6 +140,7 @@ Y_UNIT_TEST_SUITE(KqpIntervalColumnShard) {
                 } else {
                     BulkUpsertRowTableCSV(helper, name, rows);
                 }
+
                 break;
             }
             case ETableKind::DATASHARD: {
@@ -141,6 +151,7 @@ Y_UNIT_TEST_SUITE(KqpIntervalColumnShard) {
                 } else {
                     BulkUpsertRowTableCSV(helper, name, rows);
                 }
+
                 break;
             }
         }
@@ -180,9 +191,7 @@ Y_UNIT_TEST_SUITE(KqpIntervalColumnShard) {
         const auto Load = Arg<2>();
 
         const TString tableName = "/Root/Table1";
-        TKikimrSettings runnerSettings;
-        runnerSettings.WithSampleTables = false;
-        TTestHelper helper(runnerSettings);
+        TTestHelper helper(CreateKikimrSettingsWithIntervalSupport());
         TTestHelper::TColumnTable col;
         TVector<TTestHelper::TColumnSchema> schema;
         PrepareBase(helper, Table, tableName, &col, &schema);
@@ -201,11 +210,9 @@ Y_UNIT_TEST_SUITE(KqpIntervalColumnShard) {
             TStringBuilder() << "[[1;[10];[1000000]];[2;[20];[-500000]];[3;[30];#];[4;[40];[0]];[5;[50];[" << MaxValidInterval
                            << "]];[6;[60];[" << MinValidInterval << "]]]", Scan);
 
-        // Select only the interval column
         CheckOrExec(helper, "SELECT ival FROM `/Root/Table1` WHERE id=1", "[[[1000000]]]", Scan);
         CheckOrExec(helper, "SELECT ival FROM `/Root/Table1` WHERE id=3", "[[#]]", Scan);
 
-        // Additional null row
         LoadData(helper, Table, Load, tableName, { { 7, 0, std::nullopt } }, &col, &schema);
         CheckOrExec(helper, "SELECT * FROM `/Root/Table1` WHERE id=7", "[[7;[0];#]]", Scan);
     }
@@ -216,9 +223,7 @@ Y_UNIT_TEST_SUITE(KqpIntervalColumnShard) {
         const auto Load = Arg<2>();
 
         const TString tableName = "/Root/Table1";
-        TKikimrSettings runnerSettings;
-        runnerSettings.WithSampleTables = false;
-        TTestHelper helper(runnerSettings);
+        TTestHelper helper(CreateKikimrSettingsWithIntervalSupport());
         TTestHelper::TColumnTable col;
         TVector<TTestHelper::TColumnSchema> schema;
         PrepareBase(helper, Table, tableName, &col, &schema);
@@ -227,26 +232,20 @@ Y_UNIT_TEST_SUITE(KqpIntervalColumnShard) {
               { 4, 40, std::nullopt }, { 5, 50, (i64)-500000 } },
             &col, &schema);
 
-        // Equal filter - should match two rows
         CheckOrExec(helper, "SELECT * FROM `/Root/Table1` WHERE ival = CAST(1000000 AS Interval) ORDER BY id",
             "[[1;[10];[1000000]];[3;[30];[1000000]]]", Scan);
 
-        // Equal filter - single match
         CheckOrExec(helper, "SELECT * FROM `/Root/Table1` WHERE ival = CAST(2000000 AS Interval) ORDER BY id",
             "[[2;[20];[2000000]]]", Scan);
 
-        // Equal filter - negative value
         CheckOrExec(helper, "SELECT * FROM `/Root/Table1` WHERE ival = CAST(-500000 AS Interval) ORDER BY id",
             "[[5;[50];[-500000]]]", Scan);
 
-        // Equal filter - no match
         CheckOrExec(helper, "SELECT * FROM `/Root/Table1` WHERE ival = CAST(999 AS Interval)", "[]", Scan);
 
-        // Not equal filter
         CheckOrExec(helper, "SELECT * FROM `/Root/Table1` WHERE ival != CAST(1000000 AS Interval) ORDER BY id",
             "[[2;[20];[2000000]];[5;[50];[-500000]]]", Scan);
 
-        // Not equal to negative value
         CheckOrExec(helper, "SELECT * FROM `/Root/Table1` WHERE ival != CAST(-500000 AS Interval) ORDER BY id",
             "[[1;[10];[1000000]];[2;[20];[2000000]];[3;[30];[1000000]]]", Scan);
     }
@@ -257,9 +256,7 @@ Y_UNIT_TEST_SUITE(KqpIntervalColumnShard) {
         const auto Load = Arg<2>();
 
         const TString tableName = "/Root/Table1";
-        TKikimrSettings runnerSettings;
-        runnerSettings.WithSampleTables = false;
-        TTestHelper helper(runnerSettings);
+        TTestHelper helper(CreateKikimrSettingsWithIntervalSupport());
         TTestHelper::TColumnTable col;
         TVector<TTestHelper::TColumnSchema> schema;
         PrepareBase(helper, Table, tableName, &col, &schema);
@@ -268,15 +265,12 @@ Y_UNIT_TEST_SUITE(KqpIntervalColumnShard) {
               { 4, 40, std::nullopt }, { 5, 50, (i64)0 }, { 6, 60, std::nullopt } },
             &col, &schema);
 
-        // IS NULL filter
         CheckOrExec(helper, "SELECT * FROM `/Root/Table1` WHERE ival IS NULL ORDER BY id",
             "[[2;[20];#];[4;[40];#];[6;[60];#]]", Scan);
 
-        // IS NOT NULL filter
         CheckOrExec(helper, "SELECT * FROM `/Root/Table1` WHERE ival IS NOT NULL ORDER BY id",
             "[[1;[10];[100]];[3;[30];[300]];[5;[50];[0]]]", Scan);
 
-        // Count nulls vs non-nulls
         CheckOrExec(helper, "SELECT count(*) FROM `/Root/Table1` WHERE ival IS NULL", "[[3u]]", Scan);
         CheckOrExec(helper, "SELECT count(*) FROM `/Root/Table1` WHERE ival IS NOT NULL", "[[3u]]", Scan);
     }
@@ -287,9 +281,7 @@ Y_UNIT_TEST_SUITE(KqpIntervalColumnShard) {
         const auto Load = Arg<2>();
 
         const TString tableName = "/Root/Table1";
-        TKikimrSettings runnerSettings;
-        runnerSettings.WithSampleTables = false;
-        TTestHelper helper(runnerSettings);
+        TTestHelper helper(CreateKikimrSettingsWithIntervalSupport());
         TTestHelper::TColumnTable col;
         TVector<TTestHelper::TColumnSchema> schema;
         PrepareBase(helper, Table, tableName, &col, &schema);
@@ -298,35 +290,27 @@ Y_UNIT_TEST_SUITE(KqpIntervalColumnShard) {
               { 4, 40, (i64)1000000 }, { 5, 50, (i64)5000000 }, { 6, 60, std::nullopt } },
             &col, &schema);
 
-        // Less than
         CheckOrExec(helper, "SELECT * FROM `/Root/Table1` WHERE ival < CAST(0 AS Interval) ORDER BY id",
             "[[1;[10];[-3000000]];[2;[20];[-1000000]]]", Scan);
 
-        // Greater than
         CheckOrExec(helper, "SELECT * FROM `/Root/Table1` WHERE ival > CAST(0 AS Interval) ORDER BY id",
             "[[4;[40];[1000000]];[5;[50];[5000000]]]", Scan);
 
-        // Less than or equal
         CheckOrExec(helper, "SELECT * FROM `/Root/Table1` WHERE ival <= CAST(0 AS Interval) ORDER BY id",
             "[[1;[10];[-3000000]];[2;[20];[-1000000]];[3;[30];[0]]]", Scan);
 
-        // Greater than or equal
         CheckOrExec(helper, "SELECT * FROM `/Root/Table1` WHERE ival >= CAST(0 AS Interval) ORDER BY id",
             "[[3;[30];[0]];[4;[40];[1000000]];[5;[50];[5000000]]]", Scan);
 
-        // Range: between two values
         CheckOrExec(helper, "SELECT * FROM `/Root/Table1` WHERE ival >= CAST(-1000000 AS Interval) AND ival <= CAST(1000000 AS Interval) ORDER BY id",
             "[[2;[20];[-1000000]];[3;[30];[0]];[4;[40];[1000000]]]", Scan);
 
-        // Strict range
         CheckOrExec(helper, "SELECT * FROM `/Root/Table1` WHERE ival > CAST(-1000000 AS Interval) AND ival < CAST(5000000 AS Interval) ORDER BY id",
             "[[3;[30];[0]];[4;[40];[1000000]]]", Scan);
 
-        // Compare with negative value
         CheckOrExec(helper, "SELECT * FROM `/Root/Table1` WHERE ival < CAST(-1000000 AS Interval) ORDER BY id",
             "[[1;[10];[-3000000]]]", Scan);
 
-        // Compare with large positive value - should return all non-null rows
         CheckOrExec(helper, "SELECT * FROM `/Root/Table1` WHERE ival < CAST(99999999 AS Interval) ORDER BY id",
             "[[1;[10];[-3000000]];[2;[20];[-1000000]];[3;[30];[0]];[4;[40];[1000000]];[5;[50];[5000000]]]", Scan);
     }
@@ -337,9 +321,7 @@ Y_UNIT_TEST_SUITE(KqpIntervalColumnShard) {
         const auto Load = Arg<2>();
 
         const TString tableName = "/Root/Table1";
-        TKikimrSettings runnerSettings;
-        runnerSettings.WithSampleTables = false;
-        TTestHelper helper(runnerSettings);
+        TTestHelper helper(CreateKikimrSettingsWithIntervalSupport());
         TTestHelper::TColumnTable col;
         TVector<TTestHelper::TColumnSchema> schema;
         PrepareBase(helper, Table, tableName, &col, &schema);
@@ -348,15 +330,12 @@ Y_UNIT_TEST_SUITE(KqpIntervalColumnShard) {
               { 4, 40, (i64)-200 }, { 5, 50, (i64)0 } },
             &col, &schema);
 
-        // Ascending order
         CheckOrExec(helper, "SELECT * FROM `/Root/Table1` ORDER BY ival",
             "[[4;[40];[-200]];[2;[20];[-100]];[5;[50];[0]];[3;[30];[200]];[1;[10];[300]]]", Scan);
 
-        // Descending order
         CheckOrExec(helper, "SELECT * FROM `/Root/Table1` ORDER BY ival DESC",
             "[[1;[10];[300]];[3;[30];[200]];[5;[50];[0]];[2;[20];[-100]];[4;[40];[-200]]]", Scan);
 
-        // Add duplicate ival and order by ival then by id
         LoadData(helper, Table, Load, tableName, { { 6, 60, (i64)200 } }, &col, &schema);
 
         CheckOrExec(helper, "SELECT * FROM `/Root/Table1` ORDER BY ival, id",
@@ -372,9 +351,7 @@ Y_UNIT_TEST_SUITE(KqpIntervalColumnShard) {
         const auto Load = Arg<2>();
 
         const TString tableName = "/Root/Table1";
-        TKikimrSettings runnerSettings;
-        runnerSettings.WithSampleTables = false;
-        TTestHelper helper(runnerSettings);
+        TTestHelper helper(CreateKikimrSettingsWithIntervalSupport());
         TTestHelper::TColumnTable col;
         TVector<TTestHelper::TColumnSchema> schema;
         PrepareBase(helper, Table, tableName, &col, &schema);
@@ -387,7 +364,6 @@ Y_UNIT_TEST_SUITE(KqpIntervalColumnShard) {
         CheckOrExec(helper, "SELECT ival, count(*) AS cnt FROM `/Root/Table1` GROUP BY ival ORDER BY ival",
             "[[[-100];1u];[[100];3u];[[200];2u];[[300];1u]]", Scan);
 
-        // Group by with min of id
         CheckOrExec(helper, "SELECT ival, count(*) AS cnt, min(id) AS min_id FROM `/Root/Table1` GROUP BY ival ORDER BY ival",
             "[[[-100];1u;7];[[100];3u;1];[[200];2u;2];[[300];1u;5]]", Scan);
     }
@@ -398,9 +374,7 @@ Y_UNIT_TEST_SUITE(KqpIntervalColumnShard) {
         const auto Load = Arg<2>();
 
         const TString tableName = "/Root/Table1";
-        TKikimrSettings runnerSettings;
-        runnerSettings.WithSampleTables = false;
-        TTestHelper helper(runnerSettings);
+        TTestHelper helper(CreateKikimrSettingsWithIntervalSupport());
         TTestHelper::TColumnTable col;
         TVector<TTestHelper::TColumnSchema> schema;
         PrepareBase(helper, Table, tableName, &col, &schema);
@@ -409,23 +383,13 @@ Y_UNIT_TEST_SUITE(KqpIntervalColumnShard) {
               { 4, 40, std::nullopt }, { 5, 50, (i64)0 } },
             &col, &schema);
 
-        // min
         CheckOrExec(helper, "SELECT min(ival) FROM `/Root/Table1`", "[[[-500]]]", Scan);
-
-        // max
         CheckOrExec(helper, "SELECT max(ival) FROM `/Root/Table1`", "[[[999]]]", Scan);
-
-        // count(ival) - excludes nulls
         CheckOrExec(helper, "SELECT count(ival) FROM `/Root/Table1`", "[[4u]]", Scan);
-
-        // count(*) - includes nulls
         CheckOrExec(helper, "SELECT count(*) FROM `/Root/Table1`", "[[5u]]", Scan);
-
-        // Combined aggregations
         CheckOrExec(helper, "SELECT min(ival), max(ival), count(ival), count(*) FROM `/Root/Table1`",
             "[[[-500];[999];4u;5u]]", Scan);
 
-        // Aggregation on table with all nulls
         {
             const TString tableName2 = "/Root/Table2";
             TTestHelper::TColumnTable col2;
@@ -447,9 +411,7 @@ Y_UNIT_TEST_SUITE(KqpIntervalColumnShard) {
 
         const TString t1 = "/Root/Table1";
         const TString t2 = "/Root/Table2";
-        TKikimrSettings runnerSettings;
-        runnerSettings.WithSampleTables = false;
-        TTestHelper helper(runnerSettings);
+        TTestHelper helper(CreateKikimrSettingsWithIntervalSupport());
         TTestHelper::TColumnTable col1, col2;
         TVector<TTestHelper::TColumnSchema> s1, s2;
         if (Table == ETableKind::COLUMNSHARD) {
@@ -458,6 +420,7 @@ Y_UNIT_TEST_SUITE(KqpIntervalColumnShard) {
                 TTestHelper::TColumnSchema().SetName("int").SetType(NScheme::NTypeIds::Int64),
                 TTestHelper::TColumnSchema().SetName("ival").SetType(NScheme::NTypeIds::Interval),
             };
+
             col1.SetName(t1).SetPrimaryKey({ "id" }).SetSharding({ "id" }).SetSchema(s1);
             helper.CreateTable(col1);
 
@@ -466,11 +429,11 @@ Y_UNIT_TEST_SUITE(KqpIntervalColumnShard) {
                 TTestHelper::TColumnSchema().SetName("table1_id").SetType(NScheme::NTypeIds::Int32),
                 TTestHelper::TColumnSchema().SetName("ival").SetType(NScheme::NTypeIds::Interval),
             };
+
             col2.SetName(t2).SetPrimaryKey({ "id" }).SetSharding({ "id" }).SetSchema(s2);
             helper.CreateTable(col2);
         } else {
             CreateDataShardTable(helper, t1);
-            // Table2 has table1_id instead of int
             auto& session = helper.GetSession();
             auto res = session
                            .ExecuteSchemeQuery(TStringBuilder() << R"(
@@ -485,15 +448,11 @@ Y_UNIT_TEST_SUITE(KqpIntervalColumnShard) {
             UNIT_ASSERT_VALUES_EQUAL(res.GetStatus(), NYdb::EStatus::SUCCESS);
         }
 
-        // Load table1 data
         LoadData(helper, Table, Load, t1,
             { { 1, 10, (i64)1000000 }, { 2, 20, (i64)-500000 }, { 3, 30, std::nullopt } },
             &col1, &s1);
 
-        // Load table2 data - need special handling for table1_id column in DATASHARD
         if (Table == ETableKind::COLUMNSHARD) {
-            // For columnshard, table2 has schema: id, table1_id, ival
-            // We build arrow batch manually since the schema differs from TRow
             using namespace NKikimr::NKqp::NTestArrow;
             if (Load == ELoadKind::ARROW) {
                 auto idArr = MakeInt32Array({1, 2, 3, 4});
@@ -522,7 +481,6 @@ Y_UNIT_TEST_SUITE(KqpIntervalColumnShard) {
                 UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
             }
         } else {
-            // DATASHARD table2: id Int32 NOT NULL, table1_id Int32, ival Interval
             if (Load == ELoadKind::ARROW) {
                 using namespace NKikimr::NKqp::NTestArrow;
                 auto idArr = MakeInt32Array({1, 2, 3, 4});
@@ -533,6 +491,7 @@ Y_UNIT_TEST_SUITE(KqpIntervalColumnShard) {
                       arrow::field("table1_id", arrow::int32()),
                       arrow::field("ival", arrow::int64()) },
                     { idArr, t1idArr, ivalArr });
+
                 TString strBatch = NArrow::SerializeBatchNoCompression(batch);
                 TString strSchema = NArrow::SerializeSchema(*batch->schema());
                 auto result = helper.GetKikimr().GetTableClient().BulkUpsert(t2, NYdb::NTable::EDataFormat::ApacheArrow, strBatch, strSchema).GetValueSync();
@@ -555,14 +514,12 @@ Y_UNIT_TEST_SUITE(KqpIntervalColumnShard) {
             }
         }
 
-        // Join by id, select interval columns from both tables
         CheckOrExec(helper,
             "SELECT t1.id, t1.ival, t2.ival FROM `/Root/Table1` AS t1 "
             "JOIN `/Root/Table2` AS t2 ON t1.id = t2.table1_id "
             "ORDER BY t1.id, t2.id",
             "[[1;[1000000];[2000000]];[1;[1000000];[3000000]];[2;[-500000];[-100000]];[3;#;#]]", Scan);
 
-        // Join with filter on interval
         CheckOrExec(helper,
             "SELECT t1.id, t1.ival, t2.ival FROM `/Root/Table1` AS t1 "
             "JOIN `/Root/Table2` AS t2 ON t1.id = t2.table1_id "
@@ -578,19 +535,17 @@ Y_UNIT_TEST_SUITE(KqpIntervalColumnShard) {
 
         const TString t1 = "/Root/JoinTable1";
         const TString t2 = "/Root/JoinTable2";
-        TKikimrSettings runnerSettings;
-        runnerSettings.WithSampleTables = false;
-        TTestHelper helper(runnerSettings);
+        TTestHelper helper(CreateKikimrSettingsWithIntervalSupport());
         TTestHelper::TColumnTable col1, col2;
         TVector<TTestHelper::TColumnSchema> s1, s2;
 
-        // Both tables have same schema: id, int, ival
         if (Table == ETableKind::COLUMNSHARD) {
             s1 = {
                 TTestHelper::TColumnSchema().SetName("id").SetType(NScheme::NTypeIds::Int32).SetNullable(false),
                 TTestHelper::TColumnSchema().SetName("int").SetType(NScheme::NTypeIds::Int64),
                 TTestHelper::TColumnSchema().SetName("ival").SetType(NScheme::NTypeIds::Interval),
             };
+
             col1.SetName(t1).SetPrimaryKey({ "id" }).SetSharding({ "id" }).SetSchema(s1);
             helper.CreateTable(col1);
 
@@ -610,7 +565,6 @@ Y_UNIT_TEST_SUITE(KqpIntervalColumnShard) {
             { { 10, 100, (i64)1000 }, { 20, 200, (i64)2000 }, { 30, 300, (i64)4000 } },
             &col2, &s2);
 
-        // Join on interval column - only matching ival values
         CheckOrExec(helper,
             "SELECT t1.id, t2.id, t1.ival FROM `/Root/JoinTable1` AS t1 "
             "JOIN `/Root/JoinTable2` AS t2 ON t1.ival = t2.ival "
@@ -624,9 +578,7 @@ Y_UNIT_TEST_SUITE(KqpIntervalColumnShard) {
         const auto Load = Arg<2>();
 
         const TString tableName = "/Root/Table1";
-        TKikimrSettings runnerSettings;
-        runnerSettings.WithSampleTables = false;
-        TTestHelper helper(runnerSettings);
+        TTestHelper helper(CreateKikimrSettingsWithIntervalSupport());
         TTestHelper::TColumnTable col;
         TVector<TTestHelper::TColumnSchema> schema;
         PrepareBase(helper, Table, tableName, &col, &schema);
@@ -635,31 +587,24 @@ Y_UNIT_TEST_SUITE(KqpIntervalColumnShard) {
               { 4, 40, (i64)-300 }, { 5, 50, (i64)1000 }, { 6, 60, (i64)0 } },
             &col, &schema);
 
-        // LIMIT 1 ascending
         CheckOrExec(helper, "SELECT * FROM `/Root/Table1` ORDER BY ival LIMIT 1",
             "[[4;[40];[-300]]]", Scan);
 
-        // LIMIT 1 descending
         CheckOrExec(helper, "SELECT * FROM `/Root/Table1` ORDER BY ival DESC LIMIT 1",
             "[[5;[50];[1000]]]", Scan);
 
-        // LIMIT 3 ascending
         CheckOrExec(helper, "SELECT * FROM `/Root/Table1` ORDER BY ival LIMIT 3",
             "[[4;[40];[-300]];[2;[20];[-200]];[6;[60];[0]]]", Scan);
 
-        // LIMIT 3 descending
         CheckOrExec(helper, "SELECT * FROM `/Root/Table1` ORDER BY ival DESC LIMIT 3",
             "[[5;[50];[1000]];[1;[10];[500]];[3;[30];[100]]]", Scan);
 
-        // LIMIT with OFFSET
         CheckOrExec(helper, "SELECT * FROM `/Root/Table1` ORDER BY ival LIMIT 2 OFFSET 2",
             "[[6;[60];[0]];[3;[30];[100]]]", Scan);
 
-        // LIMIT larger than table size
         CheckOrExec(helper, "SELECT * FROM `/Root/Table1` ORDER BY ival LIMIT 100",
             "[[4;[40];[-300]];[2;[20];[-200]];[6;[60];[0]];[3;[30];[100]];[1;[10];[500]];[5;[50];[1000]]]", Scan);
 
-        // ORDER BY ival, id with LIMIT
         CheckOrExec(helper, "SELECT * FROM `/Root/Table1` ORDER BY ival, id LIMIT 2",
             "[[4;[40];[-300]];[2;[20];[-200]]]", Scan);
     }
@@ -670,9 +615,7 @@ Y_UNIT_TEST_SUITE(KqpIntervalColumnShard) {
         const auto Load = Arg<2>();
 
         const TString tableName = "/Root/Table1";
-        TKikimrSettings runnerSettings;
-        runnerSettings.WithSampleTables = false;
-        TTestHelper helper(runnerSettings);
+        TTestHelper helper(CreateKikimrSettingsWithIntervalSupport());
         TTestHelper::TColumnTable col;
         TVector<TTestHelper::TColumnSchema> schema;
         PrepareBase(helper, Table, tableName, &col, &schema);
@@ -682,24 +625,19 @@ Y_UNIT_TEST_SUITE(KqpIntervalColumnShard) {
               { 7, 70, std::nullopt }, { 8, 80, (i64)-100 } },
             &col, &schema);
 
-        // GROUP BY with NULLs - NULLs should be grouped together
         CheckOrExec(helper, "SELECT ival, count(*) AS cnt FROM `/Root/Table1` GROUP BY ival ORDER BY ival",
             "[[#;3u];[[-100];1u];[[100];2u];[[200];2u]]", Scan);
 
-        // count(ival) in GROUP BY excludes NULLs from count
         CheckOrExec(helper, "SELECT ival, count(ival) AS cnt FROM `/Root/Table1` GROUP BY ival ORDER BY ival",
             "[[#;0u];[[-100];1u];[[100];2u];[[200];2u]]", Scan);
 
-        // Aggregate with WHERE filtering out NULLs
         CheckOrExec(helper,
             "SELECT ival, count(*) AS cnt FROM `/Root/Table1` WHERE ival IS NOT NULL GROUP BY ival ORDER BY ival",
             "[[[-100];1u];[[100];2u];[[200];2u]]", Scan);
 
-        // Aggregate only on NULL rows
         CheckOrExec(helper, "SELECT count(*) FROM `/Root/Table1` WHERE ival IS NULL",
             "[[3u]]", Scan);
 
-        // min/max ignoring NULLs
         CheckOrExec(helper, "SELECT min(ival), max(ival) FROM `/Root/Table1`",
             "[[[-100];[200]]]", Scan);
     }
@@ -708,9 +646,7 @@ Y_UNIT_TEST_SUITE(KqpIntervalColumnShard) {
         const auto Scan = Arg<0>();
         const auto Load = Arg<1>();
 
-        TKikimrSettings runnerSettings;
-        runnerSettings.WithSampleTables = false;
-        TTestHelper helper(runnerSettings);
+        TTestHelper helper(CreateKikimrSettingsWithIntervalSupport());
 
         TVector<TTestHelper::TColumnSchema> schema = {
             TTestHelper::TColumnSchema().SetName("ival").SetType(NScheme::NTypeIds::Interval).SetNullable(false),
@@ -748,36 +684,28 @@ Y_UNIT_TEST_SUITE(KqpIntervalColumnShard) {
             UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
         }
 
-        // Equality filter on PK
         CheckOrExec(helper, "SELECT * FROM `/Root/ColumnTableTest` WHERE ival = CAST(0 AS Interval)", "[[0;#]]", Scan);
         CheckOrExec(helper, "SELECT * FROM `/Root/ColumnTableTest` WHERE ival = CAST(4000000 AS Interval)", "[[4000000;[4]]]", Scan);
         CheckOrExec(helper, "SELECT * FROM `/Root/ColumnTableTest` WHERE ival = CAST(-7000000 AS Interval)", "[[-7000000;[1]]]", Scan);
 
-        // Less than
         CheckOrExec(helper, "SELECT * FROM `/Root/ColumnTableTest` WHERE ival < CAST(0 AS Interval)",
             "[[-7000000;[1]];[-3000000;[2]]]", Scan);
 
-        // Greater than
         CheckOrExec(helper, "SELECT * FROM `/Root/ColumnTableTest` WHERE ival > CAST(0 AS Interval)",
             "[[4000000;[4]];[9000000;[5]]]", Scan);
 
-        // Less than or equal
         CheckOrExec(helper, "SELECT * FROM `/Root/ColumnTableTest` WHERE ival <= CAST(0 AS Interval)",
             "[[-7000000;[1]];[-3000000;[2]];[0;#]]", Scan);
 
-        // Greater than or equal
         CheckOrExec(helper, "SELECT * FROM `/Root/ColumnTableTest` WHERE ival >= CAST(0 AS Interval)",
             "[[0;#];[4000000;[4]];[9000000;[5]]]", Scan);
 
-        // Not equal
         CheckOrExec(helper, "SELECT * FROM `/Root/ColumnTableTest` WHERE ival != CAST(0 AS Interval)",
             "[[-7000000;[1]];[-3000000;[2]];[4000000;[4]];[9000000;[5]]]", Scan);
 
-        // Range filter on PK
         CheckOrExec(helper, "SELECT * FROM `/Root/ColumnTableTest` WHERE ival > CAST(-3000000 AS Interval) AND ival < CAST(9000000 AS Interval)",
             "[[0;#];[4000000;[4]]]", Scan);
 
-        // PK filter with no results
         CheckOrExec(helper, "SELECT * FROM `/Root/ColumnTableTest` WHERE ival = CAST(999 AS Interval)", "[]", Scan);
     }
 
@@ -785,8 +713,7 @@ Y_UNIT_TEST_SUITE(KqpIntervalColumnShard) {
         const auto Scan = Arg<0>();
         const auto Load = Arg<1>();
 
-        TKikimrSettings runnerSettings;
-        runnerSettings.WithSampleTables = false;
+        auto runnerSettings = CreateKikimrSettingsWithIntervalSupport();
         runnerSettings.AppConfig.MutableTableServiceConfig()->SetEnableHtapTx(true);
         TTestHelper helper(runnerSettings);
 
@@ -805,10 +732,8 @@ Y_UNIT_TEST_SUITE(KqpIntervalColumnShard) {
         col.SetName(cs).SetPrimaryKey({ "id" }).SetSharding({ "id" }).SetSchema(schema);
         helper.CreateTable(col);
 
-        // Load initial data via DML into datashard
         helper.ExecuteQuery("UPSERT INTO `" + ds + "` (id, int, ival) VALUES (1, 100, CAST(1000000 AS Interval)), (2, 200, CAST(-500000 AS Interval))");
 
-        // Load initial data into columnshard via bulk upsert
         if (Load == ELoadKind::ARROW) {
             using namespace NKikimr::NKqp::NTestArrow;
             auto idArr = MakeInt32Array({1, 2});
@@ -838,31 +763,26 @@ Y_UNIT_TEST_SUITE(KqpIntervalColumnShard) {
         CheckOrExec(helper, "SELECT * FROM `" + ds + "` ORDER BY id", "[[1;[100];[1000000]];[2;[200];[-500000]]]", Scan);
         CheckOrExec(helper, "SELECT * FROM `" + cs + "` ORDER BY id", "[[1;[100];[1000000]];[2;[200];[-500000]]]", Scan);
 
-        // UPDATE
         helper.ExecuteQuery("UPDATE `" + ds + "` SET int = int + 1 WHERE ival = CAST(1000000 AS Interval)");
         helper.ExecuteQuery("UPDATE `" + cs + "` SET int = int + 1 WHERE ival = CAST(1000000 AS Interval)");
         CheckOrExec(helper, "SELECT * FROM `" + ds + "` ORDER BY id", "[[1;[101];[1000000]];[2;[200];[-500000]]]", Scan);
         CheckOrExec(helper, "SELECT * FROM `" + cs + "` ORDER BY id", "[[1;[101];[1000000]];[2;[200];[-500000]]]", Scan);
 
-        // UPSERT new row
         helper.ExecuteQuery("UPSERT INTO `" + ds + "` (id, int, ival) VALUES (3, 300, CAST(3000000 AS Interval))");
         helper.ExecuteQuery("UPSERT INTO `" + cs + "` (id, int, ival) VALUES (3, 300, CAST(3000000 AS Interval))");
         CheckOrExec(helper, "SELECT * FROM `" + ds + "` ORDER BY id", "[[1;[101];[1000000]];[2;[200];[-500000]];[3;[300];[3000000]]]", Scan);
         CheckOrExec(helper, "SELECT * FROM `" + cs + "` ORDER BY id", "[[1;[101];[1000000]];[2;[200];[-500000]];[3;[300];[3000000]]]", Scan);
 
-        // REPLACE
         helper.ExecuteQuery("REPLACE INTO `" + ds + "` (id, int, ival) VALUES (2, 250, CAST(-250000 AS Interval))");
         helper.ExecuteQuery("REPLACE INTO `" + cs + "` (id, int, ival) VALUES (2, 250, CAST(-250000 AS Interval))");
         CheckOrExec(helper, "SELECT * FROM `" + ds + "` ORDER BY id", "[[1;[101];[1000000]];[2;[250];[-250000]];[3;[300];[3000000]]]", Scan);
         CheckOrExec(helper, "SELECT * FROM `" + cs + "` ORDER BY id", "[[1;[101];[1000000]];[2;[250];[-250000]];[3;[300];[3000000]]]", Scan);
 
-        // DELETE
         helper.ExecuteQuery("DELETE FROM `" + ds + "` WHERE ival = CAST(-250000 AS Interval)");
         helper.ExecuteQuery("DELETE FROM `" + cs + "` WHERE ival = CAST(-250000 AS Interval)");
         CheckOrExec(helper, "SELECT * FROM `" + ds + "` ORDER BY id", "[[1;[101];[1000000]];[3;[300];[3000000]]]", Scan);
         CheckOrExec(helper, "SELECT * FROM `" + cs + "` ORDER BY id", "[[1;[101];[1000000]];[3;[300];[3000000]]]", Scan);
 
-        // Cross-table copy: CS from DS
         const TString csFromDs = "/Root/CSFromDS";
         TVector<TTestHelper::TColumnSchema> schema2 = schema;
         TTestHelper::TColumnTable col2;
@@ -873,7 +793,6 @@ Y_UNIT_TEST_SUITE(KqpIntervalColumnShard) {
             "SELECT id, int, ival FROM `" + ds + "`");
         CheckOrExec(helper, "SELECT * FROM `" + csFromDs + "` ORDER BY id", "[[1;[101];[1000000]];[3;[300];[3000000]]]", Scan);
 
-        // Cross-table copy: DS from CS
         const TString dsFromCs = "/Root/DSFromCS";
         helper.ExecuteQuery("CREATE TABLE `" + dsFromCs + "` (id Int32 NOT NULL, int Int64, ival Interval, PRIMARY KEY (id))");
         helper.ExecuteQuery(
@@ -886,14 +805,11 @@ Y_UNIT_TEST_SUITE(KqpIntervalColumnShard) {
         const auto Scan = Arg<0>();
         const auto Table = Arg<1>();
 
-        TKikimrSettings runnerSettings;
-        runnerSettings.WithSampleTables = false;
-        TTestHelper helper(runnerSettings);
+        TTestHelper helper(CreateKikimrSettingsWithIntervalSupport());
         TTestHelper::TColumnTable col;
         TVector<TTestHelper::TColumnSchema> schema;
         PrepareBase(helper, Table, "/Root/Table1", &col, &schema);
 
-        // Basic CSV upsert with positive and negative values
         {
             TStringBuilder builder;
             builder << "1,10,1000000" << Endl;
@@ -906,7 +822,6 @@ Y_UNIT_TEST_SUITE(KqpIntervalColumnShard) {
         CheckOrExec(helper, "SELECT * FROM `/Root/Table1` ORDER BY id",
             "[[1;[10];[1000000]];[2;[20];[-500000]];[3;[30];[0]]]", Scan);
 
-        // CSV upsert with large values
         {
             TStringBuilder builder;
             builder << "4,40," << MaxValidInterval << Endl;
@@ -918,7 +833,6 @@ Y_UNIT_TEST_SUITE(KqpIntervalColumnShard) {
         CheckOrExec(helper, "SELECT * FROM `/Root/Table1` WHERE id >= 4 ORDER BY id",
             TStringBuilder() << "[[4;[40];[" << MaxValidInterval << "]];[5;[50];[" << MinValidInterval << "]]]", Scan);
 
-        // CSV upsert overwriting existing rows
         {
             TStringBuilder builder;
             builder << "1,10,9999" << Endl;

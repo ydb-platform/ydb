@@ -741,6 +741,27 @@ std::shared_ptr<arrow::Array> AdoptArrowTypeToYQL(const std::shared_ptr<arrow::A
         }
     }
 
+    if (original->type_id() == arrow::Type::DURATION) {
+        auto durations = std::static_pointer_cast<arrow::DurationArray>(original);
+        auto int64Data = std::make_shared<arrow::ArrayData>(arrow::TypeTraits<arrow::Int64Type>::type_singleton(), original->length(), durations->data()->buffers);
+        auto int64Array = std::make_shared<arrow::Int64Array>(int64Data);
+        auto durationType = std::static_pointer_cast<arrow::DurationType>(original->type());
+
+        static arrow::Datum const1M(std::make_shared<arrow::Int64Scalar>(1000000));
+        static arrow::Datum const1K(std::make_shared<arrow::Int64Scalar>(1000));
+
+        switch (durationType->unit()) {
+        case arrow::TimeUnit::SECOND:
+            return NArrow::TStatusValidator::GetValid(arrow::compute::Multiply(int64Array, const1M)).make_array();
+        case arrow::TimeUnit::MILLI:
+            return NArrow::TStatusValidator::GetValid(arrow::compute::Multiply(int64Array, const1K)).make_array();
+        case arrow::TimeUnit::MICRO:
+            return int64Array;
+        case arrow::TimeUnit::NANO:
+            return NArrow::TStatusValidator::GetValid(arrow::compute::Divide(int64Array, const1K)).make_array();
+        }
+    }
+
     if (column.PgType) {
         if (!cachedPgConverter.has_value()) {
             cachedPgConverter = NYql::BuildPgColumnConverter(original->type(), column.PgType);

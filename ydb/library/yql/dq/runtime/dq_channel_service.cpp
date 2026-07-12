@@ -2346,6 +2346,7 @@ IDqInputChannel::TPtr TDqChannelService::GetInputChannel(const TDqChannelSetting
 }
 
 void TDqChannelService::NotifyCleanup() {
+    LOG_T("CLEANUP");
     ActorSystem->Schedule(Limits.CleanupPeriod, new NActors::IEventHandle(ServiceActorId, ServiceActorId, new TEvPrivate::TEvCleanup()));
     std::lock_guard lock(Mutex);
     for (auto& [_, nodeState] : NodeStates) {

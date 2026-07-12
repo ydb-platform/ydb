@@ -30,7 +30,8 @@ TAsyncStatus ValidateExternalDatasourceSecrets(const NKikimrSchemeOp::TExternalD
         externalDataSourceDesc.GetAuth(),
         userToken ? new NACLib::TUserToken(*userToken) : nullptr,
         externalData.GetDatabase(),
-        externalData.GetActorSystem()
+        externalData.GetActorSystem(),
+        true
     );
 
     return describeFuture.Apply([secrets](const NThreading::TFuture<TEvDescribeSecretsResponse::TDescription>& f) {

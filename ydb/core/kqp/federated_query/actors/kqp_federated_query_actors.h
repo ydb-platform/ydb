@@ -46,7 +46,8 @@ NThreading::TFuture<TEvDescribeSecretsResponse::TDescription> DescribeExternalDa
     const NKikimrSchemeOp::TAuth& authDescription,
     const TIntrusiveConstPtr<NACLib::TUserToken> userToken,
     const TString& database,
-    NActors::TActorSystem* actorSystem
+    NActors::TActorSystem* actorSystem,
+    bool forModify = false
 );
 
 NThreading::TFuture<TEvDescribeResourceIdResponse::TDescription> DescribeExternalDataSourceResourceId(

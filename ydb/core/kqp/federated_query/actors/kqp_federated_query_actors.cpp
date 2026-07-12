@@ -36,7 +36,8 @@ NThreading::TFuture<TEvDescribeSecretsResponse::TDescription> DescribeExternalDa
     const NKikimrSchemeOp::TAuth& authDescription,
     const TIntrusiveConstPtr<NACLib::TUserToken> userToken,
     const TString& database,
-    NActors::TActorSystem* actorSystem
+    NActors::TActorSystem* actorSystem,
+    bool forModify
 ) {
     switch (authDescription.identity_case()) {
         case NKikimrSchemeOp::TAuth::kServiceAccount: {
@@ -70,7 +71,7 @@ NThreading::TFuture<TEvDescribeSecretsResponse::TDescription> DescribeExternalDa
         }
 
         case NKikimrSchemeOp::TAuth::kIam: {
-            if (authDescription.GetIam().HasResourceId()) {
+            if (!forModify) {
                 return NThreading::MakeFuture(TEvDescribeSecretsResponse::TDescription({}));
             }
             const TString& initialTokenId = authDescription.GetIam().GetInitialTokenSecretName();

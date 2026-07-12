@@ -80,7 +80,7 @@ def get_ydb_config(request):
         },
         replication_config={
             "iam_service_control": {
-                "endpoint": iam_emulator_endpoint
+                "endpoint": iam_emulator_endpoint,
                 "service_id": "ydb",
                 "microservice_id": "data-plane",
                 "resource_type": "resource-manager.cloud",

@@ -5,6 +5,7 @@
 #include <ydb/core/grpc_services/base/base.h>
 #include <ydb/core/persqueue/deferred_publish/describe_publication_query.h>
 #include <ydb/core/persqueue/deferred_publish/events.h>
+#include <ydb/core/persqueue/deferred_publish/finalize_publication_actor.h>
 #include <ydb/core/persqueue/deferred_publish/list_publications_query.h>
 #include <ydb/core/persqueue/deferred_publish/registry_actor.h>
 #include <ydb/library/aclib/aclib.h>
@@ -19,6 +20,13 @@ namespace {
 
 constexpr TStringBuf NotImplementedMessage = "Topic deferred publish is not implemented yet";
 constexpr TStringBuf DisabledMessage = "Topic deferred publish is not enabled";
+
+TString GetSerializedUserToken(const IRequestOpCtx* request) {
+    if (request == nullptr) {
+        return {};
+    }
+    return request->GetSerializedToken();
+}
 
 TString GetUserSID(const IRequestOpCtx* request) {
     if (request == nullptr) {
@@ -331,6 +339,126 @@ private:
     std::unique_ptr<IRequestOpCtx> Request;
 };
 
+class TPublishRequestActor
+    : public NActors::TActorBootstrapped<TPublishRequestActor> {
+public:
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
+        return NKikimrServices::TActivity::GRPC_REQ;
+    }
+
+    explicit TPublishRequestActor(IRequestOpCtx* request)
+        : Request(request)
+    {}
+
+    void Bootstrap() {
+        if (!AppData()->FeatureFlags.GetEnableTopicDeferredPublish()) {
+            Request->RaiseIssue(NYql::TIssue(TString(DisabledMessage)));
+            Ydb::Topic::DeferredPublish::PublishResult result;
+            Request->SendResult(result, Ydb::StatusIds::UNSUPPORTED);
+            PassAway();
+            return;
+        }
+
+        const auto database = Request->GetDatabaseName();
+        if (!ValidateDeferredPublishDatabase(Request.get(), database)) {
+            Ydb::Topic::DeferredPublish::PublishResult result;
+            Request->SendResult(result, Ydb::StatusIds::BAD_REQUEST);
+            PassAway();
+            return;
+        }
+
+        const auto* protoRequest = TEvPublishRequest::GetProtoRequest(Request);
+        Register(NPQ::NDeferredPublish::CreateFinalizePublicationActor(
+            SelfId(),
+            *database,
+            protoRequest->int_publication_id(),
+            NPQ::NDeferredPublish::EFinalizePublicationOp::Publish,
+            GetSerializedUserToken(Request.get())));
+        Become(&TPublishRequestActor::StateFunc);
+    }
+
+    void Handle(NPQ::NDeferredPublish::TEvFinalizePublicationResponse::TPtr& ev) {
+        if (ev->Get()->Status != Ydb::StatusIds::SUCCESS) {
+            RaiseIssues(Request.get(), ev->Get()->Issues, "Publish failed");
+        }
+
+        Ydb::Topic::DeferredPublish::PublishResult result;
+        Request->SendResult(result, ev->Get()->Status);
+        PassAway();
+    }
+
+    STFUNC(StateFunc) {
+        switch (ev->GetTypeRewrite()) {
+            hFunc(NPQ::NDeferredPublish::TEvFinalizePublicationResponse, Handle);
+            default:
+                break;
+        }
+    }
+
+private:
+    std::unique_ptr<IRequestOpCtx> Request;
+};
+
+class TCancelPublicationRequestActor
+    : public NActors::TActorBootstrapped<TCancelPublicationRequestActor> {
+public:
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
+        return NKikimrServices::TActivity::GRPC_REQ;
+    }
+
+    explicit TCancelPublicationRequestActor(IRequestOpCtx* request)
+        : Request(request)
+    {}
+
+    void Bootstrap() {
+        if (!AppData()->FeatureFlags.GetEnableTopicDeferredPublish()) {
+            Request->RaiseIssue(NYql::TIssue(TString(DisabledMessage)));
+            Ydb::Topic::DeferredPublish::CancelPublicationResult result;
+            Request->SendResult(result, Ydb::StatusIds::UNSUPPORTED);
+            PassAway();
+            return;
+        }
+
+        const auto database = Request->GetDatabaseName();
+        if (!ValidateDeferredPublishDatabase(Request.get(), database)) {
+            Ydb::Topic::DeferredPublish::CancelPublicationResult result;
+            Request->SendResult(result, Ydb::StatusIds::BAD_REQUEST);
+            PassAway();
+            return;
+        }
+
+        const auto* protoRequest = TEvCancelPublicationRequest::GetProtoRequest(Request);
+        Register(NPQ::NDeferredPublish::CreateFinalizePublicationActor(
+            SelfId(),
+            *database,
+            protoRequest->int_publication_id(),
+            NPQ::NDeferredPublish::EFinalizePublicationOp::Cancel,
+            GetSerializedUserToken(Request.get())));
+        Become(&TCancelPublicationRequestActor::StateFunc);
+    }
+
+    void Handle(NPQ::NDeferredPublish::TEvFinalizePublicationResponse::TPtr& ev) {
+        if (ev->Get()->Status != Ydb::StatusIds::SUCCESS) {
+            RaiseIssues(Request.get(), ev->Get()->Issues, "CancelPublication failed");
+        }
+
+        Ydb::Topic::DeferredPublish::CancelPublicationResult result;
+        Request->SendResult(result, ev->Get()->Status);
+        PassAway();
+    }
+
+    STFUNC(StateFunc) {
+        switch (ev->GetTypeRewrite()) {
+            hFunc(NPQ::NDeferredPublish::TEvFinalizePublicationResponse, Handle);
+            default:
+                break;
+        }
+    }
+
+private:
+    std::unique_ptr<IRequestOpCtx> Request;
+};
+
 } // namespace
 
 void DoBeginPublicationRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f) {
@@ -338,11 +466,11 @@ void DoBeginPublicationRequest(std::unique_ptr<IRequestOpCtx> p, const IFacility
 }
 
 void DoPublishRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f) {
-    RegisterDeferredPublishNotImplementedRequest<TEvPublishRequest, Ydb::Topic::DeferredPublish::PublishResult>(std::move(p), f);
+    f.RegisterActor(new TPublishRequestActor(p.release()));
 }
 
 void DoCancelPublicationRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f) {
-    RegisterDeferredPublishNotImplementedRequest<TEvCancelPublicationRequest, Ydb::Topic::DeferredPublish::CancelPublicationResult>(std::move(p), f);
+    f.RegisterActor(new TCancelPublicationRequestActor(p.release()));
 }
 
 void DoListPublicationsRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f) {

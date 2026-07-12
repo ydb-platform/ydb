@@ -29,6 +29,21 @@ struct TDescribePublicationData {
     TVector<TDescribeDestination> Destinations;
 };
 
+struct TDestinationRow {
+    TString Path;
+    TString DestinationBlob;
+};
+
+struct TListDestinationsData {
+    TString ExtPublicationId;
+    TVector<TDestinationRow> Destinations;
+};
+
+enum class EFinalizePublicationOp {
+    Publish,
+    Cancel,
+};
+
 struct TEvDeferredPublish {
     enum EEv : ui32 {
         EvBeginPublicationRequest = EventSpaceBegin(TKikimrEvents::ES_PQ_DEFERRED_PUBLISH),
@@ -40,6 +55,8 @@ struct TEvDeferredPublish {
         EvGetDestinationBlobResponse,
         EvUpsertDestinationResponse,
         EvDeletePublicationResponse,
+        EvListDestinationsResponse,
+        EvFinalizePublicationResponse,
     };
 
     struct TEvBeginPublicationRequest : public NActors::TEventLocal<TEvBeginPublicationRequest, EvBeginPublicationRequest> {
@@ -95,6 +112,17 @@ struct TEvDeferredPublish {
         Ydb::StatusIds::StatusCode Status = Ydb::StatusIds::SUCCESS;
         NYql::TIssues Issues;
     };
+
+    struct TEvListDestinationsResponse : public NActors::TEventLocal<TEvListDestinationsResponse, EvListDestinationsResponse> {
+        Ydb::StatusIds::StatusCode Status = Ydb::StatusIds::SUCCESS;
+        NYql::TIssues Issues;
+        TMaybe<TListDestinationsData> Data;
+    };
+
+    struct TEvFinalizePublicationResponse : public NActors::TEventLocal<TEvFinalizePublicationResponse, EvFinalizePublicationResponse> {
+        Ydb::StatusIds::StatusCode Status = Ydb::StatusIds::SUCCESS;
+        NYql::TIssues Issues;
+    };
 };
 
 using TEvBeginPublicationRequest = TEvDeferredPublish::TEvBeginPublicationRequest;
@@ -106,5 +134,7 @@ using TEvDescribePublicationResponse = TEvDeferredPublish::TEvDescribePublicatio
 using TEvGetDestinationBlobResponse = TEvDeferredPublish::TEvGetDestinationBlobResponse;
 using TEvUpsertDestinationResponse = TEvDeferredPublish::TEvUpsertDestinationResponse;
 using TEvDeletePublicationResponse = TEvDeferredPublish::TEvDeletePublicationResponse;
+using TEvListDestinationsResponse = TEvDeferredPublish::TEvListDestinationsResponse;
+using TEvFinalizePublicationResponse = TEvDeferredPublish::TEvFinalizePublicationResponse;
 
 } // namespace NKikimr::NPQ::NDeferredPublish

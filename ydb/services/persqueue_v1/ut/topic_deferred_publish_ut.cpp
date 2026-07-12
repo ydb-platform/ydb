@@ -8,6 +8,7 @@
 #include <ydb/core/persqueue/deferred_publish/events.h>
 #include <ydb/core/persqueue/deferred_publish/registry_actor.h>
 #include <ydb/core/persqueue/deferred_publish/upsert_destination_query.h>
+#include <ydb/core/protos/grpc_pq_old.pb.h>
 #include <ydb/core/testlib/test_client.h>
 #include <ydb/library/aclib/aclib.h>
 #include <ydb/public/api/grpc/ydb_cms_v1.grpc.pb.h>
@@ -29,15 +30,7 @@ namespace NKikimr::NPersQueueTests {
 
 namespace {
 
-constexpr TStringBuf NotImplementedMessage = "Topic deferred publish is not implemented yet";
 constexpr TStringBuf DisabledMessage = "Topic deferred publish is not enabled";
-
-void AssertNotImplemented(const Ydb::Operations::Operation& operation) {
-    UNIT_ASSERT_VALUES_EQUAL(operation.status(), Ydb::StatusIds::UNSUPPORTED);
-    UNIT_ASSERT(operation.ready());
-    UNIT_ASSERT_GT(operation.issues_size(), 0);
-    UNIT_ASSERT_VALUES_EQUAL(operation.issues(0).message(), TString(NotImplementedMessage));
-}
 
 void AssertUnsupported(const Ydb::Operations::Operation& operation, TStringBuf message) {
     UNIT_ASSERT_VALUES_EQUAL(operation.status(), Ydb::StatusIds::UNSUPPORTED);
@@ -163,6 +156,81 @@ TDescribePublicationOutcome CallDescribePublication(
     return {rpcStatus, response.operation()};
 }
 
+struct TFinalizePublicationOutcome {
+    grpc::Status RpcStatus;
+    Ydb::Operations::Operation Operation;
+};
+
+TFinalizePublicationOutcome CallPublish(
+    Ydb::Topic::DeferredPublish::V1::TopicDeferredPublishService::Stub& stub,
+    const TString& database,
+    ui64 intPublicationId,
+    const TString& authTicket = "root@builtin")
+{
+    grpc::ClientContext context;
+    FillClientContext(context, database, authTicket);
+
+    Ydb::Topic::DeferredPublish::PublishRequest request;
+    request.set_int_publication_id(intPublicationId);
+
+    Ydb::Topic::DeferredPublish::PublishResponse response;
+    const auto rpcStatus = stub.Publish(&context, request, &response);
+    return {rpcStatus, response.operation()};
+}
+
+TFinalizePublicationOutcome CallCancelPublication(
+    Ydb::Topic::DeferredPublish::V1::TopicDeferredPublishService::Stub& stub,
+    const TString& database,
+    ui64 intPublicationId,
+    const TString& authTicket = "root@builtin")
+{
+    grpc::ClientContext context;
+    FillClientContext(context, database, authTicket);
+
+    Ydb::Topic::DeferredPublish::CancelPublicationRequest request;
+    request.set_int_publication_id(intPublicationId);
+
+    Ydb::Topic::DeferredPublish::CancelPublicationResponse response;
+    const auto rpcStatus = stub.CancelPublication(&context, request, &response);
+    return {rpcStatus, response.operation()};
+}
+
+TMaybe<TString> ParseLegacyReadPayload(const TString& raw) {
+    NKikimrPQClient::TDataChunk dataChunk;
+    if (!dataChunk.ParseFromString(raw)) {
+        return Nothing();
+    }
+    return dataChunk.GetData();
+}
+
+TMaybe<TString> TryReadFirstTopicMessage(
+    NPersQueue::TTestServer& server,
+    const TString& topicShortName)
+{
+    const TString topic = "rt3.dc1--" + topicShortName;
+    const TInstant deadline = TInstant::Now() + TDuration::Seconds(30);
+    while (TInstant::Now() < deadline) {
+        THolder<NMsgBusProxy::TBusPersQueue> request = TRequestReadPQ{
+            topic, 0, 0, 100, "user", 0}.GetRequest();
+        request.Get()->Record.SetTicket("root@builtin");
+
+        const auto response = server.AnnoyingClient->CallPersQueueGRPC(request->Record);
+        if ((NMsgBusProxy::EResponseStatus)response.GetStatus() == NMsgBusProxy::MSTATUS_OK) {
+            const auto& result = response.GetPartitionResponse().GetCmdReadResult();
+            for (ui32 i = 0; i < result.ResultSize(); ++i) {
+                const auto& r = result.GetResult(i);
+                if (r.HasData()) {
+                    if (const auto payload = ParseLegacyReadPayload(r.GetData())) {
+                        return payload;
+                    }
+                }
+            }
+        }
+        TestSleep(*server.CleverServer->GetRuntime(), TDuration::MilliSeconds(100));
+    }
+    return Nothing();
+}
+
 bool SchemePathExists(NPersQueue::TTestServer& server, const TString& path) {
     const auto response = server.AnnoyingClient->Ls(path);
     return response && response->Record.GetSchemeStatus() == NKikimrScheme::StatusSuccess;
@@ -188,11 +256,24 @@ void GrantPublicationTableRead(NPersQueue::TTestServer& server, const TString& s
 
 void GrantPublicationTableWrite(NPersQueue::TTestServer& server, const TString& subject) {
     GrantPublicationTableRead(server, subject);
-    server.AnnoyingClient->TestGrant(
-        "/Root/.metadata",
-        "topic_deferred_publication_destinations",
-        subject,
-        NACLib::EAccessRights::GenericWrite);
+    if (SchemePathExists(server, "/Root/.metadata/topic_deferred_publication_destinations")) {
+        server.AnnoyingClient->TestGrant(
+            "/Root/.metadata",
+            "topic_deferred_publication_destinations",
+            subject,
+            NACLib::EAccessRights::GenericWrite);
+    }
+}
+
+void GrantPublicationRegistryDelete(NPersQueue::TTestServer& server, const TString& subject) {
+    GrantPublicationTableWrite(server, subject);
+    if (SchemePathExists(server, "/Root/.metadata/topic_deferred_publications")) {
+        server.AnnoyingClient->TestGrant(
+            "/Root/.metadata",
+            "topic_deferred_publications",
+            subject,
+            NACLib::EAccessRights::GenericWrite);
+    }
 }
 
 void InsertDestinationRow(
@@ -457,6 +538,7 @@ NPersQueue::TTestServer MakeServerWithDeferredPublishEnabled(
 {
     auto settings = NKikimr::NPersQueueTests::PQSettings()
         .SetEnableTopicDeferredPublish(true);
+    settings.PQConfig.SetCheckACL(false);
     settings.FeatureFlags.SetForbidRequestsToStaticNodesWithoutDatabase(
         forbidRequestsToStaticNodesWithoutDatabase);
     return NPersQueue::TTestServer(settings);
@@ -1183,27 +1265,19 @@ Y_UNIT_TEST(BeginPublicationWorksInServerlessDatabase) {
 }
 
 Y_UNIT_TEST(OtherMethodsReturnNotImplemented) {
+    // Publish/Cancel are implemented in ticket 09; this test is kept for historical name only.
     auto server = MakeServerWithDeferredPublishEnabled();
     server.AnnoyingClient->GrantConnect("root@builtin");
 
     auto stub = MakeStub(server);
+    const ui64 intPublicationId = BeginPublicationIntId(
+        CallBeginPublication(*stub, "/Root", "publish-stub-check"));
 
     {
-        grpc::ClientContext context;
-        FillClientContext(context, "/Root");
-        Ydb::Topic::DeferredPublish::PublishRequest request;
-        Ydb::Topic::DeferredPublish::PublishResponse response;
-        UNIT_ASSERT(stub->Publish(&context, request, &response).ok());
-        AssertNotImplemented(response.operation());
-    }
-
-    {
-        grpc::ClientContext context;
-        FillClientContext(context, "/Root");
-        Ydb::Topic::DeferredPublish::CancelPublicationRequest request;
-        Ydb::Topic::DeferredPublish::CancelPublicationResponse response;
-        UNIT_ASSERT(stub->CancelPublication(&context, request, &response).ok());
-        AssertNotImplemented(response.operation());
+        const auto outcome = CallPublish(*stub, "/Root", intPublicationId);
+        UNIT_ASSERT(outcome.RpcStatus.ok());
+        UNIT_ASSERT(outcome.Operation.ready());
+        UNIT_ASSERT_VALUES_EQUAL(outcome.Operation.status(), Ydb::StatusIds::ABORTED);
     }
 }
 
@@ -1626,6 +1700,210 @@ Y_UNIT_TEST(StreamWriteMergesPartitionsIntoDestinationBlob) {
     UNIT_ASSERT_VALUES_EQUAL(blob.PartitionsSize(), 2);
     UNIT_ASSERT(NPQ::NDeferredPublish::FindTopicPartitionDestination(blob, 0));
     UNIT_ASSERT(NPQ::NDeferredPublish::FindTopicPartitionDestination(blob, 1));
+}
+
+} // Y_UNIT_TEST_SUITE
+
+Y_UNIT_TEST_SUITE(TopicDeferredPublishFinalize) {
+
+Y_UNIT_TEST(PublishAfterStreamWriteClearsRegistryAndMakesDataVisible) {
+    auto fixture = TDeferredStreamWriteFixture::Enabled("finalize-publish-topic", "ext-publish");
+    GrantPublicationRegistryDelete(fixture.Server, "root@builtin");
+
+    constexpr TStringBuf payload = "deferred-payload-visible";
+    {
+        auto session = fixture.OpenWriteStream("producer-publish");
+        WriteAndExpectWriteResponse(*session->Stream, MakeStreamWriteRequest(
+            1,
+            TString(payload),
+            std::make_pair(fixture.IntPublicationId, fixture.ExtPublicationId)));
+    }
+
+    const auto publishOutcome = CallPublish(*fixture.DeferredStub, "/Root", fixture.IntPublicationId);
+    UNIT_ASSERT(publishOutcome.RpcStatus.ok());
+    UNIT_ASSERT(publishOutcome.Operation.ready());
+    UNIT_ASSERT_VALUES_EQUAL(publishOutcome.Operation.status(), Ydb::StatusIds::SUCCESS);
+    UNIT_ASSERT_VALUES_EQUAL(CountPublications(fixture.Server, "root@builtin"), 0u);
+
+    const auto message = TryReadFirstTopicMessage(fixture.Server, fixture.TopicShortName);
+    UNIT_ASSERT(message.Defined());
+    UNIT_ASSERT_VALUES_EQUAL(*message, TString(payload));
+}
+
+Y_UNIT_TEST(CancelAfterStreamWriteClearsRegistryWithoutData) {
+    auto fixture = TDeferredStreamWriteFixture::Enabled("finalize-cancel-topic", "ext-cancel");
+    GrantPublicationRegistryDelete(fixture.Server, "root@builtin");
+
+    {
+        auto session = fixture.OpenWriteStream("producer-cancel");
+        WriteAndExpectWriteResponse(*session->Stream, MakeStreamWriteRequest(
+            1,
+            "deferred-payload-cancel",
+            std::make_pair(fixture.IntPublicationId, fixture.ExtPublicationId)));
+    }
+
+    const auto cancelOutcome = CallCancelPublication(*fixture.DeferredStub, "/Root", fixture.IntPublicationId);
+    UNIT_ASSERT(cancelOutcome.RpcStatus.ok());
+    UNIT_ASSERT(cancelOutcome.Operation.ready());
+    UNIT_ASSERT_VALUES_EQUAL(cancelOutcome.Operation.status(), Ydb::StatusIds::SUCCESS);
+    UNIT_ASSERT_VALUES_EQUAL(CountPublications(fixture.Server, "root@builtin"), 0u);
+
+    UNIT_ASSERT(!TryReadFirstTopicMessage(fixture.Server, fixture.TopicShortName).Defined());
+}
+
+Y_UNIT_TEST(RepeatFinalizeReturnsNotFound) {
+    auto fixture = TDeferredStreamWriteFixture::Enabled("finalize-repeat-topic", "ext-repeat");
+    GrantPublicationRegistryDelete(fixture.Server, "root@builtin");
+
+    {
+        auto session = fixture.OpenWriteStream("producer-repeat");
+        WriteAndExpectWriteResponse(*session->Stream, MakeStreamWriteRequest(
+            1,
+            "payload-repeat",
+            std::make_pair(fixture.IntPublicationId, fixture.ExtPublicationId)));
+    }
+
+    const auto firstPublish = CallPublish(*fixture.DeferredStub, "/Root", fixture.IntPublicationId);
+    UNIT_ASSERT_VALUES_EQUAL(firstPublish.Operation.status(), Ydb::StatusIds::SUCCESS);
+
+    const auto secondPublish = CallPublish(*fixture.DeferredStub, "/Root", fixture.IntPublicationId);
+    UNIT_ASSERT_VALUES_EQUAL(secondPublish.Operation.status(), Ydb::StatusIds::NOT_FOUND);
+
+    const auto cancelOutcome = CallCancelPublication(*fixture.DeferredStub, "/Root", fixture.IntPublicationId);
+    UNIT_ASSERT_VALUES_EQUAL(cancelOutcome.Operation.status(), Ydb::StatusIds::NOT_FOUND);
+}
+
+Y_UNIT_TEST(PublishAndCancelDisabledByDefault) {
+    NPersQueue::TTestServer server;
+    server.AnnoyingClient->GrantConnect("root@builtin");
+
+    auto stub = MakeStub(server);
+
+    {
+        const auto outcome = CallPublish(*stub, "/Root", 1);
+        UNIT_ASSERT(outcome.RpcStatus.ok());
+        AssertUnsupported(outcome.Operation, DisabledMessage);
+    }
+
+    {
+        const auto outcome = CallCancelPublication(*stub, "/Root", 1);
+        UNIT_ASSERT(outcome.RpcStatus.ok());
+        AssertUnsupported(outcome.Operation, DisabledMessage);
+    }
+}
+
+Y_UNIT_TEST(FinalizeUnknownIntReturnsNotFound) {
+    auto server = MakeServerWithDeferredPublishEnabled();
+    server.AnnoyingClient->GrantConnect("root@builtin");
+
+    auto stub = MakeStub(server);
+    BeginPublicationIntId(CallBeginPublication(*stub, "/Root", "warmup-finalize-not-found"));
+
+    for (const ui64 intPublicationId : {0u, 999999u}) {
+        const auto publishOutcome = CallPublish(*stub, "/Root", intPublicationId);
+        UNIT_ASSERT_VALUES_EQUAL(publishOutcome.Operation.status(), Ydb::StatusIds::NOT_FOUND);
+
+        const auto cancelOutcome = CallCancelPublication(*stub, "/Root", intPublicationId);
+        UNIT_ASSERT_VALUES_EQUAL(cancelOutcome.Operation.status(), Ydb::StatusIds::NOT_FOUND);
+    }
+}
+
+Y_UNIT_TEST(PublishMultipleDestinations) {
+    auto server = MakeServerWithDeferredPublishEnabled();
+    server.AnnoyingClient->GrantConnect("root@builtin");
+    CreateLegacyStreamWriteTopic(server, "finalize-multi-topic-a", 1);
+    CreateLegacyStreamWriteTopic(server, "finalize-multi-topic-b", 1);
+
+    auto deferredStub = MakeStub(server);
+    auto topicStub = MakeTopicServiceStub(server);
+    const ui64 intPublicationId = BeginPublicationIntId(
+        CallBeginPublication(*deferredStub, "/Root", "ext-multi"));
+    GrantPublicationRegistryDelete(server, "root@builtin");
+
+    {
+        auto session = TStreamWriteSession::Open(*topicStub, "finalize-multi-topic-a", "producer-a", 0);
+        WriteAndExpectWriteResponse(*session->Stream, MakeStreamWriteRequest(
+            1,
+            "topic-a-payload",
+            std::make_pair(intPublicationId, TString("ext-multi"))));
+    }
+    {
+        auto session = TStreamWriteSession::Open(*topicStub, "finalize-multi-topic-b", "producer-b", 0);
+        WriteAndExpectWriteResponse(*session->Stream, MakeStreamWriteRequest(
+            1,
+            "topic-b-payload",
+            std::make_pair(intPublicationId, TString("ext-multi"))));
+    }
+
+    const auto publishOutcome = CallPublish(*deferredStub, "/Root", intPublicationId);
+    UNIT_ASSERT_VALUES_EQUAL(publishOutcome.Operation.status(), Ydb::StatusIds::SUCCESS);
+    UNIT_ASSERT_VALUES_EQUAL(CountPublications(server, "root@builtin"), 0u);
+}
+
+Y_UNIT_TEST(PublishBeforeWriteAckKeepsRegistry) {
+    auto fixture = TDeferredStreamWriteFixture::Enabled("finalize-before-ack-topic", "ext-before-ack");
+    GrantPublicationRegistryDelete(fixture.Server, "root@builtin");
+
+    TFinalizePublicationOutcome publishOutcome;
+    std::thread publishThread([&]() {
+        publishOutcome = CallPublish(*fixture.DeferredStub, "/Root", fixture.IntPublicationId);
+    });
+
+    auto session = fixture.OpenWriteStream("producer-before-ack");
+    UNIT_ASSERT(session->Stream->Write(MakeStreamWriteRequest(
+        1,
+        "payload-before-ack",
+        std::make_pair(fixture.IntPublicationId, fixture.ExtPublicationId))));
+    publishThread.join();
+
+    UNIT_ASSERT_VALUES_UNEQUAL(publishOutcome.Operation.status(), Ydb::StatusIds::SUCCESS);
+    UNIT_ASSERT_VALUES_EQUAL(CountPublications(fixture.Server, "root@builtin"), 1u);
+}
+
+Y_UNIT_TEST(PublishFailureOnInvalidDestinationKeepsRegistry) {
+    auto fixture = TDeferredStreamWriteFixture::Enabled("finalize-bad-dest-topic", "ext-bad-dest");
+    GrantPublicationRegistryDelete(fixture.Server, "root@builtin");
+
+    {
+        auto session = fixture.OpenWriteStream("producer-bad-dest");
+        WriteAndExpectWriteResponse(*session->Stream, MakeStreamWriteRequest(
+            1,
+            "payload-bad-dest",
+            std::make_pair(fixture.IntPublicationId, fixture.ExtPublicationId)));
+    }
+
+    const TString badBlob = NPQ::NDeferredPublish::SerializeDestinationBlob(
+        NPQ::NDeferredPublish::MakeDestinationBlob(0, 9'999'999'999ull));
+    UNIT_ASSERT_VALUES_EQUAL(
+        CallUpsertDestination(fixture.Server, "/Root", fixture.IntPublicationId, "bad-topic-path", badBlob),
+        Ydb::StatusIds::SUCCESS);
+
+    const auto publishOutcome = CallPublish(*fixture.DeferredStub, "/Root", fixture.IntPublicationId);
+    UNIT_ASSERT_VALUES_UNEQUAL(publishOutcome.Operation.status(), Ydb::StatusIds::SUCCESS);
+    UNIT_ASSERT_VALUES_EQUAL(CountPublications(fixture.Server, "root@builtin"), 1u);
+}
+
+Y_UNIT_TEST(BeginOnlyPublishAndCancelUseDeleteOnly) {
+    auto server = MakeServerWithDeferredPublishEnabled();
+    server.AnnoyingClient->GrantConnect("root@builtin");
+
+    auto stub = MakeStub(server);
+
+    const ui64 publishOnlyId = BeginPublicationIntId(
+        CallBeginPublication(*stub, "/Root", "begin-only-publish"));
+    {
+        const auto outcome = CallPublish(*stub, "/Root", publishOnlyId);
+        UNIT_ASSERT_VALUES_EQUAL(outcome.Operation.status(), Ydb::StatusIds::ABORTED);
+        UNIT_ASSERT_VALUES_EQUAL(CountPublications(server, "root@builtin"), 1u);
+    }
+
+    const ui64 cancelOnlyId = BeginPublicationIntId(
+        CallBeginPublication(*stub, "/Root", "begin-only-cancel"));
+    {
+        const auto outcome = CallCancelPublication(*stub, "/Root", cancelOnlyId);
+        UNIT_ASSERT_VALUES_EQUAL(outcome.Operation.status(), Ydb::StatusIds::SUCCESS);
+        UNIT_ASSERT_VALUES_EQUAL(CountPublications(server, "root@builtin"), 1u);
+    }
 }
 
 } // Y_UNIT_TEST_SUITE

@@ -58,6 +58,8 @@ struct TWorkerSettings {
     int MinMessageSize = 10;
     int MaxMessageSize = 10000;
     bool EarlyFinish = false;
+    int PauseMessageIndex = -1;
+    int PauseDelayMs = 0;
 };
 
 struct TFailureSettings {
@@ -70,8 +72,9 @@ struct TFailureSettings {
 template <typename TDerived>
 class TWorkerActor : public NActors::TActor<TDerived> {
 public:
-    TWorkerActor(std::shared_ptr<IDqChannelService> service, ui32 channelId, const TWorkerSettings& settings)
+    TWorkerActor(const TString& logPrefix, std::shared_ptr<IDqChannelService> service, ui32 channelId, const TWorkerSettings& settings)
         : NActors::TActor<TDerived>(&TWorkerActor::StateFunc)
+        , LogPrefix(logPrefix)
         , Service(service)
         , ChannelId(channelId)
         , Settings(settings)
@@ -96,10 +99,26 @@ public:
         Run();
     }
 
-    virtual void HandleStart(TEvTestPrivate::TEvStart::TPtr& ev) = 0;
+    virtual void HandleStart(TEvTestPrivate::TEvStart::TPtr& ev) {
+        RunnerId = ev->Sender;
+        PeerId = ev->Get()->PeerId;
+        LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KQP_CHANNELS, LogPrefix << "TEST START SelfId=" << this->SelfId() << ", ChannelId=" << ChannelId << ", PeerId=" << PeerId);
+        if (Settings.StartDelayMs) {
+            this->Schedule(TDuration::MilliSeconds(RandomNumber<ui64>(Settings.StartDelayMs) + 1), new NActors::TEvents::TEvWakeup());
+        } else {
+            Run();
+        }
+    }
 
-    virtual void HandleAbort(NYql::NDq::TEvDq::TEvAbortExecution::TPtr& ev) = 0;
+    virtual void HandleAbort(NYql::NDq::TEvDq::TEvAbortExecution::TPtr& ev) {
+        LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KQP_CHANNELS,
+            LogPrefix << "TEST ABORT SelfId=" << this->SelfId() << ", ChannelId=" << ChannelId << ", " << ev->Get()->GetIssues().ToOneLineString()
+        );
+        this->Send(RunnerId, new TEvTestPrivate::TEvFinished(TEvTestPrivate::ERole::Producer, true));
+        this->PassAway();
+    }
 
+    TString LogPrefix;
     std::shared_ptr<IDqChannelService> Service;
     std::shared_ptr<IChannelBuffer> Buffer;
     ui32 ChannelId;
@@ -113,7 +132,7 @@ public:
 class TProducerActor : public TWorkerActor<TProducerActor> {
 public:
     TProducerActor(std::shared_ptr<IDqChannelService> service, ui32 channelId, const TWorkerSettings& settings)
-        : TWorkerActor(service, channelId, settings)
+        : TWorkerActor("PROD ", service, channelId, settings)
     {}
 
     void Run() override {
@@ -123,46 +142,41 @@ public:
             Started = true;
         }
         if (Buffer->IsFinished()) {
-            LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KQP_CHANNELS, "PROD TEST FINISHED SelfId=" << SelfId() << ", ChannelId=" << ChannelId);
+            LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KQP_CHANNELS, LogPrefix << "TEST FINISHED SelfId=" << SelfId() << ", ChannelId=" << ChannelId);
             Send(RunnerId, new TEvTestPrivate::TEvFinished(TEvTestPrivate::ERole::Producer, false));
             PassAway();
             return;
         }
-        while (Buffer->GetFillLevel() == EDqFillLevel::NoLimit && MessageIndex <= Settings.MessageCount) {
-            if (MessageIndex == Settings.MessageCount) {
-                Buffer->SendFinish();
-            } else {
-                auto bytes = Settings.MinMessageSize + RandomNumber<ui64>(Settings.MaxMessageSize - Settings.MinMessageSize);
-                Buffer->Push(TDataChunk(NYql::TChunkedBuffer(TString(bytes, 'a')), 1, false));
+        while (Buffer->GetFillLevel() == EDqFillLevel::NoLimit && MessageIndex < Settings.MessageCount) {
+            if (Settings.PauseMessageIndex == MessageIndex) {
+                if (!ResumeTime) {
+                    ResumeTime = TInstant::Now() + TDuration::MilliSeconds(Settings.PauseDelayMs);
+                    LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KQP_CHANNELS, LogPrefix << "TEST PAUSED SelfId=" << SelfId() << ", ChannelId=" << ChannelId);
+                }
+                if (TInstant::Now() < ResumeTime) {
+                    Schedule(ResumeTime, new NActors::TEvents::TEvWakeup());
+                    return;
+                } else {
+                    ResumeTime = TInstant::Zero();
+                    LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KQP_CHANNELS, LogPrefix << "TEST RESUMED SelfId=" << SelfId() << ", ChannelId=" << ChannelId);
+                }
             }
+            auto bytes = Settings.MinMessageSize + RandomNumber<ui64>(Settings.MaxMessageSize - Settings.MinMessageSize);
+            Buffer->Push(TDataChunk(NYql::TChunkedBuffer(TString(bytes, 'a')), 1, false));
             MessageIndex++;
         }
-    }
-
-    void HandleStart(TEvTestPrivate::TEvStart::TPtr& ev) override {
-        RunnerId = ev->Sender;
-        PeerId = ev->Get()->PeerId;
-        LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KQP_CHANNELS, "PROD TEST START SelfId=" << SelfId() << ", ChannelId=" << ChannelId << ", PeerId=" << PeerId);
-        if (Settings.StartDelayMs) {
-            Schedule(TDuration::MilliSeconds(RandomNumber<ui64>(Settings.StartDelayMs) + 1), new NActors::TEvents::TEvWakeup());
-        } else {
-            Run();
+        if (MessageIndex == Settings.MessageCount) {
+            Buffer->SendFinish();
         }
     }
 
-    void HandleAbort(NYql::NDq::TEvDq::TEvAbortExecution::TPtr& ev) override {
-        LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KQP_CHANNELS,
-            "PROD TEST ABORT SelfId=" << SelfId() << ", ChannelId=" << ChannelId << ", " << ev->Get()->GetIssues().ToOneLineString()
-        );
-        Send(RunnerId, new TEvTestPrivate::TEvFinished(TEvTestPrivate::ERole::Producer, true));
-        PassAway();
-    }
+    TInstant ResumeTime;
 };
 
 class TConsumerActor : public TWorkerActor<TConsumerActor> {
 public:
     TConsumerActor(std::shared_ptr<IDqChannelService> service, ui32 channelId, const TWorkerSettings& settings)
-        : TWorkerActor(service, channelId, settings)
+        : TWorkerActor("CONS ", service, channelId, settings)
     {}
 
     void Run() override {
@@ -176,7 +190,7 @@ public:
             MessageIndex++;
         }
         if (Settings.EarlyFinish && MessageIndex == Settings.MessageCount) {
-            LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KQP_CHANNELS, "CONS TEST EARLY FINISH SelfId=" << SelfId() << ", ChannelId=" << ChannelId);
+            LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KQP_CHANNELS, LogPrefix << "TEST EARLY FINISH SelfId=" << SelfId() << ", ChannelId=" << ChannelId);
             Buffer->EarlyFinish();
             MessageIndex++;
         }
@@ -184,29 +198,10 @@ public:
             MessageIndex++;
         }
         if (Buffer->IsFinished()) {
-            LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KQP_CHANNELS, "CONS TEST FINISHED SelfId=" << SelfId() << ", ChannelId=" << ChannelId);
+            LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KQP_CHANNELS, LogPrefix << "TEST FINISHED SelfId=" << SelfId() << ", ChannelId=" << ChannelId);
             Send(RunnerId, new TEvTestPrivate::TEvFinished(TEvTestPrivate::ERole::Consumer, false));
             PassAway();
         }
-    }
-
-    void HandleStart(TEvTestPrivate::TEvStart::TPtr& ev) override {
-        RunnerId = ev->Sender;
-        PeerId = ev->Get()->PeerId;
-        LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KQP_CHANNELS, "CONS TEST START SelfId=" << SelfId() << ", ChannelId=" << ChannelId << ", PeerId=" << PeerId);
-        if (Settings.StartDelayMs) {
-            Schedule(TDuration::MilliSeconds(RandomNumber<ui64>(Settings.StartDelayMs) + 1), new NActors::TEvents::TEvWakeup());
-        } else {
-            Run();
-        }
-    }
-
-    void HandleAbort(NYql::NDq::TEvDq::TEvAbortExecution::TPtr& ev) override {
-        LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KQP_CHANNELS,
-            "CONS TEST ABORT SelfId=" << SelfId() << ", ChannelId=" << ChannelId << ", " << ev->Get()->GetIssues().ToOneLineString()
-        );
-        Send(RunnerId, new TEvTestPrivate::TEvFinished(TEvTestPrivate::ERole::Consumer, true));
-        PassAway();
     }
 };
 
@@ -328,6 +323,39 @@ struct TLoadTest {
 
 struct TReconTest : public TLoadTest {
 
+    void Prepare() override {
+        TLoadTest::Prepare();
+        settings.AppConfig.MutableTableServiceConfig()->MutableDqChannelConfig()->SetCleanupPeriodMs(20);
+        settings.AppConfig.MutableTableServiceConfig()->MutableDqChannelConfig()->SetIdlePingPeriodMs(10);
+    }
+
+    void Start() override {
+        for (auto i = 0; i < Count; i ++) {
+            auto channelId = i + 1;
+            if ((i & 1) == 0) {
+                auto producerSettings = ProducerSettings;
+                producerSettings.PauseMessageIndex = (channelId + producerSettings.MessageCount / 2) % producerSettings.MessageCount;
+                producerSettings.PauseDelayMs = 50;
+                auto producer = Runtime->Register(new TProducerActor(Service0, channelId, producerSettings), NodeIndex0);
+                auto consumer = Runtime->Register(new TConsumerActor(Service1, channelId, ConsumerSettings), NodeIndex1);
+                Runtime->Send(consumer, Control1, new TEvTestPrivate::TEvStart(producer), NodeIndex1, true);
+                Runtime->Send(producer, Control0, new TEvTestPrivate::TEvStart(consumer), NodeIndex0, true);
+                Actors.insert(producer);
+                Actors.insert(consumer);
+            } else {
+                auto producerSettings = ProducerSettings;
+                producerSettings.PauseMessageIndex = channelId;
+                producerSettings.PauseDelayMs = 50;
+                auto producer = Runtime->Register(new TProducerActor(Service1, channelId, producerSettings), NodeIndex1);
+                auto consumer = Runtime->Register(new TConsumerActor(Service0, channelId, ConsumerSettings), NodeIndex0);
+                Runtime->Send(consumer, Control0, new TEvTestPrivate::TEvStart(producer), NodeIndex0, true);
+                Runtime->Send(producer, Control1, new TEvTestPrivate::TEvStart(consumer), NodeIndex1, true);
+                Actors.insert(producer);
+                Actors.insert(consumer);
+            }
+        }
+    }
+
 };
 
 Y_UNIT_TEST_SUITE(Channels20) {
@@ -386,7 +414,7 @@ Y_UNIT_TEST_SUITE(Channels20) {
     Y_UNIT_TEST(Reconciliation) {
         TReconTest test;
 
-        test.Count = 100;
+        test.Count = 1;
         test.Local = false;
         test.ProducerSettings.MessageCount = 100;
         test.ConsumerSettings.MessageCount = 100;

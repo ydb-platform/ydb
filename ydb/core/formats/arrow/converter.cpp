@@ -24,9 +24,6 @@ static bool ConvertData(TCell& cell, const NScheme::TTypeInfo& colType, TMemoryP
                 cell = TCell();
                 break;
             }
-            if (NDyNumber::IsValidDyNumber(cell.AsBuf())) {
-                break;
-            }
             const auto dyNumber = NDyNumber::ParseDyNumberString(cell.AsBuf());
             if (!dyNumber.Defined()) {
                 errorMessage = "Invalid DyNumber string representation";

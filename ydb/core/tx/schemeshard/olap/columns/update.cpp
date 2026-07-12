@@ -293,7 +293,6 @@ bool TOlapColumnBase::IsAllowedType(ui32 typeId) {
         return false;
     }
 
-    Y_UNUSED(typeId);
     return true;
 }
 

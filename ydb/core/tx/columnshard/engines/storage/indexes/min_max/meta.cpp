@@ -70,9 +70,6 @@ bool TIndexMeta::DoCheckValue(const TString& data, const std::optional<ui64> cat
     if (chunkValue.ElementType()->Equals(arrow::timestamp(arrow::TimeUnit::MICRO))) {
         chunkValue.Min() = chunkValue.Min()->CastTo(arrow::uint64()).ValueOrDie();
         chunkValue.Max() = chunkValue.Max()->CastTo(arrow::uint64()).ValueOrDie();
-    } else if (chunkValue.ElementType()->Equals(arrow::duration(arrow::TimeUnit::MICRO))) {
-        chunkValue.Min() = chunkValue.Min()->CastTo(arrow::int64()).ValueOrDie();
-        chunkValue.Max() = chunkValue.Max()->CastTo(arrow::int64()).ValueOrDie();
     }
     return !Skip(chunkValue, requestValue, op);
 }

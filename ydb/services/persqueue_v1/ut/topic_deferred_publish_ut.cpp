@@ -1200,7 +1200,7 @@ Y_UNIT_TEST(UpsertDestinationInsertsRow) {
         CallBeginPublication(*stub, "/Root", "upsert-insert"));
 
     const auto blob = NPQ::NDeferredPublish::SerializeDestinationBlob(
-        NPQ::NDeferredPublish::MakeDestinationBlob("/Root/topic-a", 1, 100));
+        NPQ::NDeferredPublish::MakeDestinationBlob(1, 100));
     UNIT_ASSERT_VALUES_EQUAL(
         CallUpsertDestination(server, "/Root", intPublicationId, "/Root/topic-a", blob),
         Ydb::StatusIds::SUCCESS);
@@ -1217,9 +1217,9 @@ Y_UNIT_TEST(UpsertDestinationReplacesBlob) {
 
     const TString path = "/Root/topic-a";
     const auto firstBlob = NPQ::NDeferredPublish::SerializeDestinationBlob(
-        NPQ::NDeferredPublish::MakeDestinationBlob(path, 1, 100));
+        NPQ::NDeferredPublish::MakeDestinationBlob(1, 100));
     const auto secondBlob = NPQ::NDeferredPublish::SerializeDestinationBlob(
-        NPQ::NDeferredPublish::MakeDestinationBlob(path, 2, 200));
+        NPQ::NDeferredPublish::MakeDestinationBlob(2, 200));
 
     UNIT_ASSERT_VALUES_EQUAL(
         CallUpsertDestination(server, "/Root", intPublicationId, path, firstBlob),
@@ -1240,7 +1240,7 @@ Y_UNIT_TEST(UpsertDestinationNotFoundForUnknownInt) {
     BeginPublicationIntId(CallBeginPublication(*stub, "/Root", "upsert-warmup"));
 
     const auto blob = NPQ::NDeferredPublish::SerializeDestinationBlob(
-        NPQ::NDeferredPublish::MakeDestinationBlob("/Root/topic-a", 1, 100));
+        NPQ::NDeferredPublish::MakeDestinationBlob(1, 100));
     UNIT_ASSERT_VALUES_EQUAL(
         CallUpsertDestination(server, "/Root", 999999, "/Root/topic-a", blob),
         Ydb::StatusIds::NOT_FOUND);
@@ -1251,7 +1251,7 @@ Y_UNIT_TEST(UpsertDestinationNotFoundBeforeBegin) {
     server.AnnoyingClient->GrantConnect("root@builtin");
 
     const auto blob = NPQ::NDeferredPublish::SerializeDestinationBlob(
-        NPQ::NDeferredPublish::MakeDestinationBlob("/Root/topic-a", 1, 100));
+        NPQ::NDeferredPublish::MakeDestinationBlob(1, 100));
     UNIT_ASSERT_VALUES_EQUAL(
         CallUpsertDestination(server, "/Root", 1, "/Root/topic-a", blob),
         Ydb::StatusIds::NOT_FOUND);
@@ -1266,7 +1266,7 @@ Y_UNIT_TEST(UpsertDestinationThenDescribeShowsPath) {
         CallBeginPublication(*stub, "/Root", "upsert-describe"));
 
     const auto blob = NPQ::NDeferredPublish::SerializeDestinationBlob(
-        NPQ::NDeferredPublish::MakeDestinationBlob("/Root/topic-a", 1, 100));
+        NPQ::NDeferredPublish::MakeDestinationBlob(1, 100));
     UNIT_ASSERT_VALUES_EQUAL(
         CallUpsertDestination(server, "/Root", intPublicationId, "/Root/topic-a", blob),
         Ydb::StatusIds::SUCCESS);
@@ -1290,7 +1290,7 @@ Y_UNIT_TEST(DeletePublicationRemovesParentAndDestinations) {
         CallBeginPublication(*stub, "/Root", "delete-with-dest"));
 
     const auto blob = NPQ::NDeferredPublish::SerializeDestinationBlob(
-        NPQ::NDeferredPublish::MakeDestinationBlob("/Root/topic-a", 1, 100));
+        NPQ::NDeferredPublish::MakeDestinationBlob(1, 100));
     UNIT_ASSERT_VALUES_EQUAL(
         CallUpsertDestination(server, "/Root", intPublicationId, "/Root/topic-a", blob),
         Ydb::StatusIds::SUCCESS);

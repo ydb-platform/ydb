@@ -2,7 +2,10 @@ package NKikimrPQ;
 option java_package = "ru.yandex.kikimr.proto";
 
 message TDeferredPublishDestinationBlob {
-    optional string Path = 1;
-    optional uint32 PartitionId = 2;
-    optional uint64 TabletId = 3;
+    repeated TTopicPartitionDestination Partitions = 1;
+}
+
+message TTopicPartitionDestination {
+    optional uint32 PartitionId = 1;
+    optional uint64 TabletId = 2;
 }

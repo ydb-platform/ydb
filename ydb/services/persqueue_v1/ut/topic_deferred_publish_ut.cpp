@@ -205,10 +205,11 @@ TMaybe<TString> ParseLegacyReadPayload(const TString& raw) {
 
 TMaybe<TString> TryReadFirstTopicMessage(
     NPersQueue::TTestServer& server,
-    const TString& topicShortName)
+    const TString& topicShortName,
+    TDuration timeout = TDuration::Seconds(30))
 {
     const TString topic = "rt3.dc1--" + topicShortName;
-    const TInstant deadline = TInstant::Now() + TDuration::Seconds(30);
+    const TInstant deadline = TInstant::Now() + timeout;
     while (TInstant::Now() < deadline) {
         THolder<NMsgBusProxy::TBusPersQueue> request = TRequestReadPQ{
             topic, 0, 0, 100, "user", 0}.GetRequest();
@@ -229,6 +230,166 @@ TMaybe<TString> TryReadFirstTopicMessage(
         TestSleep(*server.CleverServer->GetRuntime(), TDuration::MilliSeconds(100));
     }
     return Nothing();
+}
+
+struct TTopicReadMessage {
+    i64 PartitionId = 0;
+    ui64 Offset = 0;
+    TString Data;
+};
+
+TVector<TTopicReadMessage> TryReadTopicMessagesViaStreamRead(
+    NPersQueue::TTestServer& server,
+    Ydb::Topic::V1::TopicService::Stub& topicStub,
+    const TString& topicShortName,
+    TDuration timeout,
+    ui32 minPartitions = 1)
+{
+    grpc::ClientContext context;
+    FillClientContext(context, "/Root");
+
+    auto stream = topicStub.StreamRead(&context);
+    if (!stream) {
+        return {};
+    }
+
+    Ydb::Topic::StreamReadMessage::FromClient req;
+    Ydb::Topic::StreamReadMessage::FromServer resp;
+
+    req.mutable_init_request()->add_topics_read_settings()->set_path(topicShortName);
+    req.mutable_init_request()->set_consumer("user");
+    if (!stream->Write(req) || !stream->Read(&resp)) {
+        return {};
+    }
+    if (resp.server_message_case() != Ydb::Topic::StreamReadMessage::FromServer::kInitResponse) {
+        return {};
+    }
+
+    auto sendReadRequests = [&]() {
+        req.Clear();
+        req.mutable_read_request()->set_bytes_size(1024 * 1024);
+        for (ui32 i = 0; i < 10; ++i) {
+            stream->Write(req);
+        }
+    };
+
+    sendReadRequests();
+
+    THashMap<i64, i64> partitionIdBySessionId;
+    THashSet<i64> acceptedPartitions;
+    TVector<TTopicReadMessage> messages;
+    const TInstant deadline = TInstant::Now() + timeout;
+
+    while (TInstant::Now() < deadline) {
+        if (!stream->Read(&resp)) {
+            if (!messages.empty()) {
+                break;
+            }
+            TestSleep(*server.CleverServer->GetRuntime(), TDuration::MilliSeconds(50));
+            sendReadRequests();
+            continue;
+        }
+
+        switch (resp.server_message_case()) {
+            case Ydb::Topic::StreamReadMessage::FromServer::kStartPartitionSessionRequest: {
+                const auto& partitionSession = resp.start_partition_session_request().partition_session();
+                const i64 sessionId = partitionSession.partition_session_id();
+                if (!partitionIdBySessionId.contains(sessionId)) {
+                    partitionIdBySessionId[sessionId] = partitionSession.partition_id();
+                    acceptedPartitions.insert(partitionSession.partition_id());
+
+                    req.Clear();
+                    req.mutable_start_partition_session_response()->set_partition_session_id(sessionId);
+                    stream->Write(req);
+                    sendReadRequests();
+                }
+                break;
+            }
+            case Ydb::Topic::StreamReadMessage::FromServer::kReadResponse: {
+                for (const auto& partitionData : resp.read_response().partition_data()) {
+                    const auto partitionId = partitionIdBySessionId.Value(
+                        partitionData.partition_session_id(),
+                        -1);
+                    for (const auto& batch : partitionData.batches()) {
+                        for (const auto& messageData : batch.message_data()) {
+                            messages.push_back(TTopicReadMessage{
+                                .PartitionId = partitionId,
+                                .Offset = static_cast<ui64>(messageData.offset()),
+                                .Data = messageData.data(),
+                            });
+                        }
+                    }
+                }
+                if (!messages.empty() && acceptedPartitions.size() >= minPartitions) {
+                    return messages;
+                }
+                sendReadRequests();
+                break;
+            }
+            default:
+                break;
+        }
+    }
+
+    return messages;
+}
+
+void AssertTopicNotVisible(
+    NPersQueue::TTestServer& server,
+    const TString& topicShortName,
+    TDuration probeDuration = TDuration::Seconds(2))
+{
+    UNIT_ASSERT(!TryReadFirstTopicMessage(server, topicShortName, probeDuration).Defined());
+}
+
+void AssertTopicVisible(
+    NPersQueue::TTestServer& server,
+    Ydb::Topic::V1::TopicService::Stub& topicStub,
+    const TString& topicShortName,
+    const TString& expectedPayload,
+    i64 expectedPartitionId = 0,
+    ui64 expectedOffset = 0,
+    ui32 minPartitions = 1)
+{
+    const auto messages = TryReadTopicMessagesViaStreamRead(
+        server,
+        topicStub,
+        topicShortName,
+        TDuration::Seconds(30),
+        minPartitions);
+    if (messages.empty()) {
+        const auto legacyMessage = TryReadFirstTopicMessage(server, topicShortName);
+        UNIT_ASSERT_C(legacyMessage.Defined(), "Expected topic to have visible messages");
+        UNIT_ASSERT_VALUES_EQUAL(*legacyMessage, expectedPayload);
+        if (expectedPartitionId == 0 && expectedOffset == 0) {
+            return;
+        }
+        UNIT_FAIL("Legacy read does not expose partition/offset metadata");
+    }
+
+    bool found = false;
+    for (const auto& message : messages) {
+        if (message.PartitionId == expectedPartitionId
+            && message.Offset == expectedOffset
+            && message.Data == expectedPayload)
+        {
+            found = true;
+            break;
+        }
+    }
+    UNIT_ASSERT_C(
+        found,
+        TStringBuilder()
+            << "Expected message partition=" << expectedPartitionId
+            << " offset=" << expectedOffset
+            << " payload=" << expectedPayload);
+}
+
+void AssertTopicEmptyAfterCancel(
+    NPersQueue::TTestServer& server,
+    const TString& topicShortName)
+{
+    AssertTopicNotVisible(server, topicShortName, TDuration::Seconds(2));
 }
 
 bool SchemePathExists(NPersQueue::TTestServer& server, const TString& path) {
@@ -1904,6 +2065,185 @@ Y_UNIT_TEST(BeginOnlyPublishAndCancelUseDeleteOnly) {
         UNIT_ASSERT_VALUES_EQUAL(outcome.Operation.status(), Ydb::StatusIds::SUCCESS);
         UNIT_ASSERT_VALUES_EQUAL(CountPublications(server, "root@builtin"), 1u);
     }
+}
+
+} // Y_UNIT_TEST_SUITE
+
+Y_UNIT_TEST_SUITE(TopicDeferredPublishLifecycle) {
+
+Y_UNIT_TEST(PublishMakesDataVisible) {
+    auto fixture = TDeferredStreamWriteFixture::Enabled("lifecycle-publish-topic", "ext-lifecycle-publish");
+    GrantPublicationRegistryDelete(fixture.Server, "root@builtin");
+
+    constexpr TStringBuf payload = "lifecycle-publish-payload";
+    {
+        auto session = fixture.OpenWriteStream("producer-lifecycle-publish");
+        WriteAndExpectWriteResponse(*session->Stream, MakeStreamWriteRequest(
+            1,
+            TString(payload),
+            std::make_pair(fixture.IntPublicationId, fixture.ExtPublicationId)));
+    }
+
+    const auto publishOutcome = CallPublish(*fixture.DeferredStub, "/Root", fixture.IntPublicationId);
+    UNIT_ASSERT_VALUES_EQUAL(publishOutcome.Operation.status(), Ydb::StatusIds::SUCCESS);
+    UNIT_ASSERT_VALUES_EQUAL(CountPublications(fixture.Server, "root@builtin"), 0u);
+
+    AssertTopicVisible(
+        fixture.Server,
+        *fixture.TopicStub,
+        fixture.TopicShortName,
+        TString(payload));
+}
+
+Y_UNIT_TEST(CancelDiscardsData) {
+    auto fixture = TDeferredStreamWriteFixture::Enabled("lifecycle-cancel-topic", "ext-lifecycle-cancel");
+    GrantPublicationRegistryDelete(fixture.Server, "root@builtin");
+
+    {
+        auto session = fixture.OpenWriteStream("producer-lifecycle-cancel");
+        WriteAndExpectWriteResponse(*session->Stream, MakeStreamWriteRequest(
+            1,
+            "lifecycle-cancel-payload",
+            std::make_pair(fixture.IntPublicationId, fixture.ExtPublicationId)));
+    }
+
+    const auto cancelOutcome = CallCancelPublication(*fixture.DeferredStub, "/Root", fixture.IntPublicationId);
+    UNIT_ASSERT_VALUES_EQUAL(cancelOutcome.Operation.status(), Ydb::StatusIds::SUCCESS);
+    UNIT_ASSERT_VALUES_EQUAL(CountPublications(fixture.Server, "root@builtin"), 0u);
+
+    AssertTopicEmptyAfterCancel(fixture.Server, fixture.TopicShortName);
+}
+
+Y_UNIT_TEST(StagingNotVisibleBeforePublish) {
+    auto fixture = TDeferredStreamWriteFixture::Enabled("lifecycle-staging-topic", "ext-lifecycle-staging");
+    GrantPublicationRegistryDelete(fixture.Server, "root@builtin");
+
+    constexpr TStringBuf payload = "lifecycle-staging-payload";
+    {
+        auto session = fixture.OpenWriteStream("producer-lifecycle-staging");
+        WriteAndExpectWriteResponse(*session->Stream, MakeStreamWriteRequest(
+            1,
+            TString(payload),
+            std::make_pair(fixture.IntPublicationId, fixture.ExtPublicationId)));
+    }
+
+    AssertTopicNotVisible(fixture.Server, fixture.TopicShortName);
+    UNIT_ASSERT_VALUES_EQUAL(CountPublications(fixture.Server, "root@builtin"), 1u);
+
+    const auto publishOutcome = CallPublish(*fixture.DeferredStub, "/Root", fixture.IntPublicationId);
+    UNIT_ASSERT_VALUES_EQUAL(publishOutcome.Operation.status(), Ydb::StatusIds::SUCCESS);
+
+    AssertTopicVisible(
+        fixture.Server,
+        *fixture.TopicStub,
+        fixture.TopicShortName,
+        TString(payload));
+}
+
+Y_UNIT_TEST(MultiDestinationSinglePublication) {
+    auto server = MakeServerWithDeferredPublishEnabled();
+    server.AnnoyingClient->GrantConnect("root@builtin");
+    CreateLegacyStreamWriteTopic(server, "lifecycle-multi-topic-a", 1);
+    CreateLegacyStreamWriteTopic(server, "lifecycle-multi-topic-b", 1);
+
+    auto deferredStub = MakeStub(server);
+    auto topicStub = MakeTopicServiceStub(server);
+    const ui64 intPublicationId = BeginPublicationIntId(
+        CallBeginPublication(*deferredStub, "/Root", "ext-lifecycle-multi-dest"));
+    GrantPublicationRegistryDelete(server, "root@builtin");
+
+    constexpr TStringBuf payloadA = "lifecycle-topic-a";
+    constexpr TStringBuf payloadB = "lifecycle-topic-b";
+    {
+        auto session = TStreamWriteSession::Open(*topicStub, "lifecycle-multi-topic-a", "producer-a", 0);
+        WriteAndExpectWriteResponse(*session->Stream, MakeStreamWriteRequest(
+            1,
+            TString(payloadA),
+            std::make_pair(intPublicationId, TString("ext-lifecycle-multi-dest"))));
+    }
+    {
+        auto session = TStreamWriteSession::Open(*topicStub, "lifecycle-multi-topic-b", "producer-b", 0);
+        WriteAndExpectWriteResponse(*session->Stream, MakeStreamWriteRequest(
+            1,
+            TString(payloadB),
+            std::make_pair(intPublicationId, TString("ext-lifecycle-multi-dest"))));
+    }
+
+    const auto publishOutcome = CallPublish(*deferredStub, "/Root", intPublicationId);
+    UNIT_ASSERT_VALUES_EQUAL(publishOutcome.Operation.status(), Ydb::StatusIds::SUCCESS);
+    UNIT_ASSERT_VALUES_EQUAL(CountPublications(server, "root@builtin"), 0u);
+
+    AssertTopicVisible(server, *topicStub, "lifecycle-multi-topic-a", TString(payloadA));
+    AssertTopicVisible(server, *topicStub, "lifecycle-multi-topic-b", TString(payloadB));
+}
+
+Y_UNIT_TEST(RepeatFinalizeNotFound) {
+    auto fixture = TDeferredStreamWriteFixture::Enabled("lifecycle-repeat-topic", "ext-lifecycle-repeat");
+    GrantPublicationRegistryDelete(fixture.Server, "root@builtin");
+
+    constexpr TStringBuf payload = "lifecycle-repeat-payload";
+    {
+        auto session = fixture.OpenWriteStream("producer-lifecycle-repeat");
+        WriteAndExpectWriteResponse(*session->Stream, MakeStreamWriteRequest(
+            1,
+            TString(payload),
+            std::make_pair(fixture.IntPublicationId, fixture.ExtPublicationId)));
+    }
+
+    const auto firstPublish = CallPublish(*fixture.DeferredStub, "/Root", fixture.IntPublicationId);
+    UNIT_ASSERT_VALUES_EQUAL(firstPublish.Operation.status(), Ydb::StatusIds::SUCCESS);
+
+    AssertTopicVisible(
+        fixture.Server,
+        *fixture.TopicStub,
+        fixture.TopicShortName,
+        TString(payload));
+
+    const auto secondPublish = CallPublish(*fixture.DeferredStub, "/Root", fixture.IntPublicationId);
+    UNIT_ASSERT_VALUES_EQUAL(secondPublish.Operation.status(), Ydb::StatusIds::NOT_FOUND);
+
+    const auto cancelOutcome = CallCancelPublication(*fixture.DeferredStub, "/Root", fixture.IntPublicationId);
+    UNIT_ASSERT_VALUES_EQUAL(cancelOutcome.Operation.status(), Ydb::StatusIds::NOT_FOUND);
+
+    const auto legacyMessage = TryReadFirstTopicMessage(fixture.Server, fixture.TopicShortName);
+    UNIT_ASSERT(legacyMessage.Defined());
+    UNIT_ASSERT_VALUES_EQUAL(*legacyMessage, TString(payload));
+}
+
+Y_UNIT_TEST(BeginOnlyPublishAborts) {
+    auto server = MakeServerWithDeferredPublishEnabled();
+    server.AnnoyingClient->GrantConnect("root@builtin");
+    CreateLegacyStreamWriteTopic(server, "lifecycle-begin-only-publish");
+
+    auto deferredStub = MakeStub(server);
+
+    const ui64 intPublicationId = BeginPublicationIntId(
+        CallBeginPublication(*deferredStub, "/Root", "ext-begin-only-publish"));
+    GrantPublicationRegistryDelete(server, "root@builtin");
+
+    const auto publishOutcome = CallPublish(*deferredStub, "/Root", intPublicationId);
+    UNIT_ASSERT_VALUES_EQUAL(publishOutcome.Operation.status(), Ydb::StatusIds::ABORTED);
+    UNIT_ASSERT_VALUES_EQUAL(CountPublications(server, "root@builtin"), 1u);
+
+    AssertTopicNotVisible(server, "lifecycle-begin-only-publish");
+}
+
+Y_UNIT_TEST(BeginOnlyCancelDeletes) {
+    auto server = MakeServerWithDeferredPublishEnabled();
+    server.AnnoyingClient->GrantConnect("root@builtin");
+    CreateLegacyStreamWriteTopic(server, "lifecycle-begin-only-cancel");
+
+    auto deferredStub = MakeStub(server);
+
+    const ui64 intPublicationId = BeginPublicationIntId(
+        CallBeginPublication(*deferredStub, "/Root", "ext-begin-only-cancel"));
+    GrantPublicationRegistryDelete(server, "root@builtin");
+
+    const auto cancelOutcome = CallCancelPublication(*deferredStub, "/Root", intPublicationId);
+    UNIT_ASSERT_VALUES_EQUAL(cancelOutcome.Operation.status(), Ydb::StatusIds::SUCCESS);
+    UNIT_ASSERT_VALUES_EQUAL(CountPublications(server, "root@builtin"), 0u);
+
+    AssertTopicNotVisible(server, "lifecycle-begin-only-cancel");
 }
 
 } // Y_UNIT_TEST_SUITE

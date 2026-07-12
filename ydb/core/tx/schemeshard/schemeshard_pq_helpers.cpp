@@ -72,9 +72,8 @@ void SendTopicCloudEvent(
 {
     NPQ::NCloudEvents::TCloudEventInfo info;
     if (!BuildTopicCloudEventInfo(operation, ss, status, reason, userSID, peerName, info)) {
-        LOG_ERROR_S(*NActors::TlsActivationContext, NKikimrServices::PERSQUEUE,
-            "Failed to build topic cloud event info for operation: "
-                << NKikimrSchemeOp::EOperationType_Name(operation.GetOperationType()));
+        YDB_LOG_ERROR_COMP(NKikimrServices::PERSQUEUE, "Failed to build topic cloud event info",
+            {"operation", NKikimrSchemeOp::EOperationType_Name(operation.GetOperationType())});
         return;
     }
 
@@ -106,9 +105,8 @@ void SendTopicCloudEventIfNeeded(
                 return;
         }
 
-        LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-            "Sending topic cloud event for operation: "
-                << NKikimrSchemeOp::EOperationType_Name(transaction.GetOperationType()));
+        YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "Sending topic cloud event",
+            {"operation", NKikimrSchemeOp::EOperationType_Name(transaction.GetOperationType())});
 
         SendTopicCloudEvent(
             transaction,

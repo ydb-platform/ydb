@@ -731,8 +731,9 @@ public:
                 }
         }
 
-        LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::BUILD_INDEX,
-            "Restored index build id# " << indexInfo->Id << ": " << *indexInfo);
+        YDB_LOG_DEBUG_COMP(NKikimrServices::BUILD_INDEX, "Restored index build",
+            {"id", indexInfo->Id},
+            {"#_*indexInfo", *indexInfo});
     }
 
     template<class TRow>
@@ -749,8 +750,9 @@ public:
             row.template GetValue<Schema::IndexBuildShardStatus::LastKeyAck>();
 
         TSerializedTableRange bound{range};
-        LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::BUILD_INDEX,
-            "AddShardStatus id# " << Id << " shard " << shardIdx);
+        YDB_LOG_DEBUG_COMP(NKikimrServices::BUILD_INDEX, "AddShardStatus shard",
+            {"id", Id},
+            {"shardIdx", shardIdx});
         if (BuildKind == TIndexBuildInfo::EBuildKind::BuildVectorIndex &&
             KMeans.State != TIndexBuildInfo::TKMeans::Filter &&
             KMeans.State != TIndexBuildInfo::TKMeans::FilterBorders)

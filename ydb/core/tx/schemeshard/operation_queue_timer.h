@@ -80,8 +80,8 @@ private:
             new IEventHandle(TActorBase::SelfId(), TActorBase::SelfId(), new TEvWakeupQueue),
             AppData(ctx)->UserPoolId);
 
-        LOG_DEBUG_S(ctx, ServiceId,
-            "Operation queue set wakeup after delta# " << delta.Seconds() << " seconds");
+        YDB_LOG_DEBUG_CTX_COMP(ctx, ServiceId, "Operation queue set wakeup after seconds",
+            {"delta", delta.Seconds()});
     }
 
     TMonotonic Now() override {
@@ -89,7 +89,7 @@ private:
     }
 
     void HandleWakeup(const TActorContext &ctx) {
-        LOG_DEBUG_S(ctx, ServiceId, "Operation queue wakeup");
+        YDB_LOG_DEBUG_CTX_COMP(ctx, ServiceId, "Operation queue wakeup");
         When = {};
         LongTimerId = {};
         TBase::Wakeup();

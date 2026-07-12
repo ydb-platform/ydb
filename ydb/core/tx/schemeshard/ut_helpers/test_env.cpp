@@ -26,6 +26,8 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
+
 
 bool NSchemeShardUT_Private::TTestEnv::ENABLE_SCHEMESHARD_LOG = true;
 static const bool ENABLE_DATASHARD_LOG = false;
@@ -232,8 +234,8 @@ private:
             const auto pipeActor = found->first;
             const auto txId = found->second;
 
-            LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                        "tests -- TTxNotificationSubscriber for txId " << txId << ": disconnected from schemeshard, resend EvNotifyTxCompletion");
+            YDB_LOG_DEBUG_CTX(ctx, "Tests -- TTxNotificationSubscriber for txId disconnected from schemeshard, resend EvNotifyTxCompletion",
+                {"txId", txId});
 
             // Remove entry from the tx-pipe mapping. Pipe actor has already died.
             PipeToTx.erase(pipeActor);
@@ -247,8 +249,8 @@ private:
     void Handle(TEvSchemeShard::TEvNotifyTxCompletion::TPtr &ev, const TActorContext &ctx) {
         ui64 txId = ev->Get()->Record.GetTxId();
 
-        LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                    "tests -- TTxNotificationSubscriber for txId " << txId << ": send EvNotifyTxCompletion");
+        YDB_LOG_DEBUG_CTX(ctx, "Tests -- TTxNotificationSubscriber for txId send EvNotifyTxCompletion",
+            {"txId", txId});
 
         // Add txId, add waiter, recreate pipe and send notification request
 
@@ -264,8 +266,8 @@ private:
     void Handle(TEvSchemeShard::TEvNotifyTxCompletionResult::TPtr &ev, const TActorContext &ctx) {
         ui64 txId = ev->Get()->Record.GetTxId();
 
-        LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                    "tests -- TTxNotificationSubscriber for txId " << txId << ": got EvNotifyTxCompletionResult");
+        YDB_LOG_DEBUG_CTX(ctx, "Tests -- TTxNotificationSubscriber for txId got EvNotifyTxCompletionResult",
+            {"txId", txId});
 
         if (!SchemeTxWaiters.contains(txId))
             return;
@@ -273,8 +275,9 @@ private:
         // Notify all waiters, forget txId, drop pipe
 
         for (TActorId waiter : SchemeTxWaiters[txId]) {
-            LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                        "tests -- TTxNotificationSubscriber for txId " << txId <<": satisfy waiter " << waiter);
+            YDB_LOG_DEBUG_CTX(ctx, "Tests -- TTxNotificationSubscriber for txId satisfy waiter",
+                {"txId", txId},
+                {"waiter", waiter});
             ctx.Send(waiter, new TEvSchemeShard::TEvNotifyTxCompletionResult(txId));
         }
         SchemeTxWaiters.erase(txId);
@@ -293,8 +296,8 @@ private:
     }
 
     void SendToSchemeshard(ui64 txId, const TActorContext &ctx) {
-        LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-            "tests -- TTxNotificationSubscriber, SendToSchemeshard, txId " << txId);
+        YDB_LOG_DEBUG_CTX(ctx, "Tests -- TTxNotificationSubscriber, SendToSchemeshard, txId",
+            {"txId", txId});
 
         // NOTE: the only reason why we should send every EvNotifyTxCompletion to schemeshard
         // with a separate pipe is to avoid out-of-order reception of 2 events on the schemeshard side:
@@ -372,8 +375,7 @@ private:
     {
         Y_UNUSED(ctx);
 
-        LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                    "tests -- TFakeMetering got TEvMetering::TEvWriteMeteringJson");
+        YDB_LOG_DEBUG_CTX(ctx, "Tests -- TFakeMetering got TEvMetering::TEvWriteMeteringJson");
 
         const auto* msg = ev->Get();
 
@@ -382,10 +384,9 @@ private:
 
     void HandleUnexpectedEvent(STFUNC_SIG)
     {
-        ALOG_DEBUG(NKikimrServices::FLAT_TX_SCHEMESHARD,
-                    "TFakeMetering:"
-                        << " unhandled event type: " << ev->GetTypeRewrite()
-                        << " event: " << ev->ToString());
+        YDB_LOG_DEBUG("TFakeMetering: unhandled event",
+            {"type", ev->GetTypeRewrite()},
+            {"event", ev->ToString()});
     }
 
 private:

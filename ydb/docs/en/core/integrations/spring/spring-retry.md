@@ -8,7 +8,7 @@ This is an experimental module. Its API and behavior may change in future versio
 
 {% endnote %}
 
-{{ ydb-short-name }}is a distributed database, so some errors are transient: for example, a session may expire, a temporary overload may occur, a node may become temporarily unavailable, or a transaction may be aborted due to concurrent data changes. Proper handling of such errors requires retrying the entire transaction, not an individual query. The `spring-ydb-retry` module takes over this logic: it intercepts transactional methods, classifies errors by [{{ ydb-short-name }} status codes](../../reference/ydb-sdk/error_handling.md), and retries the transaction with [exponential backoff](../../concepts/glossary.md#exponential-backoff) and [jitter](../../concepts/glossary.md#jitter) as needed.
+{{ ydb-short-name }} is a distributed database, so some errors are transient: for example, a session may expire, a temporary overload may occur, a node may become temporarily unavailable, or a transaction may be aborted due to concurrent data changes. Proper handling of such errors requires retrying the entire transaction, not an individual query. The `spring-ydb-retry` module takes over this logic: it intercepts transactional methods, classifies errors by [{{ ydb-short-name }} status codes](../../reference/ydb-sdk/error_handling.md), and retries the transaction with [exponential backoff](../../concepts/glossary.md#exponential-backoff) and [jitter](../../concepts/glossary.md#jitter) as needed.
 
 ## Features {#features}
 

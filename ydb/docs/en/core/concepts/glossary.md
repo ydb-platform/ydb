@@ -32,7 +32,7 @@ The primary role of database nodes is to run various [tablets](#tablet) and [act
 
 #### Storage node {#storage-node}
 
-**Storage nodes** (or **nodes storage**) are stateful nodes responsible for long-term storage of data fragments. The collection of storage nodes in a given [cluster {{ ydb-short-name }}](#cluster) is called [distributed storage](#distributed-storage) and can be viewed as the storage layer of that cluster. Thus, adding more storage nodes and disks is the main way to increase the cluster's storage capacity and I/O throughput.
+**Storage nodes** (or **storage nodes**) are stateful nodes responsible for long-term storage of data fragments. The collection of storage nodes in a given [cluster {{ ydb-short-name }}](#cluster) is called [distributed storage](#distributed-storage) and can be viewed as the storage layer of that cluster. Thus, adding more storage nodes and disks is the main way to increase the cluster's storage capacity and I/O throughput.
 
 #### Hybrid node {#hybrid-mode}
 
@@ -494,7 +494,7 @@ A {{ ydb-short-name }} user whose account is created in a third-party directory,
 
 ### Group {#access-group}
 
-** [Group](../security/authorization.md#group)** or **access group** is a named set of [users](#access-user) and other groups with equal capabilities for their members.
+**[Group](../security/authorization.md#group)** or **access group** is a named set of [users](#access-user) and other groups with equal capabilities for their members.
 
 A group is identified by a [SID](#access-sid).
 
@@ -883,7 +883,7 @@ In the case of read-only transactions, similar to "read uncommitted" in other da
 
 #### Transaction flags {#txflags}
 
-**Transaction flags** or **TxFlags** is a bitmask of flags that somehow modify the execution of a transaction.
+**Transaction flags**, **transaction flags**, or **TxFlags** is a bitmask of flags that somehow modify the execution of a transaction.
 
 #### Transaction ID {#txid}
 
@@ -913,7 +913,7 @@ MiniKQL is a low-level language. End users of the system only see queries in [YQ
 
 ### Global schema {#global-schema}
 
-**Global schema**, **database schema**, **global scheme**, **global schema** or **database schema** is the schema of all data stored in the [database](#database). It consists of [tables](#table) and other entities such as [topics](#topic). The metadata about these entities is called the global schema. The term is used in contrast to **local schema** or **local schema**, which refers to the data schema inside a [tablet](#tablet). {{ ydb-short-name }} users never see the local schema and work only with the global schema.
+**Global schema**, **database schema**, **global scheme**, **global schema** or **database schema** is the schema of all data stored in the [database](#database). It consists of [tables](#table) and other entities such as [topics](#topic). The metadata about these entities is called the global schema. The term is used in contrast to **local schema**, which refers to the data schema inside a [tablet](#tablet). {{ ydb-short-name }} users never see the local schema and work only with the global schema.
 
 ### KiKiMR {#kikimr}
 

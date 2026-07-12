@@ -112,6 +112,13 @@ static arrow::Status ConvertColumn(
         }
         case NScheme::NTypeIds::JsonDocument: {
             for (i32 i = 0; i < binaryArray.length(); ++i) {
+                if (binaryArray.IsNull(i)) {
+                    auto appendResult = builder.AppendNull();
+                    if (!appendResult.ok()) {
+                        return appendResult;
+                    }
+                    continue;
+                }
                 auto value = binaryArray.Value(i);
                 if (!value.size()) {
                     Y_ABORT_UNLESS(builder.AppendNull().ok());

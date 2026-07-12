@@ -420,8 +420,6 @@ common:
     to: /integrations/data-migration/import-jdbc.md
   - from: /integrations/ingestion/import-jdbc.md
     to: /integrations/data-migration/import-jdbc.md
-  - from: /integrations/ingestion/import-mysql.md
-    to: /integrations/data-migration/import-mysql.md
   - from: /integrations/ingestion/spark.md
     to: /integrations/query-engines/spark.md
   - from: /integrations/logstash.md

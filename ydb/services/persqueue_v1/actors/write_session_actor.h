@@ -156,7 +156,8 @@ private:
     void HandlePoison(TEvPQProxy::TEvDieCommand::TPtr& ev, const NActors::TActorContext& ctx);
     void Handle(TEvents::TEvWakeup::TPtr& ev, const TActorContext& ctx);
 
-    void CloseSession(const TString& errorReason, const PersQueue::ErrorCode::ErrorCode errorCode, const NActors::TActorContext& ctx);
+    void CloseSession(const TString& errorReason, const PersQueue::ErrorCode::ErrorCode errorCode, const NActors::TActorContext& ctx,
+                      std::optional<Ydb::StatusIds::StatusCode> statusOverride = std::nullopt);
 
     void CheckFinish(const NActors::TActorContext& ctx);
 
@@ -277,6 +278,8 @@ private:
     TString ClientDC;
 
     TInstant LastSourceIdUpdate;
+
+    THashMap<ui64, TString> DeferredPublicationExtByInt;
 
     TVector<NPersQueue::TPQLabelsInfo> Aggr;
     NKikimr::NPQ::TMultiCounter SLITotal;

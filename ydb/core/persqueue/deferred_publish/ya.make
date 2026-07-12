@@ -4,6 +4,7 @@ SRCS(
     delete_publication_query.cpp
     describe_publication_query.cpp
     destination_blob.cpp
+    get_destination_blob_query.cpp
     insert_publication_query.cpp
     list_publications_query.cpp
     query_utils.cpp

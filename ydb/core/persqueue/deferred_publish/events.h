@@ -37,6 +37,7 @@ struct TEvDeferredPublish {
         EvInsertPublicationFinished,
         EvListPublicationsResponse,
         EvDescribePublicationResponse,
+        EvGetDestinationBlobResponse,
         EvUpsertDestinationResponse,
         EvDeletePublicationResponse,
     };
@@ -79,6 +80,12 @@ struct TEvDeferredPublish {
         TMaybe<TDescribePublicationData> Publication;
     };
 
+    struct TEvGetDestinationBlobResponse : public NActors::TEventLocal<TEvGetDestinationBlobResponse, EvGetDestinationBlobResponse> {
+        Ydb::StatusIds::StatusCode Status = Ydb::StatusIds::SUCCESS;
+        NYql::TIssues Issues;
+        TMaybe<TString> DestinationBlob;
+    };
+
     struct TEvUpsertDestinationResponse : public NActors::TEventLocal<TEvUpsertDestinationResponse, EvUpsertDestinationResponse> {
         Ydb::StatusIds::StatusCode Status = Ydb::StatusIds::SUCCESS;
         NYql::TIssues Issues;
@@ -96,6 +103,7 @@ using TEvTablesCreationFinished = TEvDeferredPublish::TEvTablesCreationFinished;
 using TEvInsertPublicationFinished = TEvDeferredPublish::TEvInsertPublicationFinished;
 using TEvListPublicationsResponse = TEvDeferredPublish::TEvListPublicationsResponse;
 using TEvDescribePublicationResponse = TEvDeferredPublish::TEvDescribePublicationResponse;
+using TEvGetDestinationBlobResponse = TEvDeferredPublish::TEvGetDestinationBlobResponse;
 using TEvUpsertDestinationResponse = TEvDeferredPublish::TEvUpsertDestinationResponse;
 using TEvDeletePublicationResponse = TEvDeferredPublish::TEvDeletePublicationResponse;
 

@@ -15,6 +15,11 @@
 
 namespace NKikimr::NPQ {
 
+struct TDeferredPublishWriterOpts {
+    ui64 IntPublicationId = 0;
+    TString ExtPublicationId;
+};
+
 struct TEvPartitionWriter {
     enum EEv {
         EvInitResult = EventSpaceBegin(TKikimrEvents::ES_PQ_PARTITION_WRITER),
@@ -25,6 +30,9 @@ struct TEvPartitionWriter {
         EvAbortDeferredStaging,
 
         EvTxWriteRequest,
+
+        EvRequestDeferredDestinationUpsert,
+        EvDeferredDestinationUpsertResult,
 
         EvEnd,
     };
@@ -162,26 +170,39 @@ struct TEvPartitionWriter {
     struct TEvAbortDeferredStaging : public TEventLocal<TEvAbortDeferredStaging, EvAbortDeferredStaging> {
     };
 
+    struct TEvRequestDeferredDestinationUpsert : public TEventLocal<TEvRequestDeferredDestinationUpsert, EvRequestDeferredDestinationUpsert> {
+        ui64 IntPublicationId = 0;
+        TString TopicPath;
+        TString Database;
+        ui32 PartitionId = 0;
+        ui64 TabletId = 0;
+    };
+
+    struct TEvDeferredDestinationUpsertResult : public TEventLocal<TEvDeferredDestinationUpsertResult, EvDeferredDestinationUpsertResult> {
+        bool Success = false;
+        TString Reason;
+    };
+
     struct TEvTxWriteRequest : public TEventLocal<TEvTxWriteRequest, EvTxWriteRequest> {
-        TEvTxWriteRequest(const TString& sessionId, const TString& txId, THolder<TEvWriteRequest>&& request) :
-            SessionId(sessionId),
-            TxId(txId),
-            Request(std::move(request))
+        TEvTxWriteRequest(
+            const TString& sessionId,
+            const TString& txId,
+            THolder<TEvWriteRequest>&& request,
+            TMaybe<TDeferredPublishWriterOpts> deferredPublish = Nothing())
+            : SessionId(sessionId)
+            , TxId(txId)
+            , Request(std::move(request))
+            , DeferredPublish(std::move(deferredPublish))
         {
         }
 
         TString SessionId;
         TString TxId;
         THolder<TEvWriteRequest> Request;
+        TMaybe<TDeferredPublishWriterOpts> DeferredPublish;
     };
 
 }; // TEvPartitionWriter
-
-
-struct TDeferredPublishWriterOpts {
-    ui64 IntPublicationId = 0;
-    TString ExtPublicationId;
-};
 
 
 struct TPartitionWriterOpts {

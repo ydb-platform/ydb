@@ -427,6 +427,14 @@ class TPartitionWriter : public TActorBootstrapped<TPartitionWriter>, public TPa
             ERROR("CmdAbortDeferredStaging: absent result");
         }
 
+        if (UpsertRollbackPending) {
+            NKikimrClient::TResponse response;
+            response.SetStatus(NMsgBusProxy::MSTATUS_ERROR);
+            response.SetErrorCode(NPersQueue::NErrorCode::BAD_REQUEST);
+            response.SetErrorReason("Failed to upsert deferred publish destination");
+            return InitResult("Failed to upsert deferred publish destination", std::move(response));
+        }
+
         BecomeZombie(EErrorCode::InternalError, "Deferred staging aborted");
     }
 
@@ -473,11 +481,52 @@ class TPartitionWriter : public TActorBootstrapped<TPartitionWriter>, public TPa
         }
 
         // we do not save partition id to KQP in Kafka transaction, because we do not have KQP transaction during write request in Kafka API
-        if (HasWriteId() && !IsKafkaTransactionWriter() && !IsDeferredPublishWriter()) {
+        if (IsDeferredPublishWriter()) {
+            StartUpsertDestination();
+        } else if (HasWriteId() && !IsKafkaTransactionWriter()) {
             SavePartitionIdToKqpTxn(ActorContext());
         } else {
             GetMaxSeqNo();
         }
+    }
+
+    void StartUpsertDestination() {
+        Y_ENSURE(IsDeferredPublishWriter());
+        Y_ENSURE(!Opts.Database.empty());
+
+        auto* event = new TEvPartitionWriter::TEvRequestDeferredDestinationUpsert;
+        event->IntPublicationId = Opts.DeferredPublish->IntPublicationId;
+        event->TopicPath = Opts.TopicPath;
+        event->Database = Opts.Database;
+        event->PartitionId = PartitionId;
+        event->TabletId = TabletId;
+        Send(Client, event);
+        Become(&TThis::StateUpsertDestination);
+    }
+
+    void HandleUpsertPermanentFailure(const TString& reason) {
+        UpsertRollbackPending = true;
+        ERROR("Upsert destination failed: " << reason);
+        AbortDeferredStaging();
+    }
+
+    STATEFN(StateUpsertDestination) {
+        switch (ev->GetTypeRewrite()) {
+            hFunc(TEvPartitionWriter::TEvDeferredDestinationUpsertResult, HandleDeferredDestinationUpsertResult);
+            hFunc(TEvPartitionWriter::TEvWriteRequest, HoldPending);
+            hFunc(TEvPartitionWriter::TEvAbortDeferredStaging, HandleAbortDeferredStagingEvent);
+        default:
+            return StateBase(ev);
+        }
+    }
+
+    void HandleDeferredDestinationUpsertResult(TEvPartitionWriter::TEvDeferredDestinationUpsertResult::TPtr& ev) {
+        if (ev->Get()->Success) {
+            GetMaxSeqNo();
+            return;
+        }
+
+        HandleUpsertPermanentFailure(ev->Get()->Reason);
     }
 
     void SavePartitionIdToKqpTxn(const TActorContext& ctx) {
@@ -1020,15 +1069,6 @@ public:
         PipeClient = RegisterWithSameMailbox(NTabletPipe::CreateClient(SelfId(), TabletId, config));
 
         if (IsDeferredPublishWriter()) {
-            if (!AppData(ctx)->FeatureFlags.GetEnableTopicDeferredPublish()) {
-                NKikimrClient::TResponse response;
-                response.SetStatus(NMsgBusProxy::MSTATUS_ERROR);
-                response.SetErrorCode(NPersQueue::NErrorCode::BAD_REQUEST);
-                response.SetErrorReason("deferred publish is not supported yet");
-                SendInitResult("deferred publish is disabled", std::move(response));
-                Become(&TThis::StateZombie);
-                return;
-            }
             WriteId = MakeDeferredWriteIdFromOpts();
             GetOwnership();
         } else if (Opts.Database && Opts.SessionId && Opts.TxId) {
@@ -1096,6 +1136,8 @@ private:
 
     TMaybe<NPQ::TWriteId> WriteId;
     ui32 SupportivePartitionId = INVALID_PARTITION_ID;
+
+    bool UpsertRollbackPending = false;
 
     using IRetryPolicy = IRetryPolicy<Ydb::StatusIds::StatusCode>;
     using IRetryState = IRetryPolicy::IRetryState;

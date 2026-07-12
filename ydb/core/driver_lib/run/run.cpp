@@ -2259,6 +2259,10 @@ TIntrusivePtr<TServiceInitializersList> TKikimrRunner::CreateServiceInitializers
     }
 #endif
 
+    if (serviceMask.EnableUdfStore) {
+        sil->AddServiceInitializer(new TUdfStoreInitializer(runConfig, FunctionRegistry));
+    }
+
     return sil;
 }
 

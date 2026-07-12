@@ -293,14 +293,7 @@ bool TOlapColumnBase::IsAllowedType(ui32 typeId) {
         return false;
     }
 
-    switch (typeId) {
-        case NYql::NProto::Interval:
-        case NYql::NProto::DyNumber:
-        case NYql::NProto::Uuid:
-            return false;
-        default:
-            break;
-    }
+    Y_UNUSED(typeId);
     return true;
 }
 
@@ -338,7 +331,10 @@ bool TOlapColumnBase::IsAllowedPkType(ui32 typeId) {
         case NYql::NProto::Datetime64:
         case NYql::NProto::Timestamp64:
         case NYql::NProto::Interval64:
+        case NYql::NProto::Interval:
         case NYql::NProto::Decimal:
+        case NYql::NProto::DyNumber:
+        case NYql::NProto::Uuid:
             return true;
         default:
             return false;

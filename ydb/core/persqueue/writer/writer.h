@@ -22,6 +22,7 @@ struct TEvPartitionWriter {
         EvWriteAccepted,
         EvWriteResponse,
         EvDisconnected,
+        EvAbortDeferredStaging,
 
         EvTxWriteRequest,
 
@@ -158,6 +159,9 @@ struct TEvPartitionWriter {
         const TEvWriteResponse::EErrorCode ErrorCode;
     };
 
+    struct TEvAbortDeferredStaging : public TEventLocal<TEvAbortDeferredStaging, EvAbortDeferredStaging> {
+    };
+
     struct TEvTxWriteRequest : public TEventLocal<TEvTxWriteRequest, EvTxWriteRequest> {
         TEvTxWriteRequest(const TString& sessionId, const TString& txId, THolder<TEvWriteRequest>&& request) :
             SessionId(sessionId),
@@ -172,6 +176,12 @@ struct TEvPartitionWriter {
     };
 
 }; // TEvPartitionWriter
+
+
+struct TDeferredPublishWriterOpts {
+    ui64 IntPublicationId = 0;
+    TString ExtPublicationId;
+};
 
 
 struct TPartitionWriterOpts {
@@ -199,6 +209,7 @@ struct TPartitionWriterOpts {
     std::optional<NKafka::TProducerInstanceId> KafkaProducerInstanceId;
     // Indicates that this writer will write records in transactions
     std::optional<TString> KafkaTransactionalId;
+    std::optional<TDeferredPublishWriterOpts> DeferredPublish;
     TString TraceId;
     TString RequestType;
 
@@ -225,6 +236,10 @@ struct TPartitionWriterOpts {
     TPartitionWriterOpts& WithKafkaProducerInstanceId(const std::optional<NKafka::TProducerInstanceId>& value) { KafkaProducerInstanceId = value; return *this; }
     TPartitionWriterOpts& WithKafkaTransactionalId(const std::optional<TString>& value) { KafkaTransactionalId = value; return *this; }
     TPartitionWriterOpts& WithTrackProducerId(bool value) { TrackProducerId = value; return *this; }
+    TPartitionWriterOpts& WithDeferredPublish(ui64 intPublicationId, const TString& extPublicationId) {
+        DeferredPublish = TDeferredPublishWriterOpts{intPublicationId, extPublicationId};
+        return *this;
+    }
 };
 
 IActor* CreatePartitionWriter(const TActorId& client,

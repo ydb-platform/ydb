@@ -4,7 +4,9 @@
 #include <ydb/core/persqueue/pqtablet/partition/partition.h>
 #include <ydb/core/persqueue/pqtablet/quota/read_quoter.h>
 #include <ydb/core/persqueue/pqtablet/fix_transaction_states.h>
+#include <memory>
 #include <ydb/core/persqueue/ut/common/pq_ut_common.h>
+#include <ydb/core/persqueue/writer/writer.h>
 #include <ydb/core/protos/counters_keyvalue.pb.h>
 #include <ydb/core/protos/pqconfig.pb.h>
 #include <ydb/core/tablet/tablet_counters_protobuf.h>
@@ -120,6 +122,79 @@ using NKikimr::NPQ::NHelpers::CreatePQTabletMock;
 using TPQTabletMock = NKikimr::NPQ::NHelpers::TPQTabletMock;
 
 } // namespace NHelpers
+
+namespace NDeferredWriterTest {
+
+class TClientActor : public TActorBootstrapped<TClientActor> {
+public:
+    TClientActor(ui64 tabletId, ui32 partitionId, ui64 writeCookie, const std::shared_ptr<bool>& writeDone)
+        : TabletId(tabletId)
+        , PartitionId(partitionId)
+        , WriteCookie(writeCookie)
+        , WriteDone(writeDone)
+    {
+    }
+
+    void Bootstrap(const TActorContext& ctx) {
+        TPartitionWriterOpts opts;
+        opts.WithDeduplication(false)
+            .WithSourceId("deferred-writer-source")
+            .WithTopicPath("/topic")
+            .WithDeferredPublish(52, "ext-52");
+
+        WriterId = ctx.Register(CreatePartitionWriter(SelfId(), TabletId, PartitionId, opts));
+        Become(&TThis::StateWork);
+    }
+
+    STATEFN(StateWork) {
+        switch (ev->GetTypeRewrite()) {
+            hFunc(TEvPartitionWriter::TEvInitResult, HandleInit);
+            hFunc(TEvPartitionWriter::TEvWriteResponse, HandleWrite);
+            hFunc(TEvPartitionWriter::TEvDisconnected, HandleDisconnected);
+        default:
+            break;
+        }
+    }
+
+private:
+    void HandleInit(TEvPartitionWriter::TEvInitResult::TPtr& ev) {
+        if (!ev->Get()->IsSuccess()) {
+            *WriteDone = false;
+            return;
+        }
+
+        auto writeEv = MakeHolder<TEvPartitionWriter::TEvWriteRequest>(WriteCookie);
+        auto* request = writeEv->Record.MutablePartitionRequest();
+        request->SetOwnerCookie(ev->Get()->GetResult().OwnerCookie);
+        auto* cmdWrite = request->AddCmdWrite();
+        cmdWrite->SetSourceId("deferred-writer-source");
+        cmdWrite->SetSeqNo(0);
+        const TString data = "deferred-writer-payload";
+        cmdWrite->SetData(data);
+        cmdWrite->SetCreateTimeMS(TInstant::Now().MilliSeconds());
+        cmdWrite->SetDisableDeduplication(true);
+        cmdWrite->SetUncompressedSize(data.size());
+        cmdWrite->SetIgnoreQuotaDeadline(true);
+        cmdWrite->SetExternalOperation(true);
+        Send(WriterId, writeEv.Release());
+    }
+
+    void HandleWrite(TEvPartitionWriter::TEvWriteResponse::TPtr& ev) {
+        *WriteDone = ev->Get()->IsSuccess();
+    }
+
+    void HandleDisconnected(TEvPartitionWriter::TEvDisconnected::TPtr&) {
+        *WriteDone = false;
+    }
+
+    const ui64 TabletId;
+    const ui32 PartitionId;
+    const ui64 WriteCookie;
+    const std::shared_ptr<bool> WriteDone;
+    TActorId WriterId;
+};
+
+} // namespace NDeferredWriterTest
 
 Y_UNIT_TEST_SUITE(TPQTabletTests) {
 
@@ -294,6 +369,8 @@ protected:
         ui64 txId,
         NKikimrPQ::TPartitionOperation::TWriteOp::TDeferredPublicationApi::EOp op,
         const std::vector<ui32>& partitionIds = {0});
+    void SendAbortDeferredStagingRequest(const TWriteId& writeId, ui32 partitionId = 0, ui64 cookie = 55);
+    void WaitAbortDeferredStagingResponse(ui64 cookie = 55);
 
     std::unique_ptr<TEvPersQueue::TEvRequest> MakeGetOwnershipRequest(const TGetOwnershipRequestParams& params,
                                                                       const TActorId& pipe) const;
@@ -1030,6 +1107,47 @@ void TPQTabletFixture::WaitDeferredPublicationWriteResponse() {
 void TPQTabletFixture::SendDeferredPublicationWriteRequest(const TWriteId& writeId, const TString& ownerCookie, const ui32 partitionId) {
     SendDeferredPublicationWriteRequestWithoutWait(writeId, ownerCookie, partitionId);
     WaitDeferredPublicationWriteResponse();
+}
+
+void TPQTabletFixture::SendAbortDeferredStagingRequest(
+    const TWriteId& writeId,
+    const ui32 partitionId,
+    const ui64 cookie)
+{
+    EnsurePipeExist();
+
+    auto event = MakeHolder<TEvPersQueue::TEvRequest>();
+    auto* request = event->Record.MutablePartitionRequest();
+    request->SetTopic("/topic");
+    request->SetPartition(partitionId);
+    request->SetCookie(cookie);
+    SetWriteId(*request, writeId);
+    request->MutableCmdAbortDeferredStaging();
+    ActorIdToProto(Pipe, request->MutablePipeClient());
+
+    SendToPipe(Ctx->Edge, event.Release());
+}
+
+void TPQTabletFixture::WaitAbortDeferredStagingResponse(const ui64 cookie) {
+    bool found = false;
+    auto observer = [&found, cookie](TAutoPtr<IEventHandle>& event) {
+        if (auto* msg = event->CastAsLocal<TEvPersQueue::TEvResponse>()) {
+            const auto& partitionResponse = msg->Record.GetPartitionResponse();
+            if (partitionResponse.HasCookie() && partitionResponse.GetCookie() == cookie
+                && partitionResponse.HasCmdAbortDeferredStagingResult()) {
+                found = true;
+            }
+        }
+        return TTestActorRuntimeBase::EEventAction::PROCESS;
+    };
+    auto prev = Ctx->Runtime->SetObserverFunc(observer);
+
+    TDispatchOptions options;
+    options.CustomFinalCondition = [&found]() {
+        return found;
+    };
+    UNIT_ASSERT(Ctx->Runtime->DispatchEvents(options));
+    Ctx->Runtime->SetObserverFunc(prev);
 }
 
 TVector<TString> TPQTabletFixture::ReadMainPartitionMessages(const ui32 partitionId, const ui32 count) {
@@ -3305,6 +3423,54 @@ Y_UNIT_TEST_F(DeferredPublication_Publish_Unknown_WriteId, TPQTabletFixture) {
                                   .WriteId=writeId});
     WaitProposeTransactionResponse({.TxId=txId,
                                    .Status=NKikimrPQ::TEvProposeTransactionResult::ABORTED});
+}
+
+Y_UNIT_TEST_F(DeferredPublication_AbortDeferredStaging_AfterOwnership, TPQTabletFixture) {
+    const TWriteId writeId = NHelpers::MakeDeferredWriteId(49, "ext-49");
+
+    PQTabletPrepare({.partitions=1}, {}, *Ctx);
+    EnsurePipeExist();
+
+    CreateSupportivePartitionForDeferredPublication(writeId);
+    WaitForExactTxWritesCount(1);
+
+    SendAbortDeferredStagingRequest(writeId);
+    WaitAbortDeferredStagingResponse();
+    WaitForExactTxWritesCount(0);
+}
+
+Y_UNIT_TEST_F(DeferredPublication_AbortDeferredStaging_Idempotent, TPQTabletFixture) {
+    const TWriteId writeId = NHelpers::MakeDeferredWriteId(50, "ext-50");
+
+    PQTabletPrepare({.partitions=1}, {}, *Ctx);
+    EnsurePipeExist();
+
+    SendAbortDeferredStagingRequest(writeId);
+    WaitAbortDeferredStagingResponse();
+    WaitForExactTxWritesCount(0);
+}
+
+Y_UNIT_TEST_F(DeferredPublication_Writer_StagingNotVisibleOnMain, TPQTabletFixture) {
+    for (ui32 node = 0; node < Ctx->Runtime->GetNodeCount(); ++node) {
+        Ctx->Runtime->GetAppData(node).FeatureFlags.SetEnableTopicDeferredPublish(true);
+    }
+
+    PQTabletPrepare({.partitions=1}, {}, *Ctx);
+    EnsurePipeExist();
+
+    auto writeDone = std::make_shared<bool>(false);
+    Ctx->Runtime->Register(new NDeferredWriterTest::TClientActor(
+        Ctx->TabletId, 0, 777, writeDone));
+
+    TDispatchOptions options;
+    options.CustomFinalCondition = [writeDone]() {
+        return *writeDone;
+    };
+    UNIT_ASSERT(Ctx->Runtime->DispatchEvents(options));
+    UNIT_ASSERT(*writeDone);
+
+    const auto messages = ReadMainPartitionMessages();
+    UNIT_ASSERT_VALUES_EQUAL(messages.size(), 0u);
 }
 
 void TPQTabletFixture::TestSendingTEvReadSetViaApp(const TSendReadSetViaAppTestParams& params)

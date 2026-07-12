@@ -2615,6 +2615,38 @@ void TPersQueue::HandleWriteRequestForSupportivePartition(const ui64 responseCoo
     HandleWriteRequest(responseCookie, std::move(traceId), actorId, req, ctx);
 }
 
+void TPersQueue::HandleAbortDeferredStagingRequest(const ui64 responseCookie,
+                                                   NWilson::TTraceId /* traceId */,
+                                                   const NKikimrClient::TPersQueuePartitionRequest& req,
+                                                   const TActorContext& ctx)
+{
+    PQ_ENSURE(req.HasWriteId());
+    const TWriteId writeId = GetWriteId(req);
+    if (!writeId.IsDeferredPublicationApiTransaction()) {
+        ReplyError(ctx, responseCookie, NPersQueue::NErrorCode::BAD_REQUEST,
+                   "CmdAbortDeferredStaging requires deferred publication WriteId");
+        return;
+    }
+
+    const ui32 originalPartitionId = req.GetPartition();
+    if (TxWrites.contains(writeId)) {
+        TTxWriteInfo& writeInfo = TxWrites.at(writeId);
+        if (writeInfo.Partitions.contains(originalPartitionId) && !writeInfo.Deleting) {
+            PQ_LOG_TX_I("abort deferred staging for WriteId " << writeId << " partition " << originalPartitionId);
+            BeginDeletePartitions(writeId, writeInfo);
+            TxWritesChanged = true;
+            TryWriteTxs(ctx);
+        }
+    }
+
+    InitResponseBuilder(responseCookie, 1, COUNTER_LATENCY_PQ_GET_OWNERSHIP);
+    auto fakeResponse = MakeHolder<TEvPQ::TEvProxyResponse>(responseCookie, false);
+    auto& record = *fakeResponse->Response;
+    record.SetStatus(NMsgBusProxy::MSTATUS_OK);
+    record.MutablePartitionResponse()->MutableCmdAbortDeferredStagingResult();
+    ctx.Send(SelfId(), fakeResponse.Release());
+}
+
 void TPersQueue::HandleEventForSupportivePartition(const ui64 responseCookie,
                                                    NWilson::TTraceId traceId,
                                                    const NKikimrClient::TPersQueuePartitionRequest& req,
@@ -2627,8 +2659,11 @@ void TPersQueue::HandleEventForSupportivePartition(const ui64 responseCookie,
         HandleReserveBytesRequestForSupportivePartition(responseCookie, std::move(traceId), req, sender, ctx);
     } else if (req.CmdWriteSize()) {
         HandleWriteRequestForSupportivePartition(responseCookie, std::move(traceId), req, ctx);
+    } else if (req.HasCmdAbortDeferredStaging()) {
+        HandleAbortDeferredStagingRequest(responseCookie, std::move(traceId), req, ctx);
     } else {
-        ReplyError(ctx, responseCookie, NPersQueue::NErrorCode::BAD_REQUEST, "CmdGetOwnership, CmdReserveBytes or CmdWrite expected");
+        ReplyError(ctx, responseCookie, NPersQueue::NErrorCode::BAD_REQUEST,
+                   "CmdGetOwnership, CmdReserveBytes, CmdWrite or CmdAbortDeferredStaging expected");
     }
 }
 
@@ -2646,9 +2681,16 @@ void TPersQueue::HandleEventForSupportivePartition(const ui64 responseCookie,
         req.HasCmdGetOwnership()
         || req.HasCmdReserveBytes()
         || req.CmdWriteSize()
+        || req.HasCmdAbortDeferredStaging()
         ;
     if (!isValid) {
-        ReplyError(ctx, responseCookie, NPersQueue::NErrorCode::BAD_REQUEST, "CmdGetOwnership, CmdReserveBytes or CmdWrite expected");
+        ReplyError(ctx, responseCookie, NPersQueue::NErrorCode::BAD_REQUEST,
+                   "CmdGetOwnership, CmdReserveBytes, CmdWrite or CmdAbortDeferredStaging expected");
+        return;
+    }
+
+    if (req.HasCmdAbortDeferredStaging()) {
+        HandleAbortDeferredStagingRequest(responseCookie, std::move(event->TraceId), req, ctx);
         return;
     }
 
@@ -2838,7 +2880,8 @@ void TPersQueue::Handle(TEvPersQueue::TEvRequest::TPtr& ev, const TActorContext&
         + req.HasCmdSplitMessageGroup()
         + req.HasCmdPublishRead()
         + req.HasCmdForgetRead()
-        + req.HasCmdUpdateReadMetrics();
+        + req.HasCmdUpdateReadMetrics()
+        + req.HasCmdAbortDeferredStaging();
 
     if (count != 1) {
         ReplyError(ctx, responseCookie, NPersQueue::NErrorCode::BAD_REQUEST,

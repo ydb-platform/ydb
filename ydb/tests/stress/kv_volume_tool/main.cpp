@@ -598,6 +598,29 @@ bool ReadValueChunk(
     return true;
 }
 
+void CleanupPartKeys(
+    Ydb::KeyValue::V1::KeyValueService::Stub& stub,
+    const TString& database,
+    const TString& path,
+    ui64 partitionId,
+    const TVector<TString>& partKeys)
+{
+    for (const auto& partKey : partKeys) {
+        Ydb::KeyValue::ExecuteTransactionRequest request;
+        request.set_path(path);
+        request.set_partition_id(partitionId);
+
+        auto* deleteRange = request.add_commands()->mutable_delete_range();
+        auto* range = deleteRange->mutable_range();
+        range->set_from_key_inclusive(partKey);
+        range->set_to_key_inclusive(partKey);
+
+        if (ExecuteTransaction(stub, database, std::move(request), "DeletePart") != 0) {
+            Cerr << "Failed to cleanup part key: " << partKey << Endl;
+        }
+    }
+}
+
 int UploadFile(const TString& endpoint, const TString& database, const TString& path, ui64 partitionId, const TString& key, const TString& filePath, ui32 storageChannel, bool useTls) {
     const i64 fileSize = GetFileLength(filePath);
     if (fileSize < 0) {
@@ -658,15 +681,11 @@ int UploadFile(const TString& endpoint, const TString& database, const TString& 
 
             Cout << "Uploading part " << partIndex << ": key=" << partKey << " (" << readBytes << " bytes)" << Endl;
             if (ExecuteTransaction(*stub, database, std::move(request), "Write") != 0) {
+                CleanupPartKeys(*stub, database, path, partitionId, partKeys);
                 return 1;
             }
 
             ++partIndex;
-        }
-
-        if (partKeys.empty()) {
-            Cerr << "File is empty: " << filePath << Endl;
-            return 1;
         }
 
         Ydb::KeyValue::ExecuteTransactionRequest request;
@@ -682,6 +701,7 @@ int UploadFile(const TString& endpoint, const TString& database, const TString& 
 
         Cout << "Concatenating " << partKeys.size() << " part(s) into key=" << key << Endl;
         if (ExecuteTransaction(*stub, database, std::move(request), "Concat") != 0) {
+            CleanupPartKeys(*stub, database, path, partitionId, partKeys);
             return 1;
         }
     }
@@ -694,9 +714,9 @@ int DownloadFile(const TString& endpoint, const TString& database, const TString
     auto channel = CreateGrpcChannel(endpoint, useTls);
     auto stub = Ydb::KeyValue::V1::KeyValueService::NewStub(channel);
 
-    TFixedBufferFileOutput out(filePath);
     ui64 offset = 0;
     ui64 totalBytes = 0;
+    std::unique_ptr<TFileOutput> out;
 
     while (true) {
         Ydb::KeyValue::ReadResult result;
@@ -706,13 +726,19 @@ int DownloadFile(const TString& endpoint, const TString& database, const TString
 
         if (result.value().empty()) {
             if (offset == 0) {
-                Cerr << "Read returned empty value for key=" << key << Endl;
-                return 1;
+                TFileOutput emptyOut(filePath);
+                emptyOut.Finish();
+                Cout << "File downloaded successfully: key=" << key << " -> " << filePath << " (0 bytes)" << Endl;
+                return 0;
             }
             break;
         }
 
-        out.Write(result.value().data(), result.value().size());
+        if (!out) {
+            out = std::make_unique<TFileOutput>(filePath);
+        }
+
+        out->Write(result.value().data(), result.value().size());
         totalBytes += result.value().size();
         offset += result.value().size();
 
@@ -721,7 +747,9 @@ int DownloadFile(const TString& endpoint, const TString& database, const TString
         }
     }
 
-    out.Finish();
+    if (out) {
+        out->Finish();
+    }
 
     Cout << "File downloaded successfully: key=" << key << " -> " << filePath << " (" << totalBytes << " bytes)" << Endl;
     return 0;

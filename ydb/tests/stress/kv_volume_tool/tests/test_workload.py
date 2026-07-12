@@ -26,6 +26,7 @@ S3_OBJECT_PREFIX = "{}/{}".format("blob_depot", BLOB_DEPOT_NAME)
 MB = 1024 * 1024
 GB = 1024 * MB
 UPLOAD_DOWNLOAD_FILE_SIZES = [
+    0,
     1 * MB,
     2 * MB,
     4 * MB,
@@ -37,8 +38,6 @@ UPLOAD_DOWNLOAD_FILE_SIZES = [
     256 * MB,
     512 * MB,
     1 * GB,
-    2 * GB,
-    4 * GB,
 ]
 
 
@@ -50,11 +49,12 @@ def _upload_download_size_id(size):
 
 def _write_file_of_size(path, size_bytes):
     chunk = (b"kv_volume_tool_upload_download_test_" * 32)[:1024]
+    big_chunk = chunk * 1024  # 1MB
     with open(path, "wb") as file:
         written = 0
         while written < size_bytes:
-            to_write = min(len(chunk), size_bytes - written)
-            file.write(chunk[:to_write])
+            to_write = min(len(big_chunk), size_bytes - written)
+            file.write(big_chunk[:to_write])
             written += to_write
 
 

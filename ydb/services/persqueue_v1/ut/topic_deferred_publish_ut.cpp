@@ -1,4 +1,5 @@
 #include <ydb/public/api/grpc/ydb_topic_deferred_publish_v1.grpc.pb.h>
+#include <ydb/public/api/grpc/ydb_topic_v1.grpc.pb.h>
 
 #include <ydb/core/cms/console/console.h>
 #include <ydb/core/grpc_services/local_rpc/local_rpc.h>
@@ -18,6 +19,8 @@
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <grpcpp/grpcpp.h>
+
+#include <google/protobuf/util/time_util.h>
 
 #include <atomic>
 #include <thread>
@@ -459,6 +462,153 @@ NPersQueue::TTestServer MakeServerWithDeferredPublishEnabled(
     return NPersQueue::TTestServer(settings);
 }
 
+std::unique_ptr<Ydb::Topic::V1::TopicService::Stub> MakeTopicServiceStub(
+    const NPersQueue::TTestServer& server)
+{
+    auto channel = grpc::CreateChannel(
+        "localhost:" + ToString(server.GrpcPort),
+        grpc::InsecureChannelCredentials());
+    return Ydb::Topic::V1::TopicService::NewStub(channel);
+}
+
+void CreateLegacyStreamWriteTopic(NPersQueue::TTestServer& server, const TString& topicShortName, ui32 partitions = 2) {
+    server.AnnoyingClient->CreateTopicNoLegacy("rt3.dc1--" + topicShortName, partitions);
+}
+
+void AssertStreamWriteSuccess(const Ydb::Topic::StreamWriteMessage::FromServer& response) {
+    UNIT_ASSERT_VALUES_EQUAL(response.status(), Ydb::StatusIds::SUCCESS);
+}
+
+void AssertStreamWriteFailed(
+    const Ydb::Topic::StreamWriteMessage::FromServer& response,
+    Ydb::StatusIds::StatusCode expectedStatus,
+    const TMaybe<TString>& expectedMessage = Nothing())
+{
+    UNIT_ASSERT_VALUES_EQUAL(response.status(), expectedStatus);
+    if (expectedMessage) {
+        UNIT_ASSERT_GT(response.issues_size(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(response.issues(0).message(), *expectedMessage);
+    }
+}
+
+void InitStreamWriteSession(
+    grpc::ClientReaderWriter<Ydb::Topic::StreamWriteMessage::FromClient, Ydb::Topic::StreamWriteMessage::FromServer>& stream,
+    const TString& topicPath,
+    const TString& producerId,
+    i64 partitionId)
+{
+    Ydb::Topic::StreamWriteMessage::FromClient req;
+    Ydb::Topic::StreamWriteMessage::FromServer resp;
+
+    req.mutable_init_request()->set_path(topicPath);
+    req.mutable_init_request()->set_producer_id(producerId);
+    req.mutable_init_request()->set_partition_id(partitionId);
+
+    UNIT_ASSERT(stream.Write(req));
+    UNIT_ASSERT(stream.Read(&resp));
+    AssertStreamWriteSuccess(resp);
+    UNIT_ASSERT_VALUES_EQUAL(resp.server_message_case(), Ydb::Topic::StreamWriteMessage::FromServer::kInitResponse);
+}
+
+Ydb::Topic::StreamWriteMessage::FromClient MakeStreamWriteRequest(
+    ui64 seqNo,
+    const TString& data,
+    const TMaybe<std::pair<ui64, TString>>& deferredPublish = Nothing(),
+    const TMaybe<std::pair<TString, TString>>& tx = Nothing())
+{
+    Ydb::Topic::StreamWriteMessage::FromClient req;
+    auto* write = req.mutable_write_request();
+    write->set_codec(Ydb::Topic::CODEC_RAW);
+
+    if (deferredPublish) {
+        auto* deferred = write->mutable_deferred_publish();
+        deferred->set_int_publication_id(deferredPublish->first);
+        deferred->set_ext_publication_id(deferredPublish->second);
+    }
+    if (tx) {
+        write->mutable_tx()->set_session(tx->first);
+        write->mutable_tx()->set_id(tx->second);
+    }
+
+    auto* msg = write->add_messages();
+    msg->set_seq_no(seqNo);
+    msg->set_data(data);
+    msg->set_uncompressed_size(data.size());
+    *msg->mutable_created_at() = google::protobuf::util::TimeUtil::MillisecondsToTimestamp(TInstant::Now().MilliSeconds());
+    return req;
+}
+
+void WriteAndExpectWriteResponse(
+    grpc::ClientReaderWriter<Ydb::Topic::StreamWriteMessage::FromClient, Ydb::Topic::StreamWriteMessage::FromServer>& stream,
+    Ydb::Topic::StreamWriteMessage::FromClient req)
+{
+    Ydb::Topic::StreamWriteMessage::FromServer resp;
+    UNIT_ASSERT(stream.Write(req));
+    UNIT_ASSERT(stream.Read(&resp));
+    AssertStreamWriteSuccess(resp);
+    UNIT_ASSERT_VALUES_EQUAL(resp.server_message_case(), Ydb::Topic::StreamWriteMessage::FromServer::kWriteResponse);
+}
+
+void WriteAndExpectFailure(
+    grpc::ClientReaderWriter<Ydb::Topic::StreamWriteMessage::FromClient, Ydb::Topic::StreamWriteMessage::FromServer>& stream,
+    Ydb::Topic::StreamWriteMessage::FromClient req,
+    Ydb::StatusIds::StatusCode expectedStatus,
+    const TMaybe<TString>& expectedMessage = Nothing())
+{
+    Ydb::Topic::StreamWriteMessage::FromServer resp;
+    UNIT_ASSERT(stream.Write(req));
+    UNIT_ASSERT(stream.Read(&resp));
+    AssertStreamWriteFailed(resp, expectedStatus, expectedMessage);
+}
+
+struct TStreamWriteSession {
+    grpc::ClientContext Context;
+    std::unique_ptr<grpc::ClientReaderWriter<Ydb::Topic::StreamWriteMessage::FromClient, Ydb::Topic::StreamWriteMessage::FromServer>> Stream;
+
+    static std::unique_ptr<TStreamWriteSession> Open(
+        Ydb::Topic::V1::TopicService::Stub& topicStub,
+        const TString& topicPath,
+        const TString& producerId,
+        i64 partitionId = 0)
+    {
+        auto session = std::make_unique<TStreamWriteSession>();
+        FillClientContext(session->Context, "/Root");
+        session->Stream = topicStub.StreamWrite(&session->Context);
+        UNIT_ASSERT(session->Stream);
+        InitStreamWriteSession(*session->Stream, topicPath, producerId, partitionId);
+        return session;
+    }
+};
+
+struct TDeferredStreamWriteFixture {
+    NPersQueue::TTestServer Server;
+    std::unique_ptr<Ydb::Topic::DeferredPublish::V1::TopicDeferredPublishService::Stub> DeferredStub;
+    std::unique_ptr<Ydb::Topic::V1::TopicService::Stub> TopicStub;
+    TString TopicShortName;
+    ui64 IntPublicationId = 0;
+    TString ExtPublicationId;
+
+    static TDeferredStreamWriteFixture Enabled(
+        const TString& topicShortName = "deferred-stream-topic",
+        const TString& extPublicationId = "ext-stream-write")
+    {
+        TDeferredStreamWriteFixture fixture;
+        fixture.TopicShortName = topicShortName;
+        fixture.ExtPublicationId = extPublicationId;
+        fixture.Server = MakeServerWithDeferredPublishEnabled();
+        fixture.Server.AnnoyingClient->GrantConnect("root@builtin");
+        CreateLegacyStreamWriteTopic(fixture.Server, topicShortName, 2);
+        fixture.DeferredStub = MakeStub(fixture.Server);
+        fixture.TopicStub = MakeTopicServiceStub(fixture.Server);
+        fixture.IntPublicationId = BeginPublicationIntId(
+            CallBeginPublication(*fixture.DeferredStub, "/Root", extPublicationId));
+        return fixture;
+    }
+
+    std::unique_ptr<TStreamWriteSession> OpenWriteStream(const TString& producerId, i64 partitionId = 0) const {
+        return TStreamWriteSession::Open(*TopicStub, TopicShortName, producerId, partitionId);
+    }
+};
 TBeginPublicationOutcome CallBeginPublicationWithEmptyDatabaseHeader(
     Ydb::Topic::DeferredPublish::V1::TopicDeferredPublishService::Stub& stub,
     const TString& extPublicationId = "pub-no-db")
@@ -1372,6 +1522,110 @@ Y_UNIT_TEST(DeletePublicationNotFoundBeforeBegin) {
     UNIT_ASSERT_VALUES_EQUAL(
         CallDeletePublication(server, "/Root", 1),
         Ydb::StatusIds::NOT_FOUND);
+}
+
+} // Y_UNIT_TEST_SUITE
+
+Y_UNIT_TEST_SUITE(TopicDeferredPublishStreamWrite) {
+
+Y_UNIT_TEST(StreamWriteDeferredPublishAcksWrite) {
+    auto fixture = TDeferredStreamWriteFixture::Enabled();
+    auto session = fixture.OpenWriteStream("producer-deferred");
+
+    WriteAndExpectWriteResponse(*session->Stream, MakeStreamWriteRequest(
+        1,
+        "deferred-payload",
+        std::make_pair(fixture.IntPublicationId, fixture.ExtPublicationId)));
+
+    AssertDestinationRowCount(fixture.Server, "root@builtin", fixture.IntPublicationId, 1);
+
+    NKikimrPQ::TDeferredPublishDestinationBlob blob;
+    UNIT_ASSERT(NPQ::NDeferredPublish::ParseDestinationBlob(
+        ReadDestinationBlob(fixture.Server, "root@builtin", fixture.IntPublicationId, fixture.TopicShortName),
+        &blob));
+    UNIT_ASSERT_VALUES_EQUAL(blob.PartitionsSize(), 1);
+    UNIT_ASSERT(NPQ::NDeferredPublish::FindTopicPartitionDestination(blob, 0));
+}
+
+Y_UNIT_TEST(StreamWriteDeferredPublishDisabledByDefault) {
+    NPersQueue::TTestServer server(
+        NKikimr::NPersQueueTests::PQSettings().SetEnableTopicDeferredPublish(false));
+    server.AnnoyingClient->GrantConnect("root@builtin");
+    const TString topicShortName = "deferred-disabled-topic";
+    CreateLegacyStreamWriteTopic(server, topicShortName, 1);
+
+    auto topicStub = MakeTopicServiceStub(server);
+    auto session = TStreamWriteSession::Open(*topicStub, topicShortName, "producer-disabled");
+
+    WriteAndExpectFailure(
+        *session->Stream,
+        MakeStreamWriteRequest(1, "payload", std::make_pair(1u, TString("ext-disabled"))),
+        Ydb::StatusIds::UNSUPPORTED,
+        TString(DisabledMessage));
+}
+
+Y_UNIT_TEST(StreamWriteRejectsEmptyExtPublicationId) {
+    auto fixture = TDeferredStreamWriteFixture::Enabled();
+    auto session = fixture.OpenWriteStream("producer-empty-ext");
+
+    WriteAndExpectFailure(
+        *session->Stream,
+        MakeStreamWriteRequest(1, "payload", std::make_pair(fixture.IntPublicationId, TString(""))),
+        Ydb::StatusIds::BAD_REQUEST,
+        TString("WriteRequest.deferred_publish.ext_publication_id must not be empty"));
+}
+
+Y_UNIT_TEST(StreamWriteFailsOnUnknownIntPublicationId) {
+    auto fixture = TDeferredStreamWriteFixture::Enabled();
+    auto session = fixture.OpenWriteStream("producer-unknown-int");
+
+    Ydb::Topic::StreamWriteMessage::FromServer resp;
+    UNIT_ASSERT(session->Stream->Write(MakeStreamWriteRequest(
+        1,
+        "payload",
+        std::make_pair(999999u, TString("missing-ext")))));
+    UNIT_ASSERT(session->Stream->Read(&resp));
+    UNIT_ASSERT(resp.status() != Ydb::StatusIds::SUCCESS);
+}
+
+Y_UNIT_TEST(StreamWriteDeferredThenRegularInSameSession) {
+    auto fixture = TDeferredStreamWriteFixture::Enabled();
+    auto session = fixture.OpenWriteStream("producer-mixed");
+
+    WriteAndExpectWriteResponse(*session->Stream, MakeStreamWriteRequest(
+        1,
+        "deferred-part",
+        std::make_pair(fixture.IntPublicationId, fixture.ExtPublicationId)));
+    WriteAndExpectWriteResponse(*session->Stream, MakeStreamWriteRequest(2, "regular-part"));
+}
+
+Y_UNIT_TEST(StreamWriteMergesPartitionsIntoDestinationBlob) {
+    auto fixture = TDeferredStreamWriteFixture::Enabled("deferred-merge-topic", "ext-merge");
+
+    {
+        auto session = fixture.OpenWriteStream("producer-part-0", 0);
+        WriteAndExpectWriteResponse(*session->Stream, MakeStreamWriteRequest(
+            1,
+            "partition-0",
+            std::make_pair(fixture.IntPublicationId, fixture.ExtPublicationId)));
+    }
+    {
+        auto session = fixture.OpenWriteStream("producer-part-1", 1);
+        WriteAndExpectWriteResponse(*session->Stream, MakeStreamWriteRequest(
+            1,
+            "partition-1",
+            std::make_pair(fixture.IntPublicationId, fixture.ExtPublicationId)));
+    }
+
+    AssertDestinationRowCount(fixture.Server, "root@builtin", fixture.IntPublicationId, 1);
+
+    NKikimrPQ::TDeferredPublishDestinationBlob blob;
+    UNIT_ASSERT(NPQ::NDeferredPublish::ParseDestinationBlob(
+        ReadDestinationBlob(fixture.Server, "root@builtin", fixture.IntPublicationId, fixture.TopicShortName),
+        &blob));
+    UNIT_ASSERT_VALUES_EQUAL(blob.PartitionsSize(), 2);
+    UNIT_ASSERT(NPQ::NDeferredPublish::FindTopicPartitionDestination(blob, 0));
+    UNIT_ASSERT(NPQ::NDeferredPublish::FindTopicPartitionDestination(blob, 1));
 }
 
 } // Y_UNIT_TEST_SUITE

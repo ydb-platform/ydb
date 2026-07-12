@@ -140,6 +140,7 @@ public:
         opts.WithDeduplication(false)
             .WithSourceId("deferred-writer-source")
             .WithTopicPath("/topic")
+            .WithDatabase("/Root")
             .WithDeferredPublish(52, "ext-52");
 
         WriterId = ctx.Register(CreatePartitionWriter(SelfId(), TabletId, PartitionId, opts));
@@ -151,12 +152,19 @@ public:
             hFunc(TEvPartitionWriter::TEvInitResult, HandleInit);
             hFunc(TEvPartitionWriter::TEvWriteResponse, HandleWrite);
             hFunc(TEvPartitionWriter::TEvDisconnected, HandleDisconnected);
+            hFunc(TEvPartitionWriter::TEvRequestDeferredDestinationUpsert, HandleDeferredDestinationUpsert);
         default:
             break;
         }
     }
 
 private:
+    void HandleDeferredDestinationUpsert(TEvPartitionWriter::TEvRequestDeferredDestinationUpsert::TPtr&) {
+        auto* result = new TEvPartitionWriter::TEvDeferredDestinationUpsertResult;
+        result->Success = true;
+        Send(WriterId, result);
+    }
+
     void HandleInit(TEvPartitionWriter::TEvInitResult::TPtr& ev) {
         if (!ev->Get()->IsSuccess()) {
             *WriteDone = false;

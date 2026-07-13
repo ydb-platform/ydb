@@ -90,6 +90,25 @@ bool JoinOutputsRight(const TString& joinKind) {
     return joinKind != "LeftOnly" && joinKind != "LeftSemi";
 }
 
+TString GetValidJoinKind(const TString& joinKind) {
+    const auto joinKindLowered = to_lower(joinKind);
+    if (joinKindLowered == "left") {
+        return "Left";
+    } else if (joinKindLowered == "inner") {
+        return "Inner";
+    } else if (joinKindLowered == "cross") {
+        return "Cross";
+    }
+    return joinKind;
+}
+
+bool ShouldUseBlockHashJoin(bool enabled, NKqp::EJoinAlgoType joinAlgo, const TString& joinKind) {
+    const auto validJoinKind = GetValidJoinKind(joinKind);
+    return enabled
+        && (joinAlgo == NKqp::EJoinAlgoType::GraceJoin || joinAlgo == NKqp::EJoinAlgoType::ReverseBlockJoin)
+        && (validJoinKind == "Inner" || validJoinKind == "Left" || validJoinKind == "LeftSemi" || validJoinKind == "LeftOnly");
+}
+
 TVector<TInfoUnit> IUSetDiff(TVector<TInfoUnit> left, TVector<TInfoUnit> right) {
     TVector<TInfoUnit> res;
     for (const auto& unit : left) {

@@ -15,6 +15,12 @@
 #include <ydb/core/kqp/opt/cbo/cbo_optimizer_new.h>
 #include <library/cpp/json/writer/json.h>
 
+namespace NYql {
+
+struct TKikimrConfiguration;
+
+} // namespace NYql
+
 namespace NKikimr {
 namespace NKqp {
 
@@ -249,7 +255,7 @@ public:
     virtual TString GetExplainName() const = 0;
     virtual TString ToString(TExprContext& ctx) = 0;
 
-    virtual NJson::TJsonValue ToJson(ui32 explainFlags);
+    virtual NJson::TJsonValue ToJson(ui32 explainFlags, const NYql::TKikimrConfiguration& config);
 
     bool IsSingleConsumer() const {
         return Parents.size() <= 1;
@@ -383,7 +389,7 @@ public:
     virtual void PropagateLiveness(ILivenessContext& ctx) override;
     virtual TString ToString(TExprContext& ctx) override;
     virtual TString GetExplainName() const override { return RangeInfo.has_value() ? "TableRangeScan" : "TableFullScan"; }
-    virtual NJson::TJsonValue ToJson(ui32 explainFlags) override;
+    virtual NJson::TJsonValue ToJson(ui32 explainFlags, const NYql::TKikimrConfiguration& config) override;
 
     void RenameProducedIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction>& renameMap, TExprContext& ctx) override;
     bool NeedsMap() const;
@@ -462,7 +468,7 @@ public:
     virtual void ComputeStatistics(TRBOContext& ctx, TPlanProps& planProps) override;
 
     virtual TString ToString(TExprContext& ctx) override;
-    virtual NJson::TJsonValue ToJson(ui32 explainFlags) override;
+    virtual NJson::TJsonValue ToJson(ui32 explainFlags, const NYql::TKikimrConfiguration& config) override;
     virtual TString GetExplainName() const override { return "Map"; }
 
     bool IsOrdered() const {
@@ -538,7 +544,7 @@ public:
     void RenameProducedIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction>& renameMap, TExprContext& ctx) override;
     void RenameUsedIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction>& renameMap, TExprContext& ctx) override;
     virtual TString ToString(TExprContext& ctx) override;
-    virtual NJson::TJsonValue ToJson(ui32 explainFlags) override;
+    virtual NJson::TJsonValue ToJson(ui32 explainFlags, const NYql::TKikimrConfiguration& config) override;
     virtual TString GetExplainName() const override { return "Aggregate"; }
 
     virtual void ComputeMetadata(TRBOContext& ctx, TPlanProps& planProps) override;
@@ -572,7 +578,7 @@ public:
     virtual TVector<TInfoUnit> GetUsedIUs(TPlanProps& props) override;
     virtual TVector<TInfoUnit> GetSubplanIUs(TPlanProps& props) override;
     virtual TString ToString(TExprContext& ctx) override;
-    virtual NJson::TJsonValue ToJson(ui32 explainFlags) override;
+    virtual NJson::TJsonValue ToJson(ui32 explainFlags, const NYql::TKikimrConfiguration& config) override;
     virtual TString GetExplainName() const override { return "Filter"; }
 
     virtual TVector<std::reference_wrapper<TExpression>> GetExpressions() override;
@@ -611,7 +617,7 @@ public:
 
     void RenameUsedIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction>& renameMap, TExprContext& ctx) override;
     virtual TString ToString(TExprContext& ctx) override;
-    virtual NJson::TJsonValue ToJson(ui32 explainFlags) override;
+    virtual NJson::TJsonValue ToJson(ui32 explainFlags, const NYql::TKikimrConfiguration& config) override;
     virtual TString GetExplainName() const override { return "Join"; }
 
     virtual void ComputeMetadata(TRBOContext& ctx, TPlanProps& planProps) override;
@@ -636,7 +642,7 @@ public:
     virtual bool PropagateNameConstraints() override;
     void RenameProducedIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction>& renameMap, TExprContext& ctx) override;
     virtual TString ToString(TExprContext& ctx) override;
-    virtual NJson::TJsonValue ToJson(ui32 explainFlags) override;
+    virtual NJson::TJsonValue ToJson(ui32 explainFlags, const NYql::TKikimrConfiguration& config) override;
     virtual TString GetExplainName() const override { return "UnionAll"; }
 
     virtual void ComputeMetadata(TRBOContext& ctx, TPlanProps& planProps) override;
@@ -662,7 +668,7 @@ public:
     virtual TPlanAliases::TAliasMap ComputeAliases() override;
     void RenameUsedIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction>& renameMap, TExprContext& ctx) override;
     virtual TString ToString(TExprContext& ctx) override;
-    virtual NJson::TJsonValue ToJson(ui32 explainFlags) override;
+    virtual NJson::TJsonValue ToJson(ui32 explainFlags, const NYql::TKikimrConfiguration& config) override;
     virtual TString GetExplainName() const override { return "Limit"; }
 
     virtual TVector<std::reference_wrapper<TExpression>> GetExpressions() override;
@@ -698,7 +704,7 @@ public:
     virtual TPlanAliases::TAliasMap ComputeAliases() override;
     void RenameUsedIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction>& renameMap, TExprContext& ctx) override;
     virtual TString ToString(TExprContext& ctx) override;
-    virtual NJson::TJsonValue ToJson(ui32 explainFlags) override;
+    virtual NJson::TJsonValue ToJson(ui32 explainFlags, const NYql::TKikimrConfiguration& config) override;
     EOpPhase GetSortPhase() const {
         return SortPhase;
     }
@@ -922,8 +928,8 @@ public:
         return TOpTraversal(this);
     }
 
-    NJson::TJsonValue GetExecutionJson(ui64 & nodeCounter, THashMap<IOperator*, ui32>& operatorIds, ui32 explainFlags = 0x00);
-    NJson::TJsonValue GetExplainJson(ui64 & nodeCounter, const THashMap<IOperator*, ui32>& operatorIds, ui32 explainFlags = 0x00);
+    NJson::TJsonValue GetExecutionJson(ui64 & nodeCounter, THashMap<IOperator*, ui32>& operatorIds, ui32 explainFlags, const NYql::TKikimrConfiguration& config);
+    NJson::TJsonValue GetExplainJson(ui64 & nodeCounter, const THashMap<IOperator*, ui32>& operatorIds, ui32 explainFlags, const NYql::TKikimrConfiguration& config);
 
     TPlanProps PlanProps;
     TExprNode::TPtr Node;

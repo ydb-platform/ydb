@@ -902,14 +902,18 @@ public:
 
         TNodePtr options = BuildInputOptions(Pos_, Hints_);
         if (!options) {
-            options = Q(Y());
+            options = Y();
+        } else {
+            if (!options->Init(ctx, Source_.Get())) {
+                return false;
+            }
         }
 
         if (ctx.EnableSystemColumns) {
             sourceData = Y("RemoveSystemMembers", sourceData);
         }
 
-        Node_ = Y("let", Alias_, Y("block", Q(L(tables, Y("return", Y("Materialize!", "world", datasink, sourceData, options))))));
+        Node_ = Y("let", Alias_, Y("block", Q(L(tables, Y("return", Y("Materialize!", "world", datasink, sourceData, Q(options)))))));
         IsUsed_ = true;
 
         return true;

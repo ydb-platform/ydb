@@ -1,0 +1,4 @@
+USE plato;
+
+INSERT INTO Output1 WITH TRUNCATE SELECT /*+ unique() */ * FROM Input;
+INSERT INTO Output2 WITH TRUNCATE SELECT /*+ distinct() */ * FROM Input;

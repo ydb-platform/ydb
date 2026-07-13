@@ -771,7 +771,7 @@ Y_UNIT_TEST_LLVM(TestExtendOverFlows) {
     const auto list1 = NTest::ConvertValueToLiteralNode(pb, TVector<double>{0.0, 1.1, -3.14});
     const auto list2 = NTest::ConvertValueToLiteralNode(pb, TVector<double>{121324.323, -7898.8});
 
-    const auto pgmReturn = pb.FromFlow(pb.Extend({pb.ToFlow(list1), pb.ToFlow(list2), pb.ToFlow(list2)}));
+    const auto pgmReturn = pb.FromFlow(pb.Extend({pb.ToFlow(list1, {}), pb.ToFlow(list2, {}), pb.ToFlow(list2, {})}));
 
     const auto graph = setup.BuildGraph(pgmReturn);
     AssertUnboxedValueElementEqual(graph->GetValue(),
@@ -823,10 +823,10 @@ Y_UNIT_TEST_QUAD(TestExtendYields, LLVM, WIDE) {
 
     const auto pgmReturn = WIDE ? pb.FromFlow(
                                       pb.NarrowMap(
-                                          pb.Extend({pb.ExpandMap(pb.ToFlow(arg0), [&](TRuntimeNode item) -> TRuntimeNode::TList { return {item}; }),
-                                                     pb.ExpandMap(pb.ToFlow(arg1), [&](TRuntimeNode item) -> TRuntimeNode::TList { return {item}; })}),
+                                          pb.Extend({pb.ExpandMap(pb.ToFlow(arg0, {}), [&](TRuntimeNode item) -> TRuntimeNode::TList { return {item}; }),
+                                                     pb.ExpandMap(pb.ToFlow(arg1, {}), [&](TRuntimeNode item) -> TRuntimeNode::TList { return {item}; })}),
                                           [&](TRuntimeNode::TList items) { return items[0]; }))
-                                : pb.FromFlow(pb.Extend({pb.ToFlow(arg0), pb.ToFlow(arg1)}));
+                                : pb.FromFlow(pb.Extend({pb.ToFlow(arg0, {}), pb.ToFlow(arg1, {})}));
 
     const auto graph = setup.BuildGraph(pgmReturn, {arg0.GetNode(), arg1.GetNode()});
 
@@ -874,13 +874,13 @@ Y_UNIT_TEST_QUAD(TestExtendRandomYields, LLVM, WIDE) {
     const auto pgmReturn = WIDE ? pb.FromFlow(
                                       pb.NarrowMap(
                                           pb.Extend({
-                                              pb.ExpandMap(pb.ToFlow(arg0), expandLambda),
-                                              pb.ExpandMap(pb.ToFlow(arg1), expandLambda),
-                                              pb.ExpandMap(pb.ToFlow(arg2), expandLambda),
-                                              pb.ExpandMap(pb.ToFlow(arg3), expandLambda),
+                                              pb.ExpandMap(pb.ToFlow(arg0, {}), expandLambda),
+                                              pb.ExpandMap(pb.ToFlow(arg1, {}), expandLambda),
+                                              pb.ExpandMap(pb.ToFlow(arg2, {}), expandLambda),
+                                              pb.ExpandMap(pb.ToFlow(arg3, {}), expandLambda),
                                           }),
                                           [&](TRuntimeNode::TList items) { return items[0]; }))
-                                : pb.FromFlow(pb.Extend({pb.ToFlow(arg0), pb.ToFlow(arg1), pb.ToFlow(arg2), pb.ToFlow(arg3)}));
+                                : pb.FromFlow(pb.Extend({pb.ToFlow(arg0, {}), pb.ToFlow(arg1, {}), pb.ToFlow(arg2, {}), pb.ToFlow(arg3, {})}));
 
     const auto graph = setup.BuildGraph(pgmReturn, {arg0.GetNode(), arg1.GetNode(), arg2.GetNode(), arg3.GetNode()});
 
@@ -967,7 +967,7 @@ Y_UNIT_TEST_LLVM(TestOrderedExtendOverFlows) {
     const auto list1 = NTest::ConvertValueToLiteralNode(pb, TVector<double>{0.0, 1.1, -3.14});
     const auto list2 = NTest::ConvertValueToLiteralNode(pb, TVector<double>{121324.323, -7898.8});
 
-    const auto pgmReturn = pb.FromFlow(pb.OrderedExtend({pb.ToFlow(list2), pb.ToFlow(list1), pb.ToFlow(list2)}));
+    const auto pgmReturn = pb.FromFlow(pb.OrderedExtend({pb.ToFlow(list2, {}), pb.ToFlow(list1, {}), pb.ToFlow(list2, {})}));
 
     const auto graph = setup.BuildGraph(pgmReturn);
     AssertUnboxedValueElementEqual(graph->GetValue(),
@@ -990,7 +990,7 @@ Y_UNIT_TEST_LLVM(TestFlowForwardList) {
     TProgramBuilder& pb = *setup.PgmBuilder;
     const auto list = NTest::ConvertValueToLiteralNode(pb, TVector<ui32>{34, 56, 7});
 
-    const auto pgmReturn = pb.ForwardList(pb.ToFlow(list));
+    const auto pgmReturn = pb.ForwardList(pb.ToFlow(list, {}));
 
     const auto graph = setup.BuildGraph(pgmReturn);
     AssertUnboxedValueElementEqual(graph->GetValue(), TVector<ui32>{34, 56, 7});
@@ -1005,7 +1005,7 @@ Y_UNIT_TEST_LLVM(TestFlowFromOptional) {
     const auto opt2 = NTest::ConvertValueToLiteralNode(pb, TMaybe<double>{-3.14});
     const auto opt = NTest::ConvertValueToLiteralNode(pb, TMaybe<double>{});
 
-    const auto pgmReturn = pb.FromFlow(pb.OrderedExtend({pb.ToFlow(opt0), pb.ToFlow(opt), pb.ToFlow(opt1), pb.ToFlow(opt), pb.ToFlow(opt2)}));
+    const auto pgmReturn = pb.FromFlow(pb.OrderedExtend({pb.ToFlow(opt0, {}), pb.ToFlow(opt, {}), pb.ToFlow(opt1, {}), pb.ToFlow(opt, {}), pb.ToFlow(opt2, {})}));
 
     const auto graph = setup.BuildGraph(pgmReturn);
     AssertUnboxedValueElementEqual(graph->GetValue(),
@@ -1018,7 +1018,7 @@ Y_UNIT_TEST_LLVM(TestCollectOverFlow) {
 
     const auto data = NTest::ConvertValueToLiteralNode(pb, TVector<double>{0.0, 1.1, -3.14, 121324.323, -7898.8});
 
-    const auto pgmReturn = pb.Collect(pb.ToFlow(data));
+    const auto pgmReturn = pb.Collect(pb.ToFlow(data, {}));
 
     const auto graph = setup.BuildGraph(pgmReturn);
 
@@ -1175,7 +1175,7 @@ Y_UNIT_TEST_LLVM(TestMapOverFlow) {
     const auto data0 = NTest::ConvertValueToLiteralNode(pb, TStringBuf("PREFIX:"));
     const auto list = NTest::ConvertValueToLiteralNode(pb, TVector<TStringBuf>{"very large string", "", "small"});
 
-    const auto pgmReturn = pb.FromFlow(pb.Map(pb.ToFlow(list),
+    const auto pgmReturn = pb.FromFlow(pb.Map(pb.ToFlow(list, {}),
                                               [&](TRuntimeNode item) {
                                                   return pb.Concat(data0, item);
                                               }));
@@ -1465,7 +1465,7 @@ Y_UNIT_TEST_LLVM(TestDiscardOverFlow) {
 
     const auto list = NTest::ConvertValueToLiteralNode(pb, TVector<TStringBuf>{"000", "100", "200", "300"});
 
-    const auto pgmReturn = pb.FromFlow(pb.Discard(pb.ToFlow(list)));
+    const auto pgmReturn = pb.FromFlow(pb.Discard(pb.ToFlow(list, {})));
     const auto graph = setup.BuildGraph(pgmReturn);
     const auto iterator = graph->GetValue();
     NUdf::TUnboxedValue item;
@@ -2859,7 +2859,7 @@ Y_UNIT_TEST_LLVM(TestSkipAndTakeOverFlow) {
     TProgramBuilder& pb = *setup.PgmBuilder;
 
     const auto list = NTest::ConvertValueToLiteralNode(pb, TVector<ui8>{0, 1, 2, 3, 4, 5, 6, 7, 8, 9});
-    const auto pgmReturn = pb.FromFlow(pb.Take(pb.Skip(pb.ToFlow(list), pb.NewDataLiteral<ui64>(4ULL)), pb.NewDataLiteral<ui64>(3ULL)));
+    const auto pgmReturn = pb.FromFlow(pb.Take(pb.Skip(pb.ToFlow(list, {}), pb.NewDataLiteral<ui64>(4ULL)), pb.NewDataLiteral<ui64>(3ULL)));
 
     const auto graph = setup.BuildGraph(pgmReturn);
     AssertUnboxedValueElementEqual(graph->GetValue(), NYql::NUdf::TUnboxedValueComparatorStreamView<ui8>({ui8(4), ui8(5), ui8(6)}));
@@ -2948,7 +2948,7 @@ Y_UNIT_TEST_LLVM(TestSqueezeToList) {
     TProgramBuilder& pb = *setup.PgmBuilder;
 
     const auto list = NTest::ConvertValueToLiteralNode(pb, TVector<double>{0.0, 1.1, -3.14, 121324.323, -7898.8});
-    const auto pgmReturn = pb.FromFlow(pb.SqueezeToList(pb.ToFlow(list), pb.NewDataLiteral<ui64>(1000ULL)));
+    const auto pgmReturn = pb.FromFlow(pb.SqueezeToList(pb.ToFlow(list, {}), pb.NewDataLiteral<ui64>(1000ULL)));
 
     const auto graph = setup.BuildGraph(pgmReturn);
     // SqueezeToList emits one list item then Finish — verify via stream-view of length 1
@@ -2966,7 +2966,7 @@ Y_UNIT_TEST_LLVM(TestSqueezeToListWithLimit) {
     TProgramBuilder& pb = *setup.PgmBuilder;
 
     const auto list = NTest::ConvertValueToLiteralNode(pb, TVector<float>{0.0f, 1.1f, -3.14f, 12.323f, -7898.8f});
-    const auto pgmReturn = pb.FromFlow(pb.SqueezeToList(pb.ToFlow(list), pb.NewDataLiteral<ui64>(3ULL)));
+    const auto pgmReturn = pb.FromFlow(pb.SqueezeToList(pb.ToFlow(list, {}), pb.NewDataLiteral<ui64>(3ULL)));
 
     const auto graph = setup.BuildGraph(pgmReturn);
     const auto stream = graph->GetValue();

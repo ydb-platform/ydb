@@ -1,0 +1,13 @@
+$tupleVariantType = Variant<Int32, String>;
+
+$optionalData = [
+    <|variantValue: Just(Variant(1, '0', $tupleVariantType))|>,
+    <|variantValue: Nothing(OptionalType($tupleVariantType))|>,
+    <|variantValue: Just(Variant('hello', '1', $tupleVariantType))|>,
+];
+
+SELECT
+    Way(variantValue) AS way
+FROM
+    as_table($optionalData)
+;

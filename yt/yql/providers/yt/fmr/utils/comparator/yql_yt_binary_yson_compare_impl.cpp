@@ -13,9 +13,6 @@ constexpr char MARKER_FALSE = FalseMarker;       // 0x04
 constexpr char MARKER_TRUE = TrueMarker;         // 0x05
 constexpr char MARKER_UINT64 = Uint64Marker;     // 0x06
 
-constexpr char SYMBOL_BEGIN_LIST = BeginListSymbol;               // '['
-constexpr char SYMBOL_END_LIST = EndListSymbol;                   // ']'
-constexpr char SYMBOL_LIST_SEPARATOR = ListItemSeparatorSymbol;   // ';'
 constexpr char SYMBOL_ENTITY = EntitySymbol;                      // '#'
 
 constexpr ui8 VARINT_DATA_MASK = 0x7F;
@@ -28,7 +25,6 @@ enum class ETypeOrder : ui8 {
     Uint64 = 3,
     Double = 4,
     String = 5,
-    Any = 6,
 };
 
 ETypeOrder GetTypeOrder(char marker) {
@@ -40,7 +36,6 @@ ETypeOrder GetTypeOrder(char marker) {
         case MARKER_UINT64: return ETypeOrder::Uint64;
         case MARKER_DOUBLE: return ETypeOrder::Double;
         case MARKER_STRING: return ETypeOrder::String;
-        case SYMBOL_BEGIN_LIST: return ETypeOrder::Any;
         default:
             ythrow yexception() << "Unknown YSON marker: 0x"
                                 << IntToString<16>(static_cast<unsigned char>(marker));
@@ -183,43 +178,6 @@ int CompareYsonScalars(char type, TYsonReader& lhs, TYsonReader& rhs) {
             return TernaryCompare(lhsStr, rhsStr);
         }
 
-        case SYMBOL_BEGIN_LIST: {
-            lhs.ReadByte();
-            rhs.ReadByte();
-
-            while (true) {
-                if (!lhs.HasData() || !rhs.HasData()) {
-                    break;
-                }
-
-                char lhsNext = lhs.PeekByte();
-                char rhsNext = rhs.PeekByte();
-
-                if (lhsNext == SYMBOL_END_LIST && rhsNext == SYMBOL_END_LIST) {
-                    return 0;
-                }
-                if (lhsNext == SYMBOL_END_LIST) {
-                    return -1;
-                }
-                if (rhsNext == SYMBOL_END_LIST) {
-                    return 1;
-                }
-
-                int cmp = CompareYsonCurrentValuesFromReaders(lhs, rhs);
-                if (cmp != 0) {
-                    return cmp;
-                }
-
-                if (lhs.HasData() && lhs.PeekByte() == SYMBOL_LIST_SEPARATOR) {
-                    lhs.ReadByte();
-                }
-                if (rhs.HasData() && rhs.PeekByte() == SYMBOL_LIST_SEPARATOR) {
-                    rhs.ReadByte();
-                }
-            }
-            return 0;
-        }
-
         default:
             ythrow yexception() << "Unsupported YSON type: 0x"
                                 << IntToString<16>(static_cast<unsigned char>(type));
@@ -234,6 +192,14 @@ int CompareYsonCurrentValuesFromReaders(TYsonReader& lhs, TYsonReader& rhs) {
     auto rhsTypeOrder = GetTypeOrder(rhsType);
 
     if (lhsTypeOrder != rhsTypeOrder) {
+        // A nullable column legitimately holds either a scalar or an explicit '#' entity across
+        // different rows of the same key column (e.g. a FULL JOIN's direct-output rows for a NULL
+        // join key vs. matched rows with a real key value). That is not a genuine type mismatch,
+        // so order null before any concrete value instead of throwing - any other type pairing is
+        // a real schema violation and should still fail loudly.
+        if (lhsTypeOrder == ETypeOrder::Null || rhsTypeOrder == ETypeOrder::Null) {
+            return TernaryCompare(static_cast<int>(lhsTypeOrder), static_cast<int>(rhsTypeOrder));
+        }
         ythrow yexception() << "Types mismatch: " << lhsType << " vs " << rhsType;
     }
 
@@ -316,19 +282,29 @@ TMaybe<TSmallKeyValue> TryExtractSmallYsonValue(TStringBuf ysonData) {
 }
 
 int CompareExtractedKeys(const TExtractedKey& lhs, const TExtractedKey& rhs) {
+    // Null is represented as a Defined Small holding monostate (see
+    // TryExtractSmallYsonValue / TSortHelper::GetSortedRowOrdering), regardless
+    // of whether the other side's Small is a scalar or wasn't extracted at all
+    // (e.g. a string). Checking this before the "both Defined" gate below
+    // ensures a null key correctly compares against a string/other non-small
+    // key instead of falling through to CompareYsonValuesImpl on raw bytes,
+    // where an empty (absent-column) RawYson would fail to parse.
+    const bool lhsIsNull = lhs.Small.Defined() && std::holds_alternative<std::monostate>(*lhs.Small);
+    const bool rhsIsNull = rhs.Small.Defined() && std::holds_alternative<std::monostate>(*rhs.Small);
+
+    if (lhsIsNull && rhsIsNull) {
+        return 0;
+    }
+    if (lhsIsNull) {
+        return -1;
+    }
+    if (rhsIsNull) {
+        return 1;
+    }
+
     if (lhs.Small.Defined() && rhs.Small.Defined()) {
         const auto& l = *lhs.Small;
         const auto& r = *rhs.Small;
-
-        if (std::holds_alternative<std::monostate>(l) && std::holds_alternative<std::monostate>(r)) {
-            return 0;
-        }
-        if (std::holds_alternative<std::monostate>(l)) {
-            return -1;
-        }
-        if (std::holds_alternative<std::monostate>(r)) {
-            return 1;
-        }
 
         if (auto lp = std::get_if<bool>(&l)) {
             auto rp = std::get_if<bool>(&r);

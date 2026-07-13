@@ -83,6 +83,9 @@ namespace NActors {
         bool CollectSubscriptionStackTrace = false;
         bool UseUring = false;
         bool EnableUringSQPOLL = false; // only effective when UseUring is set
+        // Enables negotiation and usage of TInterconnectSessionTCPv2 (no session continuation, no encryption).
+        // v2 is used only when both peers have this enabled and encryption is not in effect.
+        bool EnableInterconnectSessionV2 = false;
     };
 
     struct TWhiteboardSessionStatus {

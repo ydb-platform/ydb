@@ -260,8 +260,7 @@ public:
     TRuntimeNode Ascending(TRuntimeNode data);
     TRuntimeNode Descending(TRuntimeNode data);
 
-    // FIXME: Drop the default argument value, when all the callers are adjusted.
-    TRuntimeNode ToFlow(TRuntimeNode stream, const TArrayRef<const TRuntimeNode>& dependentNodes = {});
+    TRuntimeNode ToFlow(TRuntimeNode stream, const TArrayRef<const TRuntimeNode>& dependentNodes);
     TRuntimeNode FromFlow(TRuntimeNode flow);
     TRuntimeNode Steal(TRuntimeNode input);
 
@@ -304,6 +303,7 @@ public:
 
     TRuntimeNode BlockGuess(TRuntimeNode variant, ui32 tupleIndex);
     TRuntimeNode BlockGuess(TRuntimeNode variant, const std::string_view& memberName);
+    TRuntimeNode BlockWay(TRuntimeNode variant);
     TRuntimeNode BlockIf(TRuntimeNode condition, TRuntimeNode thenBranch, TRuntimeNode elseBranch);
     TRuntimeNode BlockJust(TRuntimeNode data);
 

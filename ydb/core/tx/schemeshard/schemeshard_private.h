@@ -1,6 +1,7 @@
 #pragma once
 #include "schemeshard_identificators.h"
 
+#include <ydb/core/base/storage_pools.h>
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
 
 #include <ydb/core/protos/flat_scheme_op.pb.h>
@@ -57,6 +58,7 @@ namespace TEvPrivate {
         EvProgressTablePartitionsFormatSweep,
         EvFullBackupItemDone,
         EvProgressForcedCompaction,
+        EvMoveShardToStoragePool,
         EvEnd
     };
 
@@ -404,6 +406,24 @@ namespace TEvPrivate {
 
     struct TEvProgressForcedCompaction : TEventLocal<TEvProgressForcedCompaction, EvProgressForcedCompaction> {
         TEvProgressForcedCompaction()
+        {}
+    };
+
+    // Sent by the DevUI move-shard actor once Hive acks, to persist the shard's new channel
+    // bindings in a dedicated tx. That tx also answers the HTTP request (from Complete()), so
+    // success is reported only after the binding is durable. HttpSender: the request's sender;
+    // HiveReply: the already-serialized Hive response to hand back.
+    struct TEvMoveShardToStoragePool : public TEventLocal<TEvMoveShardToStoragePool, EvMoveShardToStoragePool> {
+        TShardIdx ShardIdx;
+        TChannelsBindings NewBindings;
+        TActorId HttpSender;
+        TString HiveReply;
+
+        TEvMoveShardToStoragePool(const TShardIdx& shardIdx, TChannelsBindings newBindings, const TActorId& httpSender, TString hiveReply)
+            : ShardIdx(shardIdx)
+            , NewBindings(std::move(newBindings))
+            , HttpSender(httpSender)
+            , HiveReply(std::move(hiveReply))
         {}
     };
 

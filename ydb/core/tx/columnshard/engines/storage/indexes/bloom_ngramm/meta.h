@@ -30,7 +30,8 @@ private:
     [[nodiscard]] bool Initialize() {
         AFL_VERIFY(!ResultSchema);
         if (auto c = ValidateRequest(); c.IsFail()) {
-            AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("index_init", c.GetErrorMessage());
+            YDB_LOG_WARN_COMP(NKikimrServices::TX_COLUMNSHARD, "",
+                {"indexInit", c.GetErrorMessage()});
             return false;
         }
 
@@ -95,7 +96,8 @@ protected:
         {
             auto conclusion = TBase::DeserializeFromProtoImpl(bFilter);
             if (conclusion.IsFail()) {
-                AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("index_parsing", conclusion.GetErrorMessage());
+                YDB_LOG_ERROR_COMP(NKikimrServices::TX_COLUMNSHARD, "",
+                    {"indexParsing", conclusion.GetErrorMessage()});
                 return false;
             }
         }
@@ -110,7 +112,8 @@ protected:
 
         Request = TRequestSettings::FromProtoFilter(bFilter);
         if (auto c = ValidateRequest(); c.IsFail()) {
-            AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("index_parsing", c.GetErrorMessage());
+            YDB_LOG_WARN_COMP(NKikimrServices::TX_COLUMNSHARD, "",
+                {"indexParsing", c.GetErrorMessage()});
             return false;
         }
 

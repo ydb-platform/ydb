@@ -40,6 +40,14 @@ NTable::TIndexDescription TProtoAccessor::FromProto(const Ydb::Table::TableIndex
     return NTable::TIndexDescription(tableIndexDesc);
 }
 
+NTable::TMultiColumnStatisticsDescription TProtoAccessor::FromProto(const Ydb::Table::TableMultiColumnStatistics& tableMultiColumnStatistics) {
+    return NTable::TMultiColumnStatisticsDescription(tableMultiColumnStatistics);
+}
+
+NTable::TMultiColumnStatisticsDescription TProtoAccessor::FromProto(const Ydb::Table::TableMultiColumnStatisticsDescription& tableMultiColumnStatisticsDesc) {
+    return NTable::TMultiColumnStatisticsDescription(tableMultiColumnStatisticsDesc);
+}
+
 NTable::TChangefeedDescription TProtoAccessor::FromProto(const Ydb::Table::Changefeed& changefeed) {
     return NTable::TChangefeedDescription(changefeed);
 }

@@ -46,7 +46,10 @@ private:
         }
         FetchedCount += source->GetAs<IDataSource>()->GetResultRecordsCount();
         if (Limit && *Limit <= FetchedCount) {
-            AFL_NOTICE(NKikimrServices::TX_COLUMNSHARD)("event", "limit_exhausted")("limit", Limit)("fetched", FetchedCount);
+            YDB_LOG_NOTICE_COMP(NKikimrServices::TX_COLUMNSHARD, "",
+                {"event", "limit_exhausted"},
+                {"limit", Limit},
+                {"fetched", FetchedCount});
             SourcesConstructor->Clear();
         }
     }

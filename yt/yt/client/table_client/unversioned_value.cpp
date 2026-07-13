@@ -13,6 +13,7 @@
 
 #include <contrib/libs/xxhash/xxhash.h>
 
+
 #endif
 
 namespace NYT::NTableClient {

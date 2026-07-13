@@ -1,9 +1,7 @@
 from dataclasses import dataclass
 import datetime
-from typing import TypeAlias, List, Any, Optional, Sequence, Dict
+from typing import List, Any, Optional, Sequence, Dict
 
-from yt import yson
-from yt.yson.yson_types import YsonEntity
 import ydb.public.api.protos.ydb_value_pb2 as ydb_value
 from yql.essentials.providers.common.proto.gateways_config_pb2 import EGenericDataSourceKind
 from ydb.public.api.protos.ydb_value_pb2 import Type, OptionalType
@@ -14,8 +12,6 @@ import ydb.library.yql.providers.generic.connector.tests.utils.types.oracle as o
 import ydb.library.yql.providers.generic.connector.tests.utils.types.ms_sql_server as ms_sql_server
 import ydb.library.yql.providers.generic.connector.tests.utils.types.postgresql as postgresql
 import ydb.library.yql.providers.generic.connector.tests.utils.types.ydb as Ydb
-
-YsonList: TypeAlias = yson.yson_types.YsonList
 
 
 @dataclass
@@ -59,22 +55,6 @@ class Column:
             return self.name == __value.name and self.ydb_type == __value.ydb_type
         else:
             raise Exception(f"can't compare 'Column' with '{__value.__class__}'")
-
-    @classmethod
-    def from_yson(cls, src: YsonList):
-        name = src[0]
-        type_info = src[1]
-        assert isinstance(type_info, list), type_info
-
-        ydb_type = None
-
-        if type_info[0] == 'OptionalType':
-            primitive_type = ydb_value.Type(type_id=cls.__parse_primitive_type(type_info[1][1]))
-            ydb_type = ydb_value.Type(optional_type=ydb_value.OptionalType(item=primitive_type))
-        else:
-            ydb_type = ydb_value.Type(type_id=cls.__parse_primitive_type(type_info[1]))
-
-        return cls(name=name, ydb_type=ydb_type, data_source_type=None)
 
     @classmethod
     def from_json(cls, src: Dict):
@@ -136,16 +116,9 @@ class Column:
             case 'type_id':
                 return self.__cast_primitive_type(self.ydb_type.type_id, value)
             case 'optional_type':
-                if value is None:  # kqprun return None if value is not presented
+                if value is None:
                     return None
-                elif isinstance(value, YsonEntity):  # dqrun return YsonEntity if value is not presented
-                    if value == None:  # noqa
-                        return None
-
-                    raise ValueError(f'unexpected YSONEntity: {value}')
-                elif isinstance(value, list):  # dqrun return list with presented value
-                    return self.__cast_primitive_type(self.ydb_type.optional_type.item.type_id, value[0])
-                else:  # kqprun return presented value
+                else:
                     return self.__cast_primitive_type(self.ydb_type.optional_type.item.type_id, value)
 
             case _:
@@ -340,10 +313,6 @@ class Schema:
             result.append(self.columns[i].cast(val))
 
         return result
-
-    @classmethod
-    def from_yson(cls, src: YsonList):
-        return cls(columns=ColumnList(*map(Column.from_yson, src)))
 
     @classmethod
     def from_json(cls, src: Dict):

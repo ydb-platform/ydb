@@ -171,27 +171,32 @@ namespace TEvKeyValue {
         ui64 Step;
         NKeyValue::TRequestStat Stat;
         NMsgBusProxy::EResponseStatus Status;
+        TVector<ui32> AcquiredChannels;
         std::deque<std::pair<TLogoBlobID, bool>> RefCountsIncr;
 
         TEvNotify() { }
 
         TEvNotify(ui64 requestUid, ui64 generation, ui64 step, const NKeyValue::TRequestStat &stat,
-                NMsgBusProxy::EResponseStatus status, std::deque<std::pair<TLogoBlobID, bool>>&& refCountsIncr)
+                NMsgBusProxy::EResponseStatus status, TVector<ui32> acquiredChannels,
+                std::deque<std::pair<TLogoBlobID, bool>>&& refCountsIncr)
             : RequestUid(requestUid)
             , Generation(generation)
             , Step(step)
             , Stat(stat)
             , Status(status)
+            , AcquiredChannels(std::move(acquiredChannels))
             , RefCountsIncr(std::move(refCountsIncr))
         {}
 
         TEvNotify(ui64 requestUid, ui64 generation, ui64 step, const NKeyValue::TRequestStat &stat,
-                NKikimrKeyValue::Statuses::ReplyStatus status, std::deque<std::pair<TLogoBlobID, bool>>&& refCountsIncr)
+                NKikimrKeyValue::Statuses::ReplyStatus status, TVector<ui32> acquiredChannels,
+                std::deque<std::pair<TLogoBlobID, bool>>&& refCountsIncr)
             : RequestUid(requestUid)
             , Generation(generation)
             , Step(step)
             , Stat(stat)
             , Status(ConvertStatus(status))
+            , AcquiredChannels(std::move(acquiredChannels))
             , RefCountsIncr(std::move(refCountsIncr))
         {}
 

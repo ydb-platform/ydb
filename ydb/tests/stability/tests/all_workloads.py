@@ -28,7 +28,7 @@ def _init_stress_utils():
         },
         'Kafka': {
             'args': ["--endpoint", "grpc://{node_host}:2135",
-                     "--bootstrap", "http://{node_host}:31430",
+                     "--bootstrap", "http://{node_host}:{slot_kafka_port}",
                      "--source-path", "workload_source_kafka_{node_host}_iter_{iteration_num}_{uuid}",
                      "--target-path", "workload_target_kafka_{node_host}_iter_{iteration_num}_{uuid}",
                      "--consumer", "workload-consumer-{iteration_num}-{uuid}",

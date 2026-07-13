@@ -120,8 +120,8 @@ public:
     TDictStats BuildStats(const TSettings& settings, const ui32 recordsCount) const {
         TDictStats::TBuilder statBuilder;
         for (auto&& i : UsedKeys) {
-            statBuilder.Add(
-                i.second.GetKeyName(), i.second.GetRecordsCount(), i.second.GetDataSize(), i.second.GetAccessorType(settings, recordsCount));
+            statBuilder.Add(i.second.GetKeyName(), i.second.GetRecordsCount(), i.second.GetDataSize(),
+                i.second.GetAccessorType(settings, recordsCount), i.second.GetValueType());
         }
         return statBuilder.Finish();
     }

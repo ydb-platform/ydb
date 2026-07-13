@@ -358,6 +358,9 @@ void TReplicationWriterConfig::Register(TRegistrar registrar)
     registrar.Parameter("use_probe_put_blocks", &TThis::UseProbePutBlocks)
         .Default(false);
 
+    registrar.Parameter("use_send_blocks", &TThis::UseSendBlocks)
+        .Default(true);
+
     registrar.Parameter("preallocate_disk_space", &TThis::PreallocateDiskSpace)
         .Default(false);
 
@@ -386,11 +389,13 @@ void TReplicationWriterConfig::Register(TRegistrar registrar)
 int TReplicationWriterConfig::GetDirectUploadNodeCount()
 {
     auto replicationFactor = std::min(MinUploadReplicationFactor, UploadReplicationFactor);
-    if (DirectUploadNodeCount) {
+    if (!UseSendBlocks) {
+        return UploadReplicationFactor;
+    } else if (DirectUploadNodeCount) {
         return std::min(*DirectUploadNodeCount, replicationFactor);
+    } else {
+        return std::max(static_cast<int>(std::sqrt(replicationFactor)), 1);
     }
-
-    return std::max(static_cast<int>(std::sqrt(replicationFactor)), 1);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

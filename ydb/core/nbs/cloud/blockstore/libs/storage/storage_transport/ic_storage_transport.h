@@ -9,12 +9,13 @@ namespace NYdb::NBS::NBlockStore::NStorage::NTransport {
 class TICStorageTransport: public IStorageTransport
 {
 public:
-    explicit TICStorageTransport(NActors::TActorSystem* actorSystem);
+    TICStorageTransport(
+        NActors::TActorSystem* actorSystem,
+        NActors::TActorId icStorageTransportActorId);
 
     ~TICStorageTransport() override = default;
 
-    NThreading::TFuture<TEvConnectResult> Connect(
-        const THostConnection& connection) override;
+    TConnectResultFutures Connect(const THostConnection& connection) override;
 
     NThreading::TFuture<TEvReadPersistentBufferResult> ReadFromPBuffer(
         const THostConnection& connection,

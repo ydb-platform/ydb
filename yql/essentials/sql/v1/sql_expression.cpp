@@ -18,8 +18,6 @@
 
 namespace NSQLTranslationV1 {
 
-using NALPDefaultAntlr4::SQLv1Antlr4Lexer;
-
 using namespace NSQLv1Generated;
 
 TNodeResult TSqlExpression::BuildSourceOrNode(const TRule_expr& node) {

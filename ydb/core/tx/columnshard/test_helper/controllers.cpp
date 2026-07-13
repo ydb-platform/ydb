@@ -3,11 +3,15 @@
 
 #include <ydb/core/tx/columnshard/engines/changes/ttl.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD
+
 namespace NKikimr::NOlap {
 
 void TWaitCompactionController::OnTieringModified(const std::shared_ptr<NKikimr::NColumnShard::TTiersManager>& /*tiers*/) {
     ++TiersModificationsCount;
-    AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("event", "OnTieringModified")("count", TiersModificationsCount);
+    YDB_LOG_INFO("",
+        {"event", "OnTieringModified"},
+        {"count", TiersModificationsCount});
 }
 
 void TWaitCompactionController::OverrideTierConfigs(

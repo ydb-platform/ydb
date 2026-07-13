@@ -1,4 +1,8 @@
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
+
 #include <ydb/core/base/table_index.h>
+#include <ydb/core/testlib/actors/block_events.h>
+#include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/local_indexes.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
@@ -698,4 +702,198 @@ Y_UNIT_TEST_SUITE(TSchemeShardConsistentCopyTablesTest) {
             }
         });
     }
+
+    Y_UNIT_TEST(IsBackupDuringBuildIndex) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        SetupLogging(runtime);
+
+        // Create table
+        TestCreateIndexedTable(runtime, ++txId, "/MyRoot", R"(
+            TableDescription {
+                Name: "Table1"
+                Columns { Name: "key" Type: "Uint32" }
+                Columns { Name: "value" Type: "Utf8" }
+                KeyColumnNames: ["key"]
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TBlockEvents<TEvSchemeShard::TEvModifySchemeTransaction> indexBlocker(runtime, [&](const auto& ev) {
+            const auto& rec = ev->Get()->Record;
+            return rec.GetTransaction(0).GetOperationType() == NKikimrSchemeOp::ESchemeOpApplyIndexBuild;
+        });
+
+        const ui64 buildIndexTx = ++txId;
+        AsyncBuildIndex(runtime, buildIndexTx, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/Table1",
+            TBuildIndexConfig{"index1", NKikimrSchemeOp::EIndexTypeGlobal, {"value"}, {}, {}});
+        runtime.WaitFor("Index finalize request", [&]{ return indexBlocker.size(); });
+
+        // Perform consistent copy like in export/s3, but don't let it complete
+        TBlockEvents<TEvDataShard::TEvProposeTransaction> copyBlocker(runtime, [&](const auto& ev) {
+            const auto& rec = ev->Get()->Record;
+            if (rec.GetTxKind() == NKikimrTxDataShard::TX_KIND_SCHEME) {
+                NKikimrTxDataShard::TFlatSchemeTransaction schemeTx;
+                bool ok = schemeTx.ParseFromArray(rec.GetTxBody().data(), rec.GetTxBody().size());
+                if (ok) {
+                    return schemeTx.HasReceiveSnapshot();
+                }
+            }
+            return false;
+        });
+        const ui64 copyTx = ++txId;
+        AsyncConsistentCopyTables(runtime, copyTx, "/MyRoot", R"(
+            CopyTableDescriptions {
+                SrcPath: "/MyRoot/Table1"
+                DstPath: "/MyRoot/TableBackup"
+                OmitIndexes: true
+                IsBackup: true
+            }
+        )");
+        runtime.WaitFor("Copy snapshot request", [&]{ return copyBlocker.size(); });
+
+        // Wait for failed ApplyIndexBuild response (another scheme transaction is in progress)
+        TBlockEvents<TEvSchemeShard::TEvModifySchemeTransactionResult> applyResponseBlocker(runtime, [&](const auto& ev) {
+            const auto& rec = ev->Get()->Record;
+            return rec.GetStatus() == NKikimrScheme::StatusMultipleModifications;
+        });
+        indexBlocker.Stop().Unblock();
+        runtime.WaitFor("Failed apply response", [&]{ return applyResponseBlocker.size(); });
+        applyResponseBlocker.Stop().Unblock();
+
+        // Let copying finish
+        copyBlocker.Stop().Unblock();
+        env.TestWaitNotification(runtime, copyTx);
+
+        // Wait for finished index build (it shouldn't fail)
+        env.TestWaitNotification(runtime, buildIndexTx);
+        auto descr = TestGetBuildIndex(runtime, TTestTxConfig::SchemeShard, "/MyRoot", buildIndexTx);
+        UNIT_ASSERT_VALUES_EQUAL(descr.GetIndexBuild().GetState(), Ydb::Table::IndexBuildState::STATE_DONE);
+
+        // Check that the table is not locked by dropping it
+        TestDropTable(runtime, ++txId, "/MyRoot", "Table1");
+    }
+
+    Y_UNIT_TEST(SkipUnfinishedIndex) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        SetupLogging(runtime);
+
+        // Create table
+        TestCreateIndexedTable(runtime, ++txId, "/MyRoot", R"(
+            TableDescription {
+                Name: "Table1"
+                Columns { Name: "key" Type: "Uint32" }
+                Columns { Name: "value" Type: "Utf8" }
+                KeyColumnNames: ["key"]
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TBlockEvents<TEvSchemeShard::TEvModifySchemeTransaction> indexBlocker(runtime, [&](const auto& ev) {
+            const auto& rec = ev->Get()->Record;
+            return rec.GetTransaction(0).GetOperationType() == NKikimrSchemeOp::ESchemeOpApplyIndexBuild;
+        });
+
+        const ui64 buildIndexTx = ++txId;
+        AsyncBuildIndex(runtime, buildIndexTx, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/Table1",
+            TBuildIndexConfig{"index1", NKikimrSchemeOp::EIndexTypeGlobal, {"value"}, {}, {}});
+        runtime.WaitFor("Index finalize request", [&]{ return indexBlocker.size(); });
+
+        // Perform consistent copy with indexes - it should skip the unfinished index
+        const ui64 copyTx = ++txId;
+        AsyncConsistentCopyTables(runtime, copyTx, "/MyRoot", R"(
+            CopyTableDescriptions {
+                SrcPath: "/MyRoot/Table1"
+                DstPath: "/MyRoot/TableBackup"
+                IsBackup: true
+            }
+        )");
+        env.TestWaitNotification(runtime, copyTx);
+
+        // Let index build finish (it shouldn't fail!)
+        indexBlocker.Stop().Unblock();
+        env.TestWaitNotification(runtime, buildIndexTx);
+
+        auto descr = TestGetBuildIndex(runtime, TTestTxConfig::SchemeShard, "/MyRoot", buildIndexTx);
+        UNIT_ASSERT_VALUES_EQUAL(descr.GetIndexBuild().GetState(), Ydb::Table::IndexBuildState::STATE_DONE);
+
+        // Check that the unfinished index is not copied
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/TableBackup/index1"), {NLs::PathNotExist});
+
+        // Check that the table is not left locked by dropping it
+        TestDropTable(runtime, ++txId, "/MyRoot", "Table1");
+    }
+
+    Y_UNIT_TEST(ConsistentCopyTableWithMultiColumnStatistics) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "src"
+            Columns { Name: "key" Type: "Uint32" }
+            Columns { Name: "value" Type: "Utf8" }
+            KeyColumnNames: ["key"]
+            MultiColumnStatistics { Name: "s1" ColumnNames: "value" Types: COUNT_MIN_SKETCH }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestConsistentCopyTables(runtime, ++txId, "/MyRoot", R"(
+            CopyTableDescriptions {
+                SrcPath: "/MyRoot/src"
+                DstPath: "/MyRoot/dst"
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/src", true, true), {
+            NLs::PathExist,
+            NLs::CheckMultiColumnStatistics("s1", {"value"}, {NKikimrSchemeOp::EMultiColumnStatisticsType::COUNT_MIN_SKETCH}),
+        });
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/dst", true, true), {
+            NLs::PathExist,
+            NLs::CheckMultiColumnStatistics("s1", {"value"}, {NKikimrSchemeOp::EMultiColumnStatisticsType::COUNT_MIN_SKETCH}),
+        });
+    }
+
+    Y_UNIT_TEST(ConsistentCopyColumnTableWithMultiColumnStatistics) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        runtime.GetAppData().FeatureFlags.SetEnableColumnTablesBackup(true);
+
+        TestCreateColumnTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "src"
+            ColumnShardCount: 1
+            Schema {
+                Columns { Name: "key" Type: "Uint32" NotNull: true }
+                Columns { Name: "value" Type: "Utf8" }
+                KeyColumnNames: "key"
+            }
+            MultiColumnStatistics { Name: "s1" ColumnNames: "value" Types: COUNT_MIN_SKETCH }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestConsistentCopyTables(runtime, ++txId, "/MyRoot", R"(
+            CopyTableDescriptions {
+                SrcPath: "/MyRoot/src"
+                DstPath: "/MyRoot/dst"
+                IsBackup: true
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/dst", true, true), {
+            NLs::PathExist,
+            NLs::CheckColumnTableMultiColumnStatistics("s1", {"value"}, {NKikimrSchemeOp::EMultiColumnStatisticsType::COUNT_MIN_SKETCH}),
+        });
+    }
+
 }

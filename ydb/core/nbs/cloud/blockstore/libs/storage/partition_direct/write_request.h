@@ -79,6 +79,7 @@ private:
     const TDuration RequestTimeout;
     const TDuration IndirectWriteReplyTimeout;
 
+    TInstant StartAt;
     THostMask IndirectCoordinator;
     THostMask RequestedIndirectWrites;
     THostMask RequestedDirectWrites;

@@ -771,7 +771,11 @@ public:
             return;
         }
 
-        QueryState->FillTopicOperations();
+        if (QueryState->HasDeferredPublication()) {
+            QueryState->FillDeferredPublicationOperations();
+        } else {
+            QueryState->FillTopicOperations();
+        }
 
         if (!AreAllTheTopicsAndPartitionsKnown()) {
             auto navigate = QueryState->BuildSchemeCacheNavigate();
@@ -785,7 +789,8 @@ public:
             ythrow TRequestFail(Ydb::StatusIds::BAD_REQUEST) << message;
         }
 
-        if (HasTopicWriteOperations() && !HasTopicApiWriteOperations() && !HasKafkaApiWriteOperations()) {
+        if (HasTopicWriteOperations() && !HasTopicApiWriteOperations() && !HasKafkaApiWriteOperations()
+            && !HasDeferredPublicationOperations()) {
             Become(&TKqpSessionActor::ExecuteState);
             Send(MakeTxProxyID(), new TEvTxUserProxy::TEvAllocateTxId, 0, QueryState->QueryId);
             return;
@@ -1690,7 +1695,7 @@ public:
         AFL_ENSURE(txCtx.TxManager);
         const bool broken = !!txCtx.TxManager->GetLockIssue();
 
-        if (!txCtx.DeferredEffects.Empty() && broken) {
+        if ((!txCtx.DeferredEffects.Empty() || txCtx.HasUnflushedEffectsInBuffer) && broken) {
             EmitVictimTliLog(
                 txCtx.TxManager->GetVictimQuerySpanId(),
                 std::nullopt,
@@ -1706,6 +1711,16 @@ public:
                 std::nullopt,
                 txCtx.TxManager->GetBrokenLocksCount());
             ReplyQueryError(Ydb::StatusIds::ABORTED, "tx has effects, but locks are broken",
+                MessageFromIssues(std::vector<TIssue>{*txCtx.TxManager->GetLockIssue()}));
+            return false;
+        }
+
+        if (txCtx.TxManager->BrokenLocks()) {
+            EmitVictimTliLog(
+                txCtx.TxManager->GetVictimQuerySpanId(),
+                std::nullopt,
+                txCtx.TxManager->GetBrokenLocksCount());
+            ReplyQueryError(Ydb::StatusIds::ABORTED, "transaction locks invalidated",
                 MessageFromIssues(std::vector<TIssue>{*txCtx.TxManager->GetLockIssue()}));
             return false;
         }
@@ -1918,7 +1933,8 @@ public:
         }
 
         request.AcquireLocksTxId = txCtx.LockHandle.GetLockId();
-        request.UseImmediateEffects = true;
+        request.FlushEffects = true;
+        txCtx.HasUnflushedEffectsInBuffer = false;
         request.PerShardKeysSizeLimitBytes = Config->_CommitPerShardKeysSizeLimitBytes.Get().GetRef();
 
         txCtx.HasImmediateEffects = true;
@@ -2059,8 +2075,20 @@ public:
             request.AcquireLocksTxId = txCtx.LockHandle.GetLockId();
 
             if (!txCtx.CanDeferEffects()) {
-                request.UseImmediateEffects = true;
+                request.FlushEffects = true;
+            } else {
+                // When CanDeferEffects() is true, GetCurrentPhyTx() defers all
+                // effect-only txs (ResultsSize() == 0), so the remaining tx
+                // must have results (RETURNING clause).
+                AFL_ENSURE(tx->ResultsSize() > 0);
             }
+        }
+
+        if (request.FlushEffects || commit) {
+            txCtx.HasUnflushedEffectsInBuffer = false;
+        } else if (tx && tx->GetHasEffects()) {
+            // Has unflushed effects in buffer (used for RETURNING)
+            txCtx.HasUnflushedEffectsInBuffer = true;
         }
 
         LWTRACK(KqpSessionPhyQueryProposeTx,
@@ -2238,8 +2266,7 @@ public:
             AsyncIoFactory, SelfId(),
             QueryState ? QueryState->UserRequestContext : MakeIntrusive<TUserRequestContext>("", Settings.Database, SessionId),
             QueryState ? QueryState->StatementResultIndex : 0, FederatedQuerySetup,
-            (QueryState && QueryState->RequestEv->GetSyntax() == Ydb::Query::Syntax::SYNTAX_PG)
-                ? GUCSettings : nullptr, TPartitionPrunerConfig{}, std::move(tableIdsForSnapshot), txCtx->ShardIdToTableInfo, txCtx->TxManager, txCtx->BufferActorId, /* batchOperationSettings */ Nothing(),
+            nullptr, TPartitionPrunerConfig{}, std::move(tableIdsForSnapshot), txCtx->ShardIdToTableInfo, txCtx->TxManager, txCtx->BufferActorId, /* batchOperationSettings */ Nothing(),
             llvmSettings, Settings.QueryService, QueryState ? QueryState->Generation : 0, ChannelService,
             (QueryState && QueryState->PreparedQuery)
                 ? QueryState->PreparedQuery->GetUseKqpTasksGraphV2()
@@ -3919,7 +3946,8 @@ private:
 
         QueryState->TxCtx->TopicOperations.CacheSchemeCacheNavigate(response->ResultSet);
 
-        if (HasTopicWriteOperations() && !HasTopicApiWriteOperations() && !HasKafkaApiWriteOperations()) {
+        if (HasTopicWriteOperations() && !HasTopicApiWriteOperations() && !HasKafkaApiWriteOperations()
+            && !HasDeferredPublicationOperations()) {
             Send(MakeTxProxyID(), new TEvTxUserProxy::TEvAllocateTxId, 0, QueryState->QueryId);
             return;
         }
@@ -3950,6 +3978,10 @@ private:
 
     bool HasTopicApiWriteOperations() const {
         return QueryState->TxCtx->TopicOperations.HasWriteId();
+    }
+
+    bool HasDeferredPublicationOperations() const {
+        return QueryState->TxCtx->TopicOperations.HasDeferredPublicationOperations();
     }
 
     ui64 GetTopicWriteId() const {

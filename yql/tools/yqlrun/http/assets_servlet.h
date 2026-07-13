@@ -27,7 +27,6 @@ public:
 
 private:
     TString SafeFilePath(const TString& basePath, TStringBuf reqPath) const;
-    bool IsCachedOnClient(const TRequest& req, const TAsset& asset) const;
     void LoadAsset(const TRequest& req, TAsset* asset) const;
 
 private:

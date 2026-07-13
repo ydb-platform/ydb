@@ -458,7 +458,7 @@
         {"shape":"ResourceNotFoundException"},
         {"shape":"ServiceQuotaExceededException"}
       ],
-      "documentation":"<p>Deletes documents from a data source and syncs the changes to the knowledge base that is connected to it. For more information, see <a href=\"https://docs.aws.amazon.com/bedrock/latest/userguide/kb-real-time-ingestion.html\">Ingest documents into a knowledge base in real-time</a> in the Amazon Bedrock User Guide.</p>",
+      "documentation":"<p>Deletes documents from a data source and syncs the changes to the knowledge base that is connected to it. For more information, see <a href=\"https://docs.aws.amazon.com/bedrock/latest/userguide/kb-direct-ingestion.html\">Ingest changes directly into a knowledge base</a> in the Amazon Bedrock User Guide.</p>",
       "idempotent":true
     },
     "DeletePrompt":{
@@ -754,7 +754,7 @@
         {"shape":"ResourceNotFoundException"},
         {"shape":"ServiceQuotaExceededException"}
       ],
-      "documentation":"<p>Retrieves specific documents from a data source that is connected to a knowledge base. For more information, see <a href=\"https://docs.aws.amazon.com/bedrock/latest/userguide/kb-real-time-ingestion.html\">Ingest documents into a knowledge base in real-time</a> in the Amazon Bedrock User Guide.</p>"
+      "documentation":"<p>Retrieves specific documents from a data source that is connected to a knowledge base. For more information, see <a href=\"https://docs.aws.amazon.com/bedrock/latest/userguide/kb-direct-ingestion.html\">Ingest changes directly into a knowledge base</a> in the Amazon Bedrock User Guide.</p>"
     },
     "GetPrompt":{
       "name":"GetPrompt",
@@ -791,7 +791,7 @@
         {"shape":"ResourceNotFoundException"},
         {"shape":"ServiceQuotaExceededException"}
       ],
-      "documentation":"<p>Ingests documents directly into the knowledge base that is connected to the data source. The <code>dataSourceType</code> specified in the content for each document must match the type of the data source that you specify in the header. For more information, see <a href=\"https://docs.aws.amazon.com/bedrock/latest/userguide/kb-real-time-ingestion.html\">Ingest documents into a knowledge base in real-time</a> in the Amazon Bedrock User Guide.</p>",
+      "documentation":"<p>Ingests documents directly into the knowledge base that is connected to the data source. The <code>dataSourceType</code> specified in the content for each document must match the type of the data source that you specify in the header. For more information, see <a href=\"https://docs.aws.amazon.com/bedrock/latest/userguide/kb-direct-ingestion.html\">Ingest changes directly into a knowledge base</a> in the Amazon Bedrock User Guide.</p>",
       "idempotent":true
     },
     "ListAgentActionGroups":{
@@ -1007,7 +1007,7 @@
         {"shape":"ResourceNotFoundException"},
         {"shape":"ServiceQuotaExceededException"}
       ],
-      "documentation":"<p>Retrieves all the documents contained in a data source that is connected to a knowledge base. For more information, see <a href=\"https://docs.aws.amazon.com/bedrock/latest/userguide/kb-real-time-ingestion.html\">Ingest documents into a knowledge base in real-time</a> in the Amazon Bedrock User Guide.</p>"
+      "documentation":"<p>Retrieves all the documents contained in a data source that is connected to a knowledge base. For more information, see <a href=\"https://docs.aws.amazon.com/bedrock/latest/userguide/kb-direct-ingestion.html\">Ingest changes directly into a knowledge base</a> in the Amazon Bedrock User Guide.</p>"
     },
     "ListKnowledgeBases":{
       "name":"ListKnowledgeBases",
@@ -1708,7 +1708,7 @@
         },
         "agentAliasStatus":{
           "shape":"AgentAliasStatus",
-          "documentation":"<p>The status of the alias of the agent and whether it is ready for use. The following statuses are possible:</p> <ul> <li> <p>CREATING – The agent alias is being created.</p> </li> <li> <p>PREPARED – The agent alias is finished being created or updated and is ready to be invoked.</p> </li> <li> <p>FAILED – The agent alias API operation failed.</p> </li> <li> <p>UPDATING – The agent alias is being updated.</p> </li> <li> <p>DELETING – The agent alias is being deleted.</p> </li> </ul>"
+          "documentation":"<p>The status of the alias of the agent and whether it is ready for use. The following statuses are possible:</p> <ul> <li> <p>CREATING – The agent alias is being created.</p> </li> <li> <p>PREPARED – The agent alias is finished being created or updated and is ready to be invoked.</p> </li> <li> <p>FAILED – The agent alias API operation failed.</p> </li> <li> <p>UPDATING – The agent alias is being updated.</p> </li> <li> <p>DELETING – The agent alias is being deleted.</p> </li> <li> <p>DISSOCIATED - The agent alias has no version associated with it.</p> </li> </ul>"
         },
         "agentId":{
           "shape":"Id",
@@ -1804,7 +1804,8 @@
         "PREPARED",
         "FAILED",
         "UPDATING",
-        "DELETING"
+        "DELETING",
+        "DISSOCIATED"
       ]
     },
     "AgentAliasSummaries":{
@@ -2451,7 +2452,7 @@
       "members":{
         "modelArn":{
           "shape":"BedrockModelArn",
-          "documentation":"<p>The ARN of the foundation model or <a href=\"https://docs.aws.amazon.com/bedrock/latest/userguide/cross-region-inference.html\">inference profile</a> to use for parsing.</p>"
+          "documentation":"<p>The ARN of the foundation model to use for parsing.</p>"
         },
         "parsingModality":{
           "shape":"ParsingModality",
@@ -2462,7 +2463,7 @@
           "documentation":"<p>Instructions for interpreting the contents of a document.</p>"
         }
       },
-      "documentation":"<p>Settings for a foundation model or <a href=\"https://docs.aws.amazon.com/bedrock/latest/userguide/cross-region-inference.html\">inference profile</a> used to parse documents for a data source.</p>"
+      "documentation":"<p>Settings for a foundation model used to parse documents for a data source.</p>"
     },
     "BedrockModelArn":{
       "type":"string",
@@ -2507,6 +2508,21 @@
     "ByteContentDocMimeTypeString":{
       "type":"string",
       "pattern":"[a-z]{1,20}/.{1,20}"
+    },
+    "CachePointBlock":{
+      "type":"structure",
+      "required":["type"],
+      "members":{
+        "type":{
+          "shape":"CachePointType",
+          "documentation":"<p>Indicates that the CachePointBlock is of the default type</p>"
+        }
+      },
+      "documentation":"<p>Indicates where a cache checkpoint is located. All information before this checkpoint is cached to be accessed on subsequent requests.</p>"
+    },
+    "CachePointType":{
+      "type":"string",
+      "enum":["default"]
     },
     "ChatPromptTemplateConfiguration":{
       "type":"structure",
@@ -2678,6 +2694,10 @@
     "ContentBlock":{
       "type":"structure",
       "members":{
+        "cachePoint":{
+          "shape":"CachePointBlock",
+          "documentation":"<p>Creates a cache checkpoint within a message.</p>"
+        },
         "text":{
           "shape":"String",
           "documentation":"<p>The text in the message.</p>"
@@ -4910,7 +4930,7 @@
     "FlowNodes":{
       "type":"list",
       "member":{"shape":"FlowNode"},
-      "max":20,
+      "max":40,
       "min":0
     },
     "FlowStatus":{
@@ -5092,6 +5112,14 @@
           "shape":"UnknownConnectionTargetInputFlowValidationDetails",
           "documentation":"<p>Details about an unknown target input for a connection.</p>"
         },
+        "unknownNodeInput":{
+          "shape":"UnknownNodeInputFlowValidationDetails",
+          "documentation":"<p>Details about an unknown input for a node.</p>"
+        },
+        "unknownNodeOutput":{
+          "shape":"UnknownNodeOutputFlowValidationDetails",
+          "documentation":"<p>Details about an unknown output for a node.</p>"
+        },
         "unreachableNode":{
           "shape":"UnreachableNodeFlowValidationDetails",
           "documentation":"<p>Details about an unreachable node in the flow.</p>"
@@ -5142,7 +5170,9 @@
         "MultipleNodeInputConnections",
         "UnfulfilledNodeInput",
         "UnsatisfiedConnectionConditions",
-        "Unspecified"
+        "Unspecified",
+        "UnknownNodeInput",
+        "UnknownNodeOutput"
       ]
     },
     "FlowValidations":{
@@ -7227,7 +7257,7 @@
     "MaximumLength":{
       "type":"integer",
       "box":true,
-      "max":4096,
+      "max":8192,
       "min":0
     },
     "MemoryConfiguration":{
@@ -7969,6 +7999,10 @@
     "PromptConfiguration":{
       "type":"structure",
       "members":{
+        "additionalModelRequestFields":{
+          "shape":"Document",
+          "documentation":"<p>If the Converse or ConverseStream operations support the model, <code>additionalModelRequestFields</code> contains additional inference parameters, beyond the base set of inference parameters in the <code>inferenceConfiguration</code> field. </p> <p>For more information, see <i>Inference request parameters and response fields for foundation models</i> in the Amazon Bedrock user guide.</p>"
+        },
         "basePromptTemplate":{
           "shape":"BasePromptTemplate",
           "documentation":"<p>Defines the prompt template with which to replace the default prompt template. You can use placeholder variables in the base prompt template to customize the prompt. For more information, see <a href=\"https://docs.aws.amazon.com/bedrock/latest/userguide/prompt-placeholders.html\">Prompt template placeholder variables</a>. For more information, see <a href=\"https://docs.aws.amazon.com/bedrock/latest/userguide/advanced-prompts-configure.html\">Configure the prompt templates</a>.</p>"
@@ -8131,7 +8165,7 @@
     "PromptInputVariablesList":{
       "type":"list",
       "member":{"shape":"PromptInputVariable"},
-      "max":5,
+      "max":10,
       "min":0,
       "sensitive":true
     },
@@ -9451,6 +9485,10 @@
     "SystemContentBlock":{
       "type":"structure",
       "members":{
+        "cachePoint":{
+          "shape":"CachePointBlock",
+          "documentation":"<p>Creates a cache checkpoint within a tool designation</p>"
+        },
         "text":{
           "shape":"NonEmptyString",
           "documentation":"<p>The text in the system prompt.</p>"
@@ -9544,6 +9582,10 @@
       "type":"structure",
       "required":["text"],
       "members":{
+        "cachePoint":{
+          "shape":"CachePointBlock",
+          "documentation":"<p>A cache checkpoint within a template configuration.</p>"
+        },
         "inputVariables":{
           "shape":"PromptInputVariablesList",
           "documentation":"<p>An array of the variables in the prompt template.</p>"
@@ -9571,6 +9613,10 @@
     "Tool":{
       "type":"structure",
       "members":{
+        "cachePoint":{
+          "shape":"CachePointBlock",
+          "documentation":"<p>Creates a cache checkpoint within a tool designation</p>"
+        },
         "toolSpec":{
           "shape":"ToolSpecification",
           "documentation":"<p>The specification for the tool.</p>"
@@ -9799,6 +9845,42 @@
         }
       },
       "documentation":"<p>Details about an unknown target input for a connection.</p>"
+    },
+    "UnknownNodeInputFlowValidationDetails":{
+      "type":"structure",
+      "required":[
+        "input",
+        "node"
+      ],
+      "members":{
+        "input":{
+          "shape":"FlowNodeInputName",
+          "documentation":"<p>The name of the node with the unknown input.</p>"
+        },
+        "node":{
+          "shape":"FlowNodeName",
+          "documentation":"<p>The name of the unknown input.</p>"
+        }
+      },
+      "documentation":"<p>Details about an unknown input for a node.</p>"
+    },
+    "UnknownNodeOutputFlowValidationDetails":{
+      "type":"structure",
+      "required":[
+        "node",
+        "output"
+      ],
+      "members":{
+        "node":{
+          "shape":"FlowNodeName",
+          "documentation":"<p>The name of the node with the unknown output.</p>"
+        },
+        "output":{
+          "shape":"FlowNodeOutputName",
+          "documentation":"<p>The name of the unknown output.</p>"
+        }
+      },
+      "documentation":"<p>Details about an unknown output for a node.</p>"
     },
     "UnreachableNodeFlowValidationDetails":{
       "type":"structure",
@@ -10535,6 +10617,12 @@
       "min":15,
       "sensitive":true
     },
+    "UserAgentHeader":{
+      "type":"string",
+      "max":86,
+      "min":61,
+      "sensitive":true
+    },
     "ValidateFlowDefinitionRequest":{
       "type":"structure",
       "required":["definition"],
@@ -10617,7 +10705,7 @@
       "members":{
         "embeddingModelArn":{
           "shape":"BedrockEmbeddingModelArn",
-          "documentation":"<p>The Amazon Resource Name (ARN) of the model or inference profile used to create vector embeddings for the knowledge base.</p>"
+          "documentation":"<p>The Amazon Resource Name (ARN) of the model used to create vector embeddings for the knowledge base.</p>"
         },
         "embeddingModelConfiguration":{
           "shape":"EmbeddingModelConfiguration",
@@ -10657,7 +10745,11 @@
         },
         "userAgent":{
           "shape":"UserAgent",
-          "documentation":"<p>A string used for identifying the crawler or a bot when it accesses a web server. By default, this is set to <code>bedrockbot_UUID</code> for your crawler. You can optionally append a custom string to <code>bedrockbot_UUID</code> to allowlist a specific user agent permitted to access your source URLs. </p>"
+          "documentation":"<p>Returns the user agent suffix for your web crawler.</p>"
+        },
+        "userAgentHeader":{
+          "shape":"UserAgentHeader",
+          "documentation":"<p>A string used for identifying the crawler or bot when it accesses a web server. The user agent header value consists of the <code>bedrockbot</code>, UUID, and a user agent suffix for your crawler (if one is provided). By default, it is set to <code>bedrockbot_UUID</code>. You can optionally append a custom suffix to <code>bedrockbot_UUID</code> to allowlist a specific user agent permitted to access your source URLs. </p>"
         }
       },
       "documentation":"<p>The configuration of web URLs that you want to crawl. You should be authorized to crawl the URLs.</p>"

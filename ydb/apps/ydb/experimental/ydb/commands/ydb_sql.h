@@ -33,7 +33,6 @@ protected:
     TString CollectStatsMode;
     TString Query;
     TString QueryFile;
-    TString Syntax;
     TDuration ResultsTtl = TDuration::Days(1);
     bool AsyncWait = false;
     // Operation status object. May be received either form ExecuteQueryScriptResponse or from OperationService explicitly
@@ -46,7 +45,6 @@ public:
     virtual void Config(TConfig& config) override;
     virtual void Parse(TConfig& config) override;
     virtual int Run(TConfig& config) override;
-    void SetSyntax(TString&& syntax);
     void SetCollectStatsMode(TString&& collectStatsMode);
     void SetScript(TString&& script);
 

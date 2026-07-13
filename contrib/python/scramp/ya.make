@@ -2,7 +2,7 @@
 
 PY3_LIBRARY()
 
-VERSION(1.4.8)
+VERSION(1.4.10)
 
 LICENSE(MIT-0)
 
@@ -16,6 +16,7 @@ PY_SRCS(
     TOP_LEVEL
     scramp/__init__.py
     scramp/core.py
+    scramp/exceptions.py
     scramp/utils.py
 )
 

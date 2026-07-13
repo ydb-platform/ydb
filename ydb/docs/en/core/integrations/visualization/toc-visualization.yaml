@@ -3,7 +3,5 @@ items:
   href: superset.md
 - name: DataLens
   href: datalens.md
-- name: FineBI
-  href: finebi.md
 - name: Grafana data source
   href: grafana.md

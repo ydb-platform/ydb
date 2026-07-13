@@ -1,10 +1,10 @@
-#include "direct_block_group_impl.h"
+#include "direct_block_group_test_fixture.h"
+#include "vchunk.h"
 
-#include <ydb/core/nbs/cloud/blockstore/config/config.h>
-#include <ydb/core/nbs/cloud/blockstore/config/protos/storage.pb.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/common/constants.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/partition_direct_service_mock.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/storage_transport/storage_transport_mock.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/storage_transport/testlib/ic_storage_transport_test_adapter.h>
 
 #include <ydb/core/nbs/cloud/storage/core/libs/coroutine/executor.h>
 #include <ydb/core/nbs/cloud/storage/core/libs/coroutine/executor_ut.h>
@@ -12,11 +12,7 @@
 #include <ydb/core/base/appdata_fwd.h>
 #include <ydb/core/testlib/actors/test_runtime.h>
 
-#include <ydb/library/services/services.pb.h>
-
 #include <library/cpp/testing/unittest/registar.h>
-
-#include <vector>
 
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
@@ -31,96 +27,60 @@ constexpr auto WaitTimeout = TDuration::Seconds(10);
 
 using EConnectionType = NTransport::THostConnection::EConnectionType;
 using TStorageTransportMock = NTransport::TStorageTransportMock;
+using TICStorageTransportTestAdapter =
+    NTransport::NTestLib::TICStorageTransportTestAdapter;
 using TDDiskId = NBsController::TDDiskId;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TVector<TDDiskId> MakeDDiskIds(ui32 baseNodeId)
+TVector<TDDiskId> MakeDDiskIds(ui32 baseNodeId, ui32 count)
 {
     TVector<TDDiskId> ids;
-    ids.reserve(DirectBlockGroupHostCount);
-    for (ui32 i = 0; i < DirectBlockGroupHostCount; ++i) {
+    ids.reserve(count);
+    for (ui32 i = 0; i < count; ++i) {
         ids.emplace_back(baseNodeId + i, 1, i);
     }
     return ids;
 }
 
-TStorageConfigPtr MakeStorageConfig()
-{
-    NProto::TStorageServiceConfig rawConfig;
-    return std::make_shared<TStorageConfig>(rawConfig);
-}
-
-////////////////////////////////////////////////////////////////////////////////
-
-struct TDBGFixture: public NUnitTest::TBaseFixture
-{
-    std::unique_ptr<NActors::TTestActorRuntime> Runtime;
-    TVector<TExecutorPtr> Executors;
-
-    void SetUp(NUnitTest::TTestContext& context) override
-    {
-        Y_UNUSED(context);
-        Runtime = std::make_unique<NActors::TTestActorRuntime>();
-        Runtime->Initialize(TTestActorRuntime::TEgg{
-            .App0 = new TAppData(
-                0,
-                0,
-                0,
-                0,
-                {},
-                nullptr,
-                nullptr,
-                nullptr,
-                nullptr),
-            .Opaque = nullptr,
-            .KeyConfigGenerator = nullptr,
-            .Icb = {},
-            .Dcb = {}});
-        Runtime->SetLogPriority(
-            NKikimrServices::NBS_PARTITION,
-            NLog::PRI_DEBUG);
-    }
-
-    void TearDown(NUnitTest::TTestContext& context) override
-    {
-        Y_UNUSED(context);
-        for (const auto& executor: Executors) {
-            executor->Stop();
-        }
-        Executors.clear();
-    }
-
-    TExecutorPtr MakeExecutor()
-    {
-        auto executor = TExecutor::Create("DBG_TEST");
-        executor->Start();
-        Executors.push_back(executor);
-        return executor;
-    }
-
-    std::shared_ptr<TDirectBlockGroup> MakeDirectBlockGroup(
-        const TExecutorPtr& executor,
-        std::unique_ptr<TStorageTransportMock> transport,
-        ui32 baseNodeId = 100)
-    {
-        return std::make_shared<TDirectBlockGroup>(
-            Runtime->GetActorSystem(0),
-            MakeStorageConfig(),
-            executor,
-            "disk-1",
-            1,
-            1,
-            0,
-            MakeDDiskIds(baseNodeId),
-            MakeDDiskIds(baseNodeId + DirectBlockGroupHostCount),
-            std::move(transport));
-    }
-};
-
 TGuardedSgList MakeSgList(TString& buffer)
 {
     return TGuardedSgList(TSgList{TBlockDataRef{buffer.data(), buffer.size()}});
+}
+
+// Unwraps a future-of-future for single-thread rests on TransportMock.
+template <typename T>
+T GetResponse(const TFuture<TFuture<T>>& outer, TDuration timeout = WaitTimeout)
+{
+    return outer.GetValue(timeout).GetValue(timeout);
+}
+
+TVector<ui64> ReadAllDDiskSeqNos(
+    const TExecutorPtr& executor,
+    const std::shared_ptr<TDirectBlockGroup>& dbg)
+{
+    return RunOnExecutor(
+               executor,
+               [&]
+               {
+                   TVector<ui64> result;
+                   for (size_t i = 0; i < DirectBlockGroupHostCount; ++i) {
+                       result.push_back(dbg->GetDDiskSessionSeqNo(i));
+                   }
+                   return result;
+               })
+        .GetValue(WaitTimeout);
+}
+
+// Resolves pending connect promises in the half-open range [from, to)
+void ResolveConnects(
+    TVector<TStorageTransportMock::TConnectPromise>& promises,
+    size_t from,
+    size_t to)
+{
+    for (size_t i = from; i < to; ++i) {
+        promises[i].SetValue(TStorageTransportMock::MakeConnectResult());
+    }
 }
 
 }   // namespace
@@ -130,57 +90,104 @@ TGuardedSgList MakeSgList(TString& buffer)
 Y_UNIT_TEST_SUITE(TDirectBlockGroupTest)
 {
     // The initial-ready signal fires exactly once, only after the locked
-    // quorum (3 of 5 DDisk sessions) is reached.
+    // quorum (3 of 5 DDisk sessions and PBuffers) is reached.
     Y_UNIT_TEST_F(ShouldSignalInitialReadyOnceLockedQuorumReached, TDBGFixture)
     {
         auto executor = MakeExecutor();
-
         auto transport = std::make_unique<TStorageTransportMock>();
-        auto* transportPtr = transport.get();
-
-        const auto ddisks = MakeDDiskIds(100);
+        const auto& ddisks = transport->GetDDiskIds();
 
         // All DDisk connects are deferred -> the sessions stay NotLocked until
         // the test resolves them.
         TVector<TStorageTransportMock::TConnectPromise> connectDDiskPromises;
         for (const auto& ddiskId: ddisks) {
-            connectDDiskPromises.push_back(transportPtr->SetPendingConnect(
-                EConnectionType::DDisk,
-                ddiskId));
+            connectDDiskPromises.push_back(
+                transport->SetPendingConnect(EConnectionType::DDisk, ddiskId));
         }
 
-        const auto pbuffers = MakeDDiskIds(100 + DirectBlockGroupHostCount);
+        const auto& pbuffers = transport->GetPBufferIds();
         TVector<TStorageTransportMock::TConnectPromise> connectPBufferPromises;
         for (size_t i = 2; i < pbuffers.size(); ++i) {
-            connectPBufferPromises.push_back(transportPtr->SetPendingConnect(
+            connectPBufferPromises.push_back(transport->SetPendingConnect(
                 EConnectionType::PBuffer,
                 pbuffers[i]));
         }
 
         auto dbg = MakeDirectBlockGroup(executor, std::move(transport));
 
-        TPartitionDirectServiceMock service(true);
-        auto initialReady = dbg->Run(&service);
+        auto initialReady = RunAndGetInitialReady(dbg);
 
         // Establish-connections has run, but no DDisk session is locked yet.
         DrainExecutor(executor);
         UNIT_ASSERT(!initialReady.HasValue());
 
         // Resolve 3 ddisk sessions: still don't have pbuffer's quorum.
-        connectDDiskPromises[0].SetValue(
-            TStorageTransportMock::MakeConnectResult());
-        connectDDiskPromises[1].SetValue(
-            TStorageTransportMock::MakeConnectResult());
-        connectDDiskPromises[2].SetValue(
-            TStorageTransportMock::MakeConnectResult());
+        ResolveConnects(connectDDiskPromises, 0, 3);
         DrainExecutor(executor);
         UNIT_ASSERT(!initialReady.HasValue());
 
         // The third PBuffer connected
-        connectPBufferPromises[0].SetValue(
-            TStorageTransportMock::MakeConnectResult());
+        ResolveConnects(connectPBufferPromises, 0, 1);
         DrainExecutor(executor);
         UNIT_ASSERT(initialReady.HasValue());
+    }
+
+    Y_UNIT_TEST_F(ShouldReadWriteOnQuorum, TDBGFixture)
+    {
+        auto executor = MakeExecutor();
+        auto transport = std::make_unique<TStorageTransportMock>();
+
+        const auto& ddisks = transport->GetDDiskIds();
+        // Hosts 0..2 connect immediately (default) and form the quorum; hosts
+        // 3 and 4 stay pending.
+        auto pendingHost3 =
+            transport->SetPendingConnect(EConnectionType::DDisk, ddisks[3]);
+        transport->SetPendingConnect(EConnectionType::DDisk, ddisks[4]);
+
+        auto dbg = MakeDirectBlockGroup(executor, std::move(transport));
+        auto initialReady = RunAndGetInitialReady(dbg);
+
+        // 3 immediate sessions -> quorum reached.
+        WaitReady(initialReady);
+        const auto range = TBlockRange64::WithLength(0, 1);
+
+        // Read from a locked host completes right away.
+        {
+            TString readyBuffer(DefaultBlockSize, 'r');
+            auto readyRead = RunOnExecutor(
+                executor,
+                [&]
+                {
+                    return dbg->ReadBlocksFromDDisk(
+                        0,
+                        0,
+                        range,
+                        MakeSgList(readyBuffer),
+                        NWilson::TTraceId());
+                });
+            UNIT_ASSERT_VALUES_EQUAL(
+                S_OK,
+                GetResponse(readyRead).Error.GetCode());
+        }
+
+        // Write to a locked host completes right away.
+        {
+            TString readyWriteBuffer(DefaultBlockSize, 'w');
+            auto readyWrite = RunOnExecutor(
+                executor,
+                [&]
+                {
+                    return dbg->WriteBlocksToDDisk(
+                        0,
+                        1,
+                        range,
+                        MakeSgList(readyWriteBuffer),
+                        NWilson::TTraceId());
+                });
+            UNIT_ASSERT_VALUES_EQUAL(
+                S_OK,
+                GetResponse(readyWrite).Error.GetCode());
+        }
     }
 
     // With a 3-of-5 quorum, reads/writes to a locked host pass through,
@@ -189,64 +196,21 @@ Y_UNIT_TEST_SUITE(TDirectBlockGroupTest)
     Y_UNIT_TEST_F(ShouldBlockDDiskIoUntilSessionEstablished, TDBGFixture)
     {
         auto executor = MakeExecutor();
-
         auto transport = std::make_unique<TStorageTransportMock>();
-        auto* transportPtr = transport.get();
 
-        const auto ddisks = MakeDDiskIds(100);
-
+        const auto& ddisks = transport->GetDDiskIds();
         // Hosts 0..2 connect immediately (default) and form the quorum; hosts
         // 3 and 4 stay pending.
         auto pendingHost3 =
-            transportPtr->SetPendingConnect(EConnectionType::DDisk, ddisks[3]);
-        auto pendingHost4 =
-            transportPtr->SetPendingConnect(EConnectionType::DDisk, ddisks[4]);
-        Y_UNUSED(pendingHost4);
+            transport->SetPendingConnect(EConnectionType::DDisk, ddisks[3]);
+        transport->SetPendingConnect(EConnectionType::DDisk, ddisks[4]);
 
         auto dbg = MakeDirectBlockGroup(executor, std::move(transport));
-
-        TPartitionDirectServiceMock service(true);
-        auto initialReady = dbg->Run(&service);
+        auto initialReady = RunAndGetInitialReady(dbg);
 
         // Three immediate sessions -> quorum reached.
-        initialReady.Wait(WaitTimeout);
-        UNIT_ASSERT(initialReady.HasValue());
-
+        WaitReady(initialReady);
         const auto range = TBlockRange64::WithLength(0, 1);
-
-        // Read from a locked host completes right away.
-        TString readyBuffer(DefaultBlockSize, 'r');
-        auto readyRead = RunOnExecutor(
-            executor,
-            [&]
-            {
-                return dbg->ReadBlocksFromDDisk(
-                    0,
-                    0,
-                    range,
-                    MakeSgList(readyBuffer),
-                    NWilson::TTraceId());
-            });
-        auto readyReadResponse =
-            readyRead.GetValue(WaitTimeout).GetValue(WaitTimeout);
-        UNIT_ASSERT_VALUES_EQUAL(S_OK, readyReadResponse.Error.GetCode());
-
-        // Write to a locked host completes right away.
-        TString readyWriteBuffer(DefaultBlockSize, 'w');
-        auto readyWrite = RunOnExecutor(
-            executor,
-            [&]
-            {
-                return dbg->WriteBlocksToDDisk(
-                    0,
-                    1,
-                    range,
-                    MakeSgList(readyWriteBuffer),
-                    NWilson::TTraceId());
-            });
-        auto readyWriteResponse =
-            readyWrite.GetValue(WaitTimeout).GetValue(WaitTimeout);
-        UNIT_ASSERT_VALUES_EQUAL(S_OK, readyWriteResponse.Error.GetCode());
 
         // Read from the still-connecting host 3 suspends inside the method, so
         // the outer future (carrying the returned future) is not resolved.
@@ -267,9 +231,9 @@ Y_UNIT_TEST_SUITE(TDirectBlockGroupTest)
 
         // Establishing the session unblocks the read.
         pendingHost3.SetValue(TStorageTransportMock::MakeConnectResult());
-        auto pendingReadResponse =
-            pendingRead.GetValue(WaitTimeout).GetValue(WaitTimeout);
-        UNIT_ASSERT_VALUES_EQUAL(S_OK, pendingReadResponse.Error.GetCode());
+        UNIT_ASSERT_VALUES_EQUAL(
+            S_OK,
+            GetResponse(pendingRead).Error.GetCode());
     }
 
     // The tablet-wide "all DBGs ready" gate (WaitAll over per-DBG
@@ -279,30 +243,27 @@ Y_UNIT_TEST_SUITE(TDirectBlockGroupTest)
     {
         // DBG A: every DDisk session connects immediately -> ready after Run.
         auto executorA = MakeExecutor();
-        auto dbgA = MakeDirectBlockGroup(
-            executorA,
-            std::make_unique<TStorageTransportMock>(),
-            100);
+        auto transportA = std::make_unique<TStorageTransportMock>();
+        ui32 baseNodeId = transportA->GetDDiskIds()[0].NodeId;
+        auto dbgA = MakeDirectBlockGroup(executorA, std::move(transportA));
 
         // DBG B: every DDisk session is deferred -> not ready yet.
         auto executorB = MakeExecutor();
-        auto transportB = std::make_unique<TStorageTransportMock>();
-        auto* transportBPtr = transportB.get();
-        const auto ddisksB = MakeDDiskIds(200);
+        auto transportB =
+            std::make_unique<TStorageTransportMock>(baseNodeId + 100);
+
+        const auto& ddisksB = transportB->GetDDiskIds();
         TVector<TStorageTransportMock::TConnectPromise> connectPromisesB;
         for (const auto& ddiskId: ddisksB) {
-            connectPromisesB.push_back(transportBPtr->SetPendingConnect(
-                EConnectionType::DDisk,
-                ddiskId));
+            connectPromisesB.push_back(
+                transportB->SetPendingConnect(EConnectionType::DDisk, ddiskId));
         }
-        auto dbgB = MakeDirectBlockGroup(executorB, std::move(transportB), 200);
+        auto dbgB = MakeDirectBlockGroup(executorB, std::move(transportB));
 
         // Mirror fast_path_service.cpp: WaitAll over per-DBG initial-ready
         // futures returned by Run().
-        TPartitionDirectServiceMock serviceA(true);
-        TPartitionDirectServiceMock serviceB(true);
-        auto initialReadyA = dbgA->Run(&serviceA);
-        auto initialReadyB = dbgB->Run(&serviceB);
+        auto initialReadyA = RunAndGetInitialReady(dbgA);
+        auto initialReadyB = RunAndGetInitialReady(dbgB);
 
         TVector<TFuture<void>> initialReadyFutures{
             initialReadyA,
@@ -310,77 +271,19 @@ Y_UNIT_TEST_SUITE(TDirectBlockGroupTest)
         auto allReady = NThreading::WaitAll(initialReadyFutures);
 
         // DBG A is ready; DBG B is not -> the aggregate gate is not resolved.
-        initialReadyA.Wait(WaitTimeout);
-        UNIT_ASSERT(initialReadyA.HasValue());
+        WaitReady(initialReadyA);
         DrainExecutor(executorB);
         UNIT_ASSERT(!allReady.HasValue());
 
         // Bring DBG B to its quorum (3 of 5).
-        connectPromisesB[0].SetValue(
-            TStorageTransportMock::MakeConnectResult());
-        connectPromisesB[1].SetValue(
-            TStorageTransportMock::MakeConnectResult());
+        ResolveConnects(connectPromisesB, 0, 2);
         DrainExecutor(executorB);
         UNIT_ASSERT(!allReady.HasValue());
 
-        connectPromisesB[2].SetValue(
-            TStorageTransportMock::MakeConnectResult());
+        ResolveConnects(connectPromisesB, 2, 3);
 
         // Now every DBG is ready -> the aggregate gate resolves.
-        allReady.Wait(WaitTimeout);
-        UNIT_ASSERT(allReady.HasValue());
-    }
-
-    Y_UNIT_TEST_F(ShouldSeqNo1OnInitialConnectToDDisk, TDBGFixture)
-    {
-        auto executor = MakeExecutor();
-
-        auto transport = std::make_unique<TStorageTransportMock>();
-        auto* transportPtr = transport.get();
-
-        const auto ddisks = MakeDDiskIds(100);
-        auto dbg = MakeDirectBlockGroup(executor, std::move(transport));
-
-        TPartitionDirectServiceMock service(true);
-        auto initialReady = dbg->Run(&service);
-
-        initialReady.Wait(WaitTimeout);
-        UNIT_ASSERT(initialReady.HasValue());
-        DrainExecutor(executor);
-
-        for (const auto& ddiskId: ddisks) {
-            const auto credentials = transportPtr->GetConnectCredentials(
-                EConnectionType::DDisk,
-                ddiskId);
-            UNIT_ASSERT_VALUES_EQUAL(1, credentials.size());
-            UNIT_ASSERT_VALUES_EQUAL(1, credentials[0].DDiskSessionSeqNo);
-        }
-    }
-
-    Y_UNIT_TEST_F(ShouldSeqNo0OnInitialConnectToPBuffer, TDBGFixture)
-    {
-        auto executor = MakeExecutor();
-
-        auto transport = std::make_unique<TStorageTransportMock>();
-        auto* transportPtr = transport.get();
-
-        const auto pbuffers = MakeDDiskIds(100 + DirectBlockGroupHostCount);
-        auto dbg = MakeDirectBlockGroup(executor, std::move(transport));
-
-        TPartitionDirectServiceMock service(true);
-        auto initialReady = dbg->Run(&service);
-
-        initialReady.Wait(WaitTimeout);
-        UNIT_ASSERT(initialReady.HasValue());
-        DrainExecutor(executor);
-
-        for (const auto& pbufferId: pbuffers) {
-            const auto credentials = transportPtr->GetConnectCredentials(
-                EConnectionType::PBuffer,
-                pbufferId);
-            UNIT_ASSERT_VALUES_EQUAL(1, credentials.size());
-            UNIT_ASSERT_VALUES_EQUAL(0, credentials[0].DDiskSessionSeqNo);
-        }
+        WaitReady(allReady);
     }
 
     Y_UNIT_TEST_F(OracleShouldIgnoreCancelledError, TDBGFixture)
@@ -390,8 +293,7 @@ Y_UNIT_TEST_SUITE(TDirectBlockGroupTest)
         auto executor = MakeExecutor();
         auto dbg = MakeDirectBlockGroup(
             executor,
-            std::make_unique<TStorageTransportMock>(),
-            100);
+            std::make_unique<TStorageTransportMock>());
 
         TPartitionDirectServiceMock service(true);
         auto initialReady = dbg->Run(&service);
@@ -437,7 +339,7 @@ Y_UNIT_TEST_SUITE(TDirectBlockGroupTest)
         auto transport = std::make_unique<TStorageTransportMock>();
         transport->WriteToManyPBufferStatus =
             NKikimrBlobStorage::NDDisk::TReplyStatus::ERROR;
-        auto dbg = MakeDirectBlockGroup(executor, std::move(transport), 100);
+        auto dbg = MakeDirectBlockGroup(executor, std::move(transport));
 
         TPartitionDirectServiceMock service(true);
         auto initialReady = dbg->Run(&service);
@@ -517,7 +419,7 @@ Y_UNIT_TEST_SUITE(TDirectBlockGroupTest)
             NKikimrBlobStorage::NDDisk::TReplyStatus::ERROR;
 
         auto executor = MakeExecutor();
-        auto dbg = MakeDirectBlockGroup(executor, std::move(transport), 100);
+        auto dbg = MakeDirectBlockGroup(executor, std::move(transport));
 
         TPartitionDirectServiceMock service(true);
         auto initialReady = dbg->Run(&service);
@@ -580,8 +482,7 @@ Y_UNIT_TEST_SUITE(TDirectBlockGroupTest)
         auto executor = MakeExecutor();
         auto dbg = MakeDirectBlockGroup(
             executor,
-            std::make_unique<TStorageTransportMock>(),
-            100);
+            std::make_unique<TStorageTransportMock>());
 
         TPartitionDirectServiceMock service(true);
         auto initialReady = dbg->Run(&service);
@@ -632,6 +533,522 @@ Y_UNIT_TEST_SUITE(TDirectBlockGroupTest)
             UNIT_ASSERT_VALUES_EQUAL(0, errorsInfo.ConsecutiveErrorCount);
             UNIT_ASSERT_VALUES_EQUAL(1, errorsInfo.ConsecutiveSuccessCount);
         }
+    }
+
+    Y_UNIT_TEST_F(
+        ShouldSendCoordinatorDDiskFirstInWriteToManyPBuffers,
+        TDBGFixture)
+    {
+        const auto coordinatorHost = THostIndex(3);
+
+        auto executor = MakeExecutor();
+        auto transport = std::make_unique<TStorageTransportMock>();
+        auto* transportPtr = transport.get();
+        auto dbg = MakeDirectBlockGroup(executor, std::move(transport));
+
+        TPartitionDirectServiceMock service(true);
+        auto initialReady = dbg->Run(&service);
+        initialReady.Wait(WaitTimeout);
+        UNIT_ASSERT(initialReady.HasValue());
+
+        TString pendingBuffer(DefaultBlockSize, 'p');
+        TGuardedSgList guardedSglist = MakeSgList(pendingBuffer);
+        THostMask hosts;
+        hosts.Set(1);
+        hosts.Set(coordinatorHost);
+        hosts.Set(4);
+
+        auto pendingWrite = RunOnExecutor(
+            executor,
+            [&]
+            {
+                NThreading::TPromise<TDBGWriteBlocksToManyPBuffersResponse>
+                    promise = NThreading::NewPromise<
+                        TDBGWriteBlocksToManyPBuffersResponse>();
+                auto future = promise.GetFuture();
+                TDirectBlockGroup::TWriteBlocksToManyPBuffersCallback cb =
+                    [promise = std::move(promise)]   //
+                    (TDBGWriteBlocksToManyPBuffersResponse r) mutable
+                {
+                    promise.SetValue(std::move(r));
+                };
+
+                dbg->WriteBlocksToManyPBuffers(
+                    0,   // VChunkIndex
+                    coordinatorHost,
+                    hosts,
+                    100,   // lsn
+                    TBlockRange64::WithLength(0, 3),
+                    TDuration::Seconds(1),
+                    guardedSglist,
+                    NWilson::TTraceId(),
+                    cb);
+                return future;
+            });
+        pendingWrite.GetValue(WaitTimeout).GetValue(WaitTimeout);
+
+        // The coordinator's PBuffer DDisk must be first in the request.
+        const auto& pbuffers = transportPtr->GetPBufferIds();
+        const auto& sentIds = transportPtr->LastWriteToManyPBuffersDiskIds;
+        UNIT_ASSERT_VALUES_EQUAL(3, sentIds.size());
+        UNIT_ASSERT_VALUES_EQUAL(
+            pbuffers[coordinatorHost].NodeId,
+            sentIds[0].GetNodeId());
+        UNIT_ASSERT_VALUES_EQUAL(
+            pbuffers[coordinatorHost].PDiskId,
+            sentIds[0].GetPDiskId());
+        UNIT_ASSERT_VALUES_EQUAL(
+            pbuffers[coordinatorHost].DDiskSlotId,
+            sentIds[0].GetDDiskSlotId());
+
+        UNIT_ASSERT_VALUES_EQUAL(pbuffers[1].NodeId, sentIds[1].GetNodeId());
+        UNIT_ASSERT_VALUES_EQUAL(pbuffers[1].PDiskId, sentIds[1].GetPDiskId());
+        UNIT_ASSERT_VALUES_EQUAL(
+            pbuffers[1].DDiskSlotId,
+            sentIds[1].GetDDiskSlotId());
+
+        UNIT_ASSERT_VALUES_EQUAL(pbuffers[4].NodeId, sentIds[2].GetNodeId());
+        UNIT_ASSERT_VALUES_EQUAL(pbuffers[4].PDiskId, sentIds[2].GetPDiskId());
+        UNIT_ASSERT_VALUES_EQUAL(
+            pbuffers[4].DDiskSlotId,
+            sentIds[2].GetDDiskSlotId());
+    }
+
+    Y_UNIT_TEST_F(
+        ShouldReplyForCoordinatorOnlyWhenNodeDisconnected,
+        TDBGFixture)
+    {
+        const auto coordinatorHost = THostIndex(2);
+
+        auto executor = MakeExecutor();
+        auto transport = std::make_unique<TStorageTransportMock>();
+        transport->WriteToManyPBufferCoordinatorOnlyStatus =
+            NKikimrBlobStorage::NDDisk::TReplyStatus::ERROR;
+        auto dbg = MakeDirectBlockGroup(executor, std::move(transport));
+
+        TPartitionDirectServiceMock service(true);
+        auto initialReady = dbg->Run(&service);
+        initialReady.Wait(WaitTimeout);
+        UNIT_ASSERT(initialReady.HasValue());
+
+        TString pendingBuffer(DefaultBlockSize, 'p');
+        TGuardedSgList guardedSglist = MakeSgList(pendingBuffer);
+        THostMask hosts;
+        hosts.Set(1);
+        hosts.Set(coordinatorHost);
+        hosts.Set(3);
+
+        auto pendingWrite = RunOnExecutor(
+            executor,
+            [&]
+            {
+                NThreading::TPromise<TDBGWriteBlocksToManyPBuffersResponse>
+                    promise = NThreading::NewPromise<
+                        TDBGWriteBlocksToManyPBuffersResponse>();
+                auto future = promise.GetFuture();
+                TDirectBlockGroup::TWriteBlocksToManyPBuffersCallback cb =
+                    [promise = std::move(promise)]   //
+                    (TDBGWriteBlocksToManyPBuffersResponse r) mutable
+                {
+                    promise.SetValue(std::move(r));
+                };
+
+                dbg->WriteBlocksToManyPBuffers(
+                    0,   // VChunkIndex
+                    coordinatorHost,
+                    hosts,
+                    100,   // lsn
+                    TBlockRange64::WithLength(0, 3),
+                    TDuration::Seconds(1),
+                    guardedSglist,
+                    NWilson::TTraceId(),
+                    cb);
+                return future;
+            });
+        auto writeResponse =
+            pendingWrite.GetValue(WaitTimeout).GetValue(WaitTimeout);
+
+        // Only the coordinator host is present in the response with an error.
+        UNIT_ASSERT_VALUES_EQUAL(1, writeResponse.Responses.size());
+        UNIT_ASSERT_VALUES_EQUAL(
+            coordinatorHost,
+            writeResponse.Responses[0].HostIndex);
+        UNIT_ASSERT_VALUES_EQUAL_C(
+            E_FAIL,
+            writeResponse.Responses[0].Error.GetCode(),
+            FormatError(writeResponse.Responses[0].Error));
+
+        // Coordinator host: the WriteToManyPBuffers inflight is drained and an
+        // error is counted.
+        {
+            const auto& hostStat =
+                dbg->GetOracle()->GetHostStatistics(coordinatorHost);
+            const auto& errorsInfo = hostStat.GetErrorsInfo(TInstant::Now());
+            UNIT_ASSERT_VALUES_EQUAL(
+                0,
+                hostStat.InflightCount(EOperation::WriteToManyPBuffers));
+            UNIT_ASSERT_VALUES_EQUAL(1, errorsInfo.ConsecutiveErrorCount);
+        }
+        // Non-coordinator hosts should not have errors or inflight changes.
+        for (auto host: {THostIndex(1), THostIndex(3)}) {
+            const auto& hostStat = dbg->GetOracle()->GetHostStatistics(host);
+            const auto& errorsInfo = hostStat.GetErrorsInfo(TInstant::Now());
+            UNIT_ASSERT_VALUES_EQUAL(
+                0,
+                hostStat.InflightCount(EOperation::WriteToManyPBuffers));
+            UNIT_ASSERT_VALUES_EQUAL(0, errorsInfo.ConsecutiveErrorCount);
+        }
+    }
+
+    // QueryAddHost() routes an add-host request to the partition-direct
+    // service, tagged with this DBG's index.
+    Y_UNIT_TEST_F(ShouldQueryAddHostThroughService, TDBGFixture)
+    {
+        auto executor = MakeExecutor();
+        auto dbg = MakeDirectBlockGroup(
+            executor,
+            std::make_unique<TStorageTransportMock>());
+
+        auto initialReady = RunAndGetInitialReady(dbg);
+        WaitReady(executor, initialReady);
+
+        auto& service = *Services.back();
+        UNIT_ASSERT_VALUES_EQUAL(0u, service.AddHostRequests.size());
+
+        RunOnExecutor(
+            executor,
+            [&]
+            {
+                dbg->QueryAddHost();
+                return true;
+            })
+            .GetValue(WaitTimeout);
+
+        UNIT_ASSERT_VALUES_EQUAL(1u, service.AddHostRequests.size());
+        UNIT_ASSERT_VALUES_EQUAL(
+            static_cast<size_t>(0),
+            service.AddHostRequests[0]);
+    }
+
+    // On restart a DBG comes up with the committed connection count (here N+1).
+    // The Oracle is born at that count in the constructor, and a vchunk whose
+    // persisted config still lags at N is caught up by the DBG the moment it
+    // registers - the same OnHostAppended path a live AddHost uses, with no
+    // partition involved.
+    Y_UNIT_TEST_F(ShouldCatchUpHostsOnStartup, TDBGFixture)
+    {
+        constexpr ui32 grownHostCount = DirectBlockGroupHostCount + 1;
+        constexpr ui64 vChunkSize = RegionSize / DirectBlockGroupsCount;
+
+        auto executor = MakeExecutor();
+
+        // The DBG comes up already grown to N+1 connections.
+        auto dbg = MakeDirectBlockGroup(
+            executor,
+            std::make_unique<TStorageTransportMock>(),
+            MakeDDiskIds(100, grownHostCount),
+            MakeDDiskIds(100 + grownHostCount, grownHostCount));
+
+        auto initialReady = RunAndGetInitialReady(dbg);
+        WaitReady(executor, initialReady);
+
+        // A vchunk that still only knows the pre-add host count.
+        TIntrusivePtr<::NMonitoring::TDynamicCounters> counters(
+            new ::NMonitoring::TDynamicCounters());
+        auto vchunk = std::make_shared<TVChunk>(
+            Runtime->GetActorSystem(0),
+            Services.back().get(),
+            TVChunkConfig::MakeDefault(
+                100,
+                DirectBlockGroupHostCount,
+                DefaultPrimaryCount),
+            dbg,
+            3,
+            vChunkSize,
+            counters);
+
+        TString oracleDump;
+        TString dumpBefore;
+        TString dumpAfter;
+        RunOnExecutor(
+            executor,
+            [&]
+            {
+                oracleDump = dbg->GetOracle()->Dump();
+                dumpBefore = vchunk->DebugPrintDirtyMap();
+                dbg->Register(vchunk);
+                dumpAfter = vchunk->DebugPrintDirtyMap();
+                return true;
+            })
+            .GetValue(WaitTimeout);
+
+        // The Oracle is born at the connection count - the grown slot H5 is
+        // already present.
+        UNIT_ASSERT_STRING_CONTAINS(oracleDump, "H5");
+
+        // The grown host slot (H5) is absent in the vchunk before registering
+        // and present after - the DBG caught it up at registration.
+        UNIT_ASSERT_C(
+            dumpBefore.find("H5-") == TString::npos,
+            "unexpected H5 before register:\n" + dumpBefore);
+        UNIT_ASSERT_STRING_CONTAINS(dumpAfter, "H5-");
+    }
+}
+
+Y_UNIT_TEST_SUITE(TDDiskSessionSeqNoTest)
+{
+    Y_UNIT_TEST_F(ShouldHaveZeroConfirmedSeqNoBeforeConnect, TDBGFixture)
+    {
+        auto executor = MakeExecutor();
+        auto transport = std::make_unique<TStorageTransportMock>();
+        const auto& ddisks = transport->GetDDiskIds();
+
+        // Defer every DDisk connect so no session gets confirmed.
+        TVector<TStorageTransportMock::TConnectPromise> connectPromises;
+        for (const auto& ddiskId: ddisks) {
+            connectPromises.push_back(
+                transport->SetPendingConnect(EConnectionType::DDisk, ddiskId));
+        }
+
+        auto dbg = MakeDirectBlockGroup(executor, std::move(transport));
+        auto initialReady = RunAndGetInitialReady(dbg);
+
+        DrainExecutor(executor);
+        UNIT_ASSERT(!initialReady.HasValue());
+
+        const auto values = ReadAllDDiskSeqNos(executor, dbg);
+        for (size_t i = 0; i < DirectBlockGroupHostCount; ++i) {
+            UNIT_ASSERT_VALUES_EQUAL(0, values[i]);
+        }
+    }
+
+    Y_UNIT_TEST_F(ShouldSeqNoOnInitialConnects, TDBGFixture)
+    {
+        auto executor = MakeExecutor();
+        auto transport = std::make_unique<TStorageTransportMock>();
+        auto* transportPtr = transport.get();
+
+        const auto& ddisks = transportPtr->GetDDiskIds();
+        const auto& pbuffers = transportPtr->GetPBufferIds();
+
+        auto dbg = MakeDirectBlockGroup(executor, std::move(transport));
+        auto initialReady = RunAndGetInitialReady(dbg);
+
+        WaitReady(initialReady);
+
+        // DDisks
+        for (const auto& ddiskId: ddisks) {
+            const auto credentials = transportPtr->GetConnectCredentials(
+                EConnectionType::DDisk,
+                ddiskId);
+            UNIT_ASSERT_VALUES_EQUAL(1, credentials.size());
+            UNIT_ASSERT_VALUES_EQUAL(1, credentials[0].DDiskSessionSeqNo);
+        }
+
+        // PBuffers
+        for (const auto& pbufferId: pbuffers) {
+            const auto credentials = transportPtr->GetConnectCredentials(
+                EConnectionType::PBuffer,
+                pbufferId);
+            UNIT_ASSERT_VALUES_EQUAL(1, credentials.size());
+            UNIT_ASSERT_VALUES_EQUAL(0, credentials[0].DDiskSessionSeqNo);
+        }
+    }
+
+    // After the first Connect every DDisk has seq_no=1 and credentials carry
+    // seq_no=1. After a disconnect + reconnect of one DDisk its seq_no becomes
+    // 2, while the others stay at 1 (independent per-DDisk counters).
+    Y_UNIT_TEST_F(
+        ShouldConfirmSeqNoAfterInitialConnectAndReconnect,
+        TDBGFixture)
+    {
+        auto executor = MakeExecutor();
+        auto transport = std::make_unique<TStorageTransportMock>();
+        auto* transportPtr = transport.get();
+
+        const auto& ddisks = transportPtr->GetDDiskIds();
+        auto dbg = MakeDirectBlockGroup(executor, std::move(transport));
+        auto initialReady = RunAndGetInitialReady(dbg, false);
+        WaitReady(initialReady);
+
+        // All sessions confirmed at seq_no=1.
+        for (const auto seqNo: ReadAllDDiskSeqNos(executor, dbg)) {
+            UNIT_ASSERT_VALUES_EQUAL(1, seqNo);
+        }
+
+        // Defer the reconnect of DDisk[0].
+        auto reconnectPromise =
+            transportPtr->SetPendingConnect(EConnectionType::DDisk, ddisks[0]);
+
+        transportPtr->FireDisconnect(
+            EConnectionType::DDisk,
+            ddisks[0],
+            ddisks[0].NodeId);
+        // drain OnNodeDisconnected and queue reconnect
+        DrainExecutor(executor);
+        // drain reconnect
+        DrainExecutor(executor);
+
+        // The reconnect Connect already carries seq_no=2.
+        const auto credentials = transportPtr->GetConnectCredentials(
+            EConnectionType::DDisk,
+            ddisks[0]);
+        UNIT_ASSERT_VALUES_EQUAL(2, credentials.back().DDiskSessionSeqNo);
+
+        reconnectPromise.SetValue(TStorageTransportMock::MakeConnectResult());
+        DrainExecutor(executor);
+
+        const auto values = ReadAllDDiskSeqNos(executor, dbg);
+        UNIT_ASSERT_VALUES_EQUAL(2, values[0]);
+        for (size_t i = 1; i < DirectBlockGroupHostCount; ++i) {
+            UNIT_ASSERT_VALUES_EQUAL(1, values[i]);
+        }
+    }
+
+    // A stale connect response (seq_no <= ConfirmedSessionSeqNo) is ignored and
+    // does not roll back the confirmed seq_no.
+    Y_UNIT_TEST_F(ShouldIgnoreStaleConnectResponse, TDBGFixture)
+    {
+        auto executor = MakeExecutor();
+        auto transport = std::make_unique<TStorageTransportMock>();
+        auto* transportPtr = transport.get();
+
+        const auto& ddisks = transportPtr->GetDDiskIds();
+        // seq_no=1 on DDisk[0] is in flight.
+        auto firstConnect =
+            transportPtr->SetPendingConnect(EConnectionType::DDisk, ddisks[0]);
+
+        auto dbg = MakeDirectBlockGroup(executor, std::move(transport));
+        auto initialReady = RunAndGetInitialReady(dbg, false);
+        DrainExecutor(executor);
+
+        // seq_no=2 on DDisk[0] is in flight.
+        auto secondConnect =
+            transportPtr->SetPendingConnect(EConnectionType::DDisk, ddisks[0]);
+
+        transportPtr->FireDisconnect(
+            EConnectionType::DDisk,
+            ddisks[0],
+            ddisks[0].NodeId);
+        DrainExecutor(executor);
+
+        // Resolve the new (seq_no=2) connect first.
+        secondConnect.SetValue(TStorageTransportMock::MakeConnectResult());
+        DrainExecutor(executor);
+
+        auto afterNew = RunOnExecutor(
+            executor,
+            [&] { return dbg->GetDDiskSessionSeqNo(0); });
+        UNIT_ASSERT_VALUES_EQUAL(2, afterNew.GetValue(WaitTimeout));
+
+        // resolve the stale connect. It must be ignored.
+        firstConnect.SetValue(TStorageTransportMock::MakeConnectResult());
+        DrainExecutor(executor);
+
+        auto afterStale = RunOnExecutor(
+            executor,
+            [&] { return dbg->GetDDiskSessionSeqNo(0); });
+        UNIT_ASSERT_VALUES_EQUAL(2, afterStale.GetValue(WaitTimeout));
+    }
+}
+
+Y_UNIT_TEST_SUITE(TSessionsWithRealTransport)
+{
+    Y_UNIT_TEST_F(ShouldCancelSessionWaitersOnDisconnect, TDBGFixture)
+    {
+        auto executor = MakeExecutor();
+        auto transport =
+            std::make_unique<TICStorageTransportTestAdapter>(Runtime.get());
+        auto* transportPtr = transport.get();
+
+        const auto& ddisks = transportPtr->GetDDiskIds();
+        // DDisk[0] stays pending; hosts 1..4 connect immediately -> quorum 4/5.
+        transportPtr->SetPendingConnect(EConnectionType::DDisk, ddisks[0]);
+
+        auto dbg = MakeDirectBlockGroup(executor, std::move(transport));
+        auto initialReady = RunAndGetInitialReady(dbg);
+        WaitReady(executor, initialReady);
+
+        const auto range = TBlockRange64::WithLength(0, 1);
+        TString buffer(DefaultBlockSize, 'r');
+
+        // The read on host 0 suspends inside WaitForSessionLock.
+        auto pendingRead = RunOnExecutor(
+            executor,
+            [&]
+            {
+                return dbg->ReadBlocksFromDDisk(
+                    0,
+                    0,
+                    range,
+                    MakeSgList(buffer),
+                    NWilson::TTraceId());
+            });
+        DoAllExecutorAndRuntimeWork(executor);
+        UNIT_ASSERT(!pendingRead.HasValue());
+
+        // The disconnect resets the session: ResetSession wakes the waiter with
+        // an error.
+        transportPtr->FireDisconnect(
+            EConnectionType::DDisk,
+            ddisks[0],
+            transportPtr->GetNodeId());
+
+        auto innerRead = WaitFuture(executor, pendingRead, WaitTimeout);
+        UNIT_ASSERT(pendingRead.HasValue());
+        auto response = WaitFuture(executor, innerRead, WaitTimeout);
+        UNIT_ASSERT_VALUES_UNEQUAL(S_OK, response.Error.GetCode());
+    }
+
+    Y_UNIT_TEST_F(ShouldCancelActiveRequestsOnDisconnect, TDBGFixture)
+    {
+        auto executor = MakeExecutor();
+        auto transport =
+            std::make_unique<TICStorageTransportTestAdapter>(Runtime.get());
+        auto* transportPtr = transport.get();
+
+        const auto& ddisks = transportPtr->GetDDiskIds();
+        auto dbg = MakeDirectBlockGroup(executor, std::move(transport));
+        auto initialReady = RunAndGetInitialReady(dbg);
+        WaitReady(executor, initialReady);
+
+        // DDisk[0] no longer answers reads: the read future stays pending.
+        transportPtr->SetPendingReadFromDDisk(
+            EConnectionType::DDisk,
+            ddisks[0]);
+
+        const auto range = TBlockRange64::WithLength(0, 1);
+        TString buffer(DefaultBlockSize, 'r');
+
+        auto pendingRead = RunOnExecutor(
+            executor,
+            [&]
+            {
+                return dbg->ReadBlocksFromDDisk(
+                    0,
+                    0,
+                    range,
+                    MakeSgList(buffer),
+                    NWilson::TTraceId());
+            });
+
+        // The session is already established, so the read does not suspend in
+        // WaitForSessionLock: the outer future resolves immediately, carrying
+        // the still-pending in-flight read future.
+        auto inFlightRead = WaitFuture(executor, pendingRead, WaitTimeout);
+        DoAllExecutorAndRuntimeWork(executor);
+        UNIT_ASSERT(!inFlightRead.HasValue());
+
+        // The disconnect rejects the in-flight read with a "Session broken"
+        // error.
+        transportPtr->SetPendingConnect(EConnectionType::DDisk, ddisks[0]);
+        transportPtr->FireDisconnect(
+            EConnectionType::DDisk,
+            ddisks[0],
+            transportPtr->GetNodeId());
+
+        auto response = WaitFuture(executor, inFlightRead, WaitTimeout);
+        UNIT_ASSERT_VALUES_UNEQUAL(S_OK, response.Error.GetCode());
     }
 }
 

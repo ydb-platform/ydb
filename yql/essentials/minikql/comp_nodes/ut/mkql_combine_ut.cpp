@@ -141,7 +141,7 @@ TRuntimeNode Combine(TProgramBuilder& pb, TRuntimeNode stream, std::function<TRu
         });
     };
 
-    return OverFlow ? pb.FromFlow(pb.CombineCore(pb.ToFlow(stream), keyExtractor, init, update, finishLambda, 64ul << 20)) : pb.CombineCore(stream, keyExtractor, init, update, finishLambda, 64ul << 20);
+    return OverFlow ? pb.FromFlow(pb.CombineCore(pb.ToFlow(stream, {}), keyExtractor, init, update, finishLambda, 64ul << 20)) : pb.CombineCore(stream, keyExtractor, init, update, finishLambda, 64ul << 20);
 }
 
 TRuntimeNode Reduce(TProgramBuilder& pb, TRuntimeNode stream) {
@@ -1010,7 +1010,7 @@ Y_UNIT_TEST_LLVM(TestSumDoubleBooleanKeys) {
     const auto listType = NTest::ConvertToMinikqlType<TVector<double>>(pb);
     const auto list = TCallableBuilder(pb.GetTypeEnvironment(), "TestList", listType).Build();
 
-    const auto pgmReturn = pb.FromFlow(pb.CombineCore(pb.ToFlow(TRuntimeNode(list, false)),
+    const auto pgmReturn = pb.FromFlow(pb.CombineCore(pb.ToFlow(TRuntimeNode(list, false), {}),
                                                       [&](TRuntimeNode item) { return pb.AggrGreater(item, NTest::ConvertValueToLiteralNode(pb, 0.0)); },
                                                       [&](TRuntimeNode, TRuntimeNode item) { return item; },
                                                       [&](TRuntimeNode, TRuntimeNode item, TRuntimeNode state) { return pb.AggrAdd(state, item); },
@@ -1064,7 +1064,7 @@ Y_UNIT_TEST_LLVM(TestMinMaxSumDoubleBooleanKeys) {
     const auto listType = NTest::ConvertToMinikqlType<TVector<double>>(pb);
     const auto list = TCallableBuilder(pb.GetTypeEnvironment(), "TestList", listType).Build();
 
-    const auto pgmReturn = pb.FromFlow(pb.CombineCore(pb.ToFlow(TRuntimeNode(list, false)),
+    const auto pgmReturn = pb.FromFlow(pb.CombineCore(pb.ToFlow(TRuntimeNode(list, false), {}),
                                                       [&](TRuntimeNode item) { return pb.AggrGreater(item, NTest::ConvertValueToLiteralNode(pb, 0.0)); },
                                                       [&](TRuntimeNode, TRuntimeNode item) { return pb.NewTuple({item, item, item}); },
                                                       [&](TRuntimeNode, TRuntimeNode item, TRuntimeNode state) { return pb.NewTuple({pb.AggrAdd(pb.Nth(state, 0U), item), pb.AggrMin(pb.Nth(state, 1U), item), pb.AggrMax(pb.Nth(state, 2U), item)}); },
@@ -1126,7 +1126,7 @@ Y_UNIT_TEST_LLVM(TestSumDoubleSmallKey) {
     const auto listType = NTest::ConvertToMinikqlType<TVector<std::tuple<i8, double>>>(pb);
     const auto list = TCallableBuilder(pb.GetTypeEnvironment(), "TestList", listType).Build();
 
-    const auto pgmReturn = pb.Collect(pb.CombineCore(pb.ToFlow(TRuntimeNode(list, false)),
+    const auto pgmReturn = pb.Collect(pb.CombineCore(pb.ToFlow(TRuntimeNode(list, false), {}),
                                                      [&](TRuntimeNode item) { return pb.Nth(item, 0U); },
                                                      [&](TRuntimeNode, TRuntimeNode item) { return pb.Nth(item, 1U); },
                                                      [&](TRuntimeNode, TRuntimeNode item, TRuntimeNode state) { return pb.AggrAdd(state, pb.Nth(item, 1U)); },
@@ -1185,7 +1185,7 @@ Y_UNIT_TEST_LLVM(TestMinMaxSumDoubleSmallKey) {
     const auto listType = NTest::ConvertToMinikqlType<TVector<std::tuple<i8, double>>>(pb);
     const auto list = TCallableBuilder(pb.GetTypeEnvironment(), "TestList", listType).Build();
 
-    const auto pgmReturn = pb.Collect(pb.CombineCore(pb.ToFlow(TRuntimeNode(list, false)),
+    const auto pgmReturn = pb.Collect(pb.CombineCore(pb.ToFlow(TRuntimeNode(list, false), {}),
                                                      [&](TRuntimeNode item) { return pb.Nth(item, 0U); },
                                                      [&](TRuntimeNode, TRuntimeNode item) { const auto v = pb.Nth(item, 1U); return pb.NewTuple({v, v, v}); },
                                                      [&](TRuntimeNode, TRuntimeNode item, TRuntimeNode state) { const auto v = pb.Nth(item, 1U); return pb.NewTuple({pb.AggrAdd(pb.Nth(state, 0U), v), pb.AggrMin(pb.Nth(state, 1U), v), pb.AggrMax(pb.Nth(state, 2U), v)}); },
@@ -1244,7 +1244,7 @@ Y_UNIT_TEST_LLVM(TestSumDoubleStringKey) {
     const auto listType = NTest::ConvertToMinikqlType<TVector<std::tuple<const char*, double>>>(pb);
     const auto list = TCallableBuilder(pb.GetTypeEnvironment(), "TestList", listType).Build();
 
-    const auto pgmReturn = pb.Collect(pb.CombineCore(pb.ToFlow(TRuntimeNode(list, false)),
+    const auto pgmReturn = pb.Collect(pb.CombineCore(pb.ToFlow(TRuntimeNode(list, false), {}),
                                                      [&](TRuntimeNode item) { return pb.Nth(item, 0U); },
                                                      [&](TRuntimeNode, TRuntimeNode item) { return pb.Nth(item, 1U); },
                                                      [&](TRuntimeNode, TRuntimeNode item, TRuntimeNode state) { return pb.AggrAdd(state, pb.Nth(item, 1U)); },
@@ -1306,7 +1306,7 @@ Y_UNIT_TEST_LLVM(TestMinMaxSumDoubleStringKey) {
     const auto listType = NTest::ConvertToMinikqlType<TVector<std::tuple<const char*, double>>>(pb);
     const auto list = TCallableBuilder(pb.GetTypeEnvironment(), "TestList", listType).Build();
 
-    const auto pgmReturn = pb.Collect(pb.CombineCore(pb.ToFlow(TRuntimeNode(list, false)),
+    const auto pgmReturn = pb.Collect(pb.CombineCore(pb.ToFlow(TRuntimeNode(list, false), {}),
                                                      [&](TRuntimeNode item) { return pb.Nth(item, 0U); },
                                                      [&](TRuntimeNode, TRuntimeNode item) { const auto v = pb.Nth(item, 1U); return pb.NewTuple({v, v, v}); },
                                                      [&](TRuntimeNode, TRuntimeNode item, TRuntimeNode state) { const auto v = pb.Nth(item, 1U); return pb.NewTuple({pb.AggrAdd(pb.Nth(state, 0U), v), pb.AggrMin(pb.Nth(state, 1U), v), pb.AggrMax(pb.Nth(state, 2U), v)}); },
@@ -1374,7 +1374,7 @@ Y_UNIT_TEST_LLVM(TestMinMaxSumTupleKey) {
     const auto listType = NTest::ConvertToMinikqlType<TVector<std::tuple<std::tuple<ui32, const char*>, double>>>(pb);
     const auto list = TCallableBuilder(pb.GetTypeEnvironment(), "TestList", listType).Build();
 
-    const auto pgmReturn = pb.Collect(pb.CombineCore(pb.ToFlow(TRuntimeNode(list, false)),
+    const auto pgmReturn = pb.Collect(pb.CombineCore(pb.ToFlow(TRuntimeNode(list, false), {}),
                                                      [&](TRuntimeNode item) { return pb.Nth(item, 0U); },
                                                      [&](TRuntimeNode, TRuntimeNode item) { const auto v = pb.Nth(item, 1U); return pb.NewTuple({v, v, v}); },
                                                      [&](TRuntimeNode, TRuntimeNode item, TRuntimeNode state) { const auto v = pb.Nth(item, 1U); return pb.NewTuple({pb.AggrAdd(pb.Nth(state, 0U), v), pb.AggrMin(pb.Nth(state, 1U), v), pb.AggrMax(pb.Nth(state, 2U), v)}); },
@@ -1456,7 +1456,7 @@ Y_UNIT_TEST_LLVM(TestTpch) {
     const auto list = TCallableBuilder(pb.GetTypeEnvironment(), "TestList", listType).Build();
 
     const auto pgmReturn = pb.Collect(pb.CombineCore(
-        pb.Map(pb.Filter(pb.ToFlow(TRuntimeNode(list, false)),
+        pb.Map(pb.Filter(pb.ToFlow(TRuntimeNode(list, false), {}),
                          [&](TRuntimeNode item) { return pb.AggrLessOrEqual(pb.Nth(item, 0U), NTest::ConvertValueToLiteralNode(pb, border)); }),
                [&](TRuntimeNode item) { return pb.NewTuple({pb.Nth(item, 1U), pb.Nth(item, 2U), pb.Nth(item, 3U), pb.Nth(item, 4U), pb.Nth(item, 5U), pb.Nth(item, 6U)}); }),
         [&](TRuntimeNode item) { return pb.NewTuple({pb.Nth(item, 0U), pb.Nth(item, 1U)}); },

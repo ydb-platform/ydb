@@ -9,7 +9,7 @@ VERSION(23.0.0)
 LICENSE(Apache-2.0)
 
 PEERDIR(
-    contrib/python/cryptography/py3
+    contrib/python/cryptography
 )
 
 NO_LINT()

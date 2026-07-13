@@ -62,7 +62,7 @@ void DoNestedTuplesCompressTest() {
 
     const auto list = pb.NewList(items.front().GetStaticType(), std::move(items));
 
-    auto node = pb.ToFlow(list);
+    auto node = pb.ToFlow(list, {});
     node = pb.ExpandMap(node, [&](TRuntimeNode item) -> TRuntimeNode::TList {
         return {pb.Nth(item, 0U), pb.Nth(item, 1U), pb.Nth(item, 2U)};
     });
@@ -71,7 +71,7 @@ void DoNestedTuplesCompressTest() {
     node = pb.BlockExpandChunked(node);
     node = pb.WideSkipBlocks(node, NTest::ConvertValueToLiteralNode(pb, ui64(19)));
     node = pb.BlockCompress(node, 2);
-    node = pb.ToFlow(pb.WideFromBlocks(node));
+    node = pb.ToFlow(pb.WideFromBlocks(node), {});
 
     node = pb.NarrowMap(node, [&](TRuntimeNode::TList items) -> TRuntimeNode {
         return pb.NewTuple(resultTupleType, {items[0], items[1]});
@@ -162,14 +162,14 @@ Y_UNIT_TEST_LLVM(CompressBasic) {
                                                            {true, ui64(5), false},
                                                            {true, ui64(6), true},
                                                            {false, ui64(7), true}});
-    const auto flow = pb.ToFlow(list);
+    const auto flow = pb.ToFlow(list, {});
 
     const auto wideFlow = pb.ExpandMap(flow, [&](TRuntimeNode item) -> TRuntimeNode::TList {
         return {pb.Nth(item, 0U), pb.Nth(item, 1U), pb.Nth(item, 2U)};
     });
     const auto uncompressedBlocks = pb.WideToBlocks(pb.FromFlow(wideFlow));
     const auto compressedBlocks = pb.BlockCompress(uncompressedBlocks, 0);
-    const auto compressedFlow = pb.ToFlow(pb.WideFromBlocks(compressedBlocks));
+    const auto compressedFlow = pb.ToFlow(pb.WideFromBlocks(compressedBlocks), {});
     const auto narrowFlow = pb.NarrowMap(compressedFlow, [&](TRuntimeNode::TList items) -> TRuntimeNode {
         return pb.NewTuple({items[0], items[1]});
     });

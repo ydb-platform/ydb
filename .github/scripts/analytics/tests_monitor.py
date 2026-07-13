@@ -19,6 +19,34 @@ from github_issue_utils import (
 from testowners_utils import normalize_github_team_owners_string
 
 
+def _dedupe_monitor_rows(rows):
+    """One row per (full_name, date_window, branch, build_type); prefer deepest suite_folder."""
+    if not rows:
+        return rows
+    best = {}
+    for row in rows:
+        key = (row['full_name'], row['date_window'], row['branch'], row['build_type'])
+        suite_len = len(str(row.get('suite_folder') or ''))
+        if key not in best or suite_len > len(str(best[key].get('suite_folder') or '')):
+            best[key] = row
+    return list(best.values())
+
+
+def _dedupe_monitor_df(df):
+    """One row per (full_name, date_window, branch, build_type); prefer deepest suite_folder."""
+    if df is None or df.empty:
+        return df
+    keys = ['full_name', 'date_window', 'branch', 'build_type']
+    if not df.duplicated(keys).any():
+        return df
+    return (
+        df.assign(_suite_len=df['suite_folder'].fillna('').astype(str).str.len())
+        .sort_values(keys + ['_suite_len'], kind='mergesort')
+        .drop_duplicates(keys, keep='last')
+        .drop(columns='_suite_len')
+    )
+
+
 def create_tables(ydb_wrapper, table_path):
     print(f"> create table if not exists:'{table_path}'")
 
@@ -421,7 +449,7 @@ def main():
                     )
                 rows.append(rec)
 
-            return pd.DataFrame(rows)
+            return _dedupe_monitor_df(pd.DataFrame(rows))
 
         # Get last existing day
         print("Getting date of last collected monitor data")
@@ -579,6 +607,7 @@ def main():
                     SELECT 
                         test_name,
                         suite_folder,
+                        full_name,
                         owners,
                         is_muted,
                         date,
@@ -592,12 +621,12 @@ def main():
                         AND run_timestamp_last >= Timestamp('{thirty_days_ago_ts}')
                 ) AS owners_t
                 ON 
-                    hist.test_name = owners_t.test_name
-                    AND hist.suite_folder = owners_t.suite_folder
+                    hist.full_name = owners_t.full_name
                     AND hist.date_window = owners_t.date
                     AND hist.build_type = owners_t.build_type;
             """
             results = ydb_wrapper.execute_scan_query(query_get_history, query_name=f"get_monitor_history_for_date_{branch}")
+            results = _dedupe_monitor_rows(results)
 
             if results:
                 for row in results:
@@ -629,7 +658,7 @@ def main():
                 )
 
         start_time = time.time()
-        df = pd.DataFrame(data)
+        df = _dedupe_monitor_df(pd.DataFrame(data))
 
         if df.empty:
             print(f"No test data found for branch='{branch}', build_type='{build_type}' in the date range. Nothing to process.")

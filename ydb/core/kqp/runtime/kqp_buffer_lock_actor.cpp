@@ -205,9 +205,13 @@ public:
 
     void StartLockTask(ui64 cookie, TLockState& state) {
         auto& worker = state.Worker;
-        auto requests = worker->BuildLockRequests(Partitioning, LockRequestId);
+        worker->BuildLockRequests(Partitioning, LockRequestId);
 
-        for (auto& [shardId, lockRequest] : requests) {
+        while (true) {
+            auto [shardId, lockRequest] = worker->PopNextLockRequest();
+            if (!lockRequest) {
+                break;
+            }
             ++state.LocksInflight;
             StartLockRequest(cookie, shardId, std::move(lockRequest));
         }
@@ -478,11 +482,15 @@ public:
         AFL_ENSURE(failedRequest.Blocked);
         --lockState.LocksInflight;
         const auto guard = Settings.TypeEnv.BindAllocator();
-        auto requests = lockState.Worker->RebuildLockRequest(failedRequestId, LockRequestId);
-        for (auto& request : requests) {
-            const ui64 newRequestId = request.second->Record.GetRequestId();
+        lockState.Worker->RebuildLockRequest(failedRequestId, LockRequestId);
+        while (true) {
+            auto [shardId, lockRequest] = lockState.Worker->PopNextLockRequest();
+            if (!lockRequest) {
+                break;
+            }
+            const ui64 newRequestId = lockRequest->Record.GetRequestId();
             ++lockState.LocksInflight;
-            StartLockRequest(failedRequest.LockCookie, failedRequest.ShardId, std::move(request.second));
+            StartLockRequest(failedRequest.LockCookie, failedRequest.ShardId, std::move(lockRequest));
             LockIdToState.at(newRequestId).RetryAttempts = failedRequest.RetryAttempts;
         }
         LockIdToState.erase(failedRequestId);

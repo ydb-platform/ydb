@@ -8,35 +8,35 @@
 
 namespace NKikimr::NGRpcService {
 
-TTestShardGRpcService::TTestShardGRpcService(NActors::TActorSystem* actorSystem, TIntrusivePtr<NMonitoring::TDynamicCounters> counters, NActors::TActorId grpcRequestProxyId)
+TTestShardSetGRpcService::TTestShardSetGRpcService(NActors::TActorSystem* actorSystem, TIntrusivePtr<NMonitoring::TDynamicCounters> counters, NActors::TActorId grpcRequestProxyId)
     : ActorSystem_(actorSystem)
     , Counters_(std::move(counters))
     , GRpcRequestProxyId_(grpcRequestProxyId)
 {
 }
 
-TTestShardGRpcService::~TTestShardGRpcService() = default;
+TTestShardSetGRpcService::~TTestShardSetGRpcService() = default;
 
-void TTestShardGRpcService::InitService(grpc::ServerCompletionQueue* cq, NYdbGrpc::TLoggerPtr logger) {
+void TTestShardSetGRpcService::InitService(grpc::ServerCompletionQueue* cq, NYdbGrpc::TLoggerPtr logger) {
     CQ_ = cq;
     SetupIncomingRequests(std::move(logger));
 }
 
-void TTestShardGRpcService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
-    using namespace Ydb::TestShard;
+void TTestShardSetGRpcService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
+    using namespace Ydb::TestShardSet;
     auto getCounterBlock = CreateCounterCb(Counters_, ActorSystem_);
 
-#ifdef SETUP_TESTSHARD_METHOD
-#error SETUP_TESTSHARD_METHOD macro already defined
+#ifdef SETUP_TESTSHARDSET_METHOD
+#error SETUP_TESTSHARDSET_METHOD macro already defined
 #endif
 
-#define SETUP_TESTSHARD_METHOD(methodName, methodCallback, rlMode, requestType, auditMode) \
-    SETUP_METHOD(methodName, methodCallback, rlMode, requestType, testshard, auditMode, EEmptyDatabaseMode::EmptyDatabaseForbidden)
+#define SETUP_TESTSHARDSET_METHOD(methodName, methodCallback, rlMode, requestType, auditMode) \
+    SETUP_METHOD(methodName, methodCallback, rlMode, requestType, testshardset, auditMode, EEmptyDatabaseMode::EmptyDatabaseForbidden)
 
-    SETUP_TESTSHARD_METHOD(CreateTestShard, DoCreateTestShard, RLMODE(Rps), TESTSHARD_CREATETESTSHARD, TAuditMode::Modifying(TAuditMode::TLogClassConfig::ClusterAdmin));
-    SETUP_TESTSHARD_METHOD(DeleteTestShard, DoDeleteTestShard, RLMODE(Rps), TESTSHARD_DELETETESTSHARD, TAuditMode::Modifying(TAuditMode::TLogClassConfig::ClusterAdmin));
+    SETUP_TESTSHARDSET_METHOD(CreateTestShardSet, DoCreateTestShardSet, RLMODE(Rps), TESTSHARDSET_CREATETESTSHARDSET, TAuditMode::Modifying(TAuditMode::TLogClassConfig::ClusterAdmin));
+    SETUP_TESTSHARDSET_METHOD(DeleteTestShardSet, DoDeleteTestShardSet, RLMODE(Rps), TESTSHARDSET_DELETETESTSHARDSET, TAuditMode::Modifying(TAuditMode::TLogClassConfig::ClusterAdmin));
 
-#undef SETUP_TESTSHARD_METHOD
+#undef SETUP_TESTSHARDSET_METHOD
 }
 
 } // namespace NKikimr::NGRpcService

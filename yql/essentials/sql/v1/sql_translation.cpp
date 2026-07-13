@@ -110,8 +110,6 @@ TNodePtr BuildViewSelect(const TRule_select_stmt& selectStatement, TContext& con
 
 namespace NSQLTranslationV1 {
 
-using NALPDefaultAntlr4::SQLv1Antlr4Lexer;
-
 using namespace NSQLv1Generated;
 
 TIdentifier GetKeywordId(TTranslation& ctx, const TRule_keyword& node) {
@@ -784,6 +782,28 @@ bool TSqlTranslation::CreateTableIndex(const TRule_table_index& node, TVector<TI
         indexes.back().DataColumns.emplace_back(IdEx(block.GetRule_an_id_schema3(), *this));
         for (const auto& inner : block.GetBlock4()) {
             indexes.back().DataColumns.emplace_back(IdEx(inner.GetRule_an_id_schema2(), *this));
+        }
+    }
+
+    return true;
+}
+
+bool TSqlTranslation::CreateTableStatistics(const TRule_table_statistics& node, TVector<TStatisticsDescription>& statistics) {
+    statistics.emplace_back(IdEx(node.GetRule_an_id2(), *this));
+    auto& stat = statistics.back();
+
+    // ON (columns)
+    stat.Columns.emplace_back(IdEx(node.GetRule_an_id_schema5(), *this));
+    for (const auto& block : node.GetBlock6()) {
+        stat.Columns.emplace_back(IdEx(block.GetRule_an_id_schema2(), *this));
+    }
+
+    // WITH (types) — optional; omission means "all supported statistic types"
+    if (node.HasBlock8()) {
+        const auto& withTypes = node.GetBlock8().GetRule_with_statistics_types1();
+        stat.Types.emplace_back(IdEx(withTypes.GetRule_an_id_or_type3(), *this));
+        for (const auto& block : withTypes.GetBlock4()) {
+            stat.Types.emplace_back(IdEx(block.GetRule_an_id_or_type2(), *this));
         }
     }
 
@@ -2154,6 +2174,14 @@ bool TSqlTranslation::CreateTableEntry(const TRule_create_table_entry& node, TCr
             const TPosition pos(Context().Pos());
 
             params.Columns.push_back({.Pos = pos, .Name = name, .Nullable = true});
+            break;
+        }
+        case TRule_create_table_entry::kAltCreateTableEntry7: {
+            // table_statistics
+            auto& table_statistics = node.GetAlt_create_table_entry7().GetRule_table_statistics1();
+            if (!CreateTableStatistics(table_statistics, params.Statistics)) {
+                return false;
+            }
             break;
         }
         case NSQLv1Generated::TRule_create_table_entry::ALT_NOT_SET:

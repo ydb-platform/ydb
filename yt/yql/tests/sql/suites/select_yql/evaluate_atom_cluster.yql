@@ -1,0 +1,9 @@
+/* dqfile can not - missing langver support */
+/* hybridfile can not - missing langver support */
+PRAGMA YqlSelect = 'force';
+
+$x = 'pla' || 'to';
+
+SELECT * FROM plato.Input ORDER BY subkey;
+SELECT * FROM yt:plato.Input ORDER BY subkey;
+SELECT * FROM yt:$x.Input ORDER BY subkey;

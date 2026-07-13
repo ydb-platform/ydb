@@ -22,7 +22,8 @@ Y_UNIT_TEST_SUITE(DescribeSchemaSecretsServiceSlow) {
             TTestSchemeCacheStatusGetter::EFailProbability::Always);
         auto factory = std::make_shared<TTestDescribeSchemaSecretsServiceFactory>(
             /* secretUpdateListener */ nullptr,
-            schemeCacheStatusGetter.Get());
+            schemeCacheStatusGetter.Get(),
+            /* schemeShardStatusGetter */ nullptr);
         settings.SetDescribeSchemaSecretsServiceFactory(factory);
         TKikimrRunner kikimr(settings);
         kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableSchemaSecrets(true);

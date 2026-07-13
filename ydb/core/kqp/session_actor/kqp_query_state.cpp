@@ -465,6 +465,28 @@ bool TKqpQueryState::PrepareNextStatementPart() {
     return true;
 }
 
+void TKqpQueryState::FillDeferredPublicationOperations() {
+    YQL_ENSURE(HasDeferredPublication());
+
+    const auto& request = GetDeferredPublicationFromRequest();
+    NTopic::ValidateDeferredPublicationRequest(request);
+
+    TopicOperations = NTopic::TTopicOperations();
+    // Same default as Kafka in FillTopicOperations: conflict check stays enabled on wire.
+    TopicOperations.SetTrackProducerId(true);
+
+    for (const auto& destination : request.GetDestinations()) {
+        auto path = CanonizePath(NPersQueue::GetFullTopicPath(GetDatabase(), destination.GetPath()));
+        TopicOperations.AddDeferredPublicationOperation(
+            path,
+            destination.GetPartitionId(),
+            destination.GetTabletId(),
+            request.GetOp(),
+            request.GetIntPublicationId(),
+            request.GetExtPublicationId());
+    }
+}
+
 void TKqpQueryState::FillTopicOperations() {
     YQL_ENSURE(HasTopicOperations() || HasKafkaApiOperations());
 

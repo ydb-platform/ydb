@@ -38,7 +38,7 @@ TEST(TUnversionedOwningValueTest, String)
 
 TEST(TUnversionedOwningValueTest, FromSharedRef)
 {
-    auto string = TSharedRef::FromString("Hello world!");
+    auto string = TSharedRef::FromString(std::string("Hello world!"));
     auto owningValue = MakeUnversionedStringOwningValue(string);
     TUnversionedValue value = owningValue;
     ASSERT_EQ(owningValue.Type(), EValueType::String);

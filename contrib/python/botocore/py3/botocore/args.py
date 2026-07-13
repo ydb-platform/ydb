@@ -61,6 +61,23 @@ LEGACY_GLOBAL_STS_REGIONS = [
 # values result in a warning-level log message.
 USERAGENT_APPID_MAXLEN = 50
 
+VALID_REQUEST_CHECKSUM_CALCULATION_CONFIG = (
+    "when_supported",
+    "when_required",
+)
+VALID_RESPONSE_CHECKSUM_VALIDATION_CONFIG = (
+    "when_supported",
+    "when_required",
+)
+
+PRIORITY_ORDERED_SUPPORTED_PROTOCOLS = (
+    'json',
+    'rest-json',
+    'rest-xml',
+    'query',
+    'ec2',
+)
+
 
 class ClientArgsCreator:
     def __init__(
@@ -201,7 +218,7 @@ class ClientArgsCreator:
         scoped_config,
     ):
         service_name = service_model.endpoint_prefix
-        protocol = service_model.metadata['protocol']
+        protocol = self._resolve_protocol(service_model)
         parameter_validation = True
         if client_config and not client_config.parameter_validation:
             parameter_validation = False
@@ -271,12 +288,19 @@ class ClientArgsCreator:
                 sigv4a_signing_region_set=(
                     client_config.sigv4a_signing_region_set
                 ),
+                request_checksum_calculation=(
+                    client_config.request_checksum_calculation
+                ),
+                response_checksum_validation=(
+                    client_config.response_checksum_validation
+                ),
             )
         self._compute_retry_config(config_kwargs)
         self._compute_connect_timeout(config_kwargs)
         self._compute_user_agent_appid_config(config_kwargs)
         self._compute_request_compression_config(config_kwargs)
         self._compute_sigv4a_signing_region_set_config(config_kwargs)
+        self._compute_checksum_config(config_kwargs)
         s3_config = self.compute_s3_config(client_config)
 
         is_s3_service = self._is_s3_service(service_name)
@@ -781,3 +805,53 @@ class ClientArgsCreator:
                 'sigv4a_signing_region_set'
             )
         config_kwargs['sigv4a_signing_region_set'] = sigv4a_signing_region_set
+
+    def _compute_checksum_config(self, config_kwargs):
+        self._handle_checksum_config(
+            config_kwargs,
+            config_key="request_checksum_calculation",
+            valid_options=VALID_REQUEST_CHECKSUM_CALCULATION_CONFIG,
+        )
+        self._handle_checksum_config(
+            config_kwargs,
+            config_key="response_checksum_validation",
+            valid_options=VALID_RESPONSE_CHECKSUM_VALIDATION_CONFIG,
+        )
+
+    def _resolve_protocol(self, service_model):
+        # We need to ensure `protocols` exists in the metadata before attempting to
+        # access it directly since referencing service_model.protocols directly will
+        # raise an UndefinedModelAttributeError if protocols is not defined
+        if service_model.metadata.get('protocols'):
+            for protocol in PRIORITY_ORDERED_SUPPORTED_PROTOCOLS:
+                if protocol in service_model.protocols:
+                    return protocol
+            raise botocore.exceptions.UnsupportedServiceProtocolsError(
+                botocore_supported_protocols=PRIORITY_ORDERED_SUPPORTED_PROTOCOLS,
+                service_supported_protocols=service_model.protocols,
+                service=service_model.service_name,
+            )
+        # If a service does not have a `protocols` trait, fall back to the legacy
+        # `protocol` trait
+        return service_model.protocol
+
+    def _handle_checksum_config(
+        self,
+        config_kwargs,
+        config_key,
+        valid_options,
+    ):
+        value = config_kwargs.get(config_key)
+        if value is None:
+            value = self._config_store.get_config_variable(config_key)
+
+        if isinstance(value, str):
+            value = value.lower()
+
+        if value not in valid_options:
+            raise botocore.exceptions.InvalidChecksumConfigError(
+                config_key=config_key,
+                config_value=value,
+                valid_options=valid_options,
+            )
+        config_kwargs[config_key] = value

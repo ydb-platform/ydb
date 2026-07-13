@@ -11,7 +11,12 @@ public:
         TVector<std::pair<TKey, const TLayerInfo*>> infos;
         infos.reserve(order.size());
         for (auto &e: order) {
-            infos.emplace_back(e, Data_.FindPtr(e));
+            auto info = Data_.FindPtr(e);
+            if (!info) {
+                ReportUnknownLayer(e, ctx);
+                return {};
+            }
+            infos.emplace_back(e, info);
             if (infos.back().second->Locations.empty()) {
                 ctx.AddError(NYql::TIssue(
                     TStringBuilder() << "No locations for layer " << e.ToString() << ", consider adding it using yt.LayerCaches"
@@ -41,10 +46,7 @@ public:
     bool UpdateLayerLocations(const TKey& key, TVector<TLocation>&& locs, NYql::TExprContext& ctx) override {
         auto ptr = Data_.FindPtr(key);
         if (!ptr) {
-            ctx.AddError(NYql::TIssue(
-                TStringBuilder() << "Layer with key=(Name=" << key.Name.GetOrElse("nullopt").Quote()
-                << ", Url=" << key.Url.GetOrElse("nullopt").Quote() << ") not found"
-            ));
+            ReportUnknownLayer(key, ctx);
             return false;
         }
         ptr->Locations = std::move(locs);
@@ -56,6 +58,12 @@ public:
     }
 
 private:
+    static void ReportUnknownLayer(const TKey& key, NYql::TExprContext& ctx) {
+        ctx.AddError(NYql::TIssue(
+            TStringBuilder() << "Layer with key=(Name=" << key.Name.GetOrElse("nullopt").Quote()
+            << ", Url=" << key.Url.GetOrElse("nullopt").Quote() << ") not found"
+        ));
+    }
     THashMap<TKey, TLayerInfo> Data_;
 };
 }

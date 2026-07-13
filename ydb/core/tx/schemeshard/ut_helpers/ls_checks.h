@@ -228,6 +228,9 @@ namespace NLs {
 
     TCheckFunc IncrementalBackup(bool flag);
 
+    TCheckFunc CheckMultiColumnStatistics(const TString& name, const TVector<TString>& columns, const TVector<NKikimrSchemeOp::EMultiColumnStatisticsType>& types);
+    TCheckFunc CheckColumnTableMultiColumnStatistics(const TString& name, const TVector<TString>& columns, const TVector<NKikimrSchemeOp::EMultiColumnStatisticsType>& types);
+
     struct TInverseTag {
         bool Value = false;
     };

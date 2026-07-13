@@ -132,7 +132,7 @@ public:
         const TActorId bufferActorId = {}, const IKqpTransactionManagerPtr& txManager = nullptr,
         TMaybe<NBatchOperations::TSettings> batchOperationSettings = Nothing(),
         std::shared_ptr<NYql::NDq::IDqChannelService> channelService = nullptr,
-        bool shrinkTasksGraph = false)
+        bool useKqpTasksGraphV2 = false)
         : NActors::TActor<TDerived>(&TDerived::ReadyState)
         , Request(std::move(request))
         , AsyncIoFactory(std::move(asyncIoFactory))
@@ -153,7 +153,7 @@ public:
         , BatchOperationSettings(std::move(batchOperationSettings))
         , AccountDefaultPoolInScheduler(executerConfig.TableServiceConfig.GetComputeSchedulerSettings().GetAccountDefaultPool())
         , NewRboEnabled(executerConfig.TableServiceConfig.GetEnableNewRBO())
-        , TasksGraph(Database, Request.Transactions, Request.TxAlloc, executerConfig.TableServiceConfig.GetResourceManager(), AggregationSettings, Counters, BufferActorId, UserToken, shrinkTasksGraph)
+        , TasksGraph(Database, Request.Transactions, Request.TxAlloc, executerConfig.TableServiceConfig.GetResourceManager(), AggregationSettings, Counters, BufferActorId, UserToken, useKqpTasksGraphV2)
         , ChannelService(channelService)
         , PartitionPruner(MakeHolder<TPartitionPruner>(Request.TxAlloc->HolderFactory, Request.TxAlloc->TypeEnv, std::move(partitionPrunerConfig)))
         , EnableWatermarks(executerConfig.TableServiceConfig.GetEnableWatermarks())
@@ -190,7 +190,7 @@ public:
             (trace_id, TraceId()));
     }
 
-    TActorId SelfId() {
+    TActorId SelfId() const {
        return TActor<TDerived>::SelfId();
     }
 
@@ -989,7 +989,7 @@ protected:
                                 TABLED() {str << task.StageId.TxId;}
                                 TABLED() {str << task.StageId.StageId;}
                                 TABLED() {str << task.Id;}
-                                TABLED() {str << task.Meta.NodeId;}
+                                TABLED() {str << task.Meta.ExpectedNodeId.value_or(0);}
                                 TABLED() {
                                     if (task.ComputeActorId) {
                                         HREF(TStringBuilder() << "/node/" << task.ComputeActorId.NodeId() << "/actors/kqp_node?ca=" << task.ComputeActorId)  {
@@ -1382,6 +1382,27 @@ protected:
                 (ForceFlag, force),
                 (trace_id, TraceId()));
         }
+    }
+
+    // Placement inputs for TKqpTasksGraph::BuildAllTasks so its node placement (TMaxTasksGraph) reproduces the
+    // KqpPlanner local-node fast paths and local-DC preference. mayRunTasksLocally is passed by the caller because it is
+    // derived differently per executer (and, in the data executer, only after table/shard resolution).
+    TPlacementParams BuildPlacementParams(bool mayRunTasksLocally) const {
+        if (!Request.ResourceManager_) {
+            return {}; // no RM (e.g. restored graph / tests): skip the local-node heuristics.
+        }
+        const auto local = Request.ResourceManager_->GetLocalResources();
+        const auto options = Request.ResourceManager_->GetPlacingOptions();
+        return TPlacementParams{
+            .ExecuterNodeId = SelfId().NodeId(),
+            .LocalMemory = local.Memory,
+            .LocalExecutionUnits = local.ExecutionUnits,
+            .MaxNonParallelTasksExecutionLimit = options.MaxNonParallelTasksExecutionLimit,
+            .MaxNonParallelDataQueryTasksLimit = options.MaxNonParallelDataQueryTasksLimit,
+            .MaxNonParallelTopStageExecutionLimit = options.MaxNonParallelTopStageExecutionLimit,
+            .PreferLocalDatacenterExecution = options.PreferLocalDatacenterExecution,
+            .MayRunTasksLocally = mayRunTasksLocally,
+        };
     }
 
     bool BuildPlannerAndSubmitTasks() {
@@ -1946,7 +1967,7 @@ IActor* CreateKqpDataExecuter(IKqpGateway::TExecPhysicalRequest&& request, const
     TPartitionPrunerConfig partitionPrunerConfig, const TShardIdToTableInfoPtr& shardIdToTableInfo,
     const IKqpTransactionManagerPtr& txManager, TActorId bufferActorId,
     TMaybe<NBatchOperations::TSettings> batchOperationSettings, const NKikimrConfig::TQueryServiceConfig& queryServiceConfig, ui64 generation,
-    std::shared_ptr<NYql::NDq::IDqChannelService> channelService, bool shrinkTasksGraph,
+    std::shared_ptr<NYql::NDq::IDqChannelService> channelService, bool useKqpTasksGraphV2,
     TVector<NKikimr::TTableId> tableIdsForSnapshot);
 
 IActor* CreateKqpScanExecuter(IKqpGateway::TExecPhysicalRequest&& request, const TString& database,
@@ -1956,6 +1977,6 @@ IActor* CreateKqpScanExecuter(IKqpGateway::TExecPhysicalRequest&& request, const
     const TIntrusivePtr<TUserRequestContext>& userRequestContext, ui32 statementResultIndex,
     const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup, const TGUCSettings::TPtr& GUCSettings,
     const std::optional<TLlvmSettings>& llvmSettings, std::shared_ptr<NYql::NDq::IDqChannelService> channelService,
-    const IKqpTransactionManagerPtr& txManager, bool shrinkTasksGraph);
+    const IKqpTransactionManagerPtr& txManager, bool useKqpTasksGraphV2);
 
 } // namespace NKikimr::NKqp

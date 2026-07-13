@@ -647,6 +647,7 @@ NSchemeShardUT_Private::TTestEnv::TTestEnv(TTestActorRuntime& runtime, const TTe
     app.FeatureFlags.SetEnableJsonIndex(true);
     app.FeatureFlags.SetEnableSetColumnConstraint(true);
     app.FeatureFlags.SetEnableColumnStore(true);
+    app.FeatureFlags.SetEnableColumnStatistics(true);
     app.FeatureFlags.SetEnableStrictAclCheck(opts.EnableStrictAclCheck_);
     app.SetEnableMoveIndex(opts.EnableMoveIndex_);
     app.SetEnableChangefeedInitialScan(opts.EnableChangefeedInitialScan_);
@@ -699,6 +700,9 @@ NSchemeShardUT_Private::TTestEnv::TTestEnv(TTestActorRuntime& runtime, const TTe
     }
     if (opts.MaxBuildIndexShardsInFlight_) {
         app.SchemeShardConfig.SetMaxBuildIndexShardsInFlight(*opts.MaxBuildIndexShardsInFlight_);
+    }
+    if (opts.MaxStoredIndexBuilds_) {
+        app.SchemeShardConfig.SetMaxStoredIndexBuilds(*opts.MaxStoredIndexBuilds_);
     }
 
     // graph settings

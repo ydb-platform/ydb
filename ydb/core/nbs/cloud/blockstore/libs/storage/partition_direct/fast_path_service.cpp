@@ -375,6 +375,13 @@ void TFastPathService::UpdateVChunkConfig(const TVChunkConfig& cfg)
     ActorSystem->Send(PartitionActorId, event.release());
 }
 
+void TFastPathService::RequestAddHost(size_t directBlockGroupId)
+{
+    auto event = std::make_unique<TEvPartitionDirectPrivate::TEvAddHostToDBG>(
+        directBlockGroupId);
+    ActorSystem->Send(PartitionActorId, event.release());
+}
+
 ui64 TFastPathService::GenerateLsn()
 {
     const ui64 lsn = ++SequenceGenerator;
@@ -391,6 +398,32 @@ TFastPathServiceInfo TFastPathService::GetMonInfo() const
         .TotalVChunks = Regions.size() * (RegionSize / vchunkSize),
         .DbgCount = DirectBlockGroups.size(),
     };
+}
+
+NThreading::TFuture<TVector<TDbgSnapshot>> TFastPathService::GatherMonSnapshots(
+    std::optional<size_t> dbgIndex) const
+{
+    TVector<NThreading::TFuture<TDbgSnapshot>> futures;
+    if (dbgIndex) {
+        if (*dbgIndex < DirectBlockGroups.size()) {
+            futures.push_back(DirectBlockGroups[*dbgIndex]->BuildMonSnapshot());
+        }
+    } else {
+        for (const auto& dbg: DirectBlockGroups) {
+            futures.push_back(dbg->BuildMonSnapshot());
+        }
+    }
+
+    return NThreading::WaitAll(futures).Apply(
+        [futures](const auto&)
+        {
+            TVector<TDbgSnapshot> snapshots;
+            snapshots.reserve(futures.size());
+            for (const auto& future: futures) {
+                snapshots.push_back(future.GetValue());
+            }
+            return snapshots;
+        });
 }
 
 void TFastPathService::MaybeTriggerPBufferCleanup(ui64 lsn)

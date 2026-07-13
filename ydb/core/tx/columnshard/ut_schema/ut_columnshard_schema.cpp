@@ -14,11 +14,14 @@
 #include <ydb/core/wrappers/s3_wrapper.h>
 
 #include <ydb/library/actors/core/av_bootstrapped.h>
+#include <ydb/library/actors/struct_log/log_stack.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
 #include <ydb/services/metadata/service.h>
 
 #include <library/cpp/deprecated/atomic/atomic.h>
 #include <util/system/hostname.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD
 
 namespace NKikimr {
 
@@ -504,7 +507,8 @@ std::vector<std::pair<ui32, ui64>> TestTiers(bool reboots, const std::vector<TSt
     TCountersContainer counter;
     runtime.SetEventFilter(TEventsCounter(counter, runtime));
     for (ui32 i = 0; i < specs.size(); ++i) {
-        NActors::TLogContextGuard logGuard = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("TEST_STEP", i);
+        YDB_LOG_CREATE_CONTEXT_COMP(NKikimrServices::TX_COLUMNSHARD,
+            {"TESTSTEP", i});
         bool hasColdEviction = false;
         bool misconfig = false;
         auto expectedReadResult = EExpectedResult::OK;
@@ -602,7 +606,8 @@ std::vector<std::pair<ui32, ui64>> TestTiers(bool reboots, const std::vector<TSt
         } else if (misconfig) {
             while (NOlap::NBlobOperations::NRead::TActor::WaitingBlobsCount.Val()) {
                 runtime.SimulateSleep(TDuration::Seconds(1));
-                AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("waiting", NOlap::NBlobOperations::NRead::TActor::WaitingBlobsCount.Val());
+                YDB_LOG_DEBUG("",
+                    {"waiting", NOlap::NBlobOperations::NRead::TActor::WaitingBlobsCount.Val()});
             }
         }
     }

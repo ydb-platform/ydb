@@ -2630,7 +2630,7 @@ void TPlan::PrepareSvg(ui64 maxTime, ui32 timelineDelta, ui32& offsetY) {
             auto x = c->CteConnection ? c->CteIndentX : c->FromStage->IndentX;
             auto y = 0;
 
-            c->_Builder << "<g data-group='g" << c->GroupId << "' class='selectable'><title>Connection: " << c->NodeType;
+            c->_Builder << "<g data-group='g" << c->GroupId << "' class='selectable'><title>" << c->NodeType << " connection";
             if (!c->KeyColumns.empty()) {
                 c->_Builder << " KeyColumns: ";
                 bool first = true;

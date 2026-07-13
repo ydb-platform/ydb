@@ -120,17 +120,11 @@ Y_UNIT_TEST_SUITE(TInflightInfoTests)
             inflightInfo.RequestFlush(THostIndex{2}, THostMask()));
 
         // Confirm flushes
-        inflightInfo.ConfirmFlush(THostRoute{
-            .SourceHostIndex = THostIndex{0},
-            .DestinationHostIndex = THostIndex{0}});
+        inflightInfo.ConfirmFlush(THostIndex{0});
         UNIT_ASSERT_VALUES_EQUAL(false, readyQueue.ReadyToErase.contains(123));
-        inflightInfo.ConfirmFlush(
-            {.SourceHostIndex = THostIndex{1},
-             .DestinationHostIndex = THostIndex{1}});
+        inflightInfo.ConfirmFlush(THostIndex{1});
         UNIT_ASSERT_VALUES_EQUAL(false, readyQueue.ReadyToErase.contains(123));
-        inflightInfo.ConfirmFlush(
-            {.SourceHostIndex = THostIndex{2},
-             .DestinationHostIndex = THostIndex{2}});
+        inflightInfo.ConfirmFlush(THostIndex{2});
         UNIT_ASSERT_VALUES_EQUAL(true, readyQueue.ReadyToErase.contains(123));
 
         // Check erase requests
@@ -164,21 +158,15 @@ Y_UNIT_TEST_SUITE(TInflightInfoTests)
         Y_UNUSED(l);
 
         // Confirm two flushes
-        inflightInfo.ConfirmFlush(THostRoute{
-            .SourceHostIndex = THostIndex{0},
-            .DestinationHostIndex = THostIndex{0}});
-        inflightInfo.ConfirmFlush(
-            {.SourceHostIndex = THostIndex{1},
-             .DestinationHostIndex = THostIndex{1}});
+        inflightInfo.ConfirmFlush(THostIndex{0});
+        inflightInfo.ConfirmFlush(THostIndex{1});
 
         // Check lock/unlock PBuffer
         inflightInfo.LockPBuffer();
         UNIT_ASSERT_VALUES_EQUAL(true, readyQueue.ReadyToErase.empty());
 
         // Confirm last flush
-        inflightInfo.ConfirmFlush(
-            {.SourceHostIndex = THostIndex{2},
-             .DestinationHostIndex = THostIndex{2}});
+        inflightInfo.ConfirmFlush(THostIndex{2});
         UNIT_ASSERT_VALUES_EQUAL(true, readyQueue.ReadyToErase.empty());
 
         inflightInfo.UnlockPBuffer();
@@ -220,9 +208,7 @@ Y_UNIT_TEST_SUITE(TInflightInfoTests)
 
         // When a flush fails, the lsn must be queued for a flush again.
         readyQueue.ReadyToFlush.clear();
-        inflightInfo.FlushFailed(THostRoute{
-            .SourceHostIndex = THostIndex{0},
-            .DestinationHostIndex = THostIndex{0}});
+        inflightInfo.FlushFailed(THostIndex{0});
         UNIT_ASSERT_VALUES_EQUAL(true, readyQueue.ReadyToFlush.contains(123));
 
         // Restart flush to host 0
@@ -231,17 +217,11 @@ Y_UNIT_TEST_SUITE(TInflightInfoTests)
             inflightInfo.RequestFlush(THostIndex{0}, THostMask()));
 
         // Confirm flushes
-        inflightInfo.ConfirmFlush(THostRoute{
-            .SourceHostIndex = THostIndex{0},
-            .DestinationHostIndex = THostIndex{0}});
+        inflightInfo.ConfirmFlush(THostIndex{0});
         UNIT_ASSERT_VALUES_EQUAL(false, readyQueue.ReadyToErase.contains(123));
-        inflightInfo.ConfirmFlush(THostRoute{
-            .SourceHostIndex = THostIndex{1},
-            .DestinationHostIndex = THostIndex{1}});
+        inflightInfo.ConfirmFlush(THostIndex{1});
         UNIT_ASSERT_VALUES_EQUAL(false, readyQueue.ReadyToErase.contains(123));
-        inflightInfo.ConfirmFlush(THostRoute{
-            .SourceHostIndex = THostIndex{2},
-            .DestinationHostIndex = THostIndex{2}});
+        inflightInfo.ConfirmFlush(THostIndex{2});
         UNIT_ASSERT_VALUES_EQUAL(true, readyQueue.ReadyToErase.contains(123));
 
         // Erase started
@@ -318,15 +298,9 @@ Y_UNIT_TEST_SUITE(TInflightInfoTests)
             2,
             inflightInfo.RequestFlush(THostIndex{2}, THostMask()));
 
-        inflightInfo.ConfirmFlush(THostRoute{
-            .SourceHostIndex = THostIndex{0},
-            .DestinationHostIndex = THostIndex{0}});
-        inflightInfo.ConfirmFlush(THostRoute{
-            .SourceHostIndex = THostIndex{1},
-            .DestinationHostIndex = THostIndex{1}});
-        inflightInfo.ConfirmFlush(THostRoute{
-            .SourceHostIndex = THostIndex{2},
-            .DestinationHostIndex = THostIndex{2}});
+        inflightInfo.ConfirmFlush(THostIndex{0});
+        inflightInfo.ConfirmFlush(THostIndex{1});
+        inflightInfo.ConfirmFlush(THostIndex{2});
 
         // Before any erase, all written hosts need erasing.
         auto eraseNeeded = inflightInfo.GetEraseNeeded();
@@ -385,15 +359,9 @@ Y_UNIT_TEST_SUITE(TInflightInfoTests)
             2,
             inflightInfo.RequestFlush(THostIndex{2}, THostMask()));
 
-        inflightInfo.ConfirmFlush(THostRoute{
-            .SourceHostIndex = THostIndex{0},
-            .DestinationHostIndex = THostIndex{0}});
-        inflightInfo.ConfirmFlush(THostRoute{
-            .SourceHostIndex = THostIndex{1},
-            .DestinationHostIndex = THostIndex{1}});
-        inflightInfo.ConfirmFlush(THostRoute{
-            .SourceHostIndex = THostIndex{2},
-            .DestinationHostIndex = THostIndex{2}});
+        inflightInfo.ConfirmFlush(THostIndex{0});
+        inflightInfo.ConfirmFlush(THostIndex{1});
+        inflightInfo.ConfirmFlush(THostIndex{2});
 
         // Request erase for host 0 and then fail it.
         inflightInfo.RequestErase(THostIndex{0});
@@ -563,12 +531,8 @@ Y_UNIT_TEST_SUITE(TInflightInfoTests)
         Y_UNUSED(l);
 
         // Confirm flush for hosts 0 and 1 only.
-        inflightInfo.ConfirmFlush(THostRoute{
-            .SourceHostIndex = THostIndex{0},
-            .DestinationHostIndex = THostIndex{0}});
-        inflightInfo.ConfirmFlush(THostRoute{
-            .SourceHostIndex = THostIndex{1},
-            .DestinationHostIndex = THostIndex{1}});
+        inflightInfo.ConfirmFlush(THostIndex{0});
+        inflightInfo.ConfirmFlush(THostIndex{1});
 
         UNIT_ASSERT_VALUES_EQUAL(
             TInflightInfo::EState::PBufferFlushing,
@@ -600,15 +564,9 @@ Y_UNIT_TEST_SUITE(TInflightInfoTests)
         l = inflightInfo.RequestFlush(THostIndex{1}, THostMask());
         l = inflightInfo.RequestFlush(THostIndex{2}, THostMask());
         Y_UNUSED(l);
-        inflightInfo.ConfirmFlush(THostRoute{
-            .SourceHostIndex = THostIndex{0},
-            .DestinationHostIndex = THostIndex{0}});
-        inflightInfo.ConfirmFlush(THostRoute{
-            .SourceHostIndex = THostIndex{1},
-            .DestinationHostIndex = THostIndex{1}});
-        inflightInfo.ConfirmFlush(THostRoute{
-            .SourceHostIndex = THostIndex{2},
-            .DestinationHostIndex = THostIndex{2}});
+        inflightInfo.ConfirmFlush(THostIndex{0});
+        inflightInfo.ConfirmFlush(THostIndex{1});
+        inflightInfo.ConfirmFlush(THostIndex{2});
 
         // Start erasing hosts 0 and 1, confirm both.
         inflightInfo.RequestErase(THostIndex{0});
@@ -688,12 +646,8 @@ Y_UNIT_TEST_SUITE(TInflightInfoTests)
         l = inflightInfo.RequestFlush(THostIndex{1}, THostMask());
         l = inflightInfo.RequestFlush(THostIndex{2}, THostMask());
         Y_UNUSED(l);
-        inflightInfo.ConfirmFlush(THostRoute{
-            .SourceHostIndex = THostIndex{0},
-            .DestinationHostIndex = THostIndex{0}});
-        inflightInfo.ConfirmFlush(THostRoute{
-            .SourceHostIndex = THostIndex{1},
-            .DestinationHostIndex = THostIndex{1}});
+        inflightInfo.ConfirmFlush(THostIndex{0});
+        inflightInfo.ConfirmFlush(THostIndex{1});
         UNIT_ASSERT_VALUES_EQUAL(
             TInflightInfo::EState::PBufferFlushing,
             inflightInfo.GetState());

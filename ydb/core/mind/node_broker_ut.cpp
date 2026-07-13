@@ -2,6 +2,8 @@
 #include "node_broker__scheme.h"
 #include "dynamic_nameserver_impl.h"
 
+#include <ydb/core/cms/console/console.h>
+
 #include <ydb/core/testlib/basics/appdata.h>
 #include <ydb/core/testlib/basics/storage.h>
 #include <ydb/core/testlib/basics/helpers.h>
@@ -76,7 +78,8 @@ THashMap<ui32, TIntrusivePtr<TNodeWardenConfig>> NodeWardenConfigs;
 
 void SetupServices(TTestActorRuntime &runtime,
                    ui32 maxDynNodes,
-                   bool enableNodeBrokerDeltaProtocol)
+                   bool enableNodeBrokerDeltaProtocol,
+                   bool enableNodeBrokerLongLease = false)
 {
     const ui32 domainsNum = 1;
     const ui32 disksInDomain = 1;
@@ -191,6 +194,7 @@ void SetupServices(TTestActorRuntime &runtime,
     app.FeatureFlags.SetEnableNodeBrokerSingleDomainMode(true);
     app.FeatureFlags.SetEnableStableNodeNames(true);
     app.FeatureFlags.SetEnableNodeBrokerDeltaProtocol(enableNodeBrokerDeltaProtocol);
+    app.FeatureFlags.SetEnableNodeBrokerLongLease(enableNodeBrokerLongLease);
 
     runtime.Initialize(app.Unwrap());
 
@@ -261,6 +265,50 @@ void SetEpochDuration(TTestActorRuntime& runtime,
     SetConfig(runtime, sender, config);
 }
 
+void SetLeaseDuration(TTestActorRuntime& runtime,
+                      TActorId sender,
+                      TDuration lease)
+{
+    NKikimrNodeBroker::TConfig config;
+    config.SetLeaseDuration(lease.GetValue());
+    SetConfig(runtime, sender, config);
+}
+
+// Toggle the EnableNodeBrokerLongLease feature flag on the running NodeBroker
+// tablet at runtime by delivering a config notification (as the configs
+// dispatcher would in production) and waiting for the acknowledgement.
+void SetNodeBrokerLongLease(TTestActorRuntime& runtime,
+                            TActorId sender,
+                            bool enable)
+{
+    auto event = MakeHolder<NConsole::TEvConsole::TEvConfigNotificationRequest>();
+    auto& featureFlags = *event->Record.MutableConfig()->MutableFeatureFlags();
+    featureFlags.SetEnableStableNodeNames(true);
+    featureFlags.SetEnableNodeBrokerLongLease(enable);
+    runtime.SendToPipe(MakeNodeBrokerID(), sender, event.Release(), 0, GetPipeConfigWithRetries());
+
+    TAutoPtr<IEventHandle> handle;
+    runtime.GrabEdgeEventRethrow<NConsole::TEvConsole::TEvConfigNotificationResponse>(handle);
+}
+
+// Toggle the EnableNodeBrokerLongLease feature flag on the node-0 dynamic
+// nameserver at runtime via a config notification, and wait for the ack.
+void SetNameserverLongLease(TTestActorRuntime& runtime,
+                            TActorId sender,
+                            bool enable)
+{
+    auto event = MakeHolder<NConsole::TEvConsole::TEvConfigNotificationRequest>();
+    auto& featureFlags = *event->Record.MutableConfig()->MutableFeatureFlags();
+    // Keep the delta protocol flag unchanged (these tests use the epoch
+    // protocol); a differing value would make the nameserver reset its pipe.
+    featureFlags.SetEnableNodeBrokerDeltaProtocol(false);
+    featureFlags.SetEnableNodeBrokerLongLease(enable);
+    runtime.Send(new IEventHandle(GetNameserviceActorId(), sender, event.Release()));
+
+    TAutoPtr<IEventHandle> handle;
+    runtime.GrabEdgeEventRethrow<NConsole::TEvConsole::TEvConfigNotificationResponse>(handle);
+}
+
 void AsyncSetBannedIds(TTestActorRuntime& runtime,
     TActorId sender,
     const TVector<std::pair<ui32, ui32>> ids)
@@ -285,7 +333,8 @@ void SetBannedIds(TTestActorRuntime& runtime,
 void Setup(TTestActorRuntime& runtime,
            ui32 maxDynNodes = 3,
            const TVector<TString>& databases = {},
-           bool enableNodeBrokerDeltaProtocol = false)
+           bool enableNodeBrokerDeltaProtocol = false,
+           bool enableNodeBrokerLongLease = false)
 {
     using namespace NMalloc;
     TMallocInfo mallocInfo = MallocInfo();
@@ -301,7 +350,7 @@ void Setup(TTestActorRuntime& runtime,
     runtime.SetScheduledEventFilter(scheduledFilter);
 
     SetupLogging(runtime);
-    SetupServices(runtime, maxDynNodes, enableNodeBrokerDeltaProtocol);
+    SetupServices(runtime, maxDynNodes, enableNodeBrokerDeltaProtocol, enableNodeBrokerLongLease);
 
     TActorId sender = runtime.AllocateEdgeActor();
     ui32 txId = 100;
@@ -670,6 +719,27 @@ NKikimrNodeBroker::TEpoch CheckNodesList(TTestActorRuntime &runtime,
     return rec.GetEpoch();
 }
 
+void CheckNodeLiveness(TTestActorRuntime &runtime,
+                       TActorId sender,
+                       ui32 nodeId,
+                       ENodeLiveness liveness)
+{
+    const auto &rec = ListNodes(runtime, sender);
+    // The nodes list is a concatenation of the epoch snapshot and per-node
+    // deltas, so a node may appear more than once; the last occurrence wins.
+    bool found = false;
+    ui32 actual = 0;
+    for (const auto &node : rec.GetNodes()) {
+        if (node.GetNodeId() == nodeId) {
+            found = true;
+            actual = node.GetLiveness();
+        }
+    }
+    UNIT_ASSERT_C(found, "node " << nodeId << " is not in the alive nodes list");
+    UNIT_ASSERT_VALUES_EQUAL_C(actual, static_cast<ui32>(liveness),
+                               "unexpected liveness for node " << nodeId);
+}
+
 void CheckNodeInfo(TTestActorRuntime &runtime,
                    TActorId sender,
                    ui32 nodeId,
@@ -954,6 +1024,33 @@ THolder<TEvInterconnect::TEvNodesInfo> GetNameserverNodesListEv(TTestActorRuntim
     UNIT_ASSERT(reply);
 
     return IEventHandle::Release<TEvInterconnect::TEvNodesInfo>(handle);
+}
+
+THolder<TEvInterconnect::TEvNodesInfo> GetNameserverNodesListEv(TTestActorRuntime &runtime, TActorId sender,
+                                                                bool onlyAliveNodes) {
+    runtime.Send(new IEventHandle(GetNameserviceActorId(), sender,
+        new TEvInterconnect::TEvListNodes(false, onlyAliveNodes)));
+
+    TAutoPtr<IEventHandle> handle;
+    auto reply = runtime.GrabEdgeEventRethrow<TEvInterconnect::TEvNodesInfo>(handle);
+    UNIT_ASSERT(reply);
+
+    return IEventHandle::Release<TEvInterconnect::TEvNodesInfo>(handle);
+}
+
+// Returns the set of dynamic (non-static) node ids the nameservice reports.
+// With onlyAliveNodes the request asks the nameservice to omit nodes the
+// NodeBroker has marked dead (only meaningful when the long lease feature is on).
+THashSet<ui32> GetNameserverDynamicNodeIds(TTestActorRuntime &runtime, TActorId sender,
+                                           bool onlyAliveNodes = false)
+{
+    ui32 maxStaticNodeId = runtime.GetAppData().DynamicNameserviceConfig->MaxStaticNodeId;
+    auto ev = GetNameserverNodesListEv(runtime, sender, onlyAliveNodes);
+    THashSet<ui32> ids;
+    for (auto &node : ev->Nodes)
+        if (node.NodeId > maxStaticNodeId)
+            ids.insert(node.NodeId);
+    return ids;
 }
 
 void GetNameserverNodesList(TTestActorRuntime &runtime,
@@ -1393,6 +1490,204 @@ Y_UNIT_TEST_SUITE(TNodeBrokerTest) {
         CheckRegistration(runtime, sender, "host2", 1001, "host2.yandex.net", "1.2.3.5",
                           1, 2, 3, 5, TStatus::OK, NODE2, Max<ui64>(), false);
         CheckLeaseExtension(runtime, sender, NODE2, TStatus::OK, epoch, true);
+    }
+
+    Y_UNIT_TEST(LongLeaseNodeBecomesDeadThenExpires)
+    {
+        TTestBasicRuntime runtime(8, false);
+        Setup(runtime, 4, {}, false, /* enableNodeBrokerLongLease */ true);
+        TActorId sender = runtime.AllocateEdgeActor();
+
+        // Lease duration equal to a single (default) epoch: a node without pings
+        // survives one extra epoch (AliveUntil) before becoming Dead and another
+        // epoch (ExpireV2) before it finally expires.
+        SetLeaseDuration(runtime, sender, TDuration::Minutes(5));
+
+        auto epoch = GetEpoch(runtime, sender);
+        // Register node NODE1, it is Alive.
+        CheckRegistration(runtime, sender, "host1", 1001, "host1.yandex.net", "1.2.3.4",
+                          1, 2, 3, 4, TStatus::OK, NODE1, epoch.GetNextEnd());
+        CheckNodeLiveness(runtime, sender, NODE1, ENodeLiveness::Alive);
+
+        // After the first epoch the long lease keeps the node Alive.
+        epoch = WaitForEpochUpdate(runtime, sender);
+        CheckNodesList(runtime, sender, {NODE1}, {}, epoch.GetId());
+        CheckNodeLiveness(runtime, sender, NODE1, ENodeLiveness::Alive);
+
+        // After the second epoch AliveUntil has passed: the node becomes Dead,
+        // but is not expired yet (ExpireV2 is still in the future).
+        epoch = WaitForEpochUpdate(runtime, sender);
+        CheckNodesList(runtime, sender, {NODE1}, {}, epoch.GetId());
+        CheckNodeLiveness(runtime, sender, NODE1, ENodeLiveness::Dead);
+
+        // After the third epoch ExpireV2 has passed: the node expires.
+        epoch = WaitForEpochUpdate(runtime, sender);
+        CheckNodesList(runtime, sender, {}, {NODE1}, epoch.GetId());
+    }
+
+    Y_UNIT_TEST(LongLeasePingKeepsNodeAlive)
+    {
+        TTestBasicRuntime runtime(8, false);
+        Setup(runtime, 4, {}, false, /* enableNodeBrokerLongLease */ true);
+        TActorId sender = runtime.AllocateEdgeActor();
+
+        SetLeaseDuration(runtime, sender, TDuration::Minutes(5));
+
+        auto epoch = GetEpoch(runtime, sender);
+        CheckRegistration(runtime, sender, "host1", 1001, "host1.yandex.net", "1.2.3.4",
+                          1, 2, 3, 4, TStatus::OK, NODE1, epoch.GetNextEnd());
+
+        // As long as the node keeps extending its lease each epoch, it never
+        // becomes Dead nor expires, even with the long lease feature enabled.
+        for (ui32 i = 0; i < 5; ++i) {
+            epoch = WaitForEpochUpdate(runtime, sender);
+            CheckLeaseExtension(runtime, sender, NODE1, TStatus::OK, epoch);
+            CheckNodesList(runtime, sender, {NODE1}, {}, epoch.GetId());
+            CheckNodeLiveness(runtime, sender, NODE1, ENodeLiveness::Alive);
+        }
+    }
+
+    Y_UNIT_TEST(LongLeaseDeadNodeRevivedByRegistration)
+    {
+        TTestBasicRuntime runtime(8, false);
+        Setup(runtime, 4, {}, false, /* enableNodeBrokerLongLease */ true);
+        TActorId sender = runtime.AllocateEdgeActor();
+
+        SetLeaseDuration(runtime, sender, TDuration::Minutes(5));
+
+        auto epoch = GetEpoch(runtime, sender);
+        CheckRegistration(runtime, sender, "host1", 1001, "host1.yandex.net", "1.2.3.4",
+                          1, 2, 3, 4, TStatus::OK, NODE1, epoch.GetNextEnd());
+
+        // Let the node become Dead.
+        WaitForEpochUpdate(runtime, sender);
+        epoch = WaitForEpochUpdate(runtime, sender);
+        CheckNodesList(runtime, sender, {NODE1}, {}, epoch.GetId());
+        CheckNodeLiveness(runtime, sender, NODE1, ENodeLiveness::Dead);
+
+        // Re-registration of a Dead node revives it (extends lease, back to Alive).
+        CheckRegistration(runtime, sender, "host1", 1001, "host1.yandex.net", "1.2.3.4",
+                          1, 2, 3, 4, TStatus::OK, NODE1, epoch.GetNextEnd());
+        CheckNodeLiveness(runtime, sender, NODE1, ENodeLiveness::Alive);
+
+        // The revived node survives the following epoch as Alive.
+        epoch = WaitForEpochUpdate(runtime, sender);
+        CheckNodesList(runtime, sender, {NODE1}, {}, epoch.GetId());
+        CheckNodeLiveness(runtime, sender, NODE1, ENodeLiveness::Alive);
+    }
+
+    Y_UNIT_TEST(LongLeaseDeadStatePersistedAfterRestart)
+    {
+        TTestBasicRuntime runtime(8, false);
+        Setup(runtime, 4, {}, false, /* enableNodeBrokerLongLease */ true);
+        TActorId sender = runtime.AllocateEdgeActor();
+
+        SetLeaseDuration(runtime, sender, TDuration::Minutes(5));
+
+        auto epoch = GetEpoch(runtime, sender);
+        CheckRegistration(runtime, sender, "host1", 1001, "host1.yandex.net", "1.2.3.4",
+                          1, 2, 3, 4, TStatus::OK, NODE1, epoch.GetNextEnd());
+
+        // Let the node become Dead.
+        WaitForEpochUpdate(runtime, sender);
+        epoch = WaitForEpochUpdate(runtime, sender);
+        CheckNodeLiveness(runtime, sender, NODE1, ENodeLiveness::Dead);
+
+        // Dead state (AliveUntil/Liveness) must survive a tablet restart.
+        RestartNodeBroker(runtime);
+        CheckNodesList(runtime, sender, {NODE1}, {}, epoch.GetId());
+        CheckNodeLiveness(runtime, sender, NODE1, ENodeLiveness::Dead);
+
+        // The node still expires by ExpireV2 in the next epoch.
+        epoch = WaitForEpochUpdate(runtime, sender);
+        CheckNodesList(runtime, sender, {}, {NODE1}, epoch.GetId());
+    }
+
+    Y_UNIT_TEST(LongLeaseDisabledNodeExpiresByExpire)
+    {
+        TTestBasicRuntime runtime(8, false);
+        Setup(runtime, 4, {}, false, /* enableNodeBrokerLongLease */ false);
+        TActorId sender = runtime.AllocateEdgeActor();
+
+        // Even with a lease duration configured, when the feature is disabled the
+        // node expires by Expire (a single epoch after its last ping) and never
+        // transitions to the Dead state.
+        SetLeaseDuration(runtime, sender, TDuration::Minutes(5));
+
+        auto epoch = GetEpoch(runtime, sender);
+        CheckRegistration(runtime, sender, "host1", 1001, "host1.yandex.net", "1.2.3.4",
+                          1, 2, 3, 4, TStatus::OK, NODE1, epoch.GetNextEnd());
+        CheckNodeLiveness(runtime, sender, NODE1, ENodeLiveness::Alive);
+
+        epoch = WaitForEpochUpdate(runtime, sender);
+        CheckNodesList(runtime, sender, {NODE1}, {}, epoch.GetId());
+        CheckNodeLiveness(runtime, sender, NODE1, ENodeLiveness::Alive);
+
+        // Expires by Expire, without ever becoming Dead.
+        epoch = WaitForEpochUpdate(runtime, sender);
+        CheckNodesList(runtime, sender, {}, {NODE1}, epoch.GetId());
+    }
+
+    Y_UNIT_TEST(LongLeaseEnabledAtRuntimeExtendsLease)
+    {
+        TTestBasicRuntime runtime(8, false);
+        Setup(runtime, 4, {}, false, /* enableNodeBrokerLongLease */ false);
+        TActorId sender = runtime.AllocateEdgeActor();
+
+        SetLeaseDuration(runtime, sender, TDuration::Minutes(5));
+
+        // Register while the feature is disabled. Under the old rules this node
+        // would expire one epoch after its last ping (see
+        // LongLeaseDisabledNodeExpiresByExpire).
+        CheckRegistration(runtime, sender, "host1", 1001, "host1.yandex.net", "1.2.3.4",
+                          1, 2, 3, 4, TStatus::OK, NODE1);
+        CheckNodeLiveness(runtime, sender, NODE1, ENodeLiveness::Alive);
+
+        // Enable the feature at runtime, before the node would have expired.
+        SetNodeBrokerLongLease(runtime, sender, true);
+
+        // With the feature now on, the node follows the long-lease lifecycle based
+        // on the ExpireV2/AliveUntil stored at registration: it stays Alive one
+        // epoch, then becomes Dead instead of expiring.
+        auto epoch = WaitForEpochUpdate(runtime, sender);
+        CheckNodesList(runtime, sender, {NODE1}, {}, epoch.GetId());
+        CheckNodeLiveness(runtime, sender, NODE1, ENodeLiveness::Alive);
+
+        epoch = WaitForEpochUpdate(runtime, sender);
+        CheckNodesList(runtime, sender, {NODE1}, {}, epoch.GetId());
+        CheckNodeLiveness(runtime, sender, NODE1, ENodeLiveness::Dead);
+
+        // It only expires (by ExpireV2) the epoch after becoming Dead.
+        epoch = WaitForEpochUpdate(runtime, sender);
+        CheckNodesList(runtime, sender, {}, {NODE1}, epoch.GetId());
+    }
+
+    Y_UNIT_TEST(LongLeaseDisabledAtRuntimeExpiresDeadNode)
+    {
+        TTestBasicRuntime runtime(8, false);
+        Setup(runtime, 4, {}, false, /* enableNodeBrokerLongLease */ true);
+        TActorId sender = runtime.AllocateEdgeActor();
+
+        SetLeaseDuration(runtime, sender, TDuration::Minutes(5));
+
+        CheckRegistration(runtime, sender, "host1", 1001, "host1.yandex.net", "1.2.3.4",
+                          1, 2, 3, 4, TStatus::OK, NODE1);
+
+        // Let the node become Dead (but not expired) under the long lease rules.
+        WaitForEpochUpdate(runtime, sender);
+        auto epoch = WaitForEpochUpdate(runtime, sender);
+        CheckNodesList(runtime, sender, {NODE1}, {}, epoch.GetId());
+        CheckNodeLiveness(runtime, sender, NODE1, ENodeLiveness::Dead);
+
+        // Disable the feature while a Dead-but-not-expired node exists. The broker
+        // switches back to the Expire-based rule; the stale node (whose Expire is
+        // already in the past) must expire at the next epoch. It must not be
+        // processed as both "make dead" and "expire" in the same diff, which would
+        // crash ApplyStateDiff.
+        SetNodeBrokerLongLease(runtime, sender, false);
+
+        epoch = WaitForEpochUpdate(runtime, sender);
+        CheckNodesList(runtime, sender, {}, {NODE1}, epoch.GetId());
     }
 
     Y_UNIT_TEST(TestListNodes)
@@ -4991,6 +5286,114 @@ Y_UNIT_TEST_SUITE(TDynamicNameserverTest) {
 
         // No pending cache miss requests are left
         CheckNoPendingCacheMissesLeft(runtime, 0);
+    }
+
+    Y_UNIT_TEST(ListNodesEpochDeltaLongLeaseOnlyAlive)
+    {
+        TTestBasicRuntime runtime(8, false);
+        Setup(runtime, 4, {}, false, /* enableNodeBrokerLongLease */ true);
+        TActorId sender = runtime.AllocateEdgeActor();
+
+        // Lease duration equal to a single (default) epoch: a node without pings
+        // stays Alive for one epoch, becomes Dead the next and expires the epoch
+        // after that (see TNodeBrokerTest::LongLeaseNodeBecomesDeadThenExpires).
+        SetLeaseDuration(runtime, sender, TDuration::Minutes(5));
+
+        CheckRegistration(runtime, sender, "host1", 1001, "host1.host1.host1", "1.2.3.4",
+                          1, 2, 3, 4, TStatus::OK, NODE1);
+
+        // While the node is Alive it is served in both the full and the
+        // alive-only nodes lists.
+        UNIT_ASSERT(GetNameserverDynamicNodeIds(runtime, sender, /* onlyAlive */ false).contains(NODE1));
+        UNIT_ASSERT(GetNameserverDynamicNodeIds(runtime, sender, /* onlyAlive */ true).contains(NODE1));
+
+        // Advance until the node becomes Dead, but has not expired yet.
+        WaitForEpochUpdate(runtime, sender);
+        WaitForEpochUpdate(runtime, sender);
+        CheckNodeLiveness(runtime, sender, NODE1, ENodeLiveness::Dead);
+
+        // The full list still contains the dead-but-not-expired node, while the
+        // alive-only list omits it.
+        UNIT_ASSERT(GetNameserverDynamicNodeIds(runtime, sender, /* onlyAlive */ false).contains(NODE1));
+        UNIT_ASSERT(!GetNameserverDynamicNodeIds(runtime, sender, /* onlyAlive */ true).contains(NODE1));
+
+        // After the node finally expires it disappears from both lists.
+        WaitForEpochUpdate(runtime, sender);
+        UNIT_ASSERT(!GetNameserverDynamicNodeIds(runtime, sender, /* onlyAlive */ false).contains(NODE1));
+        UNIT_ASSERT(!GetNameserverDynamicNodeIds(runtime, sender, /* onlyAlive */ true).contains(NODE1));
+    }
+
+    Y_UNIT_TEST(LongLeaseDeadNodeStillResolvable)
+    {
+        TTestBasicRuntime runtime(8, false);
+        Setup(runtime, 4, {}, false, /* enableNodeBrokerLongLease */ true);
+        TActorId sender = runtime.AllocateEdgeActor();
+
+        SetLeaseDuration(runtime, sender, TDuration::Minutes(5));
+
+        CheckRegistration(runtime, sender, "host1", 1001, "host1.host1.host1", "1.2.3.4",
+                          1, 2, 3, 4, TStatus::OK, NODE1);
+        CheckResolveNode(runtime, sender, NODE1, "1.2.3.4");
+
+        // The node stops pinging and becomes Dead, but its long-lease expiration
+        // (ExpireV2) is still in the future, so the nameservice keeps resolving it
+        // (ResolveDynamicNode/GetNode use GetExpire(EnableLongLease) == ExpireV2).
+        WaitForEpochUpdate(runtime, sender);
+        WaitForEpochUpdate(runtime, sender);
+        CheckNodeLiveness(runtime, sender, NODE1, ENodeLiveness::Dead);
+
+        // Refresh the nameservice view from the NodeBroker, then resolve.
+        GetNameserverDynamicNodeIds(runtime, sender);
+        CheckResolveNode(runtime, sender, NODE1, "1.2.3.4");
+        CheckGetNode(runtime, sender, NODE1, true);
+
+        // Once ExpireV2 passes the node expires and is no longer resolvable.
+        WaitForEpochUpdate(runtime, sender);
+        GetNameserverDynamicNodeIds(runtime, sender);
+        CheckResolveUnknownNode(runtime, sender, NODE1);
+        CheckGetNode(runtime, sender, NODE1, false);
+
+        // No pending cache miss requests are left
+        CheckNoPendingCacheMissesLeft(runtime, 0);
+    }
+
+    Y_UNIT_TEST(LongLeaseFeatureFlagToggledAtRuntime)
+    {
+        TTestBasicRuntime runtime(8, false);
+        Setup(runtime, 4, {}, false, /* enableNodeBrokerLongLease */ true);
+        TActorId sender = runtime.AllocateEdgeActor();
+
+        SetLeaseDuration(runtime, sender, TDuration::Minutes(5));
+
+        CheckRegistration(runtime, sender, "host1", 1001, "host1.host1.host1", "1.2.3.4",
+                          1, 2, 3, 4, TStatus::OK, NODE1);
+
+        // Drive the node into the Dead-but-not-expired window. The NodeBroker
+        // keeps the long lease feature enabled the whole time, so the node stays
+        // registered (its ExpireV2 is still in the future) while we toggle the
+        // feature on the nameserver only.
+        WaitForEpochUpdate(runtime, sender);
+        WaitForEpochUpdate(runtime, sender);
+        CheckNodeLiveness(runtime, sender, NODE1, ENodeLiveness::Dead);
+
+        // Nameserver has long lease ON: the dead node is served from ExpireV2 in
+        // the full list and hidden from the alive-only list.
+        UNIT_ASSERT(GetNameserverDynamicNodeIds(runtime, sender, /* onlyAlive */ false).contains(NODE1));
+        UNIT_ASSERT(!GetNameserverDynamicNodeIds(runtime, sender, /* onlyAlive */ true).contains(NODE1));
+
+        // Turn the feature OFF at runtime. The nameserver invalidates its caches
+        // and switches to the shorter Expire; the node (whose Expire is already in
+        // the past) drops out of both lists, and the alive-only filter is disabled.
+        SetNameserverLongLease(runtime, sender, false);
+        UNIT_ASSERT(!GetNameserverDynamicNodeIds(runtime, sender, /* onlyAlive */ false).contains(NODE1));
+        UNIT_ASSERT(!GetNameserverDynamicNodeIds(runtime, sender, /* onlyAlive */ true).contains(NODE1));
+
+        // Turn it back ON: the node reappears in the full list (served from
+        // ExpireV2 again) and is again hidden from the alive-only list, proving the
+        // flag switch and cache invalidation took effect.
+        SetNameserverLongLease(runtime, sender, true);
+        UNIT_ASSERT(GetNameserverDynamicNodeIds(runtime, sender, /* onlyAlive */ false).contains(NODE1));
+        UNIT_ASSERT(!GetNameserverDynamicNodeIds(runtime, sender, /* onlyAlive */ true).contains(NODE1));
     }
 }
 

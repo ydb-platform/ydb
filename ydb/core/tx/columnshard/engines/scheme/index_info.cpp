@@ -15,6 +15,8 @@
 
 #include <util/string/join.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD
+
 namespace NKikimr::NOlap {
 
 TConclusionStatus TIndexInfo::CheckCompatible(const TIndexInfo& other) const {
@@ -167,7 +169,9 @@ std::optional<ui32> TIndexInfo::GetColumnIndexOptional(const ui32 id) const {
 std::shared_ptr<arrow::Field> TIndexInfo::GetColumnFieldOptional(const ui32 columnId) const {
     const std::optional<ui32> index = GetColumnIndexOptional(columnId);
     if (!index) {
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("column_id", columnId)("event", "incorrect_column_id");
+        YDB_LOG_DEBUG("",
+            {"columnId", columnId},
+            {"event", "incorrect_column_id"});
         return nullptr;
     }
     return ArrowSchemaWithSpecials()->GetFieldByIndexVerified(*index);
@@ -206,11 +210,34 @@ std::shared_ptr<arrow::Schema> TIndexInfo::GetColumnSchema(const ui32 columnId) 
     return GetColumnsSchema({ columnId });
 }
 
+bool TInsertOptionsPolicy::MeetsMinBlobBytes(const ui64 totalBlobBytes) const {
+    return totalBlobBytes >= BuildIndexesMinBlobBytes.value_or(0);
+}
+
+bool TInsertOptionsPolicy::ShouldBuildIndexesOnInsert(const NEvWrite::EModificationType mType, const ui64 totalBlobBytes) const {
+    if (!BuildIndexesEnabled.value_or(false)) {
+        return false;
+    }
+    if (mType != NEvWrite::EModificationType::Replace) {
+        return false;
+    }
+    return MeetsMinBlobBytes(totalBlobBytes);
+}
+
 void TIndexInfo::DeserializeOptionsFromProto(const NKikimrSchemeOp::TColumnTableSchemeOptions& optionsProto) {
     TMemoryProfileGuard g("TIndexInfo::DeserializeFromProto::Options");
     SchemeNeedActualization = optionsProto.GetSchemeNeedActualization();
     if (optionsProto.HasScanReaderPolicyName()) {
         ScanReaderPolicyName = optionsProto.GetScanReaderPolicyName();
+    }
+    if (optionsProto.HasInsertOptions()) {
+        const auto& options = optionsProto.GetInsertOptions();
+        if (options.HasBuildIndexesEnabled()) {
+            InsertOptions.BuildIndexesEnabled = options.GetBuildIndexesEnabled();
+        }
+        if (options.HasBuildIndexesMinBlobBytes()) {
+            InsertOptions.BuildIndexesMinBlobBytes = options.GetBuildIndexesMinBlobBytes();
+        }
     }
     if (optionsProto.HasCompactionPlannerConstructor()) {
         auto container =
@@ -237,7 +264,9 @@ bool TIndexInfo::DeserializeDefaultCompressionFromProto(const NKikimrSchemeOp::T
     TMemoryProfileGuard g("TIndexInfo::DeserializeFromProto::Serializer");
     NArrow::NSerialization::TSerializerContainer container;
     if (!container.DeserializeFromProto(compressionProto)) {
-        AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "cannot_parse_index_info")("reason", "cannot_parse_default_serializer");
+        YDB_LOG_ERROR("",
+            {"event", "cannot_parse_index_info"},
+            {"reason", "cannot_parse_default_serializer"});
         return false;
     }
     DefaultSerializer = container;
@@ -307,7 +336,9 @@ bool TIndexInfo::DeserializeFromProto(const NKikimrSchemeOp::TColumnTableSchema&
             AFL_VERIFY(it != columns.end());
             auto fConclusion = CreateColumnFeatures(it->second, col, operators, cache);
             if (fConclusion.IsFail()) {
-                AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "cannot_build_column_feature")("reason", fConclusion.GetErrorMessage());
+                YDB_LOG_ERROR("",
+                    {"event", "cannot_build_column_feature"},
+                    {"reason", fConclusion.GetErrorMessage()});
                 return false;
             }
             ColumnFeatures.emplace_back(fConclusion.DetachResult());

@@ -1724,6 +1724,88 @@ Y_UNIT_TEST_TWIN(MultipleSelectsAndReturningsStream, EnableIndexStreamWrite) {
     }
 }
 
+Y_UNIT_TEST_TWIN(DeleteReturningThenSelectInSameTx, EnableIndexStreamWrite) {
+    auto kikimr = DefaultKikimrRunner({}, GetAppConfig(EnableIndexStreamWrite));
+
+    {
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+        auto resultCreate = session.ExecuteSchemeQuery(Q_(R"(
+            --!syntax_v1
+            CREATE TABLE repro96 (name Utf8, team Utf8, PRIMARY KEY(name));
+        )")).GetValueSync();
+        UNIT_ASSERT_C(resultCreate.IsSuccess(), resultCreate.GetIssues().ToString());
+
+        auto resultInsert = session.ExecuteDataQuery(Q_(R"(
+            --!syntax_v1
+            INSERT INTO repro96 (name, team) VALUES ("alice"u, "red"u), ("bob"u, "blue"u);
+        )"), TTxControl::BeginTx().CommitTx()).GetValueSync();
+        UNIT_ASSERT_C(resultInsert.IsSuccess(), resultInsert.GetIssues().ToString());
+    }
+
+    {
+        auto db = kikimr.GetQueryClient();
+        auto session = db.GetSession().GetValueSync().GetSession();
+
+        auto deleteResult = session.ExecuteQuery(R"(
+            DELETE FROM repro96 WHERE team = "red"u RETURNING name;
+        )", NYdb::NQuery::TTxControl::BeginTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(deleteResult.GetStatus(), EStatus::SUCCESS, deleteResult.GetIssues().ToString());
+        CompareYson(R"([[["alice"]]])", FormatResultSetYson(deleteResult.GetResultSet(0)));
+
+        auto transaction = deleteResult.GetTransaction();
+        UNIT_ASSERT(transaction->IsActive());
+
+        auto selectResult = session.ExecuteQuery(R"(
+            SELECT name FROM repro96 WHERE team = "red"u;
+        )", NYdb::NQuery::TTxControl::Tx(*transaction).CommitTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(selectResult.GetStatus(), EStatus::SUCCESS, selectResult.GetIssues().ToString());
+        // The deleted row must not be visible inside the same transaction.
+        CompareYson(R"([])", FormatResultSetYson(selectResult.GetResultSet(0)));
+    }
+}
+
+Y_UNIT_TEST_TWIN(UpdateReturningThenSelectInSameTx, EnableIndexStreamWrite) {
+    auto kikimr = DefaultKikimrRunner({}, GetAppConfig(EnableIndexStreamWrite));
+
+    {
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+        auto resultCreate = session.ExecuteSchemeQuery(Q_(R"(
+            --!syntax_v1
+            CREATE TABLE repro96 (name Utf8, team Utf8, PRIMARY KEY(name));
+        )")).GetValueSync();
+        UNIT_ASSERT_C(resultCreate.IsSuccess(), resultCreate.GetIssues().ToString());
+
+        auto resultInsert = session.ExecuteDataQuery(Q_(R"(
+            --!syntax_v1
+            INSERT INTO repro96 (name, team) VALUES ("alice"u, "red"u), ("bob"u, "blue"u);
+        )"), TTxControl::BeginTx().CommitTx()).GetValueSync();
+        UNIT_ASSERT_C(resultInsert.IsSuccess(), resultInsert.GetIssues().ToString());
+    }
+
+    {
+        auto db = kikimr.GetQueryClient();
+        auto session = db.GetSession().GetValueSync().GetSession();
+
+        auto updateResult = session.ExecuteQuery(R"(
+            UPDATE repro96 SET team = "green"u WHERE team = "blue"u RETURNING name;
+        )", NYdb::NQuery::TTxControl::BeginTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(updateResult.GetStatus(), EStatus::SUCCESS, updateResult.GetIssues().ToString());
+        CompareYson(R"([[["bob"]]])", FormatResultSetYson(updateResult.GetResultSet(0)));
+
+        auto transaction = updateResult.GetTransaction();
+        UNIT_ASSERT(transaction->IsActive());
+
+        auto selectResult = session.ExecuteQuery(R"(
+            SELECT name FROM repro96 WHERE team = "green"u;
+        )", NYdb::NQuery::TTxControl::Tx(*transaction).CommitTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(selectResult.GetStatus(), EStatus::SUCCESS, selectResult.GetIssues().ToString());
+        // The updated value must be visible inside the same transaction.
+        CompareYson(R"([[["bob"]]])", FormatResultSetYson(selectResult.GetResultSet(0)));
+    }
+}
+
 }
 
 } // namespace NKikimr::NKqp

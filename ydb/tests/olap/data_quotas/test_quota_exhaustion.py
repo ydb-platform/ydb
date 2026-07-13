@@ -24,6 +24,7 @@ class TestYdbWorkload(object):
                 "alter_object_enabled": True,
                 'max_read_staleness_ms': 2000,
             },
+            disabled_feature_flags=['enable_small_blobs_quota_enforcement'],
             static_pdisk_size=10 * 1024 * 1024,
             dynamic_pdisk_size=5 * 1024 * 1024
         ))

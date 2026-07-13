@@ -3,6 +3,8 @@
 
 #include <ydb/core/formats/arrow/reader/merger.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD_SCAN
+
 namespace NKikimr::NOlap::NReader::NTrivial::NDuplicateFiltering {
 
 TMergeContext::TMergeContext(std::unique_ptr<NArrow::NMerger::TMergePartialStream>&& merger,
@@ -31,9 +33,13 @@ void TMergeBorders::DoExecute(const std::shared_ptr<ITask>& /*taskPtr*/) {
         Context->Merger->AddSource(data, nullptr,
             Context->IsReversed ? NArrow::NMerger::TIterationOrder::Reversed(0) : NArrow::NMerger::TIterationOrder::Forward(0), portionId);
         Context->FiltersBuilder.AddSource(portionId, Context->Portions->GetPortionVerified(portionId)->GetRecordsCount());
-        AFL_TRACE(NKikimrServices::TX_COLUMNSHARD_SCAN)
-        ("component", "duplicates_manager")("event", "TMergeBorders::DoExecute")("type", "add_source")("portion_id", portionId)(
-            "records_count", data->GetRecordsCount())("builder", Context->FiltersBuilder.DebugString());
+        YDB_LOG_TRACE("",
+            {"component", "duplicates_manager"},
+            {"event", "TMergeBorders::DoExecute"},
+            {"type", "add_source"},
+            {"portionId", portionId},
+            {"recordsCount", data->GetRecordsCount()},
+            {"builder", Context->FiltersBuilder.DebugString()});
     }
 
     AFL_VERIFY(Context->FiltersBuilder.CountSources() > 0 || ReadyBorders.empty());
@@ -41,9 +47,12 @@ void TMergeBorders::DoExecute(const std::shared_ptr<ITask>& /*taskPtr*/) {
     for (const auto& readyBorder : ReadyBorders) {
         Context->Merger->PutControlPoint(readyBorder.BuildSortablePosition(Context->IsReversed), false);
         Context->Merger->DrainToControlPoint(Context->FiltersBuilder, true);
-        AFL_TRACE(NKikimrServices::TX_COLUMNSHARD_SCAN)
-        ("component", "duplicates_manager")("event", "TMergeBorders::DoExecute")("type", "drain")(
-            "border", readyBorder.BuildSortablePosition(Context->IsReversed).DebugString())("builder", Context->FiltersBuilder.DebugString());
+        YDB_LOG_TRACE("",
+            {"component", "duplicates_manager"},
+            {"event", "TMergeBorders::DoExecute"},
+            {"type", "drain"},
+            {"border", readyBorder.BuildSortablePosition(Context->IsReversed).DebugString()},
+            {"builder", Context->FiltersBuilder.DebugString()});
     }
 
     Context->Counters->OnRowsMerged(

@@ -151,6 +151,14 @@ void TPolymorphicYsonStruct<TMapping>::Load(
 }
 
 template <CPolymorphicEnumMapping TMapping>
+void TPolymorphicYsonStruct<TMapping>::Postprocess(const std::function<NYPath::TYPath()>& pathGetter)
+{
+    if (Storage_) {
+        Storage_->Postprocess(pathGetter);
+    }
+}
+
+template <CPolymorphicEnumMapping TMapping>
 void TPolymorphicYsonStruct<TMapping>::Save(NYson::IYsonConsumer* consumer) const
 {
     consumer->OnBeginMap();

@@ -42,7 +42,12 @@ namespace NKikimr::NBsController {
                         const TNodeId nodeId = vslotId.NodeId;
                         if (!NodeMap.contains(nodeId)) {
                             const auto& location = self->HostRecords->GetLocation(nodeId);
-                            const NLayoutChecker::TPDiskLayoutPosition pos(mapper, location, vslotId.ComprisingPDiskId(), geom);
+                            const TPDiskId pdiskId = vslotId.ComprisingPDiskId();
+                            std::optional<TString> diskScope;
+                            if (const auto it = self->PDisks.find(pdiskId); it != self->PDisks.end()) {
+                                diskScope = it->second->DiskScope;
+                            }
+                            const NLayoutChecker::TPDiskLayoutPosition pos(mapper, location, diskScope, pdiskId, geom);
                             const TCommonId commonId(pos.RealmGroup, pos.Realm);
                             const TDistinctId distinctId(pos.Domain);
 

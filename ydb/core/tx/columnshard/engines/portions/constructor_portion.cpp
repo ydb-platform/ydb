@@ -9,6 +9,8 @@
 #include <ydb/core/tx/columnshard/engines/scheme/versions/versioned_index.h>
 #include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD
+
 namespace NKikimr::NOlap {
 
 std::shared_ptr<TPortionInfo> TPortionInfoConstructor::Build() {
@@ -41,8 +43,12 @@ std::shared_ptr<TPortionInfo> TPortionInfoConstructor::Build() {
 
     static TAtomicCounter countValues = 0;
     static TAtomicCounter sumValues = 0;
-    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("memory_size", result->GetMemorySize())("data_size", result->GetDataSize())(
-        "sum", sumValues.Add(result->GetMemorySize()))("count", countValues.Inc())("size_of_portion", sizeof(TPortionInfo));
+    YDB_LOG_DEBUG("",
+        {"memorySize", result->GetMemorySize()},
+        {"dataSize", result->GetDataSize()},
+        {"sum", sumValues.Add(result->GetMemorySize())},
+        {"count", countValues.Inc()},
+        {"sizeOfPortion", sizeof(TPortionInfo)});
     return result;
 }
 

@@ -307,6 +307,10 @@ public:
         return RequestEv->HasKafkaApiOperations();
     }
 
+    bool HasDeferredPublication() const {
+        return RequestEv->HasDeferredPublication();
+    }
+
     bool GetQueryKeepInCache() const {
         return RequestEv->GetQueryKeepInCache();
     }
@@ -429,6 +433,10 @@ public:
 
     const ::NKikimrKqp::TKafkaApiOperationsRequest& GetKafkaApiOperationsFromRequest() const {
         return RequestEv->GetKafkaApiOperations();
+    }
+
+    const ::NKikimrKqp::TTopicDeferredPublicationRequest& GetDeferredPublicationFromRequest() const {
+        return RequestEv->GetDeferredPublication();
     }
 
     bool NeedPersistentSnapshot() const {
@@ -694,6 +702,7 @@ public:
 
     //// Topic ops ////
     void FillTopicOperations();
+    void FillDeferredPublicationOperations();
     bool TryMergeTopicOffsets(const NTopic::TTopicOperations &operations, TString& message);
     std::unique_ptr<NSchemeCache::TSchemeCacheNavigate> BuildSchemeCacheNavigate();
     bool IsAccessDenied(const NSchemeCache::TSchemeCacheNavigate& response, TString& message);

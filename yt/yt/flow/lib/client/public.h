@@ -38,6 +38,8 @@ YT_DEFINE_ERROR_ENUM(
     // FlowCoreTarget version moved between read and CAS write; retryable.
     ((FlowCoreTargetVersionMismatch)   (3303))
     ((GracefulShutdown)                (3304))
+    // The worker cancelled the job after being disconnected from the controller for too long.
+    ((AbandonedJob)                    (3306))
 );
 
 YT_DEFINE_STRONG_TYPEDEF(TVersion, i64);

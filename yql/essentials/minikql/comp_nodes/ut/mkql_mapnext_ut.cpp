@@ -70,7 +70,7 @@ Y_UNIT_TEST_LLVM(OverFlow) {
     const auto tupleType = NTest::ConvertToMinikqlType<std::tuple<ui16, TMaybe<ui16>>>(pb);
 
     const auto list = NTest::ConvertValueToLiteralNode(pb, TVector<ui16>{10, 20, 30});
-    const auto pgmReturn = pb.FromFlow(pb.MapNext(pb.ToFlow(pb.Iterator(list, {})),
+    const auto pgmReturn = pb.FromFlow(pb.MapNext(pb.ToFlow(pb.Iterator(list, {}), {}),
                                                   [&](TRuntimeNode item, TRuntimeNode nextItem) {
                                                       return pb.NewTuple(tupleType, {item, nextItem});
                                                   }));
@@ -91,7 +91,7 @@ Y_UNIT_TEST_LLVM(OverSingleElementFlow) {
     const auto tupleType = NTest::ConvertToMinikqlType<std::tuple<ui16, TMaybe<ui16>>>(pb);
 
     const auto list = NTest::ConvertValueToLiteralNode(pb, TVector<ui16>{10});
-    const auto pgmReturn = pb.FromFlow(pb.MapNext(pb.ToFlow(pb.Iterator(list, {})),
+    const auto pgmReturn = pb.FromFlow(pb.MapNext(pb.ToFlow(pb.Iterator(list, {}), {}),
                                                   [&](TRuntimeNode item, TRuntimeNode nextItem) {
                                                       return pb.NewTuple(tupleType, {item, nextItem});
                                                   }));
@@ -110,7 +110,7 @@ Y_UNIT_TEST_LLVM(OverEmptyFlow) {
     const auto tupleType = NTest::ConvertToMinikqlType<std::tuple<ui16, TMaybe<ui16>>>(pb);
 
     const auto list = pb.NewList(NTest::ConvertToMinikqlType<ui16>(pb), {});
-    const auto pgmReturn = pb.FromFlow(pb.MapNext(pb.ToFlow(pb.Iterator(list, {})),
+    const auto pgmReturn = pb.FromFlow(pb.MapNext(pb.ToFlow(pb.Iterator(list, {}), {}),
                                                   [&](TRuntimeNode item, TRuntimeNode nextItem) {
                                                       return pb.NewTuple(tupleType, {item, nextItem});
                                                   }));

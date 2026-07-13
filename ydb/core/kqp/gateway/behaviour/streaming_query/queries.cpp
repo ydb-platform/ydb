@@ -1852,7 +1852,7 @@ private:
         auto& request = *record.MutableRequest();
         request.SetDatabase(Context.GetDatabase());
         request.SetAction(NKikimrKqp::QUERY_ACTION_EXECUTE);
-        request.SetCollectStats(Ydb::Table::QueryStatsCollection::STATS_COLLECTION_PROFILE);
+        request.SetCollectStats(Ydb::Table::QueryStatsCollection::STATS_COLLECTION_FULL);
         request.SetSyntax(Ydb::Query::SYNTAX_YQL_V1);
         request.SetType(NKikimrKqp::QUERY_TYPE_SQL_GENERIC_SCRIPT);
         request.SetKeepSession(false);

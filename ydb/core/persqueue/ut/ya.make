@@ -51,6 +51,8 @@ SRCS(
     partition_scale_manager_graph_cmp_ut.cpp
     utils_ut.cpp
     events_ut.cpp
+    write_id_ut.cpp
+    pqdata_transaction_compat_ut.cpp
 )
 
 RESOURCE(

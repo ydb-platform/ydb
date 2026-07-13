@@ -997,6 +997,10 @@
   "resource_pool_classifiers": {
     "columns": [
       {
+        "name": "Action",
+        "type": "Utf8?"
+      },
+      {
         "name": "Name",
         "type": "Utf8?"
       },
@@ -1010,6 +1014,10 @@
       },
       {
         "name": "ResourcePool",
+        "type": "Utf8?"
+      },
+      {
+        "name": "HasAppName",
         "type": "Utf8?"
       }
     ],

@@ -5,7 +5,7 @@ This documentation section covers the fundamental concepts and architectural pri
 The following topics provide comprehensive coverage of {{ ydb-short-name }}'s core functionality, from high-level architecture and data models to advanced features like transactions, indexing, and federated queries.
 
 - [Glossary](glossary.md)
-- [Architecture](architecture.md)
+- [Architecture](architecture/index.md)
 - [Connecting to a database](connect.md)
 - [Schema objects](datamodel/index.md)
 - [Cluster topology](topology.md)

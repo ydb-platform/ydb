@@ -37,15 +37,11 @@ struct TScramSecret {
     TString ServerKey;
 };
 
-struct THashes {
-    TString OldHashFormat;
-    TString NewHashFormat;
-};
-
 TMaybe<TString> ArgonHashToNewFormat(const TStringBuf oldArgonHash);
 TString HashedPasswordFromNewArgonHashFormat(const TString& argonHash);
 TMaybe<TString> ArgonHashToOldFormat(const TStringBuf newArgonHash);
-TMaybe<THashes> ConvertHashes(const TString& hash);
+bool IsOldFormatHash(const TString& hash);
+TString ConvertOldFormatHash(const TString& oldFormatHash);
 
 THashSecret SplitPasswordHash(const TStringBuf hash);
 TArgonSecret ParseArgonHash(const TStringBuf argonHash);

@@ -38,7 +38,11 @@ void TSortedPartitioner::ChangeLeftKeyBoundaryIfNeeded(
     }
 }
 
-void TSortedPartitioner::ChangeRightKeyBoundaryIfNeeded(TFmrTableKeysBoundary& rightKey, const TFmrTableKeysBoundary& taskRangeLastKey) {
+void TSortedPartitioner::ChangeRightKeyBoundaryIfNeeded(
+    TFmrTableKeysBoundary& rightKey,
+    bool& /*isRightInclusive*/,
+    const TFmrTableKeysBoundary& taskRangeLastKey
+) {
     if (taskRangeLastKey < rightKey) {
         rightKey = taskRangeLastKey;
     }

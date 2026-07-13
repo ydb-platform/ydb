@@ -743,8 +743,9 @@ private:
                              "Take",
                              "Sort",
                              "TopSort",
-                             "AssumeSorted",
-                             "SkipNullMembers"})) {
+                             "AssumeSorted", "AssumeUnique", "AssumeDistinct", "AssumeUniqueHint", "AssumeDistinctHint",
+                             "AssumeChopped", "AssumeConstraints", "AssumeStrict", "AssumeNonStrict",
+                             "SkipNullMembers", "FilterNullMembers"})) {
             lineage = *CollectLineage(node.Head());
             return &lineage;
         } else if (node.IsCallable("ExtractMembers")) {

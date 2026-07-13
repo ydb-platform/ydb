@@ -10,6 +10,8 @@
 
 #include <yql/essentials/core/minsketch/count_min_sketch.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD
+
 namespace NKikimr::NColumnShard {
 
 void TColumnShard::Handle(NStat::TEvStatistics::TEvAnalyzeShard::TPtr& ev, const TActorContext&) {
@@ -156,8 +158,12 @@ public:
 
         virtual bool DoOnError(
             const TString& storageId, const NOlap::TBlobRange& range, const NOlap::IBlobsReadingAction::TErrorStatus& status) override {
-            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "DoOnError")("storage_id", storageId)("blob_id", range)(
-                "status", status.GetErrorMessage())("status_code", status.GetStatus());
+            YDB_LOG_ERROR("",
+                {"event", "DoOnError"},
+                {"storageId", storageId},
+                {"blobId", range},
+                {"status", status.GetErrorMessage()},
+                {"statusCode", status.GetStatus()});
             AFL_VERIFY(status.GetStatus() != NKikimrProto::EReplyStatus::NODATA)("blob_id", range)("status", status.GetStatus())(
                 "error", status.GetErrorMessage())("type", "STATISTICS");
             return false;
@@ -196,12 +202,13 @@ public:
             }
 
             if (result.HasErrors()) {
-                AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("error", "Data accessor result with errors " + result.GetErrorMessage());
+                YDB_LOG_ERROR("",
+                    {"error", "Data accessor result with errors " + result.GetErrorMessage()});
             }
 
             if (result.HasRemovedData()) {
-                AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)(
-                    "error", TStringBuilder{} << "Data accessor result with removed data, " << result.GetRemovedData().size());
+                YDB_LOG_DEBUG("",
+                    {"error", TStringBuilder{} << "Data accessor result with removed data, " << result.GetRemovedData().size()});
             }
 
             THashMap<ui32, THashMap<TString, THashSet<NOlap::TBlobRange>>> rangesByColumn;
@@ -213,7 +220,8 @@ public:
                     auto indexMeta = portionSchema->GetIndexInfo().GetIndexMetaCountMinSketch({ columnId });
 
                     if (!indexMeta) {
-                        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("error", "Missing countMinSketch index for columnId " + ToString(columnId));
+                        YDB_LOG_WARN("",
+                            {"error", "Missing countMinSketch index for columnId " + ToString(columnId)});
                         continue;
                     }
                     AFL_VERIFY(indexMeta->GetColumnIds().size() == 1);
@@ -295,7 +303,8 @@ void TColumnShard::Handle(NStat::TEvStatistics::TEvStatisticsRequest::TPtr& ev, 
     respRecord.SetShardTabletId(TabletID());
 
     if (record.TypesSize() > 0 && (record.TypesSize() > 1 || record.GetTypes(0) != NKikimrStat::TYPE_COUNT_MIN_SKETCH)) {
-        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("error", "Unsupported statistic type in statistics request");
+        YDB_LOG_WARN("",
+            {"error", "Unsupported statistic type in statistics request"});
 
         respRecord.SetStatus(NKikimrStat::TEvStatisticsResponse::STATUS_ERROR);
 

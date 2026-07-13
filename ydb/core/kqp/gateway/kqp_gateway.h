@@ -160,7 +160,7 @@ public:
         NKqpProto::EIsolationLevel IsolationLevel = NKqpProto::ISOLATION_LEVEL_UNDEFINED;
         TMaybe<NKikimrKqp::TRlPath> RlPath;
         bool NeedTxId = true;
-        bool UseImmediateEffects = false;
+        bool FlushEffects = false;
         bool SaveQueryPhysicalGraph = false;  // Used only in execute script queries
         std::shared_ptr<const NKikimrKqp::TQueryPhysicalGraph> QueryPhysicalGraph;
 

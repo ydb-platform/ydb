@@ -945,7 +945,7 @@ class TTestTrailersHandler
 public:
     void HandleRequest(const IRequestPtr& /*req*/, const IResponseWriterPtr& rsp) override
     {
-        WaitFor(rsp->Write(TSharedRef::FromString("test"))).ThrowOnError();
+        WaitFor(rsp->Write(TSharedRef::FromString(std::string("test")))).ThrowOnError();
 
         rsp->GetTrailers()->Set("X-Yt-Test", "foo; bar");
         WaitFor(rsp->Close()).ThrowOnError();
@@ -981,7 +981,7 @@ class TImpatientHandler
 public:
     void HandleRequest(const IRequestPtr& /*req*/, const IResponseWriterPtr& rsp) override
     {
-        WaitFor(rsp->Write(TSharedRef::FromString("body"))).ThrowOnError();
+        WaitFor(rsp->Write(TSharedRef::FromString(std::string("body")))).ThrowOnError();
         WaitFor(rsp->Close()).ThrowOnError();
     }
 };
@@ -1175,7 +1175,7 @@ TEST_P(THttpServerTest, RequestCancel)
     auto dialer = CreateDialer(New<TDialerConfig>(), Poller, HttpLogger());
     auto connection = WaitFor(dialer->Dial(TNetworkAddress::CreateIPv6Loopback(TestPort)))
         .ValueOrThrow();
-    WaitFor(connection->Write(TSharedRef::FromString("POST /cancel HTTP/1.1\r\nTransfer-Encoding: chunked\r\n\r\n")))
+    WaitFor(connection->Write(TSharedRef::FromString(std::string("POST /cancel HTTP/1.1\r\nTransfer-Encoding: chunked\r\n\r\n"))))
         .ThrowOnError();
 
     Sleep(TDuration::Seconds(1));
@@ -1214,7 +1214,7 @@ TEST_P(THttpServerTest, RequestHangUp)
     auto dialer = CreateDialer(New<TDialerConfig>(), Poller, HttpLogger());
     auto connection = WaitFor(dialer->Dial(TNetworkAddress::CreateIPv6Loopback(TestPort)))
         .ValueOrThrow();
-    WaitFor(connection->Write(TSharedRef::FromString("POST /validating HTTP/1.1\r\nTransfer-Encoding: chunked\r\n\r\n")))
+    WaitFor(connection->Write(TSharedRef::FromString(std::string("POST /validating HTTP/1.1\r\nTransfer-Encoding: chunked\r\n\r\n"))))
         .ThrowOnError();
     WaitFor(connection->CloseWrite())
         .ThrowOnError();
@@ -1260,7 +1260,7 @@ TEST_P(THttpServerTest, ConnectionKeepAlive)
 
         for (int i = 0; i < 10; ++i) {
             request->WriteRequest(EMethod::Post, "/echo");
-            WaitFor(request->Write(TSharedRef::FromString("foo")))
+            WaitFor(request->Write(TSharedRef::FromString(std::string("foo"))))
                 .ThrowOnError();
             WaitFor(request->Close())
                 .ThrowOnError();
@@ -1295,7 +1295,7 @@ TEST_P(THttpServerTest, ConnectionKeepAlive)
 
         for (int i = 0; i < 10; ++i) {
             request->WriteRequest(EMethod::Post, "/echo");
-            WaitFor(request->Write(TSharedRef::FromString("foo")))
+            WaitFor(request->Write(TSharedRef::FromString(std::string("foo"))))
                 .ThrowOnError();
             WaitFor(request->Close())
                 .ThrowOnError();

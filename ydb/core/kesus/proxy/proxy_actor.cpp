@@ -12,13 +12,7 @@
 
 #include <util/generic/hash_set.h>
 
-#define KPROXY_LOG_DEBUG_S(stream) \
-    LOG_DEBUG_S(TActivationContext::AsActorContext(), NKikimrServices::KESUS_PROXY, \
-        "[" << SelfId() << " " << KesusPath.Quote() << "] " << stream)
-
-#define KPROXY_LOG_TRACE_S(stream) \
-    LOG_TRACE_S(TActivationContext::AsActorContext(), NKikimrServices::KESUS_PROXY, \
-        "[" << SelfId() << " " << KesusPath.Quote() << "] " << stream)
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KESUS_PROXY
 
 namespace NKikimr {
 namespace NKesus {
@@ -90,7 +84,9 @@ public:
 
     void Bootstrap(const TActorContext& ctx) {
         Y_UNUSED(ctx);
-        KPROXY_LOG_DEBUG_S("Bootstrapped proxy actor");
+        YDB_LOG_DEBUG_CTX(TActivationContext::AsActorContext(), "Bootstrapped proxy actor",
+            {"selfId", SelfId()},
+            {"path", KesusPath});
         Become(&TThis::StateWork);
     }
 
@@ -178,7 +174,9 @@ private:
         Y_ABORT_UNLESS(State == STATE_IDLE);
         Y_ABORT_UNLESS(!TabletPipe);
         State = STATE_CONNECTING;
-        KPROXY_LOG_DEBUG_S("Connecting to kesus");
+        YDB_LOG_DEBUG_CTX(TActivationContext::AsActorContext(), "Connecting to kesus",
+            {"selfId", SelfId()},
+            {"path", KesusPath});
 
         // TODO: add some retry policy?
         TabletPipe = Register(NTabletPipe::CreateClient(SelfId(), TabletId));
@@ -204,20 +202,28 @@ private:
         State = STATE_REGISTERING;
 
         ++ProxyGeneration;
-        KPROXY_LOG_DEBUG_S("Registering with ProxyGeneration=" << ProxyGeneration);
+        YDB_LOG_DEBUG_CTX(TActivationContext::AsActorContext(), "Registering",
+            {"selfId", SelfId()},
+            {"path", KesusPath},
+            {"proxyGeneration", ProxyGeneration});
         NTabletPipe::SendData(SelfId(), TabletPipe, new TEvKesus::TEvRegisterProxy(KesusPath, ProxyGeneration));
         return false;
     }
 
     void Handle(const TEvents::TEvPoisonPill::TPtr& ev, const TActorContext& ctx) {
         Y_UNUSED(ev);
-        KPROXY_LOG_DEBUG_S("Destroying proxy");
+        YDB_LOG_DEBUG_CTX(TActivationContext::AsActorContext(), "Destroying proxy",
+            {"selfId", SelfId()},
+            {"path", KesusPath});
         HandleLinkFailure();
         Die(ctx);
     }
 
     void Handle(const TEvKesusProxy::TEvCancelRequest::TPtr& ev) {
-        KPROXY_LOG_TRACE_S("Received TEvCancelRequest from " << ev->Sender);
+        YDB_LOG_TRACE_CTX(TActivationContext::AsActorContext(), "Received TEvCancelRequest",
+            {"selfId", SelfId()},
+            {"path", KesusPath},
+            {"sender", ev->Sender});
         CancelDirectRequest(ev->Sender);
         CancelSessionRequest(ev->Sender);
     }
@@ -310,7 +316,9 @@ private:
 
         if (msg->Status != NKikimrProto::OK) {
             // Tablet pipe failed, report link failure
-            KPROXY_LOG_DEBUG_S("Pipe to kesus failed to connect");
+            YDB_LOG_DEBUG_CTX(TActivationContext::AsActorContext(), "Pipe to kesus failed to connect",
+                {"selfId", SelfId()},
+                {"path", KesusPath});
             HandleLinkFailure();
             if (PipeNeeded()) {
                 // TODO: maybe add some delay
@@ -321,7 +329,9 @@ private:
 
         Y_ABORT_UNLESS(State == STATE_CONNECTING);
         State = STATE_CONNECTED;
-        KPROXY_LOG_DEBUG_S("Pipe to kesus connected");
+        YDB_LOG_DEBUG_CTX(TActivationContext::AsActorContext(), "Pipe to kesus connected",
+            {"selfId", SelfId()},
+            {"path", KesusPath});
 
         // Send all waiting direct requests
         for (auto& kv : DirectRequests) {
@@ -342,7 +352,9 @@ private:
         Y_ABORT_UNLESS(msg->TabletId == TabletId);
         Y_ABORT_UNLESS(msg->ClientId == TabletPipe);
 
-        KPROXY_LOG_DEBUG_S("Pipe to kesus disconnected");
+        YDB_LOG_DEBUG_CTX(TActivationContext::AsActorContext(), "Pipe to kesus disconnected",
+            {"selfId", SelfId()},
+            {"path", KesusPath});
         HandleLinkFailure();
         if (PipeNeeded()) {
             // TODO: maybe add some delay
@@ -354,8 +366,10 @@ private:
         const auto& record = ev->Get()->Record;
         if (record.GetProxyGeneration() != ProxyGeneration) {
             // Ignore outdated responses
-            KPROXY_LOG_TRACE_S("Ignoring outdated TEvRegisterProxyResult with ProxyGeneration="
-                << record.GetProxyGeneration());
+            YDB_LOG_TRACE_CTX(TActivationContext::AsActorContext(), "Ignoring outdated TEvRegisterProxyResult",
+                {"selfId", SelfId()},
+                {"path", KesusPath},
+                {"proxyGeneration", record.GetProxyGeneration()});
             return;
         }
 
@@ -365,7 +379,10 @@ private:
 
         Y_ABORT_UNLESS(State == STATE_REGISTERING);
         State = STATE_REGISTERED;
-        KPROXY_LOG_DEBUG_S("Registered with ProxyGeneration=" << ProxyGeneration);
+        YDB_LOG_DEBUG_CTX(TActivationContext::AsActorContext(), "Registered",
+            {"selfId", SelfId()},
+            {"path", KesusPath},
+            {"proxyGeneration", ProxyGeneration});
 
         for (auto& kv : Sessions) {
             auto* data = &kv.second;
@@ -386,16 +403,20 @@ private:
     void SendAttachSession(TSessionData* data) {
         Y_ABORT_UNLESS(data->AttachEvent);
         data->AttachEvent->Record.SetProxyGeneration(ProxyGeneration);
-        KPROXY_LOG_DEBUG_S("Sending attach request for session "
-            << data->AttachEvent->Record.GetSessionId()
-            << " (cookie=" << data->SeqNo << ")");
+        YDB_LOG_DEBUG_CTX(TActivationContext::AsActorContext(), "Sending attach request",
+            {"selfId", SelfId()},
+            {"path", KesusPath},
+            {"sessionId", data->AttachEvent->Record.GetSessionId()},
+            {"cookie", data->SeqNo});
         NTabletPipe::SendData(SelfId(), TabletPipe, data->AttachEvent.Release(), data->SeqNo);
     }
 
     void SendDetachSession(TSessionData* data) {
-        KPROXY_LOG_DEBUG_S("Sending detach request for session "
-            << data->SessionId
-            << " (cookie=" << data->SeqNo << ")");
+        YDB_LOG_DEBUG_CTX(TActivationContext::AsActorContext(), "Sending detach request",
+            {"selfId", SelfId()},
+            {"path", KesusPath},
+            {"sessionId", data->SessionId},
+            {"cookie", data->SeqNo});
         NTabletPipe::SendData(
             SelfId(),
             TabletPipe,
@@ -404,9 +425,11 @@ private:
     }
 
     void SendDestroySession(const TSessionData* data) {
-        KPROXY_LOG_DEBUG_S("Sending destroy request for session "
-            << data->SessionId
-            << " (cookie=" << data->SeqNo << ")");
+        YDB_LOG_DEBUG_CTX(TActivationContext::AsActorContext(), "Sending destroy request",
+            {"selfId", SelfId()},
+            {"path", KesusPath},
+            {"sessionId", data->SessionId},
+            {"cookie", data->SeqNo});
         NTabletPipe::SendData(
             SelfId(),
             TabletPipe,
@@ -425,7 +448,11 @@ private:
     }
 
     void HandleDirectRequest(const TActorId& sender, ui64 cookie, THolder<IEventBase> event) {
-        KPROXY_LOG_TRACE_S("Received " << event->ToStringHeader() << " from " << sender);
+        YDB_LOG_TRACE_CTX(TActivationContext::AsActorContext(), "Received",
+            {"selfId", SelfId()},
+            {"path", KesusPath},
+            {"ev", event->ToStringHeader()},
+            {"sender", sender});
         Y_ABORT_UNLESS(!DirectRequestBySender.contains(sender), "Only one outgoing request per sender is allowed");
         const ui64 seqNo = ++SeqNo;
         auto& req = DirectRequests[seqNo];
@@ -444,12 +471,19 @@ private:
 
     void HandleDirectResponse(ui64 seqNo, THolder<IEventBase> event) {
         if (const auto* req = DirectRequests.FindPtr(seqNo)) {
-            KPROXY_LOG_TRACE_S("Relaying " << event->ToStringHeader() << " to " << req->Sender);
+            YDB_LOG_TRACE_CTX(TActivationContext::AsActorContext(), "Relaying",
+                {"selfId", SelfId()},
+                {"path", KesusPath},
+                {"ev", event->ToStringHeader()},
+                {"sender", req->Sender});
             Send(req->Sender, event.Release(), 0, req->Cookie);
             DirectRequestBySender.erase(req->Sender);
             DirectRequests.erase(seqNo);
         } else {
-            KPROXY_LOG_TRACE_S("Ignoring " << event->ToStringHeader());
+            YDB_LOG_TRACE_CTX(TActivationContext::AsActorContext(), "Ignoring",
+                {"selfId", SelfId()},
+                {"path", KesusPath},
+                {"ev", event->ToStringHeader()});
         }
     }
 
@@ -531,7 +565,10 @@ private:
     }
 
     void Handle(TEvKesus::TEvAttachSession::TPtr& ev) {
-        KPROXY_LOG_TRACE_S("Received TEvAttachSession from " << ev->Sender);
+        YDB_LOG_TRACE_CTX(TActivationContext::AsActorContext(), "Received TEvAttachSession",
+            {"selfId", SelfId()},
+            {"path", KesusPath},
+            {"sender", ev->Sender});
         Y_ABORT_UNLESS(ev->Sender);
         Y_ABORT_UNLESS(!SessionByOwner.contains(ev->Sender), "Only one outgoing request per sender is allowed");
 
@@ -540,7 +577,10 @@ private:
         if (auto* data = FindSessionById(sessionId)) {
             // this is an attempt to restore session
             if (record.GetSeqNo() < data->ClientSeqNo) {
-                KPROXY_LOG_TRACE_S("Replying with BAD_SESSION to " << ev->Sender);
+                YDB_LOG_TRACE_CTX(TActivationContext::AsActorContext(), "Replying with BAD_SESSION",
+                    {"selfId", SelfId()},
+                    {"path", KesusPath},
+                    {"sender", ev->Sender});
                 Send(ev->Sender,
                     new TEvKesus::TEvAttachSessionResult(
                         ProxyGeneration,
@@ -551,7 +591,10 @@ private:
                 return;
             }
             if (data->Destroy) {
-                KPROXY_LOG_TRACE_S("Replying with SESSION_EXPIRED to " << ev->Sender);
+                YDB_LOG_TRACE_CTX(TActivationContext::AsActorContext(), "Replying with SESSION_EXPIRED",
+                    {"selfId", SelfId()},
+                    {"path", KesusPath},
+                    {"sender", ev->Sender});
                 Send(ev->Sender,
                     new TEvKesus::TEvAttachSessionResult(
                         ProxyGeneration,
@@ -562,7 +605,10 @@ private:
                 return;
             }
             if (data->Owner) {
-                KPROXY_LOG_TRACE_S("Sending BAD_SESSION to " << data->Owner);
+                YDB_LOG_TRACE_CTX(TActivationContext::AsActorContext(), "Sending BAD_SESSION",
+                    {"selfId", SelfId()},
+                    {"path", KesusPath},
+                    {"owner", data->Owner});
                 Send(data->Owner,
                     new TEvKesusProxy::TEvProxyError(
                         Ydb::StatusIds::BAD_SESSION,
@@ -584,7 +630,10 @@ private:
         }
         SessionByOwner[data->Owner] = data;
         data->AttachEvent.Reset(ev->Release().Release());
-        KPROXY_LOG_TRACE_S("Allocated new session (cookie=" << data->SeqNo << ")");
+        YDB_LOG_TRACE_CTX(TActivationContext::AsActorContext(), "Allocated new session",
+            {"selfId", SelfId()},
+            {"path", KesusPath},
+            {"cookie", data->SeqNo});
 
         if (EstablishSession()) {
             // Already registered, send attach immediately
@@ -596,8 +645,10 @@ private:
         const auto& record = ev->Get()->Record;
         if (record.GetProxyGeneration() != ProxyGeneration) {
             // Ignore outdated responses
-            KPROXY_LOG_TRACE_S("Ignoring TEvAttachSessionResult with ProxyGeneration="
-                << record.GetProxyGeneration());
+            YDB_LOG_TRACE_CTX(TActivationContext::AsActorContext(), "Ignoring TEvAttachSessionResult",
+                {"selfId", SelfId()},
+                {"path", KesusPath},
+                {"proxyGeneration", record.GetProxyGeneration()});
             return;
         }
 
@@ -608,17 +659,26 @@ private:
                 data->SessionId = record.GetSessionId();
                 if (data->SessionId) {
                     SessionById[data->SessionId] = data;
-                    KPROXY_LOG_DEBUG_S("Created new session " << data->SessionId
-                        << " (cookie=" << data->SeqNo << ")");
+                    YDB_LOG_DEBUG_CTX(TActivationContext::AsActorContext(), "Created new session",
+                        {"selfId", SelfId()},
+                        {"path", KesusPath},
+                        {"sessionId", data->SessionId},
+                        {"cookie", data->SeqNo});
                 }
             } else if (!isError) {
-                KPROXY_LOG_DEBUG_S("Attached to session " << data->SessionId
-                    << " (cookie=" << data->SeqNo << ")");
+                YDB_LOG_DEBUG_CTX(TActivationContext::AsActorContext(), "Attached to session",
+                    {"selfId", SelfId()},
+                    {"path", KesusPath},
+                    {"sessionId", data->SessionId},
+                    {"cookie", data->SeqNo});
             }
             Y_ABORT_UNLESS(data->SessionId == record.GetSessionId());
 
             if (data->Owner) {
-                KPROXY_LOG_TRACE_S("Relaying TEvAttachSessionResult to " << data->Owner);
+                YDB_LOG_TRACE_CTX(TActivationContext::AsActorContext(), "Relaying TEvAttachSessionResult",
+                    {"selfId", SelfId()},
+                    {"path", KesusPath},
+                    {"owner", data->Owner});
                 Send(data->Owner, ev->Release().Release(), 0, data->OwnerCookie);
             }
 
@@ -647,7 +707,10 @@ private:
             return;
         }
 
-        KPROXY_LOG_TRACE_S("Received TEvProxyExpired with ProxyGeneration=" << ProxyGeneration);
+        YDB_LOG_TRACE_CTX(TActivationContext::AsActorContext(), "Received TEvProxyExpired",
+            {"selfId", SelfId()},
+            {"path", KesusPath},
+            {"proxyGeneration", ProxyGeneration});
 
         NKikimrKesus::TKesusError error;
         error.SetStatus(Ydb::StatusIds::BAD_SESSION);
@@ -662,11 +725,17 @@ private:
     void Handle(const TEvKesus::TEvSessionExpired::TPtr& ev) {
         const auto& record = ev->Get()->Record;
         const ui64 sessionId = record.GetSessionId();
-        KPROXY_LOG_TRACE_S("Received TEvSessionExpired with SessionId=" << sessionId);
+        YDB_LOG_TRACE_CTX(TActivationContext::AsActorContext(), "Received TEvSessionExpired",
+            {"selfId", SelfId()},
+            {"path", KesusPath},
+            {"sessionId", sessionId});
 
         if (auto* data = FindSessionById(sessionId)) {
             if (data->Owner) {
-                KPROXY_LOG_TRACE_S("Sending SESSION_EXPIRED to " << data->Owner);
+                YDB_LOG_TRACE_CTX(TActivationContext::AsActorContext(), "Sending SESSION_EXPIRED",
+                    {"selfId", SelfId()},
+                    {"path", KesusPath},
+                    {"owner", data->Owner});
                 Send(data->Owner,
                     new TEvKesusProxy::TEvProxyError(
                         Ydb::StatusIds::SESSION_EXPIRED,
@@ -686,7 +755,10 @@ private:
 
         if (auto* data = FindSession(ev->Cookie)) {
             if (data->Owner) {
-                KPROXY_LOG_TRACE_S("Sending BAD_SESSION to " << data->Owner);
+                YDB_LOG_TRACE_CTX(TActivationContext::AsActorContext(), "Sending BAD_SESSION",
+                    {"selfId", SelfId()},
+                    {"path", KesusPath},
+                    {"owner", data->Owner});
                 Send(data->Owner,
                     new TEvKesusProxy::TEvProxyError(
                         Ydb::StatusIds::BAD_SESSION,
@@ -709,7 +781,10 @@ private:
     }
 
     void Handle(const TEvKesus::TEvDestroySession::TPtr& ev) {
-        KPROXY_LOG_TRACE_S("Received TEvDestroySession from " << ev->Sender);
+        YDB_LOG_TRACE_CTX(TActivationContext::AsActorContext(), "Received TEvDestroySession",
+            {"selfId", SelfId()},
+            {"path", KesusPath},
+            {"sender", ev->Sender});
         Y_ABORT_UNLESS(ev->Sender);
 
         if (auto* data = FindSessionByOwner(ev->Sender)) {
@@ -721,7 +796,10 @@ private:
             }
         }
 
-        KPROXY_LOG_TRACE_S("Sending BAD_SESSION to " << ev->Sender);
+        YDB_LOG_TRACE_CTX(TActivationContext::AsActorContext(), "Sending BAD_SESSION",
+            {"selfId", SelfId()},
+            {"path", KesusPath},
+            {"sender", ev->Sender});
         Send(ev->Sender,
             new TEvKesusProxy::TEvProxyError(
                 Ydb::StatusIds::BAD_SESSION,
@@ -740,7 +818,10 @@ private:
             Y_ABORT_UNLESS(data->State == ESessionState::DESTROYING);
 
             if (data->Owner) {
-                KPROXY_LOG_TRACE_S("Relaying TEvDestroySessionResult to " << data->Owner);
+                YDB_LOG_TRACE_CTX(TActivationContext::AsActorContext(), "Relaying TEvDestroySessionResult",
+                    {"selfId", SelfId()},
+                    {"path", KesusPath},
+                    {"owner", data->Owner});
                 Send(data->Owner, ev->Release().Release(), 0, data->OwnerCookie);
             }
 
@@ -750,7 +831,11 @@ private:
 
     template<class TRequest>
     void HandleSessionRequest(const TActorId& sender, ui64 cookie, TAutoPtr<TRequest> event) {
-        KPROXY_LOG_TRACE_S("Received " << event->ToStringHeader() << " from " << sender);
+        YDB_LOG_TRACE_CTX(TActivationContext::AsActorContext(), "Received",
+            {"selfId", SelfId()},
+            {"path", KesusPath},
+            {"ev", event->ToStringHeader()},
+            {"sender", sender});
         Y_ABORT_UNLESS(sender);
         auto& record = event->Record;
 
@@ -760,14 +845,21 @@ private:
                 record.SetProxyGeneration(ProxyGeneration);
                 record.SetSessionId(data->SessionId);
                 ui64 seqNo = AddSessionRequest(data, cookie);
-                KPROXY_LOG_TRACE_S("Forwarding " << event->ToStringHeader()
-                    << " to kesus (session=" << data->SessionId << ", cookie=" << seqNo << ")");
+                YDB_LOG_TRACE_CTX(TActivationContext::AsActorContext(), "Forwarding to kesus",
+                    {"selfId", SelfId()},
+                    {"path", KesusPath},
+                    {"ev", event->ToStringHeader()},
+                    {"sessionId", data->SessionId},
+                    {"cookie", seqNo});
                 NTabletPipe::SendData(SelfId(), TabletPipe, event.Release(), seqNo);
                 return;
             }
         }
 
-        KPROXY_LOG_TRACE_S("Sending BAD_SESSION to " << sender);
+        YDB_LOG_TRACE_CTX(TActivationContext::AsActorContext(), "Sending BAD_SESSION",
+            {"selfId", SelfId()},
+            {"path", KesusPath},
+            {"sender", sender});
         Send(sender,
             new TEvKesusProxy::TEvProxyError(
                 Ydb::StatusIds::BAD_SESSION,
@@ -780,8 +872,13 @@ private:
         if (auto* data = FindSessionByRequest(seqNo)) {
             Y_ABORT_UNLESS(data->Owner);
             const ui64 replyCookie = finished ? RemoveSessionRequest(data, seqNo) : GetSessionRequest(data, seqNo);
-            KPROXY_LOG_TRACE_S("Relaying " << event->ToStringHeader() << " to " << data->Owner
-                << " (session=" << data->SessionId << ", cookie=" << seqNo << ")");
+            YDB_LOG_TRACE_CTX(TActivationContext::AsActorContext(), "Relaying",
+                {"selfId", SelfId()},
+                {"path", KesusPath},
+                {"ev", event->ToStringHeader()},
+                {"owner", data->Owner},
+                {"sessionId", data->SessionId},
+                {"cookie", seqNo});
             Send(data->Owner, event.Release(), 0, replyCookie);
             return;
         }

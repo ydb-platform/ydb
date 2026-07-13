@@ -5,6 +5,8 @@
 #include <ydb/core/tx/columnshard/columnshard_private_events.h>
 #include <ydb/core/tx/columnshard/defs.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD
+
 namespace NKikimr::NOlap {
 
 TIndexedWriteController::TIndexedWriteController(
@@ -71,7 +73,10 @@ std::vector<NKikimr::NOlap::TWritingBlob> TWritingBuffer::GroupIntoBlobs() {
     }
     if (result.size()) {
         if (sumSize / result.size() < 4 * 1024 * 1024 && result.size() != 1) {
-            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "error_splitting")("size", sumSize)("count", result.size());
+            YDB_LOG_ERROR("",
+                {"event", "error_splitting"},
+                {"size", sumSize},
+                {"count", result.size()});
         }
     }
     return result;

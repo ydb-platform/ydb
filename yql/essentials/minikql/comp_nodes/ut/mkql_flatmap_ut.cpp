@@ -61,7 +61,7 @@ Y_UNIT_TEST_LLVM(TestOverFlowAndPartialLists) {
     const auto data1 = NTest::ConvertValueToLiteralNode(pb, ui16(10));
     const auto data2 = NTest::ConvertValueToLiteralNode(pb, ui16(20));
     const auto list = NTest::ConvertValueToLiteralNode(pb, TVector<ui16>{10, 20});
-    const auto pgmReturn = pb.FromFlow(pb.FlatMap(pb.ToFlow(pb.Iterator(list, {})),
+    const auto pgmReturn = pb.FromFlow(pb.FlatMap(pb.ToFlow(pb.Iterator(list, {}), {}),
                                                   [&](TRuntimeNode item) {
                                                       return pb.NewList(NTest::ConvertToMinikqlType<ui16>(pb), {pb.Sub(item, data1), pb.Unwrap(pb.Div(item, data2), NTest::ConvertValueToLiteralNode(pb, TStringBuf("")), "", 0, 0)});
                                                   }));
@@ -95,7 +95,7 @@ Y_UNIT_TEST_LLVM(TestOverFlowAndStreams) {
 
     const auto data = NTest::ConvertValueToLiteralNode(pb, i32(-100));
     const auto list = NTest::ConvertValueToLiteralNode(pb, TVector<i32>{0, 3, 7});
-    const auto pgmReturn = pb.FromFlow(pb.FlatMap(pb.ToFlow(list),
+    const auto pgmReturn = pb.FromFlow(pb.FlatMap(pb.ToFlow(list, {}),
                                                   [&](TRuntimeNode item) {
                                                       return pb.Iterator(pb.NewList(NTest::ConvertToMinikqlType<TMaybe<i32>>(pb),
                                                                                     {pb.Mod(data, item), pb.Div(data, item)}),
@@ -113,10 +113,11 @@ Y_UNIT_TEST_LLVM(TestOverFlowAndFlows) {
 
     const auto data = NTest::ConvertValueToLiteralNode(pb, i32(-100));
     const auto list = NTest::ConvertValueToLiteralNode(pb, TVector<i32>{0, 3, 7});
-    const auto pgmReturn = pb.FromFlow(pb.FlatMap(pb.ToFlow(list),
+    const auto pgmReturn = pb.FromFlow(pb.FlatMap(pb.ToFlow(list, {}),
                                                   [&](TRuntimeNode item) {
                                                       return pb.ToFlow(pb.NewList(NTest::ConvertToMinikqlType<TMaybe<i32>>(pb),
-                                                                                  {pb.Mod(data, item), pb.Div(data, item)}));
+                                                                                  {pb.Mod(data, item), pb.Div(data, item)}),
+                                                                       {});
                                                   }));
 
     const auto graph = setup.BuildGraph(pgmReturn);
@@ -133,7 +134,8 @@ Y_UNIT_TEST_LLVM(TestOverListAndFlows) {
     const auto pgmReturn = pb.FromFlow(pb.FlatMap(list,
                                                   [&](TRuntimeNode item) {
                                                       return pb.ToFlow(pb.NewList(NTest::ConvertToMinikqlType<TMaybe<i32>>(pb),
-                                                                                  {pb.Mod(data, item), pb.Div(data, item)}));
+                                                                                  {pb.Mod(data, item), pb.Div(data, item)}),
+                                                                       {});
                                                   }));
 
     const auto graph = setup.BuildGraph(pgmReturn);
@@ -146,9 +148,9 @@ Y_UNIT_TEST_LLVM(TestOverFlowAndIndependentFlows) {
     TProgramBuilder& pb = *setup.PgmBuilder;
 
     const auto list = NTest::ConvertValueToLiteralNode(pb, TVector<i32>{0, 3, 7});
-    const auto pgmReturn = pb.FromFlow(pb.FlatMap(pb.ToFlow(list),
+    const auto pgmReturn = pb.FromFlow(pb.FlatMap(pb.ToFlow(list, {}),
                                                   [&](TRuntimeNode) {
-                                                      return pb.Map(pb.ToFlow(NTest::ConvertValueToLiteralNode(pb, TVector<i32>{-100, -100})), [&](TRuntimeNode it) { return pb.Abs(it); });
+                                                      return pb.Map(pb.ToFlow(NTest::ConvertValueToLiteralNode(pb, TVector<i32>{-100, -100}), {}), [&](TRuntimeNode it) { return pb.Abs(it); });
                                                   }));
 
     const auto graph = setup.BuildGraph(pgmReturn);
@@ -163,7 +165,7 @@ Y_UNIT_TEST_LLVM(TestOverListAndIndependentFlows) {
     const auto list = NTest::ConvertValueToLiteralNode(pb, TVector<i32>{0, 3, 7});
     const auto pgmReturn = pb.FromFlow(pb.FlatMap(list,
                                                   [&](TRuntimeNode) {
-                                                      return pb.Map(pb.ToFlow(NTest::ConvertValueToLiteralNode(pb, TVector<i32>{-100, -100})), [&](TRuntimeNode it) { return pb.Minus(it); });
+                                                      return pb.Map(pb.ToFlow(NTest::ConvertValueToLiteralNode(pb, TVector<i32>{-100, -100}), {}), [&](TRuntimeNode it) { return pb.Minus(it); });
                                                   }));
 
     const auto graph = setup.BuildGraph(pgmReturn);
@@ -177,7 +179,7 @@ Y_UNIT_TEST_LLVM(TestOverFlowAndPartialOptionals) {
 
     const auto data = NTest::ConvertValueToLiteralNode(pb, i64(-100));
     const auto list = NTest::ConvertValueToLiteralNode(pb, TVector<i64>{0, 3, 7});
-    const auto pgmReturn = pb.FromFlow(pb.FlatMap(pb.ToFlow(pb.Iterator(list, {})),
+    const auto pgmReturn = pb.FromFlow(pb.FlatMap(pb.ToFlow(pb.Iterator(list, {}), {}),
                                                   [&](TRuntimeNode item) {
                                                       return pb.Div(data, item);
                                                   }));
@@ -303,7 +305,7 @@ Y_UNIT_TEST_LLVM(TestNarrowWithList) {
                                                                {TMaybe<i32>{}, i32(2), i32(-2)},
                                                                {i32(3), TMaybe<i32>{}, i32(-3)}});
 
-    const auto pgmReturn = pb.Collect(pb.NarrowFlatMap(pb.ExpandMap(pb.ToFlow(list),
+    const auto pgmReturn = pb.Collect(pb.NarrowFlatMap(pb.ExpandMap(pb.ToFlow(list, {}),
                                                                     [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U), pb.Nth(item, 2U)}; }),
                                                        [&](TRuntimeNode::TList items) -> TRuntimeNode { return pb.FlatMap(pb.NewList(NTest::ConvertToMinikqlType<TMaybe<i32>>(pb), items), [](TRuntimeNode item) { return item; }); }));
 
@@ -320,9 +322,9 @@ Y_UNIT_TEST_LLVM(TestNarrowWithFlow) {
                                                                {TMaybe<i32>{}, i32(2), i32(-2)},
                                                                {i32(3), TMaybe<i32>{}, i32(-3)}});
 
-    const auto pgmReturn = pb.Collect(pb.NarrowFlatMap(pb.ExpandMap(pb.ToFlow(list),
+    const auto pgmReturn = pb.Collect(pb.NarrowFlatMap(pb.ExpandMap(pb.ToFlow(list, {}),
                                                                     [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U), pb.Nth(item, 2U)}; }),
-                                                       [&](TRuntimeNode::TList items) -> TRuntimeNode { return pb.FlatMap(pb.ToFlow(pb.NewList(NTest::ConvertToMinikqlType<TMaybe<i32>>(pb), items)), [](TRuntimeNode item) { return item; }); }));
+                                                       [&](TRuntimeNode::TList items) -> TRuntimeNode { return pb.FlatMap(pb.ToFlow(pb.NewList(NTest::ConvertToMinikqlType<TMaybe<i32>>(pb), items), {}), [](TRuntimeNode item) { return item; }); }));
 
     const auto graph = setup.BuildGraph(pgmReturn);
     AssertUnboxedValueElementEqual(graph->GetValue(), TVector<i32>{1, -1, 2, -2, 3, -3});
@@ -335,10 +337,10 @@ Y_UNIT_TEST_LLVM(TestNarrowWithIndependentFlow) {
     const auto data = NTest::ConvertValueToLiteralNode(pb, std::tuple<TMaybe<i32>, TMaybe<i32>, TMaybe<i32>>{i32(1), TMaybe<i32>{}, i32(-1)});
     const auto list = pb.NewList(NTest::ConvertToMinikqlType<std::tuple<TMaybe<i32>, TMaybe<i32>, TMaybe<i32>>>(pb), {data, data, data});
 
-    const auto pgmReturn = pb.Collect(pb.NarrowFlatMap(pb.ExpandMap(pb.ToFlow(list),
+    const auto pgmReturn = pb.Collect(pb.NarrowFlatMap(pb.ExpandMap(pb.ToFlow(list, {}),
                                                                     [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U), pb.Nth(item, 2U)}; }),
                                                        [&](TRuntimeNode::TList) { return pb.Map(
-                                                                                      pb.ToFlow(NTest::ConvertValueToLiteralNode(pb, TVector<float>{+1.f, -1.f})),
+                                                                                      pb.ToFlow(NTest::ConvertValueToLiteralNode(pb, TVector<float>{+1.f, -1.f}), {}),
                                                                                       [&](TRuntimeNode item) { return pb.Minus(item); }); }));
 
     const auto graph = setup.BuildGraph(pgmReturn);
@@ -352,7 +354,7 @@ Y_UNIT_TEST_LLVM(TestThinNarrowWithList) {
     const auto data = NTest::ConvertValueToLiteralNode(pb, std::tuple<>{});
     const auto list = pb.NewList(NTest::ConvertToMinikqlType<std::tuple<>>(pb), {data, data, data});
 
-    const auto pgmReturn = pb.Collect(pb.NarrowFlatMap(pb.ExpandMap(pb.ToFlow(list),
+    const auto pgmReturn = pb.Collect(pb.NarrowFlatMap(pb.ExpandMap(pb.ToFlow(list, {}),
                                                                     [&](TRuntimeNode) -> TRuntimeNode::TList { return {}; }),
                                                        [&](TRuntimeNode::TList) -> TRuntimeNode { return pb.Replicate(NTest::ConvertValueToLiteralNode(pb, i32(7)), NTest::ConvertValueToLiteralNode(pb, ui64(3)), __FILE__, __LINE__, 0); }));
 
@@ -366,10 +368,11 @@ Y_UNIT_TEST_LLVM(TestOverFlowAndWideFlows) {
 
     const auto data = NTest::ConvertValueToLiteralNode(pb, i32(-100));
     const auto list = NTest::ConvertValueToLiteralNode(pb, TVector<i32>{0, 3, 7});
-    const auto pgmReturn = pb.FromFlow(pb.NarrowMap(pb.FlatMap(pb.ToFlow(list),
+    const auto pgmReturn = pb.FromFlow(pb.NarrowMap(pb.FlatMap(pb.ToFlow(list, {}),
                                                                [&](TRuntimeNode item) {
                                                                    return pb.ExpandMap(pb.ToFlow(pb.NewList(NTest::ConvertToMinikqlType<TMaybe<i32>>(pb),
-                                                                                                            {pb.Mod(data, item), pb.Div(data, item)})),
+                                                                                                            {pb.Mod(data, item), pb.Div(data, item)}),
+                                                                                                 {}),
                                                                                        [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Plus(item), pb.Minus(item)}; });
                                                                }),
                                                     [&](TRuntimeNode::TList items) { return pb.NewTuple(items); }));
@@ -389,7 +392,8 @@ Y_UNIT_TEST_LLVM(TestOverListAndWideFlows) {
     const auto pgmReturn = pb.FromFlow(pb.NarrowMap(pb.FlatMap(list,
                                                                [&](TRuntimeNode item) {
                                                                    return pb.ExpandMap(pb.ToFlow(pb.NewList(NTest::ConvertToMinikqlType<TMaybe<i32>>(pb),
-                                                                                                            {pb.Mod(data, item), pb.Div(data, item)})),
+                                                                                                            {pb.Mod(data, item), pb.Div(data, item)}),
+                                                                                                 {}),
                                                                                        [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Minus(item), pb.Plus(item)}; });
                                                                }),
                                                     [&](TRuntimeNode::TList items) { return pb.NewTuple(items); }));
@@ -405,9 +409,9 @@ Y_UNIT_TEST_LLVM(TestOverFlowAndIndependentWideFlows) {
     TProgramBuilder& pb = *setup.PgmBuilder;
 
     const auto list = NTest::ConvertValueToLiteralNode(pb, TVector<i32>{0, 3, 7});
-    const auto pgmReturn = pb.FromFlow(pb.NarrowMap(pb.FlatMap(pb.ToFlow(list),
+    const auto pgmReturn = pb.FromFlow(pb.NarrowMap(pb.FlatMap(pb.ToFlow(list, {}),
                                                                [&](TRuntimeNode) {
-                                                                   return pb.ExpandMap(pb.ToFlow(NTest::ConvertValueToLiteralNode(pb, TVector<i32>{-100, -100})),
+                                                                   return pb.ExpandMap(pb.ToFlow(NTest::ConvertValueToLiteralNode(pb, TVector<i32>{-100, -100}), {}),
                                                                                        [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Plus(item), pb.Minus(item)}; });
                                                                }),
                                                     [&](TRuntimeNode::TList items) { return pb.NewTuple(items); }));
@@ -429,7 +433,7 @@ Y_UNIT_TEST_LLVM(TestOverListAndIndependentWideFlows) {
     const auto list = NTest::ConvertValueToLiteralNode(pb, TVector<i32>{0, 3, 7});
     const auto pgmReturn = pb.FromFlow(pb.NarrowMap(pb.FlatMap(list,
                                                                [&](TRuntimeNode) {
-                                                                   return pb.ExpandMap(pb.ToFlow(NTest::ConvertValueToLiteralNode(pb, TVector<i32>{-100, -100})),
+                                                                   return pb.ExpandMap(pb.ToFlow(NTest::ConvertValueToLiteralNode(pb, TVector<i32>{-100, -100}), {}),
                                                                                        [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Minus(item), pb.Plus(item)}; });
                                                                }),
                                                     [&](TRuntimeNode::TList items) { return pb.NewTuple(items); }));

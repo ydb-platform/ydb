@@ -1,5 +1,0 @@
-<tmp_path>/program.sql:<main>: Error: Optimization
-
-    <tmp_path>/program.sql:<main>:5:9: Error: Unknown setting unk
-    	  unk = "ABC"
-	        ^

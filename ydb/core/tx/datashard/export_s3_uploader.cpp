@@ -793,7 +793,7 @@ public:
             TString&& metadata)
         : ExternalStorageConfig(NWrappers::IExternalStorageConfig::Construct(AppData()->AwsClientConfig, NBackup::NFieldsWrappers::GetSettings<TSettings>(task)))
         , Settings(TStorageSettings::FromBackupTask<TSettings>(task))
-        , DataFormat(EDataFormat::Csv)
+        , DataFormat(DataFormatFromTask(task))
         , CompressionCodec(CodecFromTask(task))
         , ShardNum(task.GetShardNum())
         , HttpResolverConfig(GetHttpResolverConfigSafe(ExternalStorageConfig))

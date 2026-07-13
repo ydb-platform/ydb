@@ -25,7 +25,7 @@ Y_UNIT_TEST_LLVM(TestConcatKeyToItems) {
                                                                {"very long key two", "very long value 9"},
                                                            });
 
-    const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.WideChopper(pb.ExpandMap(pb.ToFlow(list),
+    const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.WideChopper(pb.ExpandMap(pb.ToFlow(list, {}),
                                                                                [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; }),
                                                                   [&](TRuntimeNode::TList items) -> TRuntimeNode::TList { return {pb.Substring(items.front(), pb.Sub(pb.Size(items.front()), pb.NewDataLiteral<ui32>(4U)), pb.NewDataLiteral<ui32>(4U))}; },
                                                                   [&](TRuntimeNode::TList keys, TRuntimeNode::TList items) { return pb.AggrNotEquals(keys.front(), items.front()); },
@@ -64,11 +64,11 @@ Y_UNIT_TEST_LLVM(TestCollectKeysOnly) {
                                                                {"very long key two", "value 9"},
                                                            });
 
-    const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.WideChopper(pb.ExpandMap(pb.ToFlow(list),
+    const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.WideChopper(pb.ExpandMap(pb.ToFlow(list, {}),
                                                                                [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; }),
                                                                   [&](TRuntimeNode::TList items) -> TRuntimeNode::TList { return {items.front()}; },
                                                                   [&](TRuntimeNode::TList keys, TRuntimeNode::TList items) { return pb.AggrNotEquals(keys.front(), items.front()); },
-                                                                  [&](TRuntimeNode::TList keys, TRuntimeNode) { return pb.ExpandMap(pb.ToFlow(pb.NewOptional(keys.front())), [&](TRuntimeNode item) -> TRuntimeNode::TList {
+                                                                  [&](TRuntimeNode::TList keys, TRuntimeNode) { return pb.ExpandMap(pb.ToFlow(pb.NewOptional(keys.front()), {}), [&](TRuntimeNode item) -> TRuntimeNode::TList {
                                                                                                                     return {item};
                                                                                                                 }); }),
                                                    [&](TRuntimeNode::TList items) { return items.front(); }));
@@ -94,7 +94,7 @@ Y_UNIT_TEST_LLVM(TestGetPart) {
                                                                {"very long key two", "value 9"},
                                                            });
 
-    const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.WideChopper(pb.ExpandMap(pb.ToFlow(list),
+    const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.WideChopper(pb.ExpandMap(pb.ToFlow(list, {}),
                                                                                [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; }),
                                                                   [&](TRuntimeNode::TList items) -> TRuntimeNode::TList { return {items.front()}; },
                                                                   [&](TRuntimeNode::TList keys, TRuntimeNode::TList items) { return pb.AggrNotEquals(keys.front(), items.front()); },
@@ -124,7 +124,7 @@ Y_UNIT_TEST_LLVM(TestSwitchByBoolFieldAndDontUseKey) {
 
     const auto landmine = NTest::ConvertValueToLiteralNode(pb, TStringBuf("ACHTUNG MINEN!"));
 
-    const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.WideChopper(pb.ExpandMap(pb.ToFlow(list),
+    const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.WideChopper(pb.ExpandMap(pb.ToFlow(list, {}),
                                                                                [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U), pb.Nth(item, 2U)}; }),
                                                                   [&](TRuntimeNode::TList items) -> TRuntimeNode::TList { return {pb.Unwrap(items.front(), landmine, __FILE__, __LINE__, 0)}; },
                                                                   [&](TRuntimeNode::TList, TRuntimeNode::TList items) { return items.back(); },
@@ -154,12 +154,12 @@ Y_UNIT_TEST_LLVM(TestCollectKeysIfPresent) {
                                                                {{}, "value 9", true},
                                                            });
 
-    const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.WideChopper(pb.ExpandMap(pb.ToFlow(list),
+    const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.WideChopper(pb.ExpandMap(pb.ToFlow(list, {}),
                                                                                [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U), pb.Nth(item, 2U)}; }),
                                                                   [&](TRuntimeNode::TList items) -> TRuntimeNode::TList { return {items.front()}; },
                                                                   [&](TRuntimeNode::TList keys, TRuntimeNode::TList items) { return pb.AggrNotEquals(keys.front(), items.front()); },
                                                                   [&](TRuntimeNode::TList keys, TRuntimeNode part) { return pb.IfPresent(keys,
-                                                                                                                                         [&](TRuntimeNode::TList keys) { return pb.ExpandMap(pb.ToFlow(pb.NewList(dataType, keys)), [&](TRuntimeNode item) -> TRuntimeNode::TList { return {item}; }); },
+                                                                                                                                         [&](TRuntimeNode::TList keys) { return pb.ExpandMap(pb.ToFlow(pb.NewList(dataType, keys), {}), [&](TRuntimeNode item) -> TRuntimeNode::TList { return {item}; }); },
                                                                                                                                          pb.WideMap(part, [&](TRuntimeNode::TList items) -> TRuntimeNode::TList { return {items[1U]}; })); }),
                                                    [&](TRuntimeNode::TList items) { return items.front(); }));
 
@@ -184,12 +184,12 @@ Y_UNIT_TEST_LLVM(TestConditionalByKeyPart) {
                                                                {{}, "value 9", false},
                                                            });
 
-    const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.WideChopper(pb.ExpandMap(pb.ToFlow(list),
+    const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.WideChopper(pb.ExpandMap(pb.ToFlow(list, {}),
                                                                                [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U), pb.Nth(item, 2U)}; }),
                                                                   [&](TRuntimeNode::TList items) -> TRuntimeNode::TList { return {items.front(), items.back()}; },
                                                                   [&](TRuntimeNode::TList keys, TRuntimeNode::TList items) { return pb.Or({pb.AggrNotEquals(keys.front(), items.front()), pb.AggrNotEquals(keys.back(), items.back())}); },
                                                                   [&](TRuntimeNode::TList keys, TRuntimeNode part) { return pb.If(keys.back(),
-                                                                                                                                  pb.ExpandMap(pb.ToFlow(keys.front()), [&](TRuntimeNode item) -> TRuntimeNode::TList { return {item}; }),
+                                                                                                                                  pb.ExpandMap(pb.ToFlow(keys.front(), {}), [&](TRuntimeNode item) -> TRuntimeNode::TList { return {item}; }),
                                                                                                                                   pb.WideMap(part, [&](TRuntimeNode::TList items) -> TRuntimeNode::TList { return {items[1U]}; })); }),
                                                    [&](TRuntimeNode::TList items) { return items.front(); }));
 
@@ -206,7 +206,7 @@ Y_UNIT_TEST_LLVM(TestThinAllLambdas) {
     const auto data = pb.NewTuple({});
     const auto list = pb.NewList(tupleType, {data, data, data, data});
 
-    const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.WideChopper(pb.ExpandMap(pb.ToFlow(list),
+    const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.WideChopper(pb.ExpandMap(pb.ToFlow(list, {}),
                                                                                [](TRuntimeNode) -> TRuntimeNode::TList { return {}; }),
                                                                   [](TRuntimeNode::TList items) { return items; },
                                                                   [&](TRuntimeNode::TList, TRuntimeNode::TList) { return pb.NewDataLiteral<bool>(true); },
@@ -342,13 +342,14 @@ Y_UNIT_TEST_LLVM(TestCodegenWithProxyFlow) {
 
     const auto list = NTest::ConvertValueToLiteralNode(pb, TVector<std::tuple<TStringBuf, TStringBuf>>{{"key one", "very long value 1"}});
 
-    const auto wideFlow = pb.ExpandMap(pb.ToFlow(list), [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; });
+    const auto wideFlow = pb.ExpandMap(pb.ToFlow(list, {}), [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; });
     const auto wideChoppedFlow = pb.WideChopper(wideFlow,
                                                 [&](TRuntimeNode::TList items) -> TRuntimeNode::TList { return items; },
                                                 [&](TRuntimeNode::TList, TRuntimeNode::TList) { return pb.NewDataLiteral<bool>(true); },
                                                 [&](TRuntimeNode::TList keys, TRuntimeNode input) { return pb.ToFlow(pb.FromFlow(pb.WideMap(input, [&](TRuntimeNode::TList items) -> TRuntimeNode::TList {
                                                                                                         return {pb.AggrConcat(pb.AggrConcat(keys.front(), NTest::ConvertValueToLiteralNode(pb, TStringBuf(": "))), items.back())};
-                                                                                                    }))); });
+                                                                                                    })),
+                                                                                                                     {}); });
     const auto wideProxyFlow = MakeTestProxyFlow(setup, wideChoppedFlow);
     const auto root = pb.Collect(pb.NarrowMap(wideProxyFlow, [&](TRuntimeNode::TList items) { return items.front(); }));
 

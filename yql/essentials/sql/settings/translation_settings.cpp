@@ -2,10 +2,12 @@
 
 #include <yql/essentials/core/issue/yql_issue.h>
 #include <yql/essentials/utils/utf8.h>
+#include <yql/essentials/utils/yql_panic.h>
 
 #include <library/cpp/deprecated/split/split_iterator.h>
 
 #include <util/string/split.h>
+#include <util/string/join.h>
 #include <util/system/env.h>
 
 namespace {
@@ -29,6 +31,11 @@ public:
         return true;
     }
 };
+
+[[noreturn]] TString ThrowBad(TStringBuf flag, const TVector<TString>& args) {
+    YQL_ENSURE(false, "Bad " << flag << "args [" << JoinSeq(", ", args) << "]");
+}
+
 } // namespace
 
 namespace NSQLTranslation {
@@ -161,6 +168,38 @@ bool ParseTranslationSettings(const TString& query, TTranslationSettings& settin
         return false;
     }
     return parsed.ApplyTo(settings, issues);
+}
+
+void ParseTranslationSettings(const TExtendedSqlFlags& flags, TTranslationSettings& settings) {
+    using TFlagValueParser = std::function<void(const TVector<TString>& args, TTranslationSettings& s)>;
+
+    static const THashMap<TString, TFlagValueParser> Parsers = {
+        {
+            "YqlSelect",
+            [](const TVector<TString>& args, TTranslationSettings& s) {
+                if (args.size() == 1 && args[0] == "disable") {
+                    s.YqlSelect = EYqlSelect::Disable;
+                } else if (args.size() == 1 && args[0] == "auto") {
+                    s.YqlSelect = EYqlSelect::Auto;
+                } else if (args.size() == 1 && args[0] == "force") {
+                    s.YqlSelect = EYqlSelect::Force;
+                } else {
+                    ThrowBad("YqlSelect", args);
+                }
+            },
+        },
+    };
+
+    for (const auto& [flag, args] : flags) {
+        if (args.empty()) {
+            settings.Flags.insert(TString(flag));
+        } else if (const auto* parser = Parsers.FindPtr(flag)) {
+            (*parser)(args, settings);
+        } else {
+            // Ignore unknown valuable flags, like we are
+            // able to ignore TTranslationSettings::Flags.
+        }
+    }
 }
 
 } // namespace NSQLTranslation

@@ -8,7 +8,9 @@ SRCS(
 )
 
 PEERDIR(
+    library/cpp/containers/absl
     ydb/core/tx/columnshard/engines/changes/compaction/common
+    ydb/core/formats/arrow/accessor/dictionary
     ydb/core/formats/arrow/accessor/sub_columns
 )
 

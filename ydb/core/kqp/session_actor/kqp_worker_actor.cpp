@@ -586,9 +586,6 @@ private:
                 execSettings.UsePgParser = false;
                 execSettings.SyntaxVersion = 1;
                 break;
-            case Ydb::Query::Syntax::SYNTAX_PG:
-                execSettings.UsePgParser = true;
-                break;
             default:
                 break;
         }
@@ -608,9 +605,6 @@ private:
                         execSettings.SyntaxVersion = 1;
                         break;
 
-                    case Ydb::Query::Syntax::SYNTAX_PG:
-                        execSettings.UsePgParser = true;
-                        break;
                     default:
                         break;
                 }

@@ -2448,6 +2448,24 @@ TVector<NJson::TJsonValue> RemoveRedundantNodes(NJson::TJsonValue& plan, const T
     return {plan};
 }
 
+void CopySimplifiedConnectionFields(const NJson::TJsonValue& from, NJson::TJsonValue& to) {
+    static const TVector<TString> fields = {
+        "Blocks",
+        "HashFunc",
+        "KeyColumns",
+        "Parallel",
+        "SortBy",
+        "SortColumns",
+    };
+
+    const auto& fromMap = from.GetMapSafe();
+    for (const auto& field : fields) {
+        if (auto it = fromMap.find(field); it != fromMap.end()) {
+            to[field] = it->second;
+        }
+    }
+}
+
 class TQueryPlanReconstructor {
 public:
     TQueryPlanReconstructor(
@@ -2549,15 +2567,10 @@ private:
             NJson::TJsonValue planInputs;
 
             result["Node Type"] = plan.GetMapSafe().at("Node Type").GetStringSafe();
-
-            if (plan.GetMapSafe().at("Node Type") == "HashShuffle") {
-                    TStringBuilder stringBuilder;
-                    stringBuilder << "HashShuffle (" <<
-                        "KeyColumns: " << plan.GetMapSafe().at("KeyColumns") << ", " <<
-                        "HashFunc: "   << plan.GetMapSafe().at("HashFunc")
-                    << ")";
-
-                result["Node Type"] = stringBuilder;
+            if (result.GetMapSafe().contains("PlanNodeType")
+                && result.GetMapSafe().at("PlanNodeType") == "Connection")
+            {
+                CopySimplifiedConnectionFields(plan, result);
             }
 
             if (plan.GetMapSafe().contains("CTE Name")) {

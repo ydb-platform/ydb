@@ -352,6 +352,8 @@ public:
     std::vector<TShardIdx> DoneShards;
     ui32 MaxInProgressShards = 32;
 
+    THashSet<TTxId> DependencyTxIds; // volatile set of concurrent tx(s)
+
     TMeteringStats Processed = TMeteringStatsHelper::ZeroValue();
     TMeteringStats Billed = TMeteringStatsHelper::ZeroValue();
 

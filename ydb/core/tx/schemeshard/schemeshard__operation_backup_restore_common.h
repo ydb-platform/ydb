@@ -73,6 +73,16 @@ public:
         Y_ABORT_UNLESS(txState->TxType == TxType);
         Y_ABORT_UNLESS(txState->State == TTxState::ConfigureParts);
 
+        // For column tables, backup propose is async (export actor must finish
+        // before columnshard replies). Handle cancel here to avoid waiting for
+        // that reply which may never come while export is blocked.
+        const TPath path = TPath::Init(txState->TargetPathId, context.SS);
+        if (txState->Cancel && path->IsColumnTable()) {
+            NIceDb::TNiceDb db(context.GetDB());
+            context.SS->ChangeTxState(db, OperationId, TTxState::Aborting);
+            return true;
+        }
+
         txState->ClearShardsInProgress();
         if constexpr (TKind::NeedSnapshotTime()) {
             TKind::ProposeTx(OperationId, *txState, context, GetSnapshotTime(context.SS, txState->TargetPathId));
@@ -106,6 +116,7 @@ public:
         IgnoreMessages(DebugHint(),
             { TEvHive::TEvCreateTabletReply::EventType
             , TEvDataShard::TEvProposeTransactionResult::EventType
+            , TEvColumnShard::TEvProposeTransactionResult::EventType
             , TEvPrivate::TEvOperationPlan::EventType }
         );
     }
@@ -389,6 +400,7 @@ public:
         this->IgnoreMessages(DebugHint(),
             { TEvHive::TEvCreateTabletReply::EventType
             , TEvDataShard::TEvProposeTransactionResult::EventType
+            , TEvColumnShard::TEvProposeTransactionResult::EventType
             , TEvPrivate::TEvOperationPlan::EventType }
         );
     }
@@ -463,7 +475,10 @@ public:
         : TxType(type)
         , OperationId(id)
     {
-        IgnoreMessages(DebugHint(), {TEvDataShard::TEvProposeTransactionResult::EventType});
+        IgnoreMessages(DebugHint(),
+            { TEvDataShard::TEvProposeTransactionResult::EventType
+            , TEvColumnShard::TEvProposeTransactionResult::EventType }
+        );
     }
 
     bool HandleReply(TEvDataShard::TEvSchemaChanged::TPtr& ev, TOperationContext& context) override {
@@ -547,8 +562,22 @@ class TBackupRestoreOperationBase: public TSubOperation {
         case TTxState::Waiting:
         case TTxState::CreateParts:
             return TTxState::ConfigureParts;
-        case TTxState::ConfigureParts:
+        case TTxState::ConfigureParts: {
+            const TTxState* txState = context.SS->FindTx(OperationId);
+            Y_ABORT_UNLESS(txState);
+            Y_ABORT_UNLESS(txState->TxType == TxType);
+
+            const TPath path = TPath::Init(txState->TargetPathId, context.SS);
+            if (txState->Cancel && path->IsColumnTable()) {
+                if (txState->State == TTxState::Propose) {
+                    return TTxState::Propose;
+                }
+
+                Y_ABORT_UNLESS(txState->State == TTxState::Aborting);
+                return TTxState::Aborting;
+            }
             return TTxState::Propose;
+        }
         case TTxState::Propose:
             return TTxState::ProposedWaitParts;
         case TTxState::ProposedWaitParts: {

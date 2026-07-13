@@ -1343,6 +1343,17 @@ struct TIndexDescription {
     TIndexSettings IndexSettings;
 };
 
+struct TStatisticsDescription {
+    explicit TStatisticsDescription(TIdentifier name)
+        : Name(std::move(name))
+    {
+    }
+
+    TIdentifier Name;
+    TVector<TIdentifier> Columns;
+    TVector<TIdentifier> Types; // raw parsed type identifiers; validated later
+};
+
 struct TChangefeedSettings {
     struct TLocalSinkSettings {
         // no special settings
@@ -1382,6 +1393,7 @@ struct TCreateTableParameters {
     TVector<TIdentifier> PartitionByColumns;
     TVector<std::pair<TIdentifier, bool>> OrderByColumns;
     TVector<TIndexDescription> Indexes;
+    TVector<TStatisticsDescription> Statistics;
     TVector<TFamilyEntry> ColumnFamilies;
     TVector<TChangefeedDescription> Changefeeds;
     TTableSettings TableSettings;
@@ -1418,6 +1430,8 @@ struct TAlterTableParameters {
     TVector<TIndexDescription> AddIndexes;
     TVector<TIndexDescription> AlterIndexes;
     TVector<TIdentifier> DropIndexes;
+    TVector<TStatisticsDescription> AddStatistics;
+    TVector<TIdentifier> DropStatistics;
     TMaybe<std::pair<TIdentifier, TIdentifier>> RenameIndexTo;
     TMaybe<TIdentifier> RenameTo;
     TVector<TChangefeedDescription> AddChangefeeds;
@@ -1436,6 +1450,8 @@ struct TAlterTableParameters {
                AddIndexes.empty() &&
                AlterIndexes.empty() &&
                DropIndexes.empty() &&
+               AddStatistics.empty() &&
+               DropStatistics.empty() &&
                !RenameIndexTo.Defined() &&
                !RenameTo.Defined() &&
                AddChangefeeds.empty() &&

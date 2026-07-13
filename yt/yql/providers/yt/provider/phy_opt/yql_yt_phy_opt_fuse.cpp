@@ -138,7 +138,7 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::FuseReduce(TExprBase no
     };
 
     // adds _yql_sys_tablekeyswitch column which is required for outer lambda
-    // _yql_sys_tableswitch equals "true" when reduce key is changed
+    // _yql_sys_tablekeyswitch equals "true" when reduce key is changed
     TExprNode::TPtr keySwitchLambda = ctx.Builder(node.Pos())
         .Lambda()
             .Param("stream")
@@ -564,8 +564,6 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::FuseReduceWithTrivialMa
         .Reducer(newReduceLambda)
         .Settings(newSettings)
         .Done();
-
-    return node;
 }
 
 TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::FuseInnerMap(TExprBase node, TExprContext& ctx, const TGetParents& getParents) const {

@@ -204,6 +204,8 @@ void TFacadeRunOptions::Parse(int argc, const char** argv) {
         }
     }
 
+    THashSet<TString> sqlFlags;
+
     NLastGetopt::TOpts opts = NLastGetopt::TOpts::Default();
 
     opts.AddHelpOption();
@@ -359,7 +361,7 @@ void TFacadeRunOptions::Parse(int argc, const char** argv) {
     opts.AddLongOption("full-stat", "Output full execution statistics").Optional().NoArgument().SetFlag(&FullStatistics);
     opts.AddLongOption("diagnostics", "Output diagnostics").Optional().NoArgument().SetFlag(&PrintDiagnostics);
 
-    opts.AddLongOption("sql-flags", "SQL translator pragma flags").SplitHandler(&SqlFlags, ',');
+    opts.AddLongOption("sql-flags", "SQL translator pragma flags").SplitHandler(&sqlFlags, ',');
     opts.AddLongOption("syntax-version", "SQL syntax version").StoreResult(&SyntaxVersion).DefaultValue(1);
     opts.AddLongOption("ansi-lexer", "Use ansi lexer").NoArgument().SetFlag(&AnsiLexer);
     opts.AddLongOption("assume-ydb-on-slash", "Assume YDB provider if cluster name starts with '/'").NoArgument().SetFlag(&AssumeYdbOnClusterWithSlash);
@@ -508,15 +510,18 @@ void TFacadeRunOptions::Parse(int argc, const char** argv) {
         GatewaysConfig = ParseProtoFromResource<TGatewaysConfig>("gateways.conf");
     }
 
-    if (QPlayerContext.CanRead()) {
-        auto sqlFlags = SQLFlagsFromQContext(QPlayerContext);
-        if (GatewaysPatch) {
-            // Gateways Patch is used for experimental features
-            sqlFlags.ExtendWith(TGatewaySQLFlags::FromTesting(*GatewaysPatch));
+    {
+        TGatewaySQLFlags gatewaySqlFlags;
+        for (const auto& flag : sqlFlags) {
+            gatewaySqlFlags.Set(flag);
         }
-        sqlFlags.CollectAllTo(SqlFlags);
-    } else if (GatewaysConfig) {
-        TGatewaySQLFlags::FromTesting(*GatewaysConfig).CollectAllTo(SqlFlags);
+        if (QPlayerContext.CanRead()) {
+            gatewaySqlFlags.ExtendWith(SQLFlagsFromQContext(QPlayerContext));
+        }
+        if (GatewaysConfig) {
+            gatewaySqlFlags.ExtendWith(TGatewaySQLFlags::FromTesting(*GatewaysConfig));
+        }
+        SqlFlags = std::move(gatewaySqlFlags).ToMap();
     }
 
     if (!FsConfig) {
@@ -842,7 +847,7 @@ int TFacadeRunner::DoRun(TProgramFactory& factory) {
         settings.Arena = &arena;
         settings.PgParser = EProgramType::Pg == RunOptions_.ProgramType;
         settings.ClusterMapping = ClusterMapping_;
-        settings.Flags = RunOptions_.SqlFlags;
+        ParseTranslationSettings(RunOptions_.SqlFlags, settings);
         settings.SyntaxVersion = RunOptions_.SyntaxVersion;
         settings.AnsiLexer = RunOptions_.AnsiLexer;
         settings.TestAntlr4 = RunOptions_.TestAntlr4;

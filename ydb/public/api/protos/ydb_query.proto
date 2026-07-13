@@ -159,7 +159,7 @@ message RollbackTransactionResponse {
 enum Syntax {
     SYNTAX_UNSPECIFIED = 0;
     SYNTAX_YQL_V1 = 1; // YQL
-    SYNTAX_PG = 2; // PostgresQL
+    SYNTAX_PG = 2 [deprecated = true]; // Removed: PostgreSQL syntax is no longer supported
 }
 
 message QueryContent {

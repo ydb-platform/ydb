@@ -519,7 +519,7 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
                 && !columnFamily
                 && !col.HasDefaultFromSequence()
                 && !col.HasEmptyDefault()
-                && !col.HasDefaultFromLiteral()) 
+                && !col.HasDefaultFromLiteral())
             {
                 errStr = Sprintf("Nothing to alter for column '%s'", colName.data());
                 return nullptr;
@@ -775,6 +775,75 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
         }
 
         alterData->TableDescriptionFull->MutableTTLSettings()->CopyFrom(ttl);
+    }
+
+    // Multi-column statistics.
+    {
+        const bool hasMultiColumnStatisticsChanges = (op.MultiColumnStatisticsSize() != 0 || op.DropMultiColumnStatisticsSize() != 0);
+        if (hasMultiColumnStatisticsChanges && !featureFlags.EnableColumnStatistics) {
+            errStr = "Multi-column statistics support is disabled";
+            return nullptr;
+        }
+
+        THashSet<TString> dropNames(op.GetDropMultiColumnStatistics().begin(), op.GetDropMultiColumnStatistics().end());
+        THashSet<TString> resultNames;
+        auto* outMultiColumnStatistics = alterData->TableDescriptionFull->MutableMultiColumnStatistics();
+
+        // Carry over existing statistics, skipping the dropped ones.
+        if (source) {
+            for (const auto& stat : source->MultiColumnStatistics()) {
+                if (dropNames.erase(stat.GetName())) {
+                    continue;
+                }
+                outMultiColumnStatistics->Add()->CopyFrom(stat);
+                resultNames.insert(stat.GetName());
+            }
+        }
+
+        if (!dropNames.empty()) {
+            errStr = TStringBuilder() << "MultiColumnStatistics not found: " << *dropNames.begin();
+            return nullptr;
+        }
+
+        for (const auto& add : op.GetMultiColumnStatistics()) {
+            if (add.GetName().empty()) {
+                errStr = "MultiColumnStatistics name must be specified";
+                return nullptr;
+            }
+            if (!resultNames.insert(add.GetName()).second) {
+                errStr = TStringBuilder() << "MultiColumnStatistics " << add.GetName() << " must be defined once";
+                return nullptr;
+            }
+            if (add.ColumnNamesSize() == 0) {
+                errStr = TStringBuilder() << "MultiColumnStatistics " << add.GetName() << " must have at least one column";
+                return nullptr;
+            }
+            auto* desc = outMultiColumnStatistics->Add();
+            desc->SetName(add.GetName());
+            for (const auto& colName : add.GetColumnNames()) {
+                auto it = colName2Id.find(colName);
+                if (it == colName2Id.end()) {
+                    errStr = TStringBuilder() << "Undefined column: " << colName;
+                    return nullptr;
+                }
+                desc->AddColumnNames(colName);
+                desc->AddColumnIds(it->second);
+            }
+            for (const auto rawType : add.GetTypes()) {
+                const auto type = static_cast<NKikimrSchemeOp::EMultiColumnStatisticsType>(rawType);
+                switch (type) {
+                    case NKikimrSchemeOp::EMultiColumnStatisticsType::MULTI_COLUMN_STATISTICS_UNSPECIFIED:
+                        errStr = TStringBuilder() << "MultiColumnStatistics " << add.GetName() << " type must be specified";
+                        return nullptr;
+                    case NKikimrSchemeOp::EMultiColumnStatisticsType::COUNT_MIN_SKETCH:
+                        break;
+                    default:
+                        errStr = TStringBuilder() << "Unknown statistic type: " << rawType;
+                        return nullptr;
+                }
+                desc->AddTypes(type);
+            }
+        }
     }
 
     if (featureFlags.EnableDetailedMetrics && op.HasDetailedMetricsSettings()) {
@@ -1955,6 +2024,10 @@ void TTableInfo::FinishAlter() {
 
     if (AlterData->TableDescriptionFull.Defined() && AlterData->TableDescriptionFull->HasIncrementalBackupConfig()) {
         MutableIncrementalBackupConfig().Swap(AlterData->TableDescriptionFull->MutableIncrementalBackupConfig());
+    }
+
+    if (AlterData->TableDescriptionFull.Defined()) {
+        MutableMultiColumnStatistics()->Swap(AlterData->TableDescriptionFull->MutableMultiColumnStatistics());
     }
 
     // Force FillDescription to regenerate TableDescription

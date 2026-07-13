@@ -14,6 +14,7 @@ namespace NKikimr {
 namespace NNodeBroker {
 
 enum class ENodeState : ui8;
+enum class ENodeLiveness : ui8;
 
 struct Schema : NIceDb::Schema {
     enum class EMainNodesTable : ui64 {
@@ -33,11 +34,14 @@ struct Schema : NIceDb::Schema {
         // struct Body : Column<9, NScheme::NTypeIds::Uint64> {};
         struct Lease : Column<10, NScheme::NTypeIds::Uint32> {};
         struct Expire : Column<11, NScheme::NTypeIds::Uint64> {};
+        struct ExpireV2 : Column<17, NScheme::NTypeIds::Uint64> {};
         struct Location : Column<12, NScheme::NTypeIds::String> {};
         struct ServicedSubDomain : Column<13, NScheme::NTypeIds::String> { using Type = NKikimrSubDomains::TDomainKey; };
         struct SlotIndex : Column<14, NScheme::NTypeIds::Uint32> {};
         struct AuthorizedByCertificate : Column<15, NScheme::NTypeIds::Bool> {};
         //struct BridgePileId : Column<16, NScheme::NTypeIds::Uint32> {};
+        struct AliveUntil : Column<18, NScheme::NTypeIds::Uint64> {};
+        struct Liveness : Column<19, NScheme::NTypeIds::Uint8> { using Type = ENodeLiveness; };
 
         using TKey = TableKey<ID>;
         using TColumns = TableColumns<
@@ -51,7 +55,10 @@ struct Schema : NIceDb::Schema {
             Location,
             ServicedSubDomain,
             SlotIndex,
-            AuthorizedByCertificate
+            AuthorizedByCertificate,
+            ExpireV2,
+            AliveUntil,
+            Liveness
         >;
     };
 

@@ -101,13 +101,15 @@ TZeroLevelPortions::TZeroLevelPortions(const ui32 levelIdx, const std::shared_pt
     const TLevelCounters& levelCounters, const std::shared_ptr<IOverloadChecker>& overloadChecker, const TDuration durationToDrop,
     const ui64 expectedBlobsSize, const ui64 portionsCountAvailable, const std::vector<std::shared_ptr<IPortionsSelector>>& selectors,
     const TString& defaultSelectorName, const ui64 concurrency, std::optional<ui64> compactionTaskMemoryLimit,
-    std::optional<ui64> compactionTaskPortionsCountLimit, const ui64 highPriorityContribution, bool compactAtLevel)
+    std::optional<ui64> compactionTaskPortionsCountLimit, const ui64 highPriorityContribution, bool compactAtLevel,
+    std::optional<ui64> skipLevelMinBlobSize)
     : TBase(levelIdx, nextLevel, overloadChecker, levelCounters, selectors, defaultSelectorName)
     , DurationToDrop(durationToDrop)
     , ExpectedBlobsSize(expectedBlobsSize)
     , PortionsCountAvailable(portionsCountAvailable)
     , HighPriorityContribution(highPriorityContribution)
     , CompactAtLevel(compactAtLevel)
+    , SkipLevelMinBlobSize(skipLevelMinBlobSize)
     , Concurrency(concurrency)
     , CompactionTaskMemoryLimit(compactionTaskMemoryLimit)
     , CompactionTaskPortionsCountLimit(compactionTaskPortionsCountLimit)

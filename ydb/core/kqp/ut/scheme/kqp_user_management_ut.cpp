@@ -80,7 +80,7 @@ Y_UNIT_TEST_SUITE(KqpUserManagement) {
 
             auto result = client.ExecuteQuery(query, NQuery::TTxControl::NoTx()).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Salt in Argon hash must be 16 bytes long");
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Cannot parse hashes value");
         }
         {
             auto query = TStringBuilder() << R"(
@@ -94,7 +94,7 @@ Y_UNIT_TEST_SUITE(KqpUserManagement) {
 
             auto result = client.ExecuteQuery(query, NQuery::TTxControl::NoTx()).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Hash in Argon hash must be 32 bytes long");
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Cannot parse hashes value");
         }
         {
             auto query = TStringBuilder() << R"(
@@ -108,7 +108,7 @@ Y_UNIT_TEST_SUITE(KqpUserManagement) {
 
             auto result = client.ExecuteQuery(query, NQuery::TTxControl::NoTx()).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Unsupported format of hashed password");
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Cannot parse hashes value");
         }
         {
             auto query = TStringBuilder() << R"(
@@ -122,7 +122,7 @@ Y_UNIT_TEST_SUITE(KqpUserManagement) {
 
             auto result = client.ExecuteQuery(query, NQuery::TTxControl::NoTx()).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Unsupported format of hashed password");
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Cannot parse hashes value");
         }
         {
             auto query = TStringBuilder() << R"(
@@ -137,7 +137,7 @@ Y_UNIT_TEST_SUITE(KqpUserManagement) {
 
             auto result = client.ExecuteQuery(query, NQuery::TTxControl::NoTx()).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "There should be strictly three fields here: salt, hash and type");
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Cannot parse hashes value");
         }
         {
             auto query = TStringBuilder() << R"(
@@ -151,7 +151,7 @@ Y_UNIT_TEST_SUITE(KqpUserManagement) {
 
             auto result = client.ExecuteQuery(query, NQuery::TTxControl::NoTx()).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Hash in Argon hash must be in base64 encoding");
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Cannot parse hashes value");
         }
         {
             auto query = TStringBuilder() << R"(
@@ -165,7 +165,7 @@ Y_UNIT_TEST_SUITE(KqpUserManagement) {
 
             auto result = client.ExecuteQuery(query, NQuery::TTxControl::NoTx()).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Salt in Argon hash must be in base64 encoding");
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Cannot parse hashes value");
         }
         {
             TString hashes = R"(
@@ -306,7 +306,7 @@ Y_UNIT_TEST_SUITE(KqpUserManagement) {
 
             auto result = client.ExecuteQuery(query, NQuery::TTxControl::NoTx()).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Salt in Argon hash must be 16 bytes long");
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Cannot parse hashes value");
         }
         {
             auto query = TStringBuilder() << R"(
@@ -320,7 +320,7 @@ Y_UNIT_TEST_SUITE(KqpUserManagement) {
 
             auto result = client.ExecuteQuery(query, NQuery::TTxControl::NoTx()).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Hash in Argon hash must be 32 bytes long");
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Cannot parse hashes value");
         }
         {
             auto query = TStringBuilder() << R"(
@@ -334,7 +334,7 @@ Y_UNIT_TEST_SUITE(KqpUserManagement) {
 
             auto result = client.ExecuteQuery(query, NQuery::TTxControl::NoTx()).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Unsupported format of hashed password");
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Cannot parse hashes value");
         }
         {
             auto query = TStringBuilder() << R"(
@@ -348,7 +348,7 @@ Y_UNIT_TEST_SUITE(KqpUserManagement) {
 
             auto result = client.ExecuteQuery(query, NQuery::TTxControl::NoTx()).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Unsupported format of hashed password");
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Cannot parse hashes value");
         }
         {
             auto query = TStringBuilder() << R"(
@@ -363,7 +363,7 @@ Y_UNIT_TEST_SUITE(KqpUserManagement) {
 
             auto result = client.ExecuteQuery(query, NQuery::TTxControl::NoTx()).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "There should be strictly three fields here: salt, hash and type");
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Cannot parse hashes value");
         }
         {
             auto query = TStringBuilder() << R"(
@@ -377,7 +377,7 @@ Y_UNIT_TEST_SUITE(KqpUserManagement) {
 
             auto result = client.ExecuteQuery(query, NQuery::TTxControl::NoTx()).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Hash in Argon hash must be in base64 encoding");
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Cannot parse hashes value");
         }
         {
             auto query = TStringBuilder() << R"(
@@ -391,7 +391,7 @@ Y_UNIT_TEST_SUITE(KqpUserManagement) {
 
             auto result = client.ExecuteQuery(query, NQuery::TTxControl::NoTx()).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Salt in Argon hash must be in base64 encoding");
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Cannot parse hashes value");
         }
         {
             TString hashes = R"(

@@ -33,6 +33,12 @@ on:
         description: 'macOS runner to use'
         type: string
         default: 'macos-latest'
+      additional-ya-make-args:
+        description: >-
+          Extra ya make arguments as a single string. Separate multiple flags with a space;
+          no space between -D and the flag name (e.g. "-DUSE_SSE4=no -DYDB_CLI_AI_INCLUDE_DOCS=yes").
+        type: string
+        default: ''
 defaults:
   run:
     shell: bash
@@ -131,13 +137,13 @@ jobs:
 
         echo Using full compiler path: [%TOOLCHAIN_PATH%]
 
-        call .\ya.bat make ${{ inputs.build-target }} -r -DUSE_SSE4=no -o .\ ^
+        call .\ya.bat make ${{ inputs.build-target }} -r ${{ inputs.additional-ya-make-args }} -o .\ ^
           --c-compiler "%TOOLCHAIN_PATH%" ^
           --cxx-compiler "%TOOLCHAIN_PATH%"
 
     - name: Build unix binary with ya make
       if: ${{ matrix.os != 'windows-amd' }}
-      run: ./ya make ${{ inputs.build-target }} -r -DUSE_SSE4=no --target-platform ${{ matrix.platform }}
+      run: ./ya make ${{ inputs.build-target }} -r ${{ inputs.additional-ya-make-args }} --target-platform ${{ matrix.platform }}
     - name: Check built binary version command
       run: |
         BINARY_PATH="${{ inputs.build-target }}/${{ matrix.binary }}"

@@ -160,6 +160,7 @@ DEFINE_ENUM(EAbortReason,
     ((NodePoolTreeChanged)             ( 61))
     ((UserSlotDisabled)                ( 62))
     ((JobLogDirectoryNotPrepared)      ( 63))
+    ((OverlayLayerPreparationFailed)   ( 64))
     ((SchedulingFirst)                 (100))
     ((SchedulingTimeout)               (101))
     ((SchedulingResourceOvercommit)    (102))

@@ -254,7 +254,7 @@ class TExtractCommonConjunctsRule : public ISimplifiedRule {
  */
 class TPushFilterIntoJoinRule : public ISimplifiedRule {
   public:
-    TPushFilterIntoJoinRule() : ISimplifiedRule("Push filter into join", ERuleProperties::RequireParents) {}
+    TPushFilterIntoJoinRule() : ISimplifiedRule("Push filter into join", ERuleProperties::RequireParents | ERuleProperties::RequireTypes) {}
 
     virtual bool QuickMatch(const TIntrusivePtr<IOperator>& input) const override;
     virtual TIntrusivePtr<IOperator> SimpleMatchAndApply(const TIntrusivePtr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) override;

@@ -6,12 +6,16 @@
 #include <cstring>
 #include <utility>
 
+#include <util/generic/strbuf.h>
+
 class IOutputStream;
 
 namespace NKikimr::NUuid {
 
 static constexpr ui32 UUID_LEN = 16;
 
+TString UuidBytesToString(TStringBuf in);
+void UuidBytesToString(TStringBuf in, IOutputStream& out);
 TString UuidBytesToString(const TString& in);
 void UuidBytesToString(const TString& in, IOutputStream& out);
 void UuidHalfsToString(ui64 low, ui64 hi, IOutputStream& out);

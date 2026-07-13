@@ -158,7 +158,7 @@ Y_UNIT_TEST_LLVM(TestOverFlow) {
                                                      });
     auto init = NTest::ConvertValueToLiteralNode(pb, std::make_tuple(TMaybe<i32>{3}, TMaybe<TStringBuf>{"B"}));
 
-    auto pgmReturn = pb.FromFlow(pb.ChainMap(pb.ToFlow(list), init,
+    auto pgmReturn = pb.FromFlow(pb.ChainMap(pb.ToFlow(list, {}), init,
                                              [&](TRuntimeNode item, TRuntimeNode state) -> TRuntimeNodePair {
                                                  auto key = pb.Nth(item, 0);
                                                  auto val = pb.Nth(item, 1);
@@ -191,7 +191,7 @@ Y_UNIT_TEST_LLVM(Test1OverFlow) {
                                                          TItem{},
                                                      });
 
-    auto pgmReturn = pb.FromFlow(pb.Chain1Map(pb.ToFlow(list),
+    auto pgmReturn = pb.FromFlow(pb.Chain1Map(pb.ToFlow(list, {}),
                                               [&](TRuntimeNode item) -> TRuntimeNodePair {
                 auto key = pb.Nth(item, 0);
                 auto val = pb.Nth(item, 1);
@@ -322,7 +322,8 @@ Y_UNIT_TEST_LLVM(TestChain1MapWithThrottledStream) {
     auto pgmReturn = pb.FromFlow(pb.ToFlow(
         pb.OrderedMap(chain1, [&](TRuntimeNode tuple) -> TRuntimeNode {
             return pb.Nth(tuple, 0);
-        })));
+        }),
+        {}));
 
     auto graph = setup.BuildGraph(pgmReturn);
 

@@ -261,12 +261,11 @@ def main():
         return
 
     elif args.command == "stop":
-        # Stop mode: stop all services on cluster
         print("Stopping nemesis services on cluster...")
         hosts = get_hosts_from_yaml(settings.yaml_config_location)
         print(f"Hosts: {hosts}")
 
-        stop_agent_services(hosts)
+        stop_agent_services(hosts, app_port=settings.app_port)
 
         print("\n" + "=" * 60)
         print("All services stopped successfully!")

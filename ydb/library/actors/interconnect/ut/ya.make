@@ -21,6 +21,7 @@ SRCS(
     sticking_ut.cpp
     #uring_ut.cpp
     xdc_shuffle_ut.cpp
+    v2_event_serializer_ut.cpp
 )
 
 PEERDIR(

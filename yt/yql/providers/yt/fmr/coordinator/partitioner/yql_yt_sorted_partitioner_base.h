@@ -123,7 +123,11 @@ protected:
         const TPartitionerFilterBoundary& filterBoundary
     ) = 0;
 
-    virtual void ChangeRightKeyBoundaryIfNeeded(TFmrTableKeysBoundary& rightKey, const TFmrTableKeysBoundary& taskRangeLastKey) = 0;
+    virtual void ChangeRightKeyBoundaryIfNeeded(
+        TFmrTableKeysBoundary& rightKey,
+        bool& isRightInclusive,
+        const TFmrTableKeysBoundary& taskRangeLastKey
+    ) = 0;
 
     TTaskTableInputRef CreateTaskInputFromSlicesImpl(
         const std::vector<TSlice>& slices,

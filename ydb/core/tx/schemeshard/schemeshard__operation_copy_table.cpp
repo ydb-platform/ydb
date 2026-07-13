@@ -758,6 +758,7 @@ public:
             .EnableTableDatetime64 = true,
             .EnableParameterizedDecimal = true,
             .EnableDetailedMetrics = true,
+            .EnableColumnStatistics = AppData()->FeatureFlags.GetEnableColumnStatistics(),
         };
         TTableInfo::TAlterDataPtr alterData = TTableInfo::CreateAlterData(nullptr, schema, *typeRegistry,
             limits, *domainInfo, featureFlags, errStr, LocalSequences);
@@ -1047,6 +1048,11 @@ TVector<ISubOperation::TPtr> CreateCopyTable(TOperationId nextId, const TTxTrans
         Y_ABORT_UNLESS(childPath.Base()->PathId == pathId);
 
         TTableIndexInfo::TPtr indexInfo = context.SS->Indexes.at(pathId);
+
+        if (indexInfo->State != NKikimrSchemeOp::EIndexState::EIndexStateReady) {
+            continue;
+        }
+
         {
             auto schema = TransactionTemplate(dstPath.PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpCreateTableIndex);
             schema.SetFailOnExist(tx.GetFailOnExist());

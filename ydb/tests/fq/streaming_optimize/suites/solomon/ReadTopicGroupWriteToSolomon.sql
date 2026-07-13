@@ -1,24 +1,25 @@
-/* syntax version 1 */
-/* dq can not */
-
-PRAGMA dq.MaxTasksPerStage="10";
-PRAGMA pq.Consumer="test_client";
-
 $crc = ($s) -> {
-    return Unwrap(len($s) % 8);
+    RETURN Unwrap(len($s) % 8);
 };
 
 INSERT INTO solomon.`project/cluster/service`
-    SELECT STREAM
-        Unwrap(HOP_END()) as ts,
-        cast(crc as string) as crc8,
-        COUNT(*) as count,
-        MIN(Len(Data)) as min_length,
-        MAX(Len(Data)) as max_length,
-        SUM(Len(Data)) as sum
+SELECT
+    Unwrap(HOP_END()) AS ts,
+    CAST(crc AS string) AS crc8,
+    COUNT(*) AS count,
+    MIN(Len(Data)) AS min_length,
+    MAX(Len(Data)) AS max_length,
+    SUM(Len(Data)) AS sum
+FROM (
+    SELECT
+        Data,
+        $crc(Data) AS crc
     FROM
-        (SELECT
-            Data,
-            $crc(Data) as crc
-        FROM pq.test_topic_input)
-    GROUP BY HOP(Just(CurrentUtcTimestamp(TableRow())), "PT5S", "PT5S", "PT5S"), crc;
+        pq.test_topic_input WITH (
+            STREAMING = 'TRUE'
+        )
+)
+GROUP BY
+    crc,
+    HOP (CurrentUtcTimestamp(TableRow()), 'PT5S', 'PT5S', 'PT5S')
+;

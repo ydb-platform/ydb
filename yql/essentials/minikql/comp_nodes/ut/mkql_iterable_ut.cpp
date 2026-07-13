@@ -21,7 +21,7 @@ Y_UNIT_TEST_LLVM(TestEmptyIterable) {
         return pb.EmptyIterator(pb.NewStreamType(NTest::ConvertToMinikqlType<NTest::TStructType<NTest::TStructMember<"a", ui64>>>(pb)));
     };
     const auto root = pb.SqueezeToHashedDict(
-        pb.ToFlow(pb.Iterable(lambda)),
+        pb.ToFlow(pb.Iterable(lambda), {}),
         /* isMany = */ true,
         [&pb](TRuntimeNode node) { return pb.Member(node, "a"); },
         [](TRuntimeNode node) { return node; },

@@ -47,6 +47,8 @@ private:
     void FormatIndexImplTable(const TString& tablePath, const TString& indexName, const NKikimrSchemeOp::TTableDescription& indexImplDesc);
 
     void Format(const Ydb::Table::TableIndex& index);
+    void Format(const Ydb::Table::TableMultiColumnStatistics& statistics);
+    void Format(const NKikimrSchemeOp::TMultiColumnStatisticsDescription& statistics);
     bool Format(const Ydb::Table::ExplicitPartitions& explicitPartitions, TString& del, bool needWith);
     bool Format(const Ydb::Table::ReadReplicasSettings& readReplicasSettings, TString& del, bool needWith);
     bool Format(const Ydb::Table::TtlSettings& ttlSettings, TString& del, bool needWith);

@@ -1,0 +1,39 @@
+--- a/include/llvm/Demangle/ItaniumDemangle.h
++++ b/include/llvm/Demangle/ItaniumDemangle.h
+@@ -216,6 +216,13 @@
+ #endif
+ };
+ 
++class IASTProcessor {
++public:
++    virtual void Process(const Node*) = 0;
++};
++
++void demangleAST(const char *MangledName, IASTProcessor *Processor);
++
+ class NodeArray {
+   Node **Elements;
+   size_t NumElements;
+@@ -5458,6 +5465,7 @@
+       return nullptr;
+     return Arg;
+   }
++  case 'I': // 'I' here is an old GCC mangling ABI. It is common in outside binaries.
+   case 'J': {
+     ++First;
+     size_t ArgsBegin = Names.size();
+--- a/lib/Demangle/ItaniumDemangle.cpp
++++ b/lib/Demangle/ItaniumDemangle.cpp
+@@ -366,6 +366,12 @@
+
+ using Demangler = itanium_demangle::ManglingParser<DefaultAllocator>;
+
++void llvm::itanium_demangle::demangleAST(const char *MangledName, IASTProcessor *Processor) {
++  Demangler Parser(MangledName, MangledName + std::strlen(MangledName));
++  Node* node = Parser.parse();
++  Processor->Process(node);
++}
++
+ char *llvm::itaniumDemangle(std::string_view MangledName, bool ParseParams) {
+   if (MangledName.empty())
+     return nullptr;

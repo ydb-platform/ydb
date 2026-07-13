@@ -250,7 +250,7 @@ void TKqpNewRBOTransformer::CollectTablesAndColumnsNames(TExprContext& ctx) {
     Y_ENSURE(OpRoot);
     TRBOContext rboCtx(KqpCtx, ctx, TypeCtx, *RBOTypeAnnTransformer.Get(), FuncRegistry);
     OpRoot->ComputePlanMetadata(rboCtx);
-    for (auto it : *OpRoot) {
+    for (const auto& it : *OpRoot) {
         if (IsSuitableToCollectStatistics(it.Current)) {
             CollectTablesAndColumnsNames(it.Current);
         }
@@ -297,6 +297,15 @@ IGraphTransformer::TStatus TKqpNewRBOTransformer::RequestColumnStatistics(TExprC
                             }
                             if (newStat.EqWidthHistogramEstimator) {
                                 oldStat.EqWidthHistogramEstimator = newStat.EqWidthHistogramEstimator;
+                            }
+                            if (!newStat.Type.empty()) {
+                                oldStat.Type = newStat.Type;
+                            }
+                            if (newStat.NumUniqueVals) {
+                                oldStat.NumUniqueVals = newStat.NumUniqueVals;
+                            }
+                            if (newStat.HyperLogLog) {
+                                oldStat.HyperLogLog = newStat.HyperLogLog;
                             }
                         }
                     }

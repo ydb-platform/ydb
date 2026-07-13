@@ -28,16 +28,29 @@ Y_UNIT_TEST_SUITE(DDisk) {
         const TString Letters = "./0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
 
         TDDiskTestContext(ui32 surfaceSize = 64_KB, ui64 inMemCache = 128_MB,
-                std::optional<ui32> minFreeSectorsReserve = std::nullopt)
+                std::optional<ui32> minFreeSectorsReserve = std::nullopt,
+                std::optional<ui32> preallocateFreeSpaceThresholdPercent = std::nullopt,
+                std::optional<ui32> deallocateFreeSpaceThresholdPercent = std::nullopt,
+                std::optional<ui32> deallocateThresholdSeconds = std::nullopt)
             : Env({
                 .NodeCount = 8,
                 .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
-                .ConfigPreprocessor = [inMemCache, minFreeSectorsReserve](ui32, TNodeWardenConfig& cfg){
+                .ConfigPreprocessor = [inMemCache, minFreeSectorsReserve, preallocateFreeSpaceThresholdPercent,
+                        deallocateFreeSpaceThresholdPercent, deallocateThresholdSeconds](ui32, TNodeWardenConfig& cfg){
                     NYdb::NBS::NProto::TPBufferConfig pbCfg;
                     pbCfg.SetMaxChunks(10);
                     pbCfg.SetMaxInMemoryCache(inMemCache);
                     if (minFreeSectorsReserve.has_value()) {
                         pbCfg.SetMinFreeSectorsReserve(*minFreeSectorsReserve);
+                    }
+                    if (preallocateFreeSpaceThresholdPercent.has_value()) {
+                        pbCfg.SetPreallocateFreeSpaceThresholdPercent(*preallocateFreeSpaceThresholdPercent);
+                    }
+                    if (deallocateFreeSpaceThresholdPercent.has_value()) {
+                        pbCfg.SetDeallocateFreeSpaceThresholdPercent(*deallocateFreeSpaceThresholdPercent);
+                    }
+                    if (deallocateThresholdSeconds.has_value()) {
+                        pbCfg.SetDeallocateThresholdSeconds(*deallocateThresholdSeconds);
                     }
                     cfg.PBufferConfig = pbCfg;
                 }
@@ -1246,5 +1259,109 @@ Y_UNIT_TEST_SUITE(DDisk) {
             TStringBuilder() << "Fast erase must free exactly " << expectedFastFreed
                 << " sectors; freeBefore=" << freeSectorsBeforeFastErase
                 << " freeAfter=" << freeSectorsAfterFastErase);
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Integration test for TDDiskActor::Handle(TEvPrivate::TEvDeallocatePersistentBufferChunk)
+    //
+    // This test drives the persistent buffer through a real actor system (with a
+    // mock PDisk) to verify that a chunk which is proactively allocated and later
+    // becomes fully free is actually deallocated: the chunk-map log record commits
+    // with the chunk index in DeleteChunks, and PDisk (the mock) releases the
+    // physical chunk back to its free pool, making it available for reuse.
+    //
+    // Strategy:
+    //  1. Configure aggressive proactive allocation (PreallocateFreeSpaceThresholdPercent=99)
+    //     so writing enough records forces growth beyond the initial owned-chunk count.
+    //  2. Configure aggressive proactive deallocation (DeallocateFreeSpaceThresholdPercent=90,
+    //     DeallocateThresholdSeconds=1) so that once all data is erased, the extra chunk(s)
+    //     are quickly detected as fully free and deallocated.
+    //  3. Verify the owned-chunk count (via TEvGetPersistentBufferInfo's FreeSpace
+    //     description, whose size equals TPersistentBufferSpaceAllocator::OwnedChunks.size())
+    //     grows after the writes and shrinks back down after the erases + wait.
+    //  4. Independently verify at the (mock) PDisk level that the physical chunk which
+    //     was written to disappears from the PDisk's set of chunks with data, proving
+    //     the chunk was genuinely returned to PDisk and not just dropped from DDisk's
+    //     own bookkeeping.
+    // ─────────────────────────────────────────────────────────────────────────
+    Y_UNIT_TEST(PersistentBufferChunkDeallocationReturnsChunkToPDisk) {
+        TDDiskTestContext f(1_MB, 128_MB, /*minFreeSectorsReserve=*/std::nullopt,
+            /*preallocateFreeSpaceThresholdPercent=*/99,
+            /*deallocateFreeSpaceThresholdPercent=*/90,
+            /*deallocateThresholdSeconds=*/1);
+        auto groups = f.AllocateDDiskBlockGroup();
+        auto& node = groups.begin()->GetNodes(0);
+        f.ChangeTestingNode(node);
+        f.MoveBarrier(0, 0);
+
+        auto* pdiskState = f.Env.PDiskMockStates[{f.PersId.GetNodeId(), f.PersId.GetPDiskId()}].Get();
+        UNIT_ASSERT_C(pdiskState, "PDisk mock state must exist for the persistent buffer's PDisk");
+
+        // Baseline: number of chunks owned by the PB space allocator (should be
+        // exactly PersistentBufferInitChunks == 4, matching MaxChunks=10 config).
+        auto describeFreeSpace = [&] {
+            return f.GetPBInfo(true, false)->Get()->FreeSpace.size();
+        };
+        const size_t initialOwnedChunks = describeFreeSpace();
+        UNIT_ASSERT_VALUES_EQUAL(initialOwnedChunks, 4u);
+
+        // Write enough 128-block records to push free space below the 99% threshold
+        // of the currently-owned capacity, forcing proactive allocation of an extra
+        // (5th) chunk. Each write occupies 129 sectors (128 data + 1 header); with
+        // 4 chunks * 32768 sectors = 131072 total, threshold ~= 129761 sectors, so
+        // ~12 writes (1548 sectors) push free space below the threshold.
+        std::vector<ui64> lsns;
+        for (ui32 i = 0; i < 20; ++i) {
+            const ui64 lsn = f.NextLsn;
+            f.WritePB(0, 128);
+            lsns.push_back(lsn);
+        }
+        f.Env.Sim(TDuration::Seconds(5));
+
+        const size_t ownedChunksAfterWrites = describeFreeSpace();
+        UNIT_ASSERT_C(ownedChunksAfterWrites > initialOwnedChunks,
+            TStringBuilder() << "Expected proactive allocation to grow owned chunks, got "
+                << ownedChunksAfterWrites << " (was " << initialOwnedChunks << ")");
+
+        // Capture the set of chunks with actual data at the mock PDisk level: this
+        // must include the extra, proactively-allocated chunk(s) since we wrote
+        // enough data to spill onto them.
+        const std::set<ui32> chunksAfterWrites = pdiskState->GetChunks();
+
+        // Erase every record we wrote: this frees all occupied sectors and, via
+        // ClearPersistentBufferRecords -> ProcessDeallocatePersistentBufferChunk,
+        // triggers the round-robin lock/deallocate cycle implemented in
+        // TDDiskActor::Handle(TEvPrivate::TEvDeallocatePersistentBufferChunk).
+        f.ErasePB(lsns.back(), 0);
+
+        // Give the round-robin deallocation (1 chunk per DeallocateThresholdSeconds)
+        // enough simulated time to walk through every owned chunk and release the
+        // ones that end up fully free.
+        f.Env.Sim(TDuration::Seconds(30));
+
+        const size_t ownedChunksAfterDeallocation = describeFreeSpace();
+        UNIT_ASSERT_VALUES_EQUAL_C(ownedChunksAfterDeallocation, initialOwnedChunks,
+            TStringBuilder() << "Expected owned chunks to shrink back to the initial count "
+                << initialOwnedChunks << " after erasing all data and waiting for deallocation, got "
+                << ownedChunksAfterDeallocation);
+
+        // Verify at the PDisk mock level that at least one chunk which had data
+        // written to it during the growth phase is now gone (i.e. actually
+        // released back to PDisk's free pool), not merely dropped from DDisk's
+        // internal PersistentBufferChunks bookkeeping.
+        const std::set<ui32> chunksAfterDeallocation = pdiskState->GetChunks();
+        UNIT_ASSERT_C(chunksAfterDeallocation.size() < chunksAfterWrites.size(),
+            TStringBuilder() << "Expected fewer chunks with data at the PDisk level after deallocation: before="
+                << chunksAfterWrites.size() << " after=" << chunksAfterDeallocation.size());
+
+        bool foundReleasedChunk = false;
+        for (ui32 chunkIdx : chunksAfterWrites) {
+            if (!chunksAfterDeallocation.contains(chunkIdx)) {
+                foundReleasedChunk = true;
+                break;
+            }
+        }
+        UNIT_ASSERT_C(foundReleasedChunk,
+            "At least one chunk that held persistent-buffer data must have been released back to PDisk");
     }
 }

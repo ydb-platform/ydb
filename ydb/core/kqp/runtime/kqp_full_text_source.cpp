@@ -2634,6 +2634,7 @@ private:
             YQL_ENSURE(Settings->GetQuerySettings().GetQuery().size() > 0, "Expected non-empty query");
             const auto& expr = Settings->GetQuerySettings().GetQuery();
 
+            THashMap<TStringBuf, TWordStatePtr> seen;
             for (const auto& column : Settings->GetQuerySettings().GetColumns()) {
                 for (const auto& analyzer : Settings->GetIndexDescription().GetSettings().columns()) {
                     if (analyzer.analyzers().use_filter_ngram() || analyzer.analyzers().use_filter_edge_ngram()) {
@@ -2644,9 +2645,16 @@ private:
                         size_t wordIndex = 0;
                         for (const auto& term: NFulltext::BuildSearchTermsStructured(expr, analyzer.analyzers())) {
                             YQL_ENSURE(IndexTableReader);
-                            auto word = MakeIntrusive<TWordState>(wordIndex++, term.Token, IndexTableReader, PrefixCells);
-                            word->Required = term.Required;
-                            Words.emplace_back(std::move(word));
+                            auto wordIt = seen.find(term.Token);
+                            if (wordIt != seen.end()) {
+                                // Don't add duplicate words
+                                wordIt->second->Required = wordIt->second->Required || term.Required;
+                            } else {
+                                auto word = MakeIntrusive<TWordState>(wordIndex++, term.Token, IndexTableReader, PrefixCells);
+                                word->Required = term.Required;
+                                seen[word->Word] = word;
+                                Words.emplace_back(std::move(word));
+                            }
                         }
                     }
                 }

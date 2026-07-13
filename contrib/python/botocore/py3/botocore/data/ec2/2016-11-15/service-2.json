@@ -152,7 +152,7 @@
       },
       "input":{"shape":"AssignIpv6AddressesRequest"},
       "output":{"shape":"AssignIpv6AddressesResult"},
-      "documentation":"<p>Assigns one or more IPv6 addresses to the specified network interface. You can specify one or more specific IPv6 addresses, or you can specify the number of IPv6 addresses to be automatically assigned from within the subnet's IPv6 CIDR block range. You can assign as many IPv6 addresses to a network interface as you can assign private IPv4 addresses, and the limit varies per instance type.</p> <p>You must specify either the IPv6 addresses or the IPv6 address count in the request. </p> <p>You can optionally use Prefix Delegation on the network interface. You must specify either the IPV6 Prefix Delegation prefixes, or the IPv6 Prefix Delegation count. For information, see <a href=\"https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/ec2-prefix-eni.html\"> Assigning prefixes to network interfaces</a> in the <i>Amazon EC2 User Guide</i>.</p>"
+      "documentation":"<p>Assigns the specified IPv6 addresses to the specified network interface. You can specify specific IPv6 addresses, or you can specify the number of IPv6 addresses to be automatically assigned from the subnet's IPv6 CIDR block range. You can assign as many IPv6 addresses to a network interface as you can assign private IPv4 addresses, and the limit varies by instance type.</p> <p>You must specify either the IPv6 addresses or the IPv6 address count in the request. </p> <p>You can optionally use Prefix Delegation on the network interface. You must specify either the IPV6 Prefix Delegation prefixes, or the IPv6 Prefix Delegation count. For information, see <a href=\"https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/ec2-prefix-eni.html\"> Assigning prefixes to network interfaces</a> in the <i>Amazon EC2 User Guide</i>.</p>"
     },
     "AssignPrivateIpAddresses":{
       "name":"AssignPrivateIpAddresses",
@@ -162,7 +162,7 @@
       },
       "input":{"shape":"AssignPrivateIpAddressesRequest"},
       "output":{"shape":"AssignPrivateIpAddressesResult"},
-      "documentation":"<p>Assigns one or more secondary private IP addresses to the specified network interface.</p> <p>You can specify one or more specific secondary IP addresses, or you can specify the number of secondary IP addresses to be automatically assigned within the subnet's CIDR block range. The number of secondary IP addresses that you can assign to an instance varies by instance type. For more information about Elastic IP addresses, see <a href=\"https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/elastic-ip-addresses-eip.html\">Elastic IP Addresses</a> in the <i>Amazon EC2 User Guide</i>.</p> <p>When you move a secondary private IP address to another network interface, any Elastic IP address that is associated with the IP address is also moved.</p> <p>Remapping an IP address is an asynchronous operation. When you move an IP address from one network interface to another, check <code>network/interfaces/macs/mac/local-ipv4s</code> in the instance metadata to confirm that the remapping is complete.</p> <p>You must specify either the IP addresses or the IP address count in the request.</p> <p>You can optionally use Prefix Delegation on the network interface. You must specify either the IPv4 Prefix Delegation prefixes, or the IPv4 Prefix Delegation count. For information, see <a href=\"https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/ec2-prefix-eni.html\"> Assigning prefixes to network interfaces</a> in the <i>Amazon EC2 User Guide</i>.</p>"
+      "documentation":"<p>Assigns the specified secondary private IP addresses to the specified network interface.</p> <p>You can specify specific secondary IP addresses, or you can specify the number of secondary IP addresses to be automatically assigned from the subnet's CIDR block range. The number of secondary IP addresses that you can assign to an instance varies by instance type. For more information about Elastic IP addresses, see <a href=\"https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/elastic-ip-addresses-eip.html\">Elastic IP Addresses</a> in the <i>Amazon EC2 User Guide</i>.</p> <p>When you move a secondary private IP address to another network interface, any Elastic IP address that is associated with the IP address is also moved.</p> <p>Remapping an IP address is an asynchronous operation. When you move an IP address from one network interface to another, check <code>network/interfaces/macs/mac/local-ipv4s</code> in the instance metadata to confirm that the remapping is complete.</p> <p>You must specify either the IP addresses or the IP address count in the request.</p> <p>You can optionally use Prefix Delegation on the network interface. You must specify either the IPv4 Prefix Delegation prefixes, or the IPv4 Prefix Delegation count. For information, see <a href=\"https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/ec2-prefix-eni.html\"> Assigning prefixes to network interfaces</a> in the <i>Amazon EC2 User Guide</i>.</p>"
     },
     "AssignPrivateNatGatewayAddress":{
       "name":"AssignPrivateNatGatewayAddress",
@@ -938,7 +938,7 @@
       },
       "input":{"shape":"CreateManagedPrefixListRequest"},
       "output":{"shape":"CreateManagedPrefixListResult"},
-      "documentation":"<p>Creates a managed prefix list. You can specify one or more entries for the prefix list. Each entry consists of a CIDR block and an optional description.</p>"
+      "documentation":"<p>Creates a managed prefix list. You can specify entries for the prefix list. Each entry consists of a CIDR block and an optional description.</p>"
     },
     "CreateNatGateway":{
       "name":"CreateNatGateway",
@@ -2766,7 +2766,7 @@
       },
       "input":{"shape":"DescribeInstanceAttributeRequest"},
       "output":{"shape":"InstanceAttribute"},
-      "documentation":"<p>Describes the specified attribute of the specified instance. You can specify only one attribute at a time. Valid attribute values are: <code>instanceType</code> | <code>kernel</code> | <code>ramdisk</code> | <code>userData</code> | <code>disableApiTermination</code> | <code>instanceInitiatedShutdownBehavior</code> | <code>rootDeviceName</code> | <code>blockDeviceMapping</code> | <code>productCodes</code> | <code>sourceDestCheck</code> | <code>groupSet</code> | <code>ebsOptimized</code> | <code>sriovNetSupport</code> </p>"
+      "documentation":"<p>Describes the specified attribute of the specified instance. You can specify only one attribute at a time. </p>"
     },
     "DescribeInstanceConnectEndpoints":{
       "name":"DescribeInstanceConnectEndpoints",
@@ -3176,7 +3176,7 @@
       },
       "input":{"shape":"DescribeNetworkInterfacesRequest"},
       "output":{"shape":"DescribeNetworkInterfacesResult"},
-      "documentation":"<p>Describes one or more of your network interfaces.</p> <p>If you have a large number of network interfaces, the operation fails unless you use pagination or one of the following filters: <code>group-id</code>, <code>mac-address</code>, <code>private-dns-name</code>, <code>private-ip-address</code>, <code>private-dns-name</code>, <code>subnet-id</code>, or <code>vpc-id</code>.</p> <important> <p>We strongly recommend using only paginated requests. Unpaginated requests are susceptible to throttling and timeouts.</p> </important>"
+      "documentation":"<p>Describes the specified network interfaces or all your network interfaces.</p> <p>If you have a large number of network interfaces, the operation fails unless you use pagination or one of the following filters: <code>group-id</code>, <code>mac-address</code>, <code>private-dns-name</code>, <code>private-ip-address</code>, <code>private-dns-name</code>, <code>subnet-id</code>, or <code>vpc-id</code>.</p> <important> <p>We strongly recommend using only paginated requests. Unpaginated requests are susceptible to throttling and timeouts.</p> </important>"
     },
     "DescribePlacementGroups":{
       "name":"DescribePlacementGroups",
@@ -6469,7 +6469,7 @@
       },
       "input":{"shape":"UnassignIpv6AddressesRequest"},
       "output":{"shape":"UnassignIpv6AddressesResult"},
-      "documentation":"<p>Unassigns one or more IPv6 addresses IPv4 Prefix Delegation prefixes from a network interface.</p>"
+      "documentation":"<p>Unassigns the specified IPv6 addresses or Prefix Delegation prefixes from a network interface.</p>"
     },
     "UnassignPrivateIpAddresses":{
       "name":"UnassignPrivateIpAddresses",
@@ -6478,7 +6478,7 @@
         "requestUri":"/"
       },
       "input":{"shape":"UnassignPrivateIpAddressesRequest"},
-      "documentation":"<p>Unassigns one or more secondary private IP addresses, or IPv4 Prefix Delegation prefixes from a network interface.</p>"
+      "documentation":"<p>Unassigns the specified secondary private IP addresses or IPv4 Prefix Delegation prefixes from a network interface.</p>"
     },
     "UnassignPrivateNatGatewayAddress":{
       "name":"UnassignPrivateNatGatewayAddress",
@@ -7676,7 +7676,10 @@
     },
     "AllocationType":{
       "type":"string",
-      "enum":["used"]
+      "enum":[
+        "used",
+        "future"
+      ]
     },
     "AllowedImagesSettingsDisabledState":{
       "type":"string",
@@ -8211,7 +8214,7 @@
         },
         "Ipv6Prefixes":{
           "shape":"IpPrefixList",
-          "documentation":"<p>One or more IPv6 prefixes assigned to the network interface. You cannot use this option if you use the <code>Ipv6PrefixCount</code> option.</p>",
+          "documentation":"<p>One or more IPv6 prefixes assigned to the network interface. You can't use this option if you use the <code>Ipv6PrefixCount</code> option.</p>",
           "locationName":"Ipv6Prefix"
         },
         "NetworkInterfaceId":{
@@ -8257,12 +8260,12 @@
       "members":{
         "Ipv4Prefixes":{
           "shape":"IpPrefixList",
-          "documentation":"<p>One or more IPv4 prefixes assigned to the network interface. You cannot use this option if you use the <code>Ipv4PrefixCount</code> option.</p>",
+          "documentation":"<p>One or more IPv4 prefixes assigned to the network interface. You can't use this option if you use the <code>Ipv4PrefixCount</code> option.</p>",
           "locationName":"Ipv4Prefix"
         },
         "Ipv4PrefixCount":{
           "shape":"Integer",
-          "documentation":"<p>The number of IPv4 prefixes that Amazon Web Services automatically assigns to the network interface. You cannot use this option if you use the <code>Ipv4 Prefixes</code> option.</p>"
+          "documentation":"<p>The number of IPv4 prefixes that Amazon Web Services automatically assigns to the network interface. You can't use this option if you use the <code>Ipv4 Prefixes</code> option.</p>"
         },
         "NetworkInterfaceId":{
           "shape":"NetworkInterfaceId",
@@ -9654,7 +9657,7 @@
       "members":{
         "CidrIp":{
           "shape":"String",
-          "documentation":"<p>The IPv4 address range, in CIDR format.</p> <p>To specify an IPv6 address range, use IP permissions instead.</p> <p>To specify multiple rules and descriptions for the rules, use IP permissions instead.</p>"
+          "documentation":"<p>The IPv4 address range, in CIDR format.</p> <note> <p> Amazon Web Services <a href=\"https://en.wikipedia.org/wiki/Canonicalization\">canonicalizes</a> IPv4 and IPv6 CIDRs. For example, if you specify 100.68.0.18/18 for the CIDR block, Amazon Web Services canonicalizes the CIDR block to 100.68.0.0/18. Any subsequent DescribeSecurityGroups and DescribeSecurityGroupRules calls will return the canonicalized form of the CIDR block. Additionally, if you attempt to add another rule with the non-canonical form of the CIDR (such as 100.68.0.18/18) and there is already a rule for the canonicalized form of the CIDR block (such as 100.68.0.0/18), the API throws an duplicate rule error.</p> </note> <p>To specify an IPv6 address range, use IP permissions instead.</p> <p>To specify multiple rules and descriptions for the rules, use IP permissions instead.</p>"
         },
         "FromPort":{
           "shape":"Integer",
@@ -9767,7 +9770,7 @@
         },
         "GroupName":{
           "shape":"String",
-          "documentation":"<p> For Availability Zones, this parameter has the same value as the Region name.</p> <p>For Local Zones, the name of the associated group, for example <code>us-west-2-lax-1</code>.</p> <p>For Wavelength Zones, the name of the associated group, for example <code>us-east-1-wl1-bos-wlz-1</code>.</p>",
+          "documentation":"<p>The name of the zone group. For example:</p> <ul> <li> <p>Availability Zones - <code>us-east-1-zg-1</code> </p> </li> <li> <p>Local Zones - <code>us-west-2-lax-1</code> </p> </li> <li> <p>Wavelength Zones - <code>us-east-1-wl1-bos-wlz-1</code> </p> </li> </ul>",
           "locationName":"groupName"
         },
         "NetworkBorderGroup":{
@@ -13229,7 +13232,7 @@
         },
         "InstanceCount":{
           "shape":"Integer",
-          "documentation":"<p>The number of instances for which to reserve capacity.</p> <note> <p>You can request future-dated Capacity Reservations for an instance count with a minimum of 100 VPUs. For example, if you request a future-dated Capacity Reservation for <code>m5.xlarge</code> instances, you must request at least 25 instances (<i>25 * m5.xlarge = 100 vCPUs</i>).</p> </note> <p>Valid range: 1 - 1000</p>"
+          "documentation":"<p>The number of instances for which to reserve capacity.</p> <note> <p>You can request future-dated Capacity Reservations for an instance count with a minimum of 100 vCPUs. For example, if you request a future-dated Capacity Reservation for <code>m5.xlarge</code> instances, you must request at least 25 instances (<i>25 * m5.xlarge = 100 vCPUs</i>).</p> </note> <p>Valid range: 1 - 1000</p>"
         },
         "EbsOptimized":{
           "shape":"Boolean",
@@ -13797,7 +13800,8 @@
         },
         "ClientToken":{
           "shape":"String",
-          "documentation":"<p>Unique, case-sensitive identifier that you provide to ensure the idempotency of the request. For more information, see <a href=\"https://docs.aws.amazon.com/AWSEC2/latest/APIReference/Run_Instance_Idempotency.html\">Ensuring idempotency</a>.</p>"
+          "documentation":"<p>Unique, case-sensitive identifier that you provide to ensure the idempotency of the request. If you do not specify a client token, a randomly generated token is used for the request to ensure idempotency.</p> <p>For more information, see <a href=\"https://docs.aws.amazon.com/AWSEC2/latest/APIReference/Run_Instance_Idempotency.html\">Ensuring idempotency</a>.</p>",
+          "idempotencyToken":true
         },
         "SpotOptions":{
           "shape":"SpotOptionsRequest",
@@ -15177,7 +15181,7 @@
         },
         "Groups":{
           "shape":"SecurityGroupIdStringList",
-          "documentation":"<p>The IDs of one or more security groups.</p>",
+          "documentation":"<p>The IDs of the security groups.</p>",
           "locationName":"SecurityGroupId"
         },
         "PrivateIpAddresses":{
@@ -20392,7 +20396,7 @@
         },
         "Filters":{
           "shape":"FilterList",
-          "documentation":"<p>The filters.</p> <ul> <li> <p> <code>group-name</code> - For Availability Zones, use the Region name. For Local Zones, use the name of the group associated with the Local Zone (for example, <code>us-west-2-lax-1</code>) For Wavelength Zones, use the name of the group associated with the Wavelength Zone (for example, <code>us-east-1-wl1</code>).</p> </li> <li> <p> <code>message</code> - The Zone message.</p> </li> <li> <p> <code>opt-in-status</code> - The opt-in status (<code>opted-in</code> | <code>not-opted-in</code> | <code>opt-in-not-required</code>).</p> </li> <li> <p> <code>parent-zone-id</code> - The ID of the zone that handles some of the Local Zone and Wavelength Zone control plane operations, such as API calls.</p> </li> <li> <p> <code>parent-zone-name</code> - The ID of the zone that handles some of the Local Zone and Wavelength Zone control plane operations, such as API calls.</p> </li> <li> <p> <code>region-name</code> - The name of the Region for the Zone (for example, <code>us-east-1</code>).</p> </li> <li> <p> <code>state</code> - The state of the Availability Zone, the Local Zone, or the Wavelength Zone (<code>available</code>).</p> </li> <li> <p> <code>zone-id</code> - The ID of the Availability Zone (for example, <code>use1-az1</code>), the Local Zone (for example, <code>usw2-lax1-az1</code>), or the Wavelength Zone (for example, <code>us-east-1-wl1-bos-wlz-1</code>).</p> </li> <li> <p> <code>zone-name</code> - The name of the Availability Zone (for example, <code>us-east-1a</code>), the Local Zone (for example, <code>us-west-2-lax-1a</code>), or the Wavelength Zone (for example, <code>us-east-1-wl1-bos-wlz-1</code>).</p> </li> <li> <p> <code>zone-type</code> - The type of zone (<code>availability-zone</code> | <code>local-zone</code> | <code>wavelength-zone</code>).</p> </li> </ul>",
+          "documentation":"<p>The filters.</p> <ul> <li> <p> <code>group-name</code> - The name of the zone group for the Availability Zone (for example, <code>us-east-1-zg-1</code>), the Local Zone (for example, <code>us-west-2-lax-1</code>), or the Wavelength Zone (for example, <code>us-east-1-wl1</code>).</p> </li> <li> <p> <code>message</code> - The Zone message.</p> </li> <li> <p> <code>opt-in-status</code> - The opt-in status (<code>opted-in</code> | <code>not-opted-in</code> | <code>opt-in-not-required</code>).</p> </li> <li> <p> <code>parent-zone-id</code> - The ID of the zone that handles some of the Local Zone and Wavelength Zone control plane operations, such as API calls.</p> </li> <li> <p> <code>parent-zone-name</code> - The ID of the zone that handles some of the Local Zone and Wavelength Zone control plane operations, such as API calls.</p> </li> <li> <p> <code>region-name</code> - The name of the Region for the Zone (for example, <code>us-east-1</code>).</p> </li> <li> <p> <code>state</code> - The state of the Availability Zone, the Local Zone, or the Wavelength Zone (<code>available</code>).</p> </li> <li> <p> <code>zone-id</code> - The ID of the Availability Zone (for example, <code>use1-az1</code>), the Local Zone (for example, <code>usw2-lax1-az1</code>), or the Wavelength Zone (for example, <code>us-east-1-wl1-bos-wlz-1</code>).</p> </li> <li> <p> <code>zone-name</code> - The name of the Availability Zone (for example, <code>us-east-1a</code>), the Local Zone (for example, <code>us-west-2-lax-1a</code>), or the Wavelength Zone (for example, <code>us-east-1-wl1-bos-wlz-1</code>).</p> </li> <li> <p> <code>zone-type</code> - The type of zone (<code>availability-zone</code> | <code>local-zone</code> | <code>wavelength-zone</code>).</p> </li> </ul>",
           "locationName":"Filter"
         }
       }
@@ -22465,7 +22469,7 @@
         },
         "Attribute":{
           "shape":"InstanceAttributeName",
-          "documentation":"<p>The instance attribute.</p> <p>Note: The <code>enaSupport</code> attribute is not supported at this time.</p>",
+          "documentation":"<p>The instance attribute.</p> <p>Note that the <code>enaSupport</code> attribute is not supported.</p>",
           "locationName":"attribute"
         }
       }
@@ -27197,7 +27201,7 @@
         },
         "Filters":{
           "shape":"FilterList",
-          "documentation":"<p>The filters.</p> <ul> <li> <p> <code>ip-address-type</code> - The IP address type (<code>ipv4</code> | <code>ipv6</code>).</p> </li> <li> <p> <code>service-name</code> - The name of the service.</p> </li> <li> <p> <code>service-region</code> - The Region of the service.</p> </li> <li> <p> <code>tag</code>:&lt;key&gt; - The key/value combination of a tag assigned to the resource. Use the tag key in the filter name and the tag value as the filter value. For example, to find all resources that have a tag with the key <code>Owner</code> and the value <code>TeamA</code>, specify <code>tag:Owner</code> for the filter name and <code>TeamA</code> for the filter value.</p> </li> <li> <p> <code>tag-key</code> - The key of a tag assigned to the resource. Use this filter to find all resources assigned a tag with a specific key, regardless of the tag value.</p> </li> <li> <p> <code>vpc-id</code> - The ID of the VPC in which the endpoint resides.</p> </li> <li> <p> <code>vpc-endpoint-id</code> - The ID of the endpoint.</p> </li> <li> <p> <code>vpc-endpoint-state</code> - The state of the endpoint (<code>pendingAcceptance</code> | <code>pending</code> | <code>available</code> | <code>deleting</code> | <code>deleted</code> | <code>rejected</code> | <code>failed</code>).</p> </li> <li> <p> <code>vpc-endpoint-type</code> - The type of VPC endpoint (<code>Interface</code> | <code>Gateway</code> | <code>GatewayLoadBalancer</code>).</p> </li> </ul>",
+          "documentation":"<p>The filters.</p> <ul> <li> <p> <code>ip-address-type</code> - The IP address type (<code>ipv4</code> | <code>ipv6</code>).</p> </li> <li> <p> <code>service-name</code> - The name of the service.</p> </li> <li> <p> <code>service-region</code> - The Region of the service.</p> </li> <li> <p> <code>tag</code>:&lt;key&gt; - The key/value combination of a tag assigned to the resource. Use the tag key in the filter name and the tag value as the filter value. For example, to find all resources that have a tag with the key <code>Owner</code> and the value <code>TeamA</code>, specify <code>tag:Owner</code> for the filter name and <code>TeamA</code> for the filter value.</p> </li> <li> <p> <code>tag-key</code> - The key of a tag assigned to the resource. Use this filter to find all resources assigned a tag with a specific key, regardless of the tag value.</p> </li> <li> <p> <code>vpc-id</code> - The ID of the VPC in which the endpoint resides.</p> </li> <li> <p> <code>vpc-endpoint-id</code> - The ID of the endpoint.</p> </li> <li> <p> <code>vpc-endpoint-state</code> - The state of the endpoint (<code>pendingAcceptance</code> | <code>pending</code> | <code>available</code> | <code>deleting</code> | <code>deleted</code> | <code>rejected</code> | <code>failed</code>).</p> </li> <li> <p> <code>vpc-endpoint-type</code> - The type of VPC endpoint (<code>Interface</code> | <code>Gateway</code> | <code>GatewayLoadBalancer</code> | <code>Resource</code> | <code>ServiceNetwork</code>).</p> </li> </ul>",
           "locationName":"Filter"
         },
         "MaxResults":{
@@ -30478,7 +30482,7 @@
         },
         "EventSubType":{
           "shape":"String",
-          "documentation":"<p>The event.</p> <p> <code>error</code> events:</p> <ul> <li> <p> <code>iamFleetRoleInvalid</code> - The EC2 Fleet or Spot Fleet does not have the required permissions either to launch or terminate an instance.</p> </li> <li> <p> <code>allLaunchSpecsTemporarilyBlacklisted</code> - None of the configurations are valid, and several attempts to launch instances have failed. For more information, see the description of the event.</p> </li> <li> <p> <code>spotInstanceCountLimitExceeded</code> - You've reached the limit on the number of Spot Instances that you can launch.</p> </li> <li> <p> <code>spotFleetRequestConfigurationInvalid</code> - The configuration is not valid. For more information, see the description of the event.</p> </li> </ul> <p> <code>fleetRequestChange</code> events:</p> <ul> <li> <p> <code>active</code> - The EC2 Fleet or Spot Fleet request has been validated and Amazon EC2 is attempting to maintain the target number of running instances.</p> </li> <li> <p> <code>deleted</code> (EC2 Fleet) / <code>cancelled</code> (Spot Fleet) - The EC2 Fleet is deleted or the Spot Fleet request is canceled and has no running instances. The EC2 Fleet or Spot Fleet will be deleted two days after its instances are terminated.</p> </li> <li> <p> <code>deleted_running</code> (EC2 Fleet) / <code>cancelled_running</code> (Spot Fleet) - The EC2 Fleet is deleted or the Spot Fleet request is canceled and does not launch additional instances. Its existing instances continue to run until they are interrupted or terminated. The request remains in this state until all instances are interrupted or terminated.</p> </li> <li> <p> <code>deleted_terminating</code> (EC2 Fleet) / <code>cancelled_terminating</code> (Spot Fleet) - The EC2 Fleet is deleted or the Spot Fleet request is canceled and its instances are terminating. The request remains in this state until all instances are terminated.</p> </li> <li> <p> <code>expired</code> - The EC2 Fleet or Spot Fleet request has expired. If the request was created with <code>TerminateInstancesWithExpiration</code> set, a subsequent <code>terminated</code> event indicates that the instances are terminated.</p> </li> <li> <p> <code>modify_in_progress</code> - The EC2 Fleet or Spot Fleet request is being modified. The request remains in this state until the modification is fully processed.</p> </li> <li> <p> <code>modify_succeeded</code> - The EC2 Fleet or Spot Fleet request was modified.</p> </li> <li> <p> <code>submitted</code> - The EC2 Fleet or Spot Fleet request is being evaluated and Amazon EC2 is preparing to launch the target number of instances.</p> </li> <li> <p> <code>progress</code> - The EC2 Fleet or Spot Fleet request is in the process of being fulfilled.</p> </li> </ul> <p> <code>instanceChange</code> events:</p> <ul> <li> <p> <code>launched</code> - A new instance was launched.</p> </li> <li> <p> <code>terminated</code> - An instance was terminated by the user.</p> </li> <li> <p> <code>termination_notified</code> - An instance termination notification was sent when a Spot Instance was terminated by Amazon EC2 during scale-down, when the target capacity of the fleet was modified down, for example, from a target capacity of 4 to a target capacity of 3.</p> </li> </ul> <p> <code>Information</code> events:</p> <ul> <li> <p> <code>fleetProgressHalted</code> - The price in every launch specification is not valid because it is below the Spot price (all the launch specifications have produced <code>launchSpecUnusable</code> events). A launch specification might become valid if the Spot price changes.</p> </li> <li> <p> <code>launchSpecTemporarilyBlacklisted</code> - The configuration is not valid and several attempts to launch instances have failed. For more information, see the description of the event.</p> </li> <li> <p> <code>launchSpecUnusable</code> - The price in a launch specification is not valid because it is below the Spot price.</p> </li> <li> <p> <code>registerWithLoadBalancersFailed</code> - An attempt to register instances with load balancers failed. For more information, see the description of the event.</p> </li> </ul>",
+          "documentation":"<p>The event.</p> <p> <code>error</code> events:</p> <ul> <li> <p> <code>iamFleetRoleInvalid</code> - The EC2 Fleet or Spot Fleet does not have the required permissions either to launch or terminate an instance.</p> </li> <li> <p> <code>allLaunchSpecsTemporarilyBlacklisted</code> - None of the configurations are valid, and several attempts to launch instances have failed. For more information, see the description of the event.</p> </li> <li> <p> <code>spotInstanceCountLimitExceeded</code> - You've reached the limit on the number of Spot Instances that you can launch.</p> </li> <li> <p> <code>spotFleetRequestConfigurationInvalid</code> - The configuration is not valid. For more information, see the description of the event.</p> </li> </ul> <p> <code>fleetRequestChange</code> events:</p> <ul> <li> <p> <code>active</code> - The EC2 Fleet or Spot Fleet request has been validated and Amazon EC2 is attempting to maintain the target number of running instances.</p> </li> <li> <p> <code>deleted</code> (EC2 Fleet) / <code>cancelled</code> (Spot Fleet) - The EC2 Fleet is deleted or the Spot Fleet request is canceled and has no running instances. The EC2 Fleet or Spot Fleet will be deleted two days after its instances are terminated.</p> </li> <li> <p> <code>deleted_running</code> (EC2 Fleet) / <code>cancelled_running</code> (Spot Fleet) - The EC2 Fleet is deleted or the Spot Fleet request is canceled and does not launch additional instances. Its existing instances continue to run until they are interrupted or terminated. The request remains in this state until all instances are interrupted or terminated.</p> </li> <li> <p> <code>deleted_terminating</code> (EC2 Fleet) / <code>cancelled_terminating</code> (Spot Fleet) - The EC2 Fleet is deleted or the Spot Fleet request is canceled and its instances are terminating. The request remains in this state until all instances are terminated.</p> </li> <li> <p> <code>expired</code> - The EC2 Fleet or Spot Fleet request has expired. If the request was created with <code>TerminateInstancesWithExpiration</code> set, a subsequent <code>terminated</code> event indicates that the instances are terminated.</p> </li> <li> <p> <code>modify_in_progress</code> - The EC2 Fleet or Spot Fleet request is being modified. The request remains in this state until the modification is fully processed.</p> </li> <li> <p> <code>modify_succeeded</code> - The EC2 Fleet or Spot Fleet request was modified.</p> </li> <li> <p> <code>submitted</code> - The EC2 Fleet or Spot Fleet request is being evaluated and Amazon EC2 is preparing to launch the target number of instances.</p> </li> <li> <p> <code>progress</code> - The EC2 Fleet or Spot Fleet request is in the process of being fulfilled.</p> </li> </ul> <p> <code>instanceChange</code> events:</p> <ul> <li> <p> <code>launched</code> - A new instance was launched.</p> </li> <li> <p> <code>terminated</code> - An instance was terminated by the user.</p> </li> <li> <p> <code>termination_notified</code> - An instance termination notification was sent when a Spot Instance was terminated by Amazon EC2 during scale-down, when the target capacity of the fleet was modified down, for example, from a target capacity of 4 to a target capacity of 3.</p> </li> </ul> <p> <code>Information</code> events:</p> <ul> <li> <p> <code>fleetProgressHalted</code> - The price in every launch specification is not valid because it is below the Spot price (all the launch specifications have produced <code>launchSpecUnusable</code> events). A launch specification might become valid if the Spot price changes.</p> </li> <li> <p> <code>launchSpecTemporarilyBlacklisted</code> - The configuration is not valid and several attempts to launch instances have failed. For more information, see the description of the event.</p> </li> <li> <p> <code>launchSpecUnusable</code> - The price specified in a launch specification is not valid because it is below the Spot price for the requested Spot pools.</p> <p>Note: Even if a fleet with the <code>maintain</code> request type is in the process of being canceled, it may still publish a <code>launchSpecUnusable</code> event. This does not mean that the canceled fleet is attempting to launch a new instance.</p> </li> <li> <p> <code>registerWithLoadBalancersFailed</code> - An attempt to register instances with load balancers failed. For more information, see the description of the event.</p> </li> </ul>",
           "locationName":"eventSubType"
         },
         "InstanceId":{
@@ -36947,7 +36951,7 @@
         },
         "DisableApiTermination":{
           "shape":"AttributeBooleanValue",
-          "documentation":"<p>If the value is <code>true</code>, you can't terminate the instance through the Amazon EC2 console, CLI, or API; otherwise, you can.</p>",
+          "documentation":"<p>Indicates whether termination protection is enabled. If the value is <code>true</code>, you can't terminate the instance using the Amazon EC2 console, command line tools, or API.</p>",
           "locationName":"disableApiTermination"
         },
         "EnaSupport":{
@@ -36957,7 +36961,7 @@
         },
         "EnclaveOptions":{
           "shape":"EnclaveOptions",
-          "documentation":"<p>To enable the instance for Amazon Web Services Nitro Enclaves, set this parameter to <code>true</code>; otherwise, set it to <code>false</code>.</p>",
+          "documentation":"<p>Indicates whether the instance is enabled for Amazon Web Services Nitro Enclaves.</p>",
           "locationName":"enclaveOptions"
         },
         "EbsOptimized":{
@@ -36987,7 +36991,7 @@
         },
         "ProductCodes":{
           "shape":"ProductCodeList",
-          "documentation":"<p>A list of product codes.</p>",
+          "documentation":"<p>The product codes.</p>",
           "locationName":"productCodes"
         },
         "RamdiskId":{
@@ -37002,7 +37006,7 @@
         },
         "SourceDestCheck":{
           "shape":"AttributeBooleanValue",
-          "documentation":"<p>Enable or disable source/destination checks, which ensure that the instance is either the source or the destination of any traffic that it receives. If the value is <code>true</code>, source/destination checks are enabled; otherwise, they are disabled. The default value is <code>true</code>. You must disable source/destination checks if the instance runs services such as network address translation, routing, or firewalls.</p>",
+          "documentation":"<p>Indicates whether source/destination checks are enabled.</p>",
           "locationName":"sourceDestCheck"
         },
         "SriovNetSupport":{
@@ -37017,7 +37021,7 @@
         },
         "DisableApiStop":{
           "shape":"AttributeBooleanValue",
-          "documentation":"<p>To enable the instance for Amazon Web Services Stop Protection, set this parameter to <code>true</code>; otherwise, set it to <code>false</code>.</p>",
+          "documentation":"<p>Indicates whether stop protection is enabled for the instance.</p>",
           "locationName":"disableApiStop"
         },
         "Groups":{
@@ -38319,7 +38323,7 @@
         },
         "AcceleratorTypes":{
           "shape":"AcceleratorTypeSet",
-          "documentation":"<p>The accelerator types that must be on the instance type.</p> <ul> <li> <p>For instance types with GPU accelerators, specify <code>gpu</code>.</p> </li> <li> <p>For instance types with FPGA accelerators, specify <code>fpga</code>.</p> </li> </ul> <p>Default: Any accelerator type</p>",
+          "documentation":"<p>The accelerator types that must be on the instance type.</p> <ul> <li> <p>For instance types with FPGA accelerators, specify <code>fpga</code>.</p> </li> <li> <p>For instance types with GPU accelerators, specify <code>gpu</code>.</p> </li> <li> <p>For instance types with Inference accelerators, specify <code>inference</code>.</p> </li> </ul> <p>Default: Any accelerator type</p>",
           "locationName":"acceleratorTypeSet"
         },
         "AcceleratorCount":{
@@ -38442,7 +38446,7 @@
         },
         "AcceleratorTypes":{
           "shape":"AcceleratorTypeSet",
-          "documentation":"<p>The accelerator types that must be on the instance type.</p> <ul> <li> <p>To include instance types with GPU hardware, specify <code>gpu</code>.</p> </li> <li> <p>To include instance types with FPGA hardware, specify <code>fpga</code>.</p> </li> </ul> <p>Default: Any accelerator type</p>",
+          "documentation":"<p>The accelerator types that must be on the instance type.</p> <ul> <li> <p>For instance types with FPGA accelerators, specify <code>fpga</code>.</p> </li> <li> <p>For instance types with GPU accelerators, specify <code>gpu</code>.</p> </li> <li> <p>For instance types with Inference accelerators, specify <code>inference</code>.</p> </li> </ul> <p>Default: Any accelerator type</p>",
           "locationName":"AcceleratorType"
         },
         "AcceleratorCount":{
@@ -39707,7 +39711,15 @@
         "i8g.12xlarge",
         "i8g.16xlarge",
         "i8g.24xlarge",
-        "i8g.metal-24xl"
+        "i8g.metal-24xl",
+        "u7i-6tb.112xlarge",
+        "u7i-8tb.112xlarge",
+        "u7inh-32tb.480xlarge",
+        "p5e.48xlarge",
+        "p5en.48xlarge",
+        "f2.12xlarge",
+        "f2.48xlarge",
+        "trn2.48xlarge"
       ]
     },
     "InstanceTypeHypervisor":{
@@ -40168,7 +40180,7 @@
         },
         "CidrIp":{
           "shape":"String",
-          "documentation":"<p>The IPv4 address range. You can either specify a CIDR block or a source security group, not both. To specify a single IPv4 address, use the /32 prefix length.</p>",
+          "documentation":"<p>The IPv4 address range. You can either specify a CIDR block or a source security group, not both. To specify a single IPv4 address, use the /32 prefix length.</p> <note> <p> Amazon Web Services <a href=\"https://en.wikipedia.org/wiki/Canonicalization\">canonicalizes</a> IPv4 and IPv6 CIDRs. For example, if you specify 100.68.0.18/18 for the CIDR block, Amazon Web Services canonicalizes the CIDR block to 100.68.0.0/18. Any subsequent DescribeSecurityGroups and DescribeSecurityGroupRules calls will return the canonicalized form of the CIDR block. Additionally, if you attempt to add another rule with the non-canonical form of the CIDR (such as 100.68.0.18/18) and there is already a rule for the canonicalized form of the CIDR block (such as 100.68.0.0/18), the API throws an duplicate rule error.</p> </note>",
           "locationName":"cidrIp"
         }
       },
@@ -41874,7 +41886,7 @@
           "documentation":"<p>The IPv6 prefix.</p>"
         }
       },
-      "documentation":"<p>Describes the IPv4 prefix option for a network interface.</p>"
+      "documentation":"<p>Describes the IPv6 prefix option for a network interface.</p>"
     },
     "Ipv6PrefixSpecificationResponse":{
       "type":"structure",
@@ -41904,7 +41916,7 @@
         },
         "CidrIpv6":{
           "shape":"String",
-          "documentation":"<p>The IPv6 address range. You can either specify a CIDR block or a source security group, not both. To specify a single IPv6 address, use the /128 prefix length.</p>",
+          "documentation":"<p>The IPv6 address range. You can either specify a CIDR block or a source security group, not both. To specify a single IPv6 address, use the /128 prefix length.</p> <note> <p> Amazon Web Services <a href=\"https://en.wikipedia.org/wiki/Canonicalization\">canonicalizes</a> IPv4 and IPv6 CIDRs. For example, if you specify 100.68.0.18/18 for the CIDR block, Amazon Web Services canonicalizes the CIDR block to 100.68.0.0/18. Any subsequent DescribeSecurityGroups and DescribeSecurityGroupRules calls will return the canonicalized form of the CIDR block. Additionally, if you attempt to add another rule with the non-canonical form of the CIDR (such as 100.68.0.18/18) and there is already a rule for the canonicalized form of the CIDR block (such as 100.68.0.0/18), the API throws an duplicate rule error.</p> </note>",
           "locationName":"cidrIpv6"
         }
       },
@@ -45245,7 +45257,7 @@
         },
         "DisableApiTermination":{
           "shape":"AttributeBooleanValue",
-          "documentation":"<p>If the value is <code>true</code>, you can't terminate the instance using the Amazon EC2 console, CLI, or API; otherwise, you can. You cannot use this parameter for Spot Instances.</p>",
+          "documentation":"<p>Enable or disable termination protection for the instance. If the value is <code>true</code>, you can't terminate the instance using the Amazon EC2 console, command line interface, or API. You can't enable termination protection for Spot Instances.</p>",
           "locationName":"disableApiTermination"
         },
         "InstanceType":{
@@ -45856,12 +45868,12 @@
         },
         "AddOrganizationalUnitExclusions":{
           "shape":"AddIpamOrganizationalUnitExclusionSet",
-          "documentation":"<p>Add an Organizational Unit (OU) exclusion to your IPAM. If your IPAM is integrated with Amazon Web Services Organizations and you add an organizational unit (OU) exclusion, IPAM will not manage the IP addresses in accounts in that OU exclusion. There is a limit on the number of exclusions you can create. For more information, see <a href=\"https://docs.aws.amazon.com/vpc/latest/ipam/quotas-ipam.html\">Quotas for your IPAM</a> in the <i>Amazon VPC IPAM User Guide</i>.</p>",
+          "documentation":"<p>Add an Organizational Unit (OU) exclusion to your IPAM. If your IPAM is integrated with Amazon Web Services Organizations and you add an organizational unit (OU) exclusion, IPAM will not manage the IP addresses in accounts in that OU exclusion. There is a limit on the number of exclusions you can create. For more information, see <a href=\"https://docs.aws.amazon.com/vpc/latest/ipam/quotas-ipam.html\">Quotas for your IPAM</a> in the <i>Amazon VPC IPAM User Guide</i>.</p> <note> <p>The resulting set of exclusions must not result in \"overlap\", meaning two or more OU exclusions must not exclude the same OU. For more information and examples, see the Amazon Web Services CLI request process in <a href=\"https://docs.aws.amazon.com/vpc/latest/ipam/exclude-ous.html#exclude-ous-create-delete\">Add or remove OU exclusions </a> in the <i>Amazon VPC User Guide</i>.</p> </note>",
           "locationName":"AddOrganizationalUnitExclusion"
         },
         "RemoveOrganizationalUnitExclusions":{
           "shape":"RemoveIpamOrganizationalUnitExclusionSet",
-          "documentation":"<p>Remove an Organizational Unit (OU) exclusion to your IPAM. If your IPAM is integrated with Amazon Web Services Organizations and you add an organizational unit (OU) exclusion, IPAM will not manage the IP addresses in accounts in that OU exclusion. There is a limit on the number of exclusions you can create. For more information, see <a href=\"https://docs.aws.amazon.com/vpc/latest/ipam/quotas-ipam.html\">Quotas for your IPAM</a> in the <i>Amazon VPC IPAM User Guide</i>.</p>",
+          "documentation":"<p>Remove an Organizational Unit (OU) exclusion to your IPAM. If your IPAM is integrated with Amazon Web Services Organizations and you add an organizational unit (OU) exclusion, IPAM will not manage the IP addresses in accounts in that OU exclusion. There is a limit on the number of exclusions you can create. For more information, see <a href=\"https://docs.aws.amazon.com/vpc/latest/ipam/quotas-ipam.html\">Quotas for your IPAM</a> in the <i>Amazon VPC IPAM User Guide</i>.</p> <note> <p>The resulting set of exclusions must not result in \"overlap\", meaning two or more OU exclusions must not exclude the same OU. For more information and examples, see the Amazon Web Services CLI request process in <a href=\"https://docs.aws.amazon.com/vpc/latest/ipam/exclude-ous.html#exclude-ous-create-delete\">Add or remove OU exclusions </a> in the <i>Amazon VPC User Guide</i>.</p> </note>",
           "locationName":"RemoveOrganizationalUnitExclusion"
         }
       }
@@ -53075,7 +53087,7 @@
         },
         "DisableApiTermination":{
           "shape":"Boolean",
-          "documentation":"<p>If you set this parameter to <code>true</code>, you can't terminate the instance using the Amazon EC2 console, CLI, or API; otherwise, you can. To change this attribute after launch, use <a href=\"https://docs.aws.amazon.com/AWSEC2/latest/APIReference/API_ModifyInstanceAttribute.html\">ModifyInstanceAttribute</a>. Alternatively, if you set <code>InstanceInitiatedShutdownBehavior</code> to <code>terminate</code>, you can terminate the instance by running the shutdown command from the instance.</p>"
+          "documentation":"<p>Indicates whether termination protection is enabled for the instance. The default is <code>false</code>, which means that you can terminate the instance using the Amazon EC2 console, command line tools, or API. You can enable termination protection when you launch an instance, while the instance is running, or while the instance is stopped.</p>"
         },
         "InstanceInitiatedShutdownBehavior":{
           "shape":"ShutdownBehavior",
@@ -55452,7 +55464,7 @@
         },
         "DisableApiTermination":{
           "shape":"Boolean",
-          "documentation":"<p>If you set this parameter to <code>true</code>, you can't terminate the instance using the Amazon EC2 console, CLI, or API; otherwise, you can. To change this attribute after launch, use <a href=\"https://docs.aws.amazon.com/AWSEC2/latest/APIReference/API_ModifyInstanceAttribute.html\">ModifyInstanceAttribute</a>. Alternatively, if you set <code>InstanceInitiatedShutdownBehavior</code> to <code>terminate</code>, you can terminate the instance by running the shutdown command from the instance.</p> <p>Default: <code>false</code> </p>",
+          "documentation":"<p>Indicates whether termination protection is enabled for the instance. The default is <code>false</code>, which means that you can terminate the instance using the Amazon EC2 console, command line tools, or API. You can enable termination protection when you launch an instance, while the instance is running, or while the instance is stopped.</p>",
           "locationName":"disableApiTermination"
         },
         "InstanceInitiatedShutdownBehavior":{
@@ -56566,7 +56578,7 @@
           "documentation":"<p>The description of the security group rule.</p>"
         }
       },
-      "documentation":"<p>Describes a security group rule.</p> <p>You must specify exactly one of the following parameters, based on the rule type:</p> <ul> <li> <p>CidrIpv4</p> </li> <li> <p>CidrIpv6</p> </li> <li> <p>PrefixListId</p> </li> <li> <p>ReferencedGroupId</p> </li> </ul> <p>When you modify a rule, you cannot change the rule type. For example, if the rule uses an IPv4 address range, you must use <code>CidrIpv4</code> to specify a new IPv4 address range.</p>"
+      "documentation":"<p>Describes a security group rule.</p> <p>You must specify exactly one of the following parameters, based on the rule type:</p> <ul> <li> <p>CidrIpv4</p> </li> <li> <p>CidrIpv6</p> </li> <li> <p>PrefixListId</p> </li> <li> <p>ReferencedGroupId</p> </li> </ul> <note> <p> Amazon Web Services <a href=\"https://en.wikipedia.org/wiki/Canonicalization\">canonicalizes</a> IPv4 and IPv6 CIDRs. For example, if you specify 100.68.0.18/18 for the CIDR block, Amazon Web Services canonicalizes the CIDR block to 100.68.0.0/18. Any subsequent DescribeSecurityGroups and DescribeSecurityGroupRules calls will return the canonicalized form of the CIDR block. Additionally, if you attempt to add another rule with the non-canonical form of the CIDR (such as 100.68.0.18/18) and there is already a rule for the canonicalized form of the CIDR block (such as 100.68.0.0/18), the API throws an duplicate rule error.</p> </note> <p>When you modify a rule, you cannot change the rule type. For example, if the rule uses an IPv4 address range, you must use <code>CidrIpv4</code> to specify a new IPv4 address range.</p>"
     },
     "SecurityGroupRuleUpdate":{
       "type":"structure",
@@ -57002,6 +57014,11 @@
           "documentation":"<p>The time stamp when the snapshot was completed.</p>",
           "locationName":"completionTime"
         },
+        "FullSnapshotSizeInBytes":{
+          "shape":"Long",
+          "documentation":"<p>The full size of the snapshot, in bytes.</p> <important> <p>This is <b>not</b> the incremental size of the snapshot. This is the full snapshot size and represents the size of all the blocks that were written to the source volume at the time the snapshot was created.</p> </important>",
+          "locationName":"fullSnapshotSizeInBytes"
+        },
         "SnapshotId":{
           "shape":"String",
           "documentation":"<p>The ID of the snapshot. Each snapshot receives a unique identifier when it is created.</p>",
@@ -57274,7 +57291,7 @@
         },
         "RecycleBinEnterTime":{
           "shape":"MillisecondDateTime",
-          "documentation":"<p>The date and time when the snaphsot entered the Recycle Bin.</p>",
+          "documentation":"<p>The date and time when the snapshot entered the Recycle Bin.</p>",
           "locationName":"recycleBinEnterTime"
         },
         "RecycleBinExitTime":{
@@ -58024,7 +58041,7 @@
       "members":{
         "MaxPrice":{
           "shape":"String",
-          "documentation":"<p>The maximum hourly price that you're willing to pay for a Spot Instance. We do not recommend using this parameter because it can lead to increased interruptions. If you do not specify this parameter, you will pay the current Spot price.</p> <important> <p>If you specify a maximum price, your Spot Instances will be interrupted more frequently than if you do not specify this parameter.</p> </important>"
+          "documentation":"<p>The maximum hourly price that you're willing to pay for a Spot Instance. We do not recommend using this parameter because it can lead to increased interruptions. If you do not specify this parameter, you will pay the current Spot price.</p> <important> <p>If you specify a maximum price, your Spot Instances will be interrupted more frequently than if you do not specify this parameter.</p> <p>If you specify a maximum price, it must be more than USD $0.001. Specifying a value below USD $0.001 will result in an <code>InvalidParameterValue</code> error message.</p> </important>"
         },
         "SpotInstanceType":{
           "shape":"SpotInstanceType",
@@ -61959,7 +61976,7 @@
         },
         "UnassignedIpv6Prefixes":{
           "shape":"IpPrefixList",
-          "documentation":"<p>The IPv4 prefixes that have been unassigned from the network interface.</p>",
+          "documentation":"<p>The IPv6 prefixes that have been unassigned from the network interface.</p>",
           "locationName":"unassignedIpv6PrefixSet"
         }
       }

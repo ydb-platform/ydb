@@ -95,7 +95,8 @@ Y_UNIT_TEST_LLVM(TestSkipNullMembersOverFlow) {
                                                                {{{3}, {}}},
                                                            });
 
-    const auto pgmReturn = pb.FromFlow(pb.SkipNullMembers(pb.ToFlow(list), {"Payload"}));
+    const auto pgmReturn = pb.FromFlow(pb.SkipNullMembers(pb.ToFlow(list, {}), {"Payload"}));
+
     const auto graph = setup.BuildGraph(pgmReturn);
 
     using TOutRow = std::tuple<TMaybe<i32>, i32>;
@@ -118,7 +119,8 @@ Y_UNIT_TEST_LLVM(TestFilterNullMembersOverFlow) {
                                                                {{{3}, {}}},
                                                            });
 
-    const auto pgmReturn = pb.FromFlow(pb.FilterNullMembers(pb.ToFlow(list), {"Payload"}));
+    const auto pgmReturn = pb.FromFlow(pb.FilterNullMembers(pb.ToFlow(list, {}), {"Payload"}));
+
     const auto graph = setup.BuildGraph(pgmReturn);
 
     using TOutRow = std::tuple<TMaybe<i32>, i32>;
@@ -141,7 +143,8 @@ Y_UNIT_TEST_LLVM(TestFilterNullMembersMultiOptionalOverFlow) {
                                                                {{{}, {{TMaybe<i32>{2}}}}},
                                                                {{{{TMaybe<i32>{}}}, {{TMaybe<i32>{}}}}}});
 
-    const auto pgmReturn = pb.FromFlow(pb.FilterNullMembers(pb.ToFlow(list), {"Payload"}));
+    const auto pgmReturn = pb.FromFlow(pb.FilterNullMembers(pb.ToFlow(list, {}), {"Payload"}));
+
     const auto graph = setup.BuildGraph(pgmReturn);
 
     using TOutRow = std::tuple<TOpt, TMaybe<i32>>;
@@ -254,7 +257,7 @@ Y_UNIT_TEST_LLVM(TestSkipNullElementsOverOverFlow) {
 
     const auto list = pb.NewList(tupleType, {data1, data2, data3, data4});
 
-    const auto pgmReturn = pb.FromFlow(pb.SkipNullElements(pb.ToFlow(list), {1U, 2U}));
+    const auto pgmReturn = pb.FromFlow(pb.SkipNullElements(pb.ToFlow(list, {}), {1U, 2U}));
 
     const auto graph = setup.BuildGraph(pgmReturn);
     const auto iterator = graph->GetValue();
@@ -281,7 +284,7 @@ Y_UNIT_TEST_LLVM(TestFilterNullElementsOverOverFlow) {
 
     const auto list = pb.NewList(tupleType, {data1, data2, data3, data4});
 
-    const auto pgmReturn = pb.FromFlow(pb.FilterNullElements(pb.ToFlow(list), {1U, 2U}));
+    const auto pgmReturn = pb.FromFlow(pb.FilterNullElements(pb.ToFlow(list, {}), {1U, 2U}));
 
     const auto graph = setup.BuildGraph(pgmReturn);
     const auto iterator = graph->GetValue();
@@ -309,7 +312,7 @@ Y_UNIT_TEST_LLVM(TestFilterNullElementsOverMultiOptionalOverFlow) {
 
     const auto list = pb.NewList(tupleType, {data1, data2, data3, data4});
 
-    const auto pgmReturn = pb.FromFlow(pb.FilterNullElements(pb.ToFlow(list), {1U, 2U}));
+    const auto pgmReturn = pb.FromFlow(pb.FilterNullElements(pb.ToFlow(list, {}), {1U, 2U}));
 
     const auto graph = setup.BuildGraph(pgmReturn);
     const auto iterator = graph->GetValue();
@@ -390,7 +393,7 @@ Y_UNIT_TEST_LLVM(TestFilterOverFlow) {
     const auto data5 = pb.NewDataLiteral<ui32>(5);
     const auto dataType = pb.NewDataType(NUdf::TDataType<ui32>::Id);
     const auto list = pb.NewList(dataType, {data0, data1, data2, data3, data4, data5});
-    const auto pgmReturn = pb.FromFlow(pb.Filter(pb.ToFlow(list),
+    const auto pgmReturn = pb.FromFlow(pb.Filter(pb.ToFlow(list, {}),
                                                  [&](TRuntimeNode item) {
                                                      return pb.Greater(pb.Unwrap(pb.Mod(item, data3), pb.NewDataLiteral<NUdf::EDataSlot::String>(""), "", 0, 0), data1);
                                                  }));
@@ -518,7 +521,7 @@ Y_UNIT_TEST_LLVM(TestSkipWhileOverFlow) {
     const auto dataType = pb.NewDataType(NUdf::TDataType<char*>::Id);
     const auto list = pb.NewList(dataType, {data0, data1, data2, data3});
 
-    const auto pgmReturn = pb.FromFlow(pb.SkipWhile(pb.ToFlow(list),
+    const auto pgmReturn = pb.FromFlow(pb.SkipWhile(pb.ToFlow(list, {}),
                                                     [&](TRuntimeNode item) {
                                                         return pb.NotEquals(item, data2);
                                                     }));
@@ -545,7 +548,7 @@ Y_UNIT_TEST_LLVM(TestTakeWhileOverFlow) {
     const auto dataType = pb.NewDataType(NUdf::TDataType<char*>::Id);
     const auto list = pb.NewList(dataType, {data0, data1, data2, data3});
 
-    const auto pgmReturn = pb.FromFlow(pb.TakeWhile(pb.ToFlow(list),
+    const auto pgmReturn = pb.FromFlow(pb.TakeWhile(pb.ToFlow(list, {}),
                                                     [&](TRuntimeNode item) {
                                                         return pb.NotEquals(item, data2);
                                                     }));
@@ -664,7 +667,7 @@ Y_UNIT_TEST_LLVM(TestSkipWhileInclusiveOverFlow) {
     const auto dataType = pb.NewDataType(NUdf::TDataType<char*>::Id);
     const auto list = pb.NewList(dataType, {data0, data1, data2, data3});
 
-    const auto pgmReturn = pb.FromFlow(pb.SkipWhileInclusive(pb.ToFlow(list),
+    const auto pgmReturn = pb.FromFlow(pb.SkipWhileInclusive(pb.ToFlow(list, {}),
                                                              [&](TRuntimeNode item) {
                                                                  return pb.NotEquals(item, data2);
                                                              }));
@@ -689,7 +692,7 @@ Y_UNIT_TEST_LLVM(TestTakeWhileInclusiveOverFlow) {
     const auto dataType = pb.NewDataType(NUdf::TDataType<char*>::Id);
     const auto list = pb.NewList(dataType, {data0, data1, data2, data3});
 
-    const auto pgmReturn = pb.FromFlow(pb.TakeWhileInclusive(pb.ToFlow(list),
+    const auto pgmReturn = pb.FromFlow(pb.TakeWhileInclusive(pb.ToFlow(list, {}),
                                                              [&](TRuntimeNode item) {
                                                                  return pb.NotEquals(item, data2);
                                                              }));

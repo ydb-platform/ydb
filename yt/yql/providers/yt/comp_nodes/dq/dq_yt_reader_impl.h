@@ -7,6 +7,7 @@
 #include <yql/essentials/providers/common/codec/yql_codec.h>
 #include <yql/essentials/minikql/mkql_node_cast.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node_codegen.h> // Y_IGNORE
+#include <yql/essentials/public/udf/udf_terminator.h>
 
 #include <yt/cpp/mapreduce/interface/common.h>
 #include <yt/cpp/mapreduce/interface/errors.h>
@@ -20,6 +21,8 @@
 
 #include <util/generic/size_literals.h>
 #include <util/stream/output.h>
+
+#include <exception>
 
 namespace NYql::NDqs {
 
@@ -63,23 +66,29 @@ public:
         virtual ~TState() = default;
 
         NUdf::TUnboxedValuePod FetchRecord() {
-            if (!AtStart_) {
-                IS::Next();
-            }
-            AtStart_ = false;
+            try {
+                if (!AtStart_) {
+                    IS::Next();
+                }
+                AtStart_ = false;
 
-            if (!IS::IsValid()) {
-                IS::Finish();
-                return NUdf::TUnboxedValuePod::MakeFinish();
-            }
+                if (!IS::IsValid()) {
+                    IS::Finish();
+                    return NUdf::TUnboxedValuePod::MakeFinish();
+                }
 
-            if (Yield_) {
-                Yield_ = false;
-                AtStart_ = true;
-                return NUdf::TUnboxedValuePod::MakeYield();
-            }
+                if (Yield_) {
+                    Yield_ = false;
+                    AtStart_ = true;
+                    return NUdf::TUnboxedValuePod::MakeYield();
+                }
 
-            return IS::GetCurrent().Release();
+                return IS::GetCurrent().Release();
+            } catch (const NYT::TErrorResponse& e) {
+                UdfTerminate(e.GetError().ShortDescription().c_str());
+            } catch (const std::exception& error) {
+                UdfTerminate(error.what());
+            }
         }
 
     private:
@@ -88,7 +97,13 @@ public:
     };
 
     void MakeState(TComputationContext& ctx, NUdf::TUnboxedValue& state) const {
-        static_cast<const T*>(this)->MakeState(ctx, state);
+        try {
+            static_cast<const T*>(this)->MakeState(ctx, state);
+        } catch (const NYT::TErrorResponse& e) {
+            UdfTerminate(e.GetError().ShortDescription().c_str());
+        } catch (const std::exception& error) {
+            UdfTerminate(error.what());
+        }
     }
 
     EFetchResult DoCalculate(NUdf::TUnboxedValue& state, TComputationContext& ctx, NUdf::TUnboxedValue*const* output) const {

@@ -182,29 +182,33 @@ public:
             return GeneratePg(elemPtr, buf, static_cast<NKikimr::NMiniKQL::TPgType*>(type));
         }
 
+        if (type->IsVoid() || type->IsNull()) {
+            // do nothing
+            return;
+        }
+
         // call external writer
         auto& context = Codegen_->GetContext();
         const auto typeConst = ConstantInt::get(Type::getInt64Ty(context), (ui64)type);
         const auto valType = Type::getInt128Ty(context);
-        const auto flagsConst = ConstantInt::get(Type::getInt64Ty(context), nativeYtTypeFlags);
-        if (nativeYtTypeFlags) {
+
+        if (nativeYtTypeFlags & NTCF_COMPLEX) {
             const auto funcAddr = ConstantInt::get(Type::getInt64Ty(context), (ui64)&NYql::WriteContainerNativeYtValue);
+            const auto flagsConst = ConstantInt::get(Type::getInt64Ty(context), nativeYtTypeFlags);
             const auto funType = FunctionType::get(Type::getVoidTy(context), {
                 Type::getInt64Ty(context), Type::getInt64Ty(context), PointerType::getUnqual(valType),
                 PointerType::getUnqual(Type::getInt8Ty(context))
             }, false);
-
             const auto funcPtr = CastInst::Create(Instruction::IntToPtr, funcAddr, PointerType::getUnqual(funType), "ptr", Block_);
             CallInst::Create(funType, funcPtr, { typeConst, flagsConst, elemPtr, buf }, "", Block_);
         } else {
             const auto funcAddr = ConstantInt::get(Type::getInt64Ty(context), (ui64)&NYql::WriteYsonContainerValue);
             const auto funType = FunctionType::get(Type::getVoidTy(context), {
-                Type::getInt64Ty(context), Type::getInt64Ty(context), PointerType::getUnqual(valType),
+                Type::getInt64Ty(context), PointerType::getUnqual(valType),
                 PointerType::getUnqual(Type::getInt8Ty(context))
             }, false);
-
             const auto funcPtr = CastInst::Create(Instruction::IntToPtr, funcAddr, PointerType::getUnqual(funType), "ptr", Block_);
-            CallInst::Create(funType, funcPtr, { typeConst, flagsConst, elemPtr, buf }, "", Block_);
+            CallInst::Create(funType, funcPtr, { typeConst, elemPtr, buf }, "", Block_);
         }
         if constexpr (!Flat) {
             TCodegenContext ctx(*Codegen_);
@@ -542,6 +546,8 @@ public:
                 Block_ = just;
                 if (unwrappedType->IsData()) {
                     GenerateData(velemPtr, buf, static_cast<TDataType*>(unwrappedType), nativeYtTypeFlags);
+                } else if (unwrappedType->IsVoid() || unwrappedType->IsNull()) {
+                    // do nothing
                 } else {
                     GenerateContainer(velemPtr, buf, unwrappedType, true, nativeYtTypeFlags);
                 }
@@ -560,6 +566,8 @@ public:
                 GenerateData(velemPtr, buf, static_cast<TDataType*>(unwrappedType), nativeYtTypeFlags);
             } else if (unwrappedType->IsPg()) {
                 GeneratePg(velemPtr, buf, static_cast<TPgType*>(unwrappedType));
+            } else if (unwrappedType->IsVoid() || unwrappedType->IsNull()) {
+                // do nothing
             } else {
                 GenerateContainer(velemPtr, buf, unwrappedType, false, nativeYtTypeFlags);
             }
@@ -601,7 +609,6 @@ public:
     }
 
     void SkipField(NKikimr::NMiniKQL::TType* type, ui64 nativeYtTypeFlags) override {
-        auto& module = Codegen_->GetModule();
         auto& context = Codegen_->GetContext();
         auto args = Func_->arg_begin();
         const auto valuesPtr = &*args++;
@@ -611,6 +618,7 @@ public:
         bool isOptional;
         auto unwrappedType = UnpackOptional(type, isOptional);
         if (isOptional) {
+            auto& module = Codegen_->GetModule();
             const auto just = BasicBlock::Create(context, "just", Func_);
             const auto nothing = BasicBlock::Create(context, "nothing", Func_);
             const auto done = BasicBlock::Create(context, "done", Func_);
@@ -622,7 +630,7 @@ public:
 
             {
                 Block_ = just;
-                GenerateSkip(buf, unwrappedType, nativeYtTypeFlags);
+                GenerateSkip(buf, unwrappedType, nativeYtTypeFlags, true);
                 BranchInst::Create(done, Block_);
             }
 
@@ -633,7 +641,7 @@ public:
 
             Block_ = done;
         } else {
-            GenerateSkip(buf, unwrappedType, nativeYtTypeFlags);
+            GenerateSkip(buf, unwrappedType, nativeYtTypeFlags, false);
         }
 
         ++Index_;
@@ -813,122 +821,198 @@ private:
     void GenerateContainer(Value* velemPtr, Value* buf, TType* type, bool wrapOptional, ui64 nativeYtTypeFlags) {
         auto& context = Codegen_->GetContext();
 
-        const auto funcAddr = ConstantInt::get(Type::getInt64Ty(context), nativeYtTypeFlags ? (ui64)&ReadContainerNativeYtValue : (ui64)&ReadYsonContainerValue);
         const auto typeConst = ConstantInt::get(Type::getInt64Ty(context), (ui64)type);
         const auto holderFactoryConst = ConstantInt::get(Type::getInt64Ty(context), (ui64)&HolderFactory_);
         const auto wrapConst = ConstantInt::get(Type::getInt1Ty(context), wrapOptional);
-        const auto flagsConst = ConstantInt::get(Type::getInt64Ty(context), nativeYtTypeFlags);
-        if (nativeYtTypeFlags) {
+
+        if (nativeYtTypeFlags & NTCF_COMPLEX) {
+            const auto funcAddr = ConstantInt::get(Type::getInt64Ty(context), (ui64)&ReadContainerNativeYtValue);
+            const auto flagsConst = ConstantInt::get(Type::getInt64Ty(context), nativeYtTypeFlags);
             const auto funType = FunctionType::get(Type::getVoidTy(context), {
                 Type::getInt64Ty(context), Type::getInt64Ty(context), Type::getInt64Ty(context), PointerType::getUnqual(Type::getInt8Ty(context)),
                 PointerType::getUnqual(Type::getInt8Ty(context)), Type::getInt1Ty(context)
             }, false);
-
             const auto funcPtr = CastInst::Create(Instruction::IntToPtr, funcAddr, PointerType::getUnqual(funType), "ptr", Block_);
             CallInst::Create(funType, funcPtr, { typeConst, flagsConst, holderFactoryConst, velemPtr, buf, wrapConst }, "", Block_);
         } else {
+            const auto funcAddr = ConstantInt::get(Type::getInt64Ty(context), (ui64)&ReadYsonContainerValue);
             const auto funType = FunctionType::get(Type::getVoidTy(context), {
-                Type::getInt64Ty(context), Type::getInt64Ty(context), Type::getInt64Ty(context), PointerType::getUnqual(Type::getInt8Ty(context)),
+                Type::getInt64Ty(context), Type::getInt64Ty(context), PointerType::getUnqual(Type::getInt8Ty(context)),
                 PointerType::getUnqual(Type::getInt8Ty(context)), Type::getInt1Ty(context)
             }, false);
-
             const auto funcPtr = CastInst::Create(Instruction::IntToPtr, funcAddr, PointerType::getUnqual(funType), "ptr", Block_);
-            CallInst::Create(funType, funcPtr, { typeConst, flagsConst, holderFactoryConst, velemPtr, buf, wrapConst }, "", Block_);
+            CallInst::Create(funType, funcPtr, { typeConst, holderFactoryConst, velemPtr, buf, wrapConst }, "", Block_);
         }
     }
 
-    void GenerateSkip(Value* buf, TType* type, ui64 nativeYtTypeFlags) {
+    void GenerateSkip(Value* buf, TType* type, ui64 nativeYtTypeFlags, bool wasOptional) {
+        auto& module = Codegen_->GetModule();
+
+        if (type->IsData()) {
+            return GenerateSkipData(buf, type, nativeYtTypeFlags);
+        }
+
+        if (!wasOptional && type->IsPg()) {
+            return GenerateSkipPg(buf, static_cast<TPgType*>(type));
+        }
+
+        if (type->IsVoid() || type->IsNull()) {
+            return;
+        }
+
+        if (nativeYtTypeFlags & NTCF_COMPLEX) {
+            GenerateSkipComplex(buf, type, nativeYtTypeFlags);
+        } else {
+            // yson content
+            CallInst::Create(module.getFunction("SkipVarData"), { buf }, "", Block_);
+        }
+    }
+
+    void GenerateSkipData(Value* buf, TType* type, ui64 nativeYtTypeFlags) {
+        auto& module = Codegen_->GetModule();
+        auto& context = Codegen_->GetContext();
+
+        auto schemeType = static_cast<TDataType*>(type)->GetSchemeType();
+        bool smallTz = false;
+        switch (schemeType) {
+        case NUdf::TDataType<bool>::Id: {
+            const auto sizeConst = ConstantInt::get(Type::getInt64Ty(context), (ui64)sizeof(ui8));
+            CallInst::Create(module.getFunction("SkipFixedData"), { buf, sizeConst }, "", Block_);
+            break;
+        }
+
+        case NUdf::TDataType<ui8>::Id:
+        case NUdf::TDataType<ui16>::Id:
+        case NUdf::TDataType<ui32>::Id:
+        case NUdf::TDataType<ui64>::Id:
+        case NUdf::TDataType<NUdf::TDate>::Id:
+        case NUdf::TDataType<NUdf::TDatetime>::Id:
+        case NUdf::TDataType<NUdf::TTimestamp>::Id: {
+            const auto sizeConst = ConstantInt::get(Type::getInt64Ty(context), (ui64)sizeof(ui64));
+            CallInst::Create(module.getFunction("SkipFixedData"), { buf, sizeConst }, "", Block_);
+            break;
+        }
+        case NUdf::TDataType<i8>::Id:
+        case NUdf::TDataType<i16>::Id:
+        case NUdf::TDataType<i32>::Id:
+        case NUdf::TDataType<i64>::Id:
+        case NUdf::TDataType<NUdf::TDate32>::Id:
+        case NUdf::TDataType<NUdf::TDatetime64>::Id:
+        case NUdf::TDataType<NUdf::TTimestamp64>::Id:
+        case NUdf::TDataType<NUdf::TInterval64>::Id:
+        case NUdf::TDataType<NUdf::TInterval>::Id: {
+            const auto sizeConst = ConstantInt::get(Type::getInt64Ty(context), (ui64)sizeof(i64));
+            CallInst::Create(module.getFunction("SkipFixedData"), { buf, sizeConst }, "", Block_);
+            break;
+        }
+        case NUdf::TDataType<float>::Id:
+        case NUdf::TDataType<double>::Id: {
+            const auto sizeConst = ConstantInt::get(Type::getInt64Ty(context), (ui64)sizeof(double));
+            CallInst::Create(module.getFunction("SkipFixedData"), { buf, sizeConst }, "", Block_);
+            break;
+        }
+        case NUdf::TDataType<NUdf::TTzDate>::Id:
+        case NUdf::TDataType<NUdf::TTzDatetime>::Id:
+        case NUdf::TDataType<NUdf::TTzTimestamp>::Id:
+            smallTz = true;
+            [[fallthrough]];
+        case NUdf::TDataType<NUdf::TTzDate32>::Id:
+        case NUdf::TDataType<NUdf::TTzDatetime64>::Id:
+        case NUdf::TDataType<NUdf::TTzTimestamp64>::Id: {
+            if ((smallTz && (nativeYtTypeFlags & NTCF_TZDATE)) || (!smallTz && (nativeYtTypeFlags & NTCF_BIGTZDATE))) {
+                auto typeInfo = NUdf::GetDataTypeInfo(NUdf::GetDataSlot(schemeType));
+                const auto sizeConst = ConstantInt::get(Type::getInt64Ty(context), (ui64)(typeInfo.FixedSize + sizeof(ui16)));
+                CallInst::Create(module.getFunction("SkipFixedData"), { buf, sizeConst }, "", Block_);
+            } else {
+                CallInst::Create(module.getFunction("SkipVarData"), { buf }, "", Block_);
+            }
+            break;
+        }
+        case NUdf::TDataType<NUdf::TUtf8>::Id:
+        case NUdf::TDataType<char*>::Id:
+        case NUdf::TDataType<NUdf::TJson>::Id:
+        case NUdf::TDataType<NUdf::TYson>::Id:
+        case NUdf::TDataType<NUdf::TUuid>::Id:
+        case NUdf::TDataType<NUdf::TJsonDocument>::Id: {
+            CallInst::Create(module.getFunction("SkipVarData"), { buf }, "", Block_);
+            break;
+        }
+        case NUdf::TDataType<NUdf::TDecimal>::Id: {
+            if (nativeYtTypeFlags & NTCF_DECIMAL) {
+                auto const params = static_cast<TDataDecimalType*>(type)->GetParams();
+                if (params.first < 10) {
+                    const auto sizeConst = ConstantInt::get(Type::getInt64Ty(context), (ui64)sizeof(i32));
+                    CallInst::Create(module.getFunction("SkipFixedData"), { buf, sizeConst }, "", Block_);
+                } else if (params.first < 19) {
+                    const auto sizeConst = ConstantInt::get(Type::getInt64Ty(context), (ui64)sizeof(i64));
+                    CallInst::Create(module.getFunction("SkipFixedData"), { buf, sizeConst }, "", Block_);
+                } else {
+                    const auto sizeConst = ConstantInt::get(Type::getInt64Ty(context), (ui64)sizeof(NDecimal::TInt128));
+                    CallInst::Create(module.getFunction("SkipFixedData"), { buf, sizeConst }, "", Block_);
+                }
+            } else {
+                CallInst::Create(module.getFunction("SkipVarData"), { buf }, "", Block_);
+            }
+            break;
+        }
+
+        default:
+            YQL_ENSURE(false, "Unknown data type: " << schemeType);
+        }
+    }
+
+    void GenerateSkipPg(Value* buf, TPgType* type) {
+        auto& context = Codegen_->GetContext();
+        const auto funcAddr = ConstantInt::get(Type::getInt64Ty(context), (ui64)&NCommon::SkipSkiffPg);
+        const auto typeConst = ConstantInt::get(Type::getInt64Ty(context), (ui64)type);
+
+        const auto funType = FunctionType::get(Type::getVoidTy(context), {
+            Type::getInt64Ty(context), PointerType::getUnqual(Type::getInt8Ty(context))
+        }, false);
+
+        const auto funcPtr = CastInst::Create(Instruction::IntToPtr, funcAddr, PointerType::getUnqual(funType), "ptr", Block_);
+        CallInst::Create(funType, funcPtr, { typeConst, buf }, "", Block_);
+    }
+
+    void GenerateSkipComplex(Value* buf, TType* type, ui64 nativeYtTypeFlags) {
         auto& module = Codegen_->GetModule();
         auto& context = Codegen_->GetContext();
 
         if (type->IsData()) {
-            auto schemeType = static_cast<TDataType*>(type)->GetSchemeType();
-            bool smallTz = false;
-            switch (schemeType) {
-            case NUdf::TDataType<bool>::Id: {
-                const auto sizeConst = ConstantInt::get(Type::getInt64Ty(context), (ui64)sizeof(ui8));
-                CallInst::Create(module.getFunction("SkipFixedData"), { buf, sizeConst }, "", Block_);
-                break;
+            return GenerateSkipData(buf, type, nativeYtTypeFlags);
+        }
+
+        if (type->IsPg()) {
+            return GenerateSkipPg(buf, static_cast<TPgType*>(type));
+        }
+
+        if (type->IsOptional()) {
+            auto unwrappedType = static_cast<TOptionalType*>(type)->GetItemType();
+            const auto just = BasicBlock::Create(context, "just", Func_);
+            const auto nothing = BasicBlock::Create(context, "nothing", Func_);
+            const auto done = BasicBlock::Create(context, "done", Func_);
+
+            const auto optMarker = CallInst::Create(module.getFunction("ReadOptional"), { buf }, "optMarker", Block_);
+            const auto zero = ConstantInt::get(Type::getInt8Ty(context), 0);
+            const auto check = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_NE, optMarker, zero, "exists", Block_);
+            BranchInst::Create(just, nothing, check, Block_);
+
+            {
+                Block_ = just;
+                GenerateSkipComplex(buf, unwrappedType, nativeYtTypeFlags);
+                BranchInst::Create(done, Block_);
             }
 
-            case NUdf::TDataType<ui8>::Id:
-            case NUdf::TDataType<ui16>::Id:
-            case NUdf::TDataType<ui32>::Id:
-            case NUdf::TDataType<ui64>::Id:
-            case NUdf::TDataType<NUdf::TDate>::Id:
-            case NUdf::TDataType<NUdf::TDatetime>::Id:
-            case NUdf::TDataType<NUdf::TTimestamp>::Id: {
-                const auto sizeConst = ConstantInt::get(Type::getInt64Ty(context), (ui64)sizeof(ui64));
-                CallInst::Create(module.getFunction("SkipFixedData"), { buf, sizeConst }, "", Block_);
-                break;
-            }
-            case NUdf::TDataType<i8>::Id:
-            case NUdf::TDataType<i16>::Id:
-            case NUdf::TDataType<i32>::Id:
-            case NUdf::TDataType<i64>::Id:
-            case NUdf::TDataType<NUdf::TDate32>::Id:
-            case NUdf::TDataType<NUdf::TDatetime64>::Id:
-            case NUdf::TDataType<NUdf::TTimestamp64>::Id:
-            case NUdf::TDataType<NUdf::TInterval64>::Id:
-            case NUdf::TDataType<NUdf::TInterval>::Id: {
-                const auto sizeConst = ConstantInt::get(Type::getInt64Ty(context), (ui64)sizeof(i64));
-                CallInst::Create(module.getFunction("SkipFixedData"), { buf, sizeConst }, "", Block_);
-                break;
-            }
-            case NUdf::TDataType<float>::Id:
-            case NUdf::TDataType<double>::Id: {
-                const auto sizeConst = ConstantInt::get(Type::getInt64Ty(context), (ui64)sizeof(double));
-                CallInst::Create(module.getFunction("SkipFixedData"), { buf, sizeConst }, "", Block_);
-                break;
-            }
-            case NUdf::TDataType<NUdf::TTzDate>::Id:
-            case NUdf::TDataType<NUdf::TTzDatetime>::Id:
-            case NUdf::TDataType<NUdf::TTzTimestamp>::Id:
-                smallTz = true;
-                [[fallthrough]];
-            case NUdf::TDataType<NUdf::TTzDate32>::Id:
-            case NUdf::TDataType<NUdf::TTzDatetime64>::Id:
-            case NUdf::TDataType<NUdf::TTzTimestamp64>::Id: {
-                if ((smallTz && (nativeYtTypeFlags & NTCF_TZDATE)) || (!smallTz && (nativeYtTypeFlags & NTCF_BIGTZDATE))) {
-                    auto typeInfo = NUdf::GetDataTypeInfo(NUdf::GetDataSlot(schemeType));
-                    const auto sizeConst = ConstantInt::get(Type::getInt64Ty(context), (ui64)(typeInfo.FixedSize + sizeof(ui16)));
-                    CallInst::Create(module.getFunction("SkipFixedData"), { buf, sizeConst }, "", Block_);
-                } else {
-                    CallInst::Create(module.getFunction("SkipVarData"), { buf }, "", Block_);
-                }
-                break;
-            }
-            case NUdf::TDataType<NUdf::TUtf8>::Id:
-            case NUdf::TDataType<char*>::Id:
-            case NUdf::TDataType<NUdf::TJson>::Id:
-            case NUdf::TDataType<NUdf::TYson>::Id:
-            case NUdf::TDataType<NUdf::TUuid>::Id:
-            case NUdf::TDataType<NUdf::TJsonDocument>::Id: {
-                CallInst::Create(module.getFunction("SkipVarData"), { buf }, "", Block_);
-                break;
-            }
-            case NUdf::TDataType<NUdf::TDecimal>::Id: {
-                if (nativeYtTypeFlags & NTCF_DECIMAL) {
-                    auto const params = static_cast<TDataDecimalType*>(type)->GetParams();
-                    if (params.first < 10) {
-                        const auto sizeConst = ConstantInt::get(Type::getInt64Ty(context), (ui64)sizeof(i32));
-                        CallInst::Create(module.getFunction("SkipFixedData"), { buf, sizeConst }, "", Block_);
-                    } else if (params.first < 19) {
-                        const auto sizeConst = ConstantInt::get(Type::getInt64Ty(context), (ui64)sizeof(i64));
-                        CallInst::Create(module.getFunction("SkipFixedData"), { buf, sizeConst }, "", Block_);
-                    } else {
-                        const auto sizeConst = ConstantInt::get(Type::getInt64Ty(context), (ui64)sizeof(NDecimal::TInt128));
-                        CallInst::Create(module.getFunction("SkipFixedData"), { buf, sizeConst }, "", Block_);
-                    }
-                } else {
-                    CallInst::Create(module.getFunction("SkipVarData"), { buf }, "", Block_);
-                }
-                break;
+            {
+                Block_ = nothing;
+                BranchInst::Create(done, Block_);
             }
 
-            default:
-                YQL_ENSURE(false, "Unknown data type: " << schemeType);
-            }
+            Block_ = done;
+            return;
+        }
+
+        if (type->IsVoid() || type->IsNull() || type->IsEmptyList() || type->IsEmptyDict()) {
             return;
         }
 
@@ -939,7 +1023,7 @@ private:
                 reorder = ((const std::vector<size_t>*)cookie);
             }
             for (ui32 i = 0; i < structType->GetMembersCount(); ++i) {
-                GenerateSkip(buf, structType->GetMemberType(reorder ? reorder->at(i) : i), nativeYtTypeFlags);
+                GenerateSkipComplex(buf, structType->GetMemberType(reorder ? reorder->at(i) : i), nativeYtTypeFlags);
             }
             return;
         }
@@ -947,7 +1031,7 @@ private:
         if (type->IsTuple()) {
             auto tupleType = static_cast<TTupleType*>(type);
             for (ui32 i = 0; i < tupleType->GetElementsCount(); ++i) {
-                GenerateSkip(buf, tupleType->GetElementType(i), nativeYtTypeFlags);
+                GenerateSkipComplex(buf, tupleType->GetElementType(i), nativeYtTypeFlags);
             }
             return;
         }
@@ -962,7 +1046,7 @@ private:
 
             {
                 Block_ = innerSkip;
-                GenerateSkip(buf, itemType, nativeYtTypeFlags);
+                GenerateSkipComplex(buf, itemType, nativeYtTypeFlags);
                 BranchInst::Create(listContinue, Block_);
             }
             {
@@ -985,7 +1069,7 @@ private:
             std::function<void(size_t, size_t)> genLR = [&] (size_t l, size_t r){
                 size_t m = (l + r) >> 1;
                 if (l == r) {
-                    GenerateSkip(buf, getType(m), nativeYtTypeFlags);
+                    GenerateSkipComplex(buf, getType(m), nativeYtTypeFlags);
                     return;
                 }
                 auto fn = std::to_string(l) + "_" + std::to_string(r);
@@ -1033,18 +1117,6 @@ private:
             return;
         }
 
-        if (type->IsVoid()) {
-            return;
-        }
-
-        if (type->IsNull()) {
-            return;
-        }
-
-        if (type->IsEmptyList() || type->IsEmptyDict()) {
-            return;
-        }
-
         if (type->IsDict()) {
             auto dictType = static_cast<TDictType*>(type);
             auto keyType = dictType->GetKeyType();
@@ -1061,8 +1133,8 @@ private:
 
             {
                 Block_ = innerSkip;
-                GenerateSkip(buf, keyType, nativeYtTypeFlags);
-                GenerateSkip(buf, payloadType, nativeYtTypeFlags);
+                GenerateSkipComplex(buf, keyType, nativeYtTypeFlags);
+                GenerateSkipComplex(buf, payloadType, nativeYtTypeFlags);
                 BranchInst::Create(listContinue, Block_);
             }
             {

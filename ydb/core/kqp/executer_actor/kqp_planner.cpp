@@ -327,8 +327,17 @@ ui32 TKqpPlanner::GetCurrentRetryDelay(ui32 requestId) {
 }
 
 std::unique_ptr<IEventHandle> TKqpPlanner::AssignTasksToNodes() {
-    if (ComputeTasks.empty())
+    for (const auto& task : TasksGraph.GetTasks()) {
+        if (task.Meta.ExpectedNodeId) {
+            TasksPerNode[*task.Meta.ExpectedNodeId].emplace_back(task.Id);
+        } else {
+            UnassignedTasks.emplace_back(task.Id);
+        }
+    }
+
+    if (UnassignedTasks.empty()) {
         return nullptr;
+    }
 
     PrepareToProcess();
 
@@ -353,9 +362,10 @@ std::unique_ptr<IEventHandle> TKqpPlanner::AssignTasksToNodes() {
         ResourceEstimations.size() <= localResources.ExecutionUnits &&
         singleNodeExecutionMakeSence)
     {
-        ui64 selfNodeId = ExecuterId.NodeId();
-        for(ui64 taskId: ComputeTasks) {
-            TasksPerNode[selfNodeId].push_back(taskId);
+        ui64 localNodeId = ExecuterId.NodeId();
+        for(ui64 taskId: UnassignedTasks) {
+            TasksPerNode[localNodeId].push_back(taskId);
+            TasksGraph.GetTask(taskId).Meta.ExpectedNodeId = localNodeId;
         }
 
         return nullptr;
@@ -371,8 +381,9 @@ std::unique_ptr<IEventHandle> TKqpPlanner::AssignTasksToNodes() {
             ResourceEstimations.size() <= localResources.ExecutionUnits)
         {
             ui64 localNodeId = ExecuterId.NodeId();
-            for(ui64 taskId: ComputeTasks) {
+            for(ui64 taskId: UnassignedTasks) {
                 TasksPerNode[localNodeId].push_back(taskId);
+                TasksGraph.GetTask(taskId).Meta.ExpectedNodeId = localNodeId;
             }
 
             return nullptr;
@@ -389,7 +400,6 @@ std::unique_ptr<IEventHandle> TKqpPlanner::AssignTasksToNodes() {
     std::vector<ui64> deepestTasks;
     ui64 maxLevel = 0;
     for(auto& task: TasksGraph.GetTasks()) {
-        // const auto& task = TasksGraph.GetTask(taskId);
         const auto& stageInfo = TasksGraph.GetStageInfo(task.StageId);
         const NKqpProto::TKqpPhyStage& stage = stageInfo.Meta.GetStage(stageInfo.Id);
         const ui64 stageLevel = stage.GetProgram().GetSettings().GetStageLevel();
@@ -417,6 +427,7 @@ std::unique_ptr<IEventHandle> TKqpPlanner::AssignTasksToNodes() {
             auto [it, success] = alreadyAssigned.emplace(taskId, ExecuterId.NodeId());
             if (success) {
                 TasksPerNode[ExecuterId.NodeId()].push_back(taskId);
+                TasksGraph.GetTask(taskId).Meta.ExpectedNodeId = ExecuterId.NodeId();
             }
         }
     }
@@ -477,8 +488,10 @@ std::unique_ptr<IEventHandle> TKqpPlanner::AssignTasksToNodes() {
                 if (NeedToRunLocally(TasksGraph.GetTask(taskId))) {
                     const ui64 selfNodeId = ExecuterId.NodeId();
                     TasksPerNode[selfNodeId].push_back(taskId);
+                    TasksGraph.GetTask(taskId).Meta.ExpectedNodeId = selfNodeId;
                 } else {
                     TasksPerNode[group.NodeId].push_back(taskId);
+                    TasksGraph.GetTask(taskId).Meta.ExpectedNodeId = group.NodeId;
                 }
             }
         }
@@ -572,44 +585,25 @@ TString TKqpPlanner::ExecuteDataComputeTask(ui64 taskId, ui32 computeTasksSize) 
     THashMap<TActorId, THashSet<ui64>> updates;
     CollectTaskChannelsUpdates(task, updates);
     PropagateChannelsUpdates(updates);
-    return TString();
-}
-
-ui32 TKqpPlanner::GetnScanTasks() {
-    return nScanTasks;
-}
-
-ui32 TKqpPlanner::GetnComputeTasks() {
-    return nComputeTasks;
+    return {};
 }
 
 std::unique_ptr<IEventHandle> TKqpPlanner::PlanExecution() {
-    nScanTasks = 0;
-
-    for (auto& task : TasksGraph.GetTasks()) {
-        switch (task.Meta.Type) {
-            case TTaskMeta::ETaskType::Compute:
-                ComputeTasks.emplace_back(task.Id);
-                break;
-            case TTaskMeta::ETaskType::Scan:
-                TasksPerNode[task.Meta.NodeId].emplace_back(task.Id);
-                nScanTasks++;
-                break;
-            default:
-                break;
-        }
+    if (auto err = AssignTasksToNodes()) {
+        return err;
     }
-    nComputeTasks = ComputeTasks.size();
 
-    LOG_D("Total tasks: " << nScanTasks + nComputeTasks << ", readonly: true"  // TODO ???
-        << ", " << nScanTasks << " scan tasks on " << TasksPerNode.size() << " nodes"
+    const auto scanTasksCount = TasksGraph.GetTasks().size() - UnassignedTasks.size();
+
+    LOG_D("Total tasks: " << TasksGraph.GetTasks().size() << ", readonly: true"  // TODO ???
+        << ", " << scanTasksCount << " scan tasks on " << TasksPerNode.size() << " nodes"
         << ", localComputeTasks: " << TasksGraph.GetMeta().LocalComputeTasks
         << ", MayRunTasksLocally " << TasksGraph.GetMeta().MayRunTasksLocally
         << ", snapshot: {" << GetSnapshot().TxId << ", " << GetSnapshot().Step << "}");
 
     PrepareCheckpoints();
 
-    if (nComputeTasks == 0 && TasksPerNode.size() == 1 && (AsyncIoFactory != nullptr) && TasksGraph.GetMeta().SinglePartitionOptAllowed) {
+    if (UnassignedTasks.empty() && TasksPerNode.size() == 1 && (AsyncIoFactory != nullptr) && TasksGraph.GetMeta().SinglePartitionOptAllowed) {
         // query affects a single key or shard, so it might be more effective
         // to execute this task locally so we can avoid useless overhead for remote task launching.
         for (auto& [shardId, tasks]: TasksPerNode) {
@@ -622,7 +616,7 @@ std::unique_ptr<IEventHandle> TKqpPlanner::PlanExecution() {
         }
 
     } else {
-        for (ui64 taskId : ComputeTasks) {
+        for (ui64 taskId : UnassignedTasks) {
             PendingComputeTasks.insert(taskId);
         }
 
@@ -630,11 +624,6 @@ std::unique_ptr<IEventHandle> TKqpPlanner::PlanExecution() {
             for (ui64 taskId : tasks) {
                 PendingComputeTasks.insert(taskId);
             }
-        }
-
-        auto err = AssignTasksToNodes();
-        if (err) {
-            return err;
         }
 
         if (TasksGraph.GetMeta().MayRunTasksLocally) {
@@ -652,8 +641,9 @@ std::unique_ptr<IEventHandle> TKqpPlanner::PlanExecution() {
         }
 
         for(auto& [nodeId, tasks] : TasksPerNode) {
-            if (TasksGraph.GetMeta().MayRunTasksLocally && ExecuterId.NodeId() == nodeId)
+            if (TasksGraph.GetMeta().MayRunTasksLocally && ExecuterId.NodeId() == nodeId) {
                 continue;
+            }
 
             SortUnique(tasks);
             auto& request = Requests.emplace_back(std::move(tasks), CalcSendMessageFlagsForNode(nodeId), nodeId);
@@ -699,7 +689,7 @@ void TKqpPlanner::PrepareCheckpoints() {
 
 TString TKqpPlanner::GetEstimationsInfo() const {
     TStringStream ss;
-    ss << "ComputeTasks:" << nComputeTasks << ";NodeTasks:";
+    ss << "ComputeTasks:" << UnassignedTasks.size() << ";NodeTasks:";
     if (auto it = TasksPerNode.find(ExecuterId.NodeId()); it != TasksPerNode.end()) {
         ss << it->second.size() << ";";
     } else {
@@ -820,7 +810,7 @@ const THashSet<ui64>& TKqpPlanner::GetPendingComputeTasks() {
 }
 
 void TKqpPlanner::PrepareToProcess() {
-    ui32 tasksCount = ComputeTasks.size();
+    ui32 tasksCount = UnassignedTasks.size();
     for (auto& [shardId, tasks] : TasksPerNode) {
         tasksCount += tasks.size();
     }
@@ -828,13 +818,13 @@ void TKqpPlanner::PrepareToProcess() {
     ResourceEstimations.resize(tasksCount);
     LocalRunMemoryEst = 0;
 
-    for (size_t i = 0; i < ComputeTasks.size(); ++i) {
-        BuildInitialTaskResources(TasksGraph, ComputeTasks[i], ResourceEstimations[i]);
-        ResourceManager_->EstimateTaskResources(ResourceEstimations[i], ComputeTasks.size());
+    for (size_t i = 0; i < UnassignedTasks.size(); ++i) {
+        BuildInitialTaskResources(TasksGraph, UnassignedTasks[i], ResourceEstimations[i]);
+        ResourceManager_->EstimateTaskResources(ResourceEstimations[i], UnassignedTasks.size());
         LocalRunMemoryEst += ResourceEstimations[i].TotalMemoryLimit;
     }
 
-    ui32 currentEst = ComputeTasks.size();
+    ui32 currentEst = UnassignedTasks.size();
     for(auto& [nodeId, tasks] : TasksPerNode) {
         for (ui64 taskId: tasks) {
             BuildInitialTaskResources(TasksGraph, taskId, ResourceEstimations[currentEst]);

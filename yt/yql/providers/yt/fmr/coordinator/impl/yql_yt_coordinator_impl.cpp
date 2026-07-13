@@ -944,9 +944,6 @@ private:
         if (taskStatuses.contains(ETaskStatus::InProgress)) {
             return EOperationStatus::InProgress;
         }
-        if (taskStatuses.contains(ETaskStatus::InProgress)) {
-            return EOperationStatus::InProgress;
-        }
         if (taskStatuses.contains(ETaskStatus::Accepted)) {
             return EOperationStatus::Accepted;
         }

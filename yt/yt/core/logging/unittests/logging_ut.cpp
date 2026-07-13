@@ -102,7 +102,7 @@ protected:
         event.Family = ELogFamily::PlainText;
         event.Category = Logger().GetCategory();
         event.Level = ELogLevel::Debug;
-        event.MessageRef = TSharedRef::FromString("message");
+        event.MessageRef = TSharedRef::FromString(std::string("message"));
         event.MessageKind = ELogMessageKind::Unstructured;
         event.ThreadId = 0xba;
         WriteEvent(writer, event);
@@ -534,7 +534,7 @@ TEST_F(TLoggingTest, PlainTextLoggingStructuredFormatter)
     event.Family = ELogFamily::PlainText;
     event.Category = Logger().GetCategory();
     event.Level = ELogLevel::Debug;
-    event.MessageRef = TSharedRef::FromString("test_message");
+    event.MessageRef = TSharedRef::FromString(std::string("test_message"));
     event.MessageKind = ELogMessageKind::Unstructured;
     event.FiberId = 31;
     event.TraceId = TGuid(1, 2, 3, 4);
@@ -734,7 +734,7 @@ TEST_F(TLoggingTest, UnstructuredLogging)
     event.Family = ELogFamily::Structured;
     event.Category = Logger().GetCategory();
     event.Level = ELogLevel::Debug;
-    event.MessageRef = TSharedRef::FromString("test_message");
+    event.MessageRef = TSharedRef::FromString(std::string("test_message"));
     event.MessageKind = ELogMessageKind::Unstructured;
 
     for (auto format : {ELogFormat::Yson, ELogFormat::Json}) {

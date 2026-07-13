@@ -1,5 +1,7 @@
 LIBRARY()
 
+GENERATE_ENUM_SERIALIZATION(storage_transport.h)
+
 SRCS(
     ddisk_helpers.cpp
     ic_storage_transport_actor.cpp
@@ -11,8 +13,11 @@ SRCS(
 
 PEERDIR(
     ydb/core/mind/bscontroller
-    ydb/core/nbs/cloud/storage/core/libs/common
+
+    ydb/core/nbs/cloud/blockstore/libs/common
     ydb/core/nbs/cloud/blockstore/libs/kikimr
+
+    ydb/core/nbs/cloud/storage/core/libs/common
 )
 
 END()

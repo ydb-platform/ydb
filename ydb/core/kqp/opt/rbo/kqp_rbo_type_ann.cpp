@@ -555,8 +555,8 @@ TStatus ComputeTypes(TIntrusivePtr<IOperator> op, TRBOContext& ctx, TPlanProps& 
 } // anonymous namespace
 
 TStatus TOpRoot::ComputeTypes(TRBOContext& ctx) {
-    for (auto it = begin(); it != end(); it++) {
-        auto status = ::NKikimr::NKqp::ComputeTypes((*it).Current, ctx, PlanProps);
+    for (const auto& item : *this) {
+        auto status = ::NKikimr::NKqp::ComputeTypes(item.Current, ctx, PlanProps);
         if (status != TStatus::Ok) {
             return status;
         }

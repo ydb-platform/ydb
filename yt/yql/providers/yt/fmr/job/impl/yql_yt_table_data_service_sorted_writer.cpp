@@ -56,13 +56,15 @@ NYT::TNode TFmrTableDataServiceSortedWriter::GetKeyRowByIndexes(TStringBuf curre
 
     for (size_t i = 0; i < KeyColumns_.Columns.size(); ++i) {
         const auto& index = indexes[i];
-        TString columnValue = GetIndexValue(currentYsonContent, index);
-        NYT::TNode columnValueNode = NYT::NodeFromYsonString(
-            columnValue,
-            NYT::NYson::EYsonType::Node
-        );
         const TString& columnName = KeyColumns_.Columns[i];
-        result[columnName] = std::move(columnValueNode);
+        // A key column can be legitimately absent from the row's binary yson: rows with a NULL
+        // value for a nullable key column (e.g. the direct map-bypass output of a FULL JOIN with
+        // nullable join keys) are written without that key at all, rather than with an explicit
+        // '#' entity. Parsing an empty blob as a YSON node would throw "Premature end of yson
+        // stream", so treat a missing column the same way the row comparator does - as null.
+        result[columnName] = index.IsValid()
+            ? NYT::NodeFromYsonString(GetIndexValue(currentYsonContent, index), NYT::NYson::EYsonType::Node)
+            : NYT::TNode::CreateEntity();
     }
     return result;
 };
@@ -84,7 +86,7 @@ TSortedChunkStats TFmrTableDataServiceSortedWriter::GetSortedChunkStats(TStringB
 
 void TFmrTableDataServiceSortedWriter::CheckIsSorted(TStringBuf currentYsonContent, const std::vector<TRowIndexMarkup>& chunkIndexes) const {
     TBinaryYsonComparator comparator(currentYsonContent, KeyColumns_.SortOrders);
-    for (ui64 i = 0; i < chunkIndexes.size() - 1; ++i) {
+    for (ui64 i = 0; i + 1 < chunkIndexes.size(); ++i) {
         const auto& curRowKeys = chunkIndexes[i];
         const auto& nextRowKeys = chunkIndexes[i + 1];
         if (comparator.CompareRows(curRowKeys, nextRowKeys) > 0) {

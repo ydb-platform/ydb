@@ -104,9 +104,7 @@ struct TSchemeShard::TTxUserHashesMigration : public TTransactionBase<TSchemeSha
                     IsLoginProviderModified = true;
                 }
 
-                // persist password hashes in the new column 'PasswordHashes' to get rid of old column 'SidHash' in the next release
-                db.Table<Schema::LoginSids>().Key(sidName).Update<Schema::LoginSids::SidHash, Schema::LoginSids::PasswordHashes>(
-                                                                    sid.ArgonHash, sid.PasswordHashes);
+                db.Table<Schema::LoginSids>().Key(sidName).Update<Schema::LoginSids::PasswordHashes>(sid.PasswordHashes);
             }
         }
 

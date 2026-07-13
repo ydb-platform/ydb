@@ -26,7 +26,7 @@ constexpr bool EnableStaticRefcount = true;
 using namespace llvm;
 
 Type* GetStringRefType(LLVMContext& context) {
-    const auto stringRefType = StructType::get(context, {Type::getInt8PtrTy(context),
+    const auto stringRefType = StructType::get(context, {PointerType::getUnqual(Type::getInt8Ty(context)),
                                                          Type::getInt32Ty(context),
                                                          Type::getInt32Ty(context)});
 

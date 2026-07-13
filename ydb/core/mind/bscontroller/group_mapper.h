@@ -125,6 +125,7 @@ namespace NKikimr {
                 const bool Decommitted;
                 TString WhyUnusable;
                 TBridgePileId BridgePileId;
+                std::optional<TString> DiskScope;
             };
 
         public:

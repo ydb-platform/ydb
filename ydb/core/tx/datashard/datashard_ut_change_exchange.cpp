@@ -845,8 +845,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
                 .SetEnableUuidAsPrimaryKey(true)
                 .SetEnableTablePgTypes(true)
                 .SetEnableTableDatetime64(true)
-                .SetEnableParameterizedDecimal(true)
-                .SetEnablePgSyntax(true);
+                .SetEnableParameterizedDecimal(true);
 
             Server = new TServer(settings);
             if (useRealThreads) {

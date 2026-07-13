@@ -1,0 +1,5 @@
+use plato;
+
+MATERIALIZE Input INTO $result ON plato WITH prune_unused_columns;
+SELECT key FROM $result WHERE key > "010";
+SELECT subkey FROM $result;

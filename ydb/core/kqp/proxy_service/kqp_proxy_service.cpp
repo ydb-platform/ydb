@@ -688,7 +688,7 @@ public:
 
         if (CheckRequestDeadline(requestInfo, deadline, result) &&
             CreateNewSessionWorker(requestInfo, TString(DefaultKikimrPublicClusterName), true, request.GetDatabase(),
-                event.GetSupportsBalancing(), event.GetPgWire(),
+                event.GetSupportsBalancing(),
                 event.GetClientAddress(), event.GetUserSID(), event.GetClientUserAgent(), event.GetClientSdkBuildInfo(),
                 event.GetClientPID(),
                 event.GetApplicationName(), event.GetUserName(), result))
@@ -746,7 +746,7 @@ public:
         if (ev->Get()->GetSessionId().empty()) {
             TProcessResult<TKqpSessionInfo*> result;
             if (!CreateNewSessionWorker(requestInfo, TString(DefaultKikimrPublicClusterName), false,
-                database, false, false, "", "", "", "", "", "", Nothing(), result))
+                database, false, "", "", "", "", "", ev->Get()->GetApplicationName(), Nothing(), result))
             {
                 ReplyProcessError(result.YdbStatus, result.Error, requestId);
                 return;
@@ -772,7 +772,6 @@ public:
 
             if (explicitSession &&
                 sessionInfo &&
-                !sessionInfo->PgWire && // pg wire bypasses rpc layer and doesn't perform attach
                 !sessionInfo->AttachedRpcId)
             {
                 TString error = "Attempt to execute query on explicit session without attach";
@@ -1523,7 +1522,7 @@ private:
     }
 
     bool CreateNewSessionWorker(const TKqpRequestInfo& requestInfo, const TString& cluster, bool longSession,
-        const TString& database, bool supportsBalancing, bool pgWire,
+        const TString& database, bool supportsBalancing,
         const TString& clientHost, const TString& clientSid, const TString& userAgent,
         const TString& sdkBuildInfo,
         const TString& clientPid,
@@ -1576,7 +1575,7 @@ private:
 
         auto workerId = TActivationContext::Register(sessionActor, SelfId(), TMailboxType::HTSwap, AppData()->UserPoolId);
         TKqpSessionInfo* sessionInfo = LocalSessions->Create(
-            sessionId, workerId, database, dbCounters, supportsBalancing, GetSessionIdleDuration(), pgWire);
+            sessionId, workerId, database, dbCounters, supportsBalancing, GetSessionIdleDuration());
         KqpProxySharedResources->AtomicLocalSessionCount.store(LocalSessions->size());
 
         sessionInfo->ClientSID = clientSid;

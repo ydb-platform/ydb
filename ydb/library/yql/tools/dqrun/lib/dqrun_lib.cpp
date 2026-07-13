@@ -247,9 +247,9 @@ TDqRunTool::TDqRunTool()
             FqConfig_ = MakeHolder<NFq::NConfig::TConfig>();
         }
 
-        GetRunOptions().SqlFlags.insert("DqEngineEnable");
+        GetRunOptions().SqlFlags["DqEngineEnable"] = {};
         if (!AnalyzeQuery_ && !NoForceDq_) {
-            GetRunOptions().SqlFlags.insert("DqEngineForce");
+            GetRunOptions().SqlFlags["DqEngineForce"] = {};
         }
 
     });

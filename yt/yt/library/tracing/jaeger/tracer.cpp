@@ -1,4 +1,6 @@
 
+#include <algorithm>
+
 #include "tracer.h"
 #include "private.h"
 
@@ -157,13 +159,13 @@ public:
 
 namespace {
 
-void ToProtoGuid(TString* proto, const TGuid& guid)
+void ToProtoGuid(TProtobufString* proto, const TGuid& guid)
 {
     proto->assign(reinterpret_cast<const char*>(&guid.Parts32[0]), 16);
-    ReverseInPlace(*proto);
+    std::reverse(proto->begin(), proto->begin() + proto->size());
 }
 
-void ToProtoUInt64(TString* proto, i64 i)
+void ToProtoUInt64(TProtobufString* proto, i64 i)
 {
     i = SwapBytes64(i);
     proto->assign(reinterpret_cast<char*>(&i), 8);

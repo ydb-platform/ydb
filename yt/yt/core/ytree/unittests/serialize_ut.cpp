@@ -277,8 +277,8 @@ TEST(TSerializationTest, Simple)
 TEST(TSerializationTest, PackRefs)
 {
     std::vector<TSharedRef> refs;
-    refs.push_back(TSharedRef::FromString("abc"));
-    refs.push_back(TSharedRef::FromString("12"));
+    refs.push_back(TSharedRef::FromString(std::string("abc")));
+    refs.push_back(TSharedRef::FromString(std::string("12")));
 
     auto packed = PackRefs(refs);
     auto unpacked = UnpackRefs(packed);

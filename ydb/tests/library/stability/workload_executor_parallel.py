@@ -56,8 +56,8 @@ class ParallelWorkloadTestBase:
             )
 
     @pytest.fixture(autouse=True, scope="session")
-    def stress_executor(self) -> StressRunExecutor:
-        return StressRunExecutor(self.ignore_stderr_content, self.event_process_mode, self.ydb_database)
+    def stress_executor(self, binary_deployer: StressUtilDeployer) -> StressRunExecutor:
+        return StressRunExecutor(self.ignore_stderr_content, self.event_process_mode, self.ydb_database, binary_deployer.nodes)
 
     def execute_parallel_workloads_test(
         self,

@@ -362,22 +362,14 @@ TDriver::TDriver(const TDriverConfig& config) {
         ythrow yexception() << "Invalid config object";
     }
 
-    Impl_ = std::shared_ptr<TGRpcConnectionsImpl>(new TGRpcConnectionsImpl(config.Impl_), [] (TGRpcConnectionsImpl* impl) {
-        auto destroyImpl = [impl] {
-            impl->Stop(true);
-            delete impl;
-        };
-
-        if (IsGRpcCompletionThread()) {
-            std::thread(std::move(destroyImpl)).detach();
-        } else {
-            destroyImpl();
-        }
-    });
+    Impl_.reset(new TGRpcConnectionsImpl(config.Impl_), TGRpcConnectionsDeleter());
 }
 
 void TDriver::Stop(bool wait) {
-    Impl_->Stop(wait);
+    auto impl = Impl_;
+    TGRpcConnectionsImpl::DeferOrRunNow(impl->StopState_, [impl, wait]() mutable {
+        impl->Stop(wait);
+    });
 }
 
 TDriverConfig TDriver::GetConfig() const {

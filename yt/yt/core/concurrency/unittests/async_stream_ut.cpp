@@ -30,7 +30,7 @@ TEST(TAsyncOutputStreamTest, Simple)
     auto pipe = New<TAsyncStreamPipe>();
     auto asyncWriter = CreateZeroCopyAdapter(static_cast<IAsyncOutputStreamPtr>(pipe));
 
-    auto writeResult = asyncWriter->Write(TSharedRef::FromString("foo"));
+    auto writeResult = asyncWriter->Write(TSharedRef::FromString(std::string("foo")));
     ASSERT_FALSE(writeResult.IsSet());
 
     auto readResult1 = ReadAlreadySetValue(pipe);
@@ -50,9 +50,9 @@ TEST(TAsyncOutputStreamTest, MultipleWrites)
     auto pipe = New<TAsyncStreamPipe>();
     auto asyncWriter = CreateZeroCopyAdapter(static_cast<IAsyncOutputStreamPtr>(pipe));
 
-    auto writeResult1 = asyncWriter->Write(TSharedRef::FromString("foo"));
-    auto writeResult2 = asyncWriter->Write(TSharedRef::FromString("bar"));
-    auto writeResult3 = asyncWriter->Write(TSharedRef::FromString("baz"));
+    auto writeResult1 = asyncWriter->Write(TSharedRef::FromString(std::string("foo")));
+    auto writeResult2 = asyncWriter->Write(TSharedRef::FromString(std::string("bar")));
+    auto writeResult3 = asyncWriter->Write(TSharedRef::FromString(std::string("baz")));
     auto closeResult = asyncWriter->Close();
 
     ASSERT_FALSE(writeResult1.IsSet());
@@ -91,8 +91,8 @@ TEST(TAsyncOutputStreamTest, TestEmptyString)
     auto pipe = New<TAsyncStreamPipe>();
     auto asyncWriter = CreateZeroCopyAdapter(static_cast<IAsyncOutputStreamPtr>(pipe));
 
-    auto writeResult1 = asyncWriter->Write(TSharedRef::FromString(""));
-    auto writeResult2 = asyncWriter->Write(TSharedRef::FromString(""));
+    auto writeResult1 = asyncWriter->Write(TSharedRef::FromString(std::string("")));
+    auto writeResult2 = asyncWriter->Write(TSharedRef::FromString(std::string("")));
     auto closeResult = asyncWriter->Close();
 
     auto readResult1 = ReadAlreadySetValue(pipe);

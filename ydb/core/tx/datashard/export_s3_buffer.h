@@ -3,6 +3,7 @@
 #ifndef KIKIMR_DISABLE_S3_OPS
 
 #include "export_iface.h"
+#include "export_data_format.h"
 #include "export_scan.h"
 
 #include <ydb/core/backup/common/encryption.h>
@@ -112,6 +113,11 @@ struct TS3ExportBufferSettings {
         return *this;
     }
 
+    TS3ExportBufferSettings& WithoutCompression() {
+        CompressionSettings.Clear();
+        return *this;
+    }
+
     TS3ExportBufferSettings& WithEncryption(TEncryptionSettings settings) {
         EncryptionSettings.ConstructInPlace(std::move(settings));
         return *this;
@@ -129,7 +135,7 @@ struct TS3ExportBufferSettings {
     TMaybe<TEncryptionSettings> EncryptionSettings;
 };
 
-NExportScan::IBuffer* CreateS3ExportBuffer(TS3ExportBufferSettings&& settings);
+NExportScan::IBuffer* CreateS3ExportBuffer(TS3ExportBufferSettings&& settings, std::unique_ptr<IExportDataFormat> dataFormat);
 
 } // NDataShard
 } // NKikimr

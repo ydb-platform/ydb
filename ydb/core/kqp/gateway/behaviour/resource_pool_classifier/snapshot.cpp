@@ -6,11 +6,16 @@ namespace NKikimr::NKqp {
 bool TResourcePoolClassifierSnapshot::DoDeserializeFromResultSet(const Ydb::Table::ExecuteQueryResult& rawData) {
     Y_ABORT_UNLESS(rawData.result_sets().size() == 1);
     ParseSnapshotObjects<TResourcePoolClassifierConfig>(rawData.result_sets()[0], [this](TResourcePoolClassifierConfig&& config) {
-        auto& info = ResourcePoolClassifierConfigs[config.GetDatabase()];
-        info.ByName.emplace(config.GetName(), config);
-        info.ByRank.emplace(config.GetRank(), config);
+        AddConfig(std::move(config));
     });
     return true;
+}
+
+void TResourcePoolClassifierSnapshot::AddConfig(TResourcePoolClassifierConfig config) {
+    config.EnsureSettings();
+    auto& info = ResourcePoolClassifierConfigs[config.GetDatabase()];
+    info.ByName.emplace(config.GetName(), config);
+    info.ByRank.emplace(config.GetRank(), std::move(config));
 }
 
 TString TResourcePoolClassifierSnapshot::DoSerializeToString() const {

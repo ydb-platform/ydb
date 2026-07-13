@@ -25,6 +25,7 @@ namespace NKikimr::NBsController {
                 bool IsReady;
                 TMonotonic ReadySince;
                 NKikimrBlobStorage::EVDiskStatus VDiskStatus;
+                std::optional<TString> DiskScope;
             };
             ui32 Generation;
             TBlobStorageGroupType Type;

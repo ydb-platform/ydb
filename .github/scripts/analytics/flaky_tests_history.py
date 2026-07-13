@@ -7,6 +7,19 @@ import ydb
 from ydb_wrapper import YDBWrapper
 
 
+def _dedupe_history_rows(rows):
+    """One row per (full_name, date_base, branch, build_type); prefer deepest suite_folder."""
+    if not rows:
+        return rows
+    best = {}
+    for row in rows:
+        key = (row['full_name'], row['date_base'], row['branch'], row['build_type'])
+        suite_len = len(str(row.get('suite_folder') or ''))
+        if key not in best or suite_len > len(str(best[key].get('suite_folder') or '')):
+            best[key] = row
+    return list(best.values())
+
+
 BASE_DATE = datetime.date(1970, 1, 1)
 DEFAULT_MONTHS_BACK = 180  # 6 months
 
@@ -257,6 +270,7 @@ def process_date_range(ydb_wrapper, test_runs_table, testowners_table, flaky_tes
             query, 
             query_name=f"get_flaky_test_history_for_date_{branch}"
         )
+        results = _dedupe_history_rows(results)
         print(f'📈 History data captured, {len(results)} rows')
         
         for row in results:

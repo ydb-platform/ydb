@@ -219,9 +219,19 @@ namespace NKikimr::NDDisk {
         if (FreeSpace < sectorsCount) {
             return result;
         }
+        if (FreeSpace < SectorsInChunk + sectorsCount) {
+            auto it = FreeSpaceMap.find(LockedChunkIdx);
+            if (it != FreeSpaceMap.end() && FreeSpace - it->second.FreeSpace < sectorsCount) {
+                UnlockChunk();
+            }
+        }
         while (result.size() != sectorsCount) {
             Y_ABORT_UNLESS(!ChunksByFreeSpace.empty());
             ui32 chunkIdx = ChunksByFreeSpace.back().ChunkIdx;
+            if (chunkIdx == LockedChunkIdx) {
+                Y_ABORT_UNLESS(ChunksByFreeSpace.size() >= 2);
+                chunkIdx = ChunksByFreeSpace[ChunksByFreeSpace.size() - 2].ChunkIdx;
+            }
             auto it = FreeSpaceMap.find(chunkIdx);
             Y_ABORT_UNLESS(it != FreeSpaceMap.end());
             it->second.Occupy(sectorsCount, result);
@@ -320,5 +330,42 @@ namespace NKikimr::NDDisk {
         return fs;
     }
 
+    void TPersistentBufferSpaceAllocator::LockNextChunk() {
+        if (LockedChunkIdx != Max<ui32>()) {
+            return;
+        }
+        Y_ABORT_UNLESS(OwnedChunks.size() > 0);
+        LastLockedOwnedChunksIdx++;
+        if (LastLockedOwnedChunksIdx >= OwnedChunks.size()) {
+            LastLockedOwnedChunksIdx = 0;
+        }
+        LockedChunkIdx = OwnedChunks[LastLockedOwnedChunksIdx];
+    }
+
+    void TPersistentBufferSpaceAllocator::UnlockChunk() {
+        LockedChunkIdx = Max<ui32>();
+    }
+
+    bool TPersistentBufferSpaceAllocator::DeallocateChunk() {
+        auto it = FreeSpaceMap.find(LockedChunkIdx);
+        if (it == FreeSpaceMap.end() || it->second.FreeSpace != SectorsInChunk) {
+            return false;
+        }
+        FreeSpaceMap.erase(LockedChunkIdx);
+        // A fully-free chunk (FreeSpace == SectorsInChunk) has the maximum possible free space,
+        // so in ChunksByFreeSpace (sorted ascending by FreeSpace) it is located at or near the
+        // very end of the vector. Locate it with a binary search on the unique {ChunkIdx, FreeSpace}
+        // key instead of scanning the whole vector, and erase it directly.
+        auto chunkIter = std::lower_bound(ChunksByFreeSpace.begin(), ChunksByFreeSpace.end(),
+            TChunkInfo{LockedChunkIdx, SectorsInChunk}, ChunksByFreeSpaceLess);
+        Y_ABORT_UNLESS(chunkIter != ChunksByFreeSpace.end()
+            && chunkIter->ChunkIdx == LockedChunkIdx && chunkIter->FreeSpace == SectorsInChunk);
+        ChunksByFreeSpace.erase(chunkIter);
+        std::erase(OwnedChunks, LockedChunkIdx);
+        FreeSpace -= SectorsInChunk;
+        Y_DEBUG_ABORT_UNLESS(FreeSpace == VerifyFreeSpace());
+        UnlockChunk();
+        return true;
+    }
 
 } // NKikimr::NDDisk

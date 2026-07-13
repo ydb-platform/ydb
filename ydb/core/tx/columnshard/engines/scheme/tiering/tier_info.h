@@ -185,13 +185,16 @@ public:
         AFL_VERIFY(tier);
         if (!TTLColumnName) {
             if (tier->GetEvictColumnName().empty()) {
-                AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("problem", "empty_evict_column_name");
+                YDB_LOG_ERROR_COMP(NKikimrServices::TX_COLUMNSHARD, "",
+                    {"problem", "empty_evict_column_name"});
                 return false;
             }
             TTLColumnName = tier->GetEvictColumnName();
         } else if (*TTLColumnName != tier->GetEvictColumnName()) {
-            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("problem", "incorrect_tiering_metadata")("column_before", *TTLColumnName)(
-                "column_new", tier->GetEvictColumnName());
+            YDB_LOG_ERROR_COMP(NKikimrServices::TX_COLUMNSHARD, "",
+                {"problem", "incorrect_tiering_metadata"},
+                {"columnBefore", *TTLColumnName},
+                {"columnNew", tier->GetEvictColumnName()});
             return false;
         }
 

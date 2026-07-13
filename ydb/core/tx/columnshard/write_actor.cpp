@@ -4,6 +4,9 @@
 #include <ydb/core/util/backoff.h>
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/struct_log/log_stack.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD_WRITE
 
 namespace NKikimr::NColumnShard {
 
@@ -23,8 +26,10 @@ public:
         , WriteController(writeController)
         , Deadline(deadline)
     {
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_WRITE)("event", "actor_created")("tablet_id", tabletId)(
-            "debug", writeController->DebugString());
+        YDB_LOG_DEBUG("",
+            {"event", "actor_created"},
+            {"tabletId", tabletId},
+            {"debug", writeController->DebugString()});
     }
 
     void Handle(TEvBlobStorage::TEvPutResult::TPtr& ev, const TActorContext& ctx) {
@@ -41,7 +46,11 @@ public:
         status = NYDBTest::TControllers::GetColumnShardController()->OverrideBlobPutResultOnWrite(status);
 
         if (status != NKikimrProto::OK) {
-            ACFL_ERROR("event", "TEvPutResult")("blob_id", msg->Id.ToString())("status", status)("error", msg->ErrorReason);
+            YDB_LOG_ERROR_COMP(NActors::NStructuredLog::TLogStack::GetComponent(), "",
+                {"event", "TEvPutResult"},
+                {"blobId", msg->Id},
+                {"status", status},
+                {"error", msg->ErrorReason});
             WriteController->Abort(
                 "cannot write blob " + msg->Id.ToString() + ", status: " + ::ToString(status) + ". reason: " + msg->ErrorReason);
             return SendResultAndDie(ctx, status);
@@ -54,7 +63,8 @@ public:
     }
 
     void Handle(TEvents::TEvWakeup::TPtr& /*ev*/, const TActorContext& ctx) {
-        ACFL_WARN("event", "wakeup");
+        YDB_LOG_WARN_COMP(NActors::NStructuredLog::TLogStack::GetComponent(), "",
+            {"event", "wakeup"});
         SendResultAndDie(ctx, NKikimrProto::TIMEOUT);
     }
 
@@ -96,7 +106,8 @@ public:
     }
 
     STFUNC(StateWait) {
-        NActors::TLogContextGuard logGuard = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("tablet_id", TabletId);
+        YDB_LOG_CREATE_CONTEXT_COMP(NKikimrServices::TX_COLUMNSHARD,
+            {"tabletId", TabletId});
         switch (ev->GetTypeRewrite()) {
             HFunc(TEvBlobStorage::TEvPutResult, Handle);
             HFunc(TEvents::TEvWakeup, Handle);

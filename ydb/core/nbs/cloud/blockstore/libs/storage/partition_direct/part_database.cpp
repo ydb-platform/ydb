@@ -179,4 +179,44 @@ void TPartitionDatabase::StoreVChunkConfig(const TVChunkConfig& cfg)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+bool TPartitionDatabase::ReadAddHostInProgress(
+    TMaybe<TAddHostInProgress>& addHostInProgress)
+{
+    using TTable = TPartitionSchema::TabletInfo;
+
+    auto it = Table<TTable>().Key(1).Select<TTable::AddHostInProgress>();
+
+    if (!it.IsReady()) {
+        return false;
+    }
+
+    if (it.IsValid() && it.HaveValue<TTable::AddHostInProgress>()) {
+        addHostInProgress = it.GetValue<TTable::AddHostInProgress>();
+    }
+
+    return true;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+void TPartitionDatabase::StoreAddHostInProgress(
+    const TAddHostInProgress& addHostInProgress)
+{
+    using TTable = TPartitionSchema::TabletInfo;
+
+    Table<TTable>().Key(1).Update(
+        NKikimr::NIceDb::TUpdate<TTable::AddHostInProgress>(addHostInProgress));
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+void TPartitionDatabase::ClearAddHostInProgress()
+{
+    using TTable = TPartitionSchema::TabletInfo;
+
+    Table<TTable>().Key(1).UpdateToNull<TTable::AddHostInProgress>();
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 }   // namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect

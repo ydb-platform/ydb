@@ -18,9 +18,11 @@ private:
     virtual void DoSerializeToProto(NKikimrTxColumnShard::TCommitWriteTxBody& result) const override {
         auto& data = *result.MutableSecondaryTabletData();
         if (TxBroken) {
-            data.SetTxBroken(*TxBroken);
+            data.SetTxBroken(TxBroken.value());
         }
-        data.SetSelfBroken(SelfBroken);
+        if (SelfBroken.has_value()) {
+            data.SetSelfBroken(SelfBroken.value());
+        }
         data.SetNeedReceiveBroken(NeedReceiveBroken);
         data.SetReceiveAck(ReceiveAck);
         data.SetArbiterTabletId(ArbiterTabletId);
@@ -30,16 +32,21 @@ private:
     ui64 ArbiterTabletId;
     bool NeedReceiveBroken = false;
     bool ReceiveAck = false;
-    bool SelfBroken = false;
+    std::optional<bool> SelfBroken;
     std::optional<bool> TxBroken;
+    bool SelfBrokenFlagPersisted = false;
 
     virtual bool DoParseImpl(TColumnShard& /*owner*/, const NKikimrTxColumnShard::TCommitWriteTxBody& commitTxBody) override {
         if (!commitTxBody.HasSecondaryTabletData()) {
-            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_TX)("event", "cannot read proto")("proto", commitTxBody.DebugString());
+            YDB_LOG_ERROR_COMP(NKikimrServices::TX_COLUMNSHARD_TX, "",
+                {"event", "cannot read proto"},
+                {"proto", commitTxBody.DebugString()});
             return false;
         }
         auto& protoData = commitTxBody.GetSecondaryTabletData();
-        SelfBroken = protoData.GetSelfBroken();
+        if (protoData.HasSelfBroken()) {
+            SelfBroken = protoData.GetSelfBroken();
+        }
         ArbiterTabletId = protoData.GetArbiterTabletId();
         NeedReceiveBroken = protoData.GetNeedReceiveBroken();
         ReceiveAck = protoData.GetReceiveAck();
@@ -58,15 +65,61 @@ private:
         return "EV_WRITE_SECONDARY";
     }
 
+    class TTxStartPreparation: public TExtendedTransactionBase {
+    private:
+        using TBase = TExtendedTransactionBase;
+        const ui64 TxId;
+
+        virtual bool DoExecute(NTabletFlatExecutor::TTransactionContext& txc, const NActors::TActorContext& /*ctx*/) override {
+            auto& txController = Self->GetProgressTxController();
+            auto op = txController.GetTxOperatorAs<TEvWriteCommitSecondaryTransactionOperator>(TxId, ETxOperatorStatus::InProgress);
+            if (op->SelfBroken.has_value()) {
+                op->SelfBrokenFlagPersisted = true;
+                if (!op->ReceiveAck) {
+                    // We can send the result here, because we are sure that SelfBroken is persisted
+                    op->SendResult(*Self);
+                }
+            } else {
+                auto& lock = Self->GetOperationsManager().GetLockFeaturesForTxVerified(TxId);
+                op->SelfBroken = lock.IsBroken();
+                txController.WriteTxOperatorInfo(txc, TxId, op->SerializeToProto().SerializeAsString());
+            }
+            return true;
+        }
+
+        virtual void DoComplete(const NActors::TActorContext& /*ctx*/) override {
+            auto op = Self->GetProgressTxController().GetTxOperatorAs<TEvWriteCommitSecondaryTransactionOperator>(
+                TxId, ETxOperatorStatus::InProgress, /*optional*/ true);
+            if (op) {
+                if (!op->SelfBrokenFlagPersisted) {
+                    op->SelfBrokenFlagPersisted = true;
+                    if (!op->ReceiveAck) {
+                        op->SendResult(*Self);
+                    }
+                }
+            }
+        }
+
+    public:
+        TTxStartPreparation(TColumnShard* owner, const ui64 txId)
+            : TBase(owner, "start_preparation")
+            , TxId(txId)
+        {
+        }
+    };
+
     class TTxWriteReceivedAck: public TExtendedTransactionBase {
     private:
         using TBase = TExtendedTransactionBase;
         const ui64 TxId;
 
         virtual bool DoExecute(NTabletFlatExecutor::TTransactionContext& txc, const NActors::TActorContext& ctx) override {
-            auto op = Self->GetProgressTxController().GetTxOperatorVerifiedAs<TEvWriteCommitSecondaryTransactionOperator>(TxId, true);
+            auto op = Self->GetProgressTxController().GetTxOperatorAs<TEvWriteCommitSecondaryTransactionOperator>(
+                TxId, ETxOperatorStatus::InProgress, /*optional*/ true);
             if (!op || op->ReceiveAck) {
-                AFL_WARN(NKikimrServices::TX_COLUMNSHARD_WRITE)("event", "duplication_tablet_ack_flag")("txId", TxId);
+                YDB_LOG_WARN_COMP(NKikimrServices::TX_COLUMNSHARD_WRITE, "",
+                    {"event", "duplication_tablet_ack_flag"},
+                    {"txId", TxId});
             } else {
                 op->ReceiveAck = true;
                 if (!op->NeedReceiveBroken) {
@@ -91,12 +144,6 @@ private:
         }
     };
 
-    virtual std::unique_ptr<NTabletFlatExecutor::ITransaction> CreateReceiveResultAckTx(
-        TColumnShard& owner, const ui64 recvTabletId) const override {
-        AFL_VERIFY(recvTabletId == ArbiterTabletId)("recv", recvTabletId)("arbiter", ArbiterTabletId);
-        return std::make_unique<TTxWriteReceivedAck>(owner, GetTxId());
-    }
-
     class TTxWriteReceivedBrokenFlag: public TExtendedTransactionBase {
     private:
         using TBase = TExtendedTransactionBase;
@@ -107,9 +154,12 @@ private:
         std::unique_ptr<TEvTxProcessing::TEvReadSetAck> BrokenFlagAck;
 
         virtual bool DoExecute(NTabletFlatExecutor::TTransactionContext& txc, const NActors::TActorContext& ctx) override {
-            auto op = Self->GetProgressTxController().GetTxOperatorVerifiedAs<TEvWriteCommitSecondaryTransactionOperator>(TxId, true);
+            auto& txController = Self->GetProgressTxController();
+            auto op = txController.GetTxOperatorAs<TEvWriteCommitSecondaryTransactionOperator>(TxId, ETxOperatorStatus::Any, /*optional*/ true);
             if (!op) {
-                AFL_WARN(NKikimrServices::TX_COLUMNSHARD_WRITE)("event", "duplication_tablet_broken_flag")("txId", TxId);
+                YDB_LOG_WARN_COMP(NKikimrServices::TX_COLUMNSHARD_WRITE, "",
+                    {"event", "duplication_tablet_broken_flag"},
+                    {"txId", TxId});
                 // send the ack anyway, so that the primary waits less time to progress
                 TEvWriteCommitSyncTransactionOperator::SendBrokenFlagAck(*Self, Step, TxId, ArbiterTabletId);
                 return true;
@@ -117,12 +167,19 @@ private:
 
             BrokenFlagAck =
                 TEvWriteCommitSyncTransactionOperator::MakeBrokenFlagAck(op->GetStep(), op->GetTxId(), Self->TabletID(), ArbiterTabletId);
+            if (txController.IsTxCompleting(TxId)) {
+                return true;
+            }
+
+            // op is still in progress
             if (op->TxBroken.has_value()) {
-                AFL_WARN(NKikimrServices::TX_COLUMNSHARD_WRITE)("event", "duplication_tablet_broken_flag")("txId", TxId);
+                YDB_LOG_WARN_COMP(NKikimrServices::TX_COLUMNSHARD_WRITE, "",
+                    {"event", "duplication_tablet_broken_flag"},
+                    {"txId", TxId});
                 // we cannot send the ack here, because the previous transaction (that successfully set TxBroken) may be not completed yet
             } else {
                 op->TxBroken = BrokenFlag;
-                Self->GetProgressTxController().WriteTxOperatorInfo(txc, TxId, op->SerializeToProto().SerializeAsString());
+                txController.WriteTxOperatorInfo(txc, TxId, op->SerializeToProto().SerializeAsString());
 
                 // me must check IsInProgress, because the ReadSet and the Ack from the primary may come in any order,
                 // and we do not want to enqueue the progress tx twice
@@ -137,7 +194,8 @@ private:
 
         virtual void DoComplete(const NActors::TActorContext& /*ctx*/) override {
             if (NYDBTest::TControllers::GetColumnShardController()->GetInterruptionOnLockedTransactions()) {
-                AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "skip_continue");
+                YDB_LOG_WARN_COMP(NKikimrServices::TX_COLUMNSHARD, "",
+                    {"event", "skip_continue"});
                 return;
             }
             if (BrokenFlagAck != nullptr) {
@@ -156,6 +214,12 @@ private:
         }
     };
 
+    virtual std::unique_ptr<NTabletFlatExecutor::ITransaction> CreateReceiveResultAckTx(
+        TColumnShard& owner, const ui64 recvTabletId) const override {
+        AFL_VERIFY(recvTabletId == ArbiterTabletId)("recv", recvTabletId)("arbiter", ArbiterTabletId);
+        return std::make_unique<TTxWriteReceivedAck>(owner, GetTxId());
+    }
+
     virtual std::unique_ptr<NTabletFlatExecutor::ITransaction> CreateReceiveBrokenFlagTx(
         TColumnShard& owner, const ui64 sendTabletId, const bool broken) const override {
         AFL_VERIFY(ArbiterTabletId == sendTabletId);
@@ -164,11 +228,14 @@ private:
 
     void SendResult(TColumnShard& owner) {
         if (NYDBTest::TControllers::GetColumnShardController()->GetInterruptionOnLockedTransactions()) {
-            AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "skip_continue");
+            YDB_LOG_WARN_COMP(NKikimrServices::TX_COLUMNSHARD, "",
+                {"event", "skip_continue"});
             return;
         }
+        AFL_VERIFY(SelfBroken.has_value());
         NKikimrTx::TReadSetData readSetData;
-        readSetData.SetDecision(SelfBroken ? NKikimrTx::TReadSetData::DECISION_ABORT : NKikimrTx::TReadSetData::DECISION_COMMIT);
+        bool broken = SelfBroken.value();
+        readSetData.SetDecision(broken ? NKikimrTx::TReadSetData::DECISION_ABORT : NKikimrTx::TReadSetData::DECISION_COMMIT);
         auto event = std::make_unique<TEvTxProcessing::TEvReadSet>(
             0, GetTxId(), owner.TabletID(), ArbiterTabletId, owner.TabletID(), readSetData.SerializeAsString());
         TEvWriteCommitSyncTransactionOperator::SendPersistent(owner, std::move(event), ArbiterTabletId, GetTxId());
@@ -177,47 +244,19 @@ private:
     virtual void DoOnTabletInit(TColumnShard& /*owner*/) override {
     }
 
-    class TTxStartPreparation: public TExtendedTransactionBase {
-    private:
-        using TBase = TExtendedTransactionBase;
-        const ui64 TxId;
-
-        virtual bool DoExecute(NTabletFlatExecutor::TTransactionContext& txc, const NActors::TActorContext& /*ctx*/) override {
-            auto& lock = Self->GetOperationsManager().GetLockVerified(Self->GetOperationsManager().GetLockForTxVerified(TxId));
-            auto op = Self->GetProgressTxController().GetTxOperatorVerifiedAs<TEvWriteCommitSecondaryTransactionOperator>(TxId);
-            op->SelfBroken = lock.IsBroken();
-            Self->GetProgressTxController().WriteTxOperatorInfo(txc, TxId, op->SerializeToProto().SerializeAsString());
-            if (!op->ReceiveAck) {
-                // We send the result here before SelfBroken is truly persisted, yes.
-                // But we persist lock.IsBroken(), so if the secondary crushes and restarts,
-                // the secondary will send the same result again, and the primary will ignore it (if already processed)
-                op->SendResult(*Self);
-            }
-            return true;
-        }
-
-        virtual void DoComplete(const NActors::TActorContext& /*ctx*/) override {
-        }
-
-    public:
-        TTxStartPreparation(TColumnShard* owner, const ui64 txId)
-            : TBase(owner, "start_preparation")
-            , TxId(txId)
-        {
-        }
-    };
-
     virtual bool DoIsInProgress() const override {
         return !ReceiveAck || !TxBroken.has_value();
     }
 
     virtual std::unique_ptr<NTabletFlatExecutor::ITransaction> DoBuildTxPrepareForProgress(TColumnShard* owner) const override {
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_TX)("event", "prepare_for_progress_started")("lock_id", LockId);
+        YDB_LOG_DEBUG_COMP(NKikimrServices::TX_COLUMNSHARD_TX, "",
+            {"event", "prepare_for_progress_started"},
+            {"lockId", LockId});
         return std::make_unique<TTxStartPreparation>(owner, GetTxId());
     }
 
     virtual void OnTimeout(TColumnShard& owner) override {
-        if (!ReceiveAck) {
+        if (SelfBrokenFlagPersisted && !ReceiveAck) {
             SendResult(owner);
         }
     }

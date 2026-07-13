@@ -293,7 +293,7 @@ TString TGatewayLambdaBuilder::BuildLambdaWithIO(const IMkqlCallableCompiler& co
 
                 auto ytInput = TRuntimeNode(TCallableBuilder(GetTypeEnvironment(), "YtInput", pgmBuilder.NewFlowType(nonBlockInputItemType ? nonBlockInputItemType : inputItemType)).Build(), false);
                 if (nonBlockInputItemType) {
-                    ytInput = pgmBuilder.ToFlow(pgmBuilder.WideToBlocks(pgmBuilder.FromFlow(ytInput)));
+                    ytInput = pgmBuilder.ToFlow(pgmBuilder.WideToBlocks(pgmBuilder.FromFlow(ytInput)), {});
                 }
 
                 arguments.emplace(arg.Raw(), ytInput);

@@ -1040,7 +1040,7 @@ TYtSection SectionApplyAdditionalSort(const TYtSection& section, const TYtEquiJo
     }
 
     TVector<bool> sortDirections(sortTableOrder.size(), true);
-    ui64 nativeTypeFlags = state.Configuration->UseNativeYtTypes.Get().GetOrElse(DEFAULT_USE_NATIVE_YT_TYPES) ? NTCF_ALL : NTCF_NONE;
+    const ui64 nativeTypeCompatibility = GetNativeYtTypeCompatibility(equiJoin.DataSink().Cluster().StringValue(), *state.Configuration);
     const bool useNativeYtDefaultColumnOrder = state.Configuration->UseNativeYtDefaultColumnOrder.Get().GetOrElse(DEFAULT_USE_NATIVE_YT_DEFAULT_COLUMN_ORDER);
     TMaybe<NYT::TNode> nativeType;
 
@@ -1056,7 +1056,7 @@ TYtSection SectionApplyAdditionalSort(const TYtSection& section, const TYtEquiJo
                                 .Add(inputSection)
                             .Build()
                             .Output()
-                                .Add(TYtOutTableInfo(sortTableType, state.Configuration->UseNativeYtTypes.Get().GetOrElse(DEFAULT_USE_NATIVE_YT_TYPES) ? NTCF_ALL : NTCF_NONE)
+                                .Add(TYtOutTableInfo(sortTableType, nativeTypeCompatibility)
                                      .ToExprNode(ctx, pos).Cast<TYtOutTable>())
                             .Build()
                             .Settings(GetFlowSettings(pos, state, ctx))
@@ -1080,11 +1080,11 @@ TYtSection SectionApplyAdditionalSort(const TYtSection& section, const TYtEquiJo
     } else {
         auto inputRowSpec = TYtTableBaseInfo::GetRowSpec(section.Paths().Item(0).Table());
         // Use types from first input only, because all of them shoud be equal (otherwise remap is required)
-        nativeTypeFlags = inputRowSpec->GetNativeYtTypeFlags();
         nativeType = inputRowSpec->GetNativeYtType();
     }
 
-    TYtOutTableInfo sortOut(sortTableType, nativeTypeFlags);
+    // Type flags of sort output are the same as for input ones (otherwise remap is required)
+    TYtOutTableInfo sortOut(sortTableType, nativeTypeCompatibility);
     sortOut.RowSpec->SortMembers = sortTableOrder;
     sortOut.RowSpec->SortedBy = sortTableOrder;
     sortOut.RowSpec->SortedByTypes = sortedByTypes;
@@ -1310,7 +1310,7 @@ bool RewriteYtMergeJoin(TYtEquiJoin equiJoin, const TJoinLabels& labels, TYtJoin
         .Seal()
         .Build();
 
-    TYtOutTableInfo outTableInfo(outItemType, state->Configuration->UseNativeYtTypes.Get().GetOrElse(DEFAULT_USE_NATIVE_YT_TYPES) ? NTCF_ALL : NTCF_NONE);
+    TYtOutTableInfo outTableInfo(outItemType, GetNativeYtTypeCompatibility(equiJoin.DataSink().Cluster().StringValue(), *state->Configuration));
     outTableInfo.RowSpec->SetConstraints(op.Constraints);
     outTableInfo.SetUnique(op.Constraints.GetConstraint<TDistinctConstraintNode>(), pos, ctx);
     const bool setTopLevelFullSort = state->Configuration->JoinMergeSetTopLevelFullSort.Get().GetOrElse(false);
@@ -1842,7 +1842,7 @@ bool RewriteYtMapJoin(TYtEquiJoin equiJoin, const TJoinLabels& labels, bool isLo
 
     auto mapJoinUseFlow = state->Configuration->MapJoinUseFlow.Get().GetOrElse(DEFAULT_MAP_JOIN_USE_FLOW);
 
-    TYtOutTableInfo outTableInfo(outItemType, state->Configuration->UseNativeYtTypes.Get().GetOrElse(DEFAULT_USE_NATIVE_YT_TYPES) ? NTCF_ALL : NTCF_NONE);
+    TYtOutTableInfo outTableInfo(outItemType, GetNativeYtTypeCompatibility(equiJoin.DataSink().Cluster().StringValue(), *state->Configuration));
     outTableInfo.RowSpec->SetConstraints(op.Constraints);
     outTableInfo.SetUnique(op.Constraints.GetConstraint<TDistinctConstraintNode>(), pos, ctx);
 
@@ -2869,7 +2869,7 @@ bool RewriteYtCommonJoin(TYtEquiJoin equiJoin, const TJoinLabels& labels, TYtJoi
                 .Build()
             .Build().Done().Ptr();
 
-    TYtOutTableInfo outInfo(outItemType, state->Configuration->UseNativeYtTypes.Get().GetOrElse(DEFAULT_USE_NATIVE_YT_TYPES) ? NTCF_ALL : NTCF_NONE);
+    TYtOutTableInfo outInfo(outItemType, GetNativeYtTypeCompatibility(equiJoin.DataSink().Cluster().StringValue(), *state->Configuration));
     outInfo.RowSpec->SetConstraints(op.Constraints);
     outInfo.SetUnique(op.Constraints.GetConstraint<TDistinctConstraintNode>(), pos, ctx);
     const auto outTableInfo = outInfo.ToExprNode(ctx, pos).Ptr();
@@ -3094,7 +3094,7 @@ bool RewriteYtEmptyJoin(TYtEquiJoin equiJoin, const TJoinLabels& labels, TYtJoin
         }
     }
 
-    TYtOutTableInfo outTableInfo(outItemType, state->Configuration->UseNativeYtTypes.Get().GetOrElse(DEFAULT_USE_NATIVE_YT_TYPES) ? NTCF_ALL : NTCF_NONE);
+    TYtOutTableInfo outTableInfo(outItemType, GetNativeYtTypeCompatibility(equiJoin.DataSink().Cluster().StringValue(), *state->Configuration));
     outTableInfo.RowSpec->SetConstraints(op.Constraints);
     outTableInfo.SetUnique(op.Constraints.GetConstraint<TDistinctConstraintNode>(), pos, ctx);
 
@@ -3120,19 +3120,23 @@ TStatus CollectJoinSideStats(ESizeStatCollectMode sizeMode, TJoinSideStats& stat
     stats.IsDynamic = AnyOf(tableInfo, [](const TYtPathInfo::TPtr& path) {
         return path->Table->Meta->IsDynamic;
     });
-    const ui64 nativeTypeFlags = state.Configuration->UseNativeYtTypes.Get().GetOrElse(DEFAULT_USE_NATIVE_YT_TYPES) && inputSection.Ref().GetTypeAnn()
-         ? GetNativeYtTypeFlags(*inputSection.Ref().GetTypeAnn()->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>())
-         : 0ul;
+
     TMaybe<NYT::TNode> firstNativeType;
+    TMaybe<ui64> nativeTypeFlags;
     if (!tableInfo.empty()) {
         firstNativeType = tableInfo.front()->GetNativeYtType();
+        if (inputSection.Ref().GetTypeAnn()) {
+            const ui64 nativeTypeCompatibility = GetNativeYtTypeCompatibility(tableInfo.front()->Table->Cluster, *state.Configuration);
+            nativeTypeFlags = GetNativeYtTypeFlags(*inputSection.Ref().GetTypeAnn()->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>()) & nativeTypeCompatibility;
+        }
     }
+
     stats.NeedsRemap = NYql::HasSetting(inputSection.Settings().Ref(), EYtSettingType::SysColumns)
-        || AnyOf(tableInfo, [nativeTypeFlags, firstNativeType](const TYtPathInfo::TPtr& path) {
+        || AnyOf(tableInfo, [firstNativeType, nativeTypeFlags](const TYtPathInfo::TPtr& path) {
             return path->RequiresRemap()
                 || path->Table->RowSpec->HasAuxColumns() // TODO: remove
-                || nativeTypeFlags != path->GetNativeYtTypeFlags()
-                || firstNativeType != path->GetNativeYtType();
+                || firstNativeType != path->GetNativeYtType()
+                || nativeTypeFlags != path->GetNativeYtTypeFlags();
         });
 
     bool first = true;
@@ -4531,7 +4535,7 @@ EStarRewriteStatus RewriteYtEquiJoinStarSingleChain(TYtEquiJoin equiJoin, TYtJoi
         inputVariant = ctx.MakeType<TVariantExprType>(ctx.MakeType<TTupleExprType>(items));
     }
 
-    TYtOutTableInfo outTableInfo(outItemType, state->Configuration->UseNativeYtTypes.Get().GetOrElse(DEFAULT_USE_NATIVE_YT_TYPES) ? NTCF_ALL : NTCF_NONE);
+    TYtOutTableInfo outTableInfo(outItemType, GetNativeYtTypeCompatibility(equiJoin.DataSink().Cluster().StringValue(), *state->Configuration));
     outTableInfo.RowSpec->SetConstraints(equiJoin.Ref().GetConstraintSet());
     outTableInfo.SetUnique(equiJoin.Ref().GetConstraint<TDistinctConstraintNode>(), pos, ctx);
     // TODO: mark output sorted
@@ -5366,8 +5370,7 @@ TMaybeNode<TExprBase> ExportYtEquiJoin(TYtEquiJoin equiJoin, const TYtJoinNodeOp
             .Add(sections)
         .Build()
         .Output()
-            .Add(TYtOutTableInfo(outItemType->Cast<TStructExprType>(),
-                state->Configuration->UseNativeYtTypes.Get().GetOrElse(DEFAULT_USE_NATIVE_YT_TYPES) ? NTCF_ALL : NTCF_NONE).ToExprNode(ctx, equiJoin.Pos()).Cast<TYtOutTable>())
+            .Add(TYtOutTableInfo(outItemType->Cast<TStructExprType>(), GetNativeYtTypeCompatibility(equiJoin.DataSink().Cluster().StringValue(), *state->Configuration)).ToExprNode(ctx, equiJoin.Pos()).Cast<TYtOutTable>())
         .Build()
         .Settings()
         .Build()

@@ -447,12 +447,9 @@ TErrorCode StatusCodeToErrorCode(grpc_status_code statusCode)
 std::string SerializeError(const TError& error)
 {
     // TODO(babenko): migrate to std::string
-    TString serializedError;
-    google::protobuf::io::StringOutputStream output(&serializedError);
     NYT::NProto::TError protoError;
     ToProto(&protoError, error);
-    YT_VERIFY(protoError.SerializeToZeroCopyStream(&output));
-    return serializedError;
+    return protoError.SerializeAsString();
 }
 
 TError DeserializeError(TStringBuf serializedError)

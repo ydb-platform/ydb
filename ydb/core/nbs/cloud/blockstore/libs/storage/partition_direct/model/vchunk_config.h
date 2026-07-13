@@ -25,12 +25,17 @@ public:
     [[nodiscard]] size_t GetHostCount() const;
     [[nodiscard]] ui32 GetVChunkIndex() const;
 
+    void SetDBGIndex(ui32 dbgIndex);
+    [[nodiscard]] ui32 GetDBGIndex() const;
+
     // Enables the host to work. If the total count of ddisks is not enough to
     // reach the quorum, then can make a promotion for ddisk.
     void EnableHost(THostIndex hostIndex);
     // Temporarily disables the host. Does not change the ddisk status for the
     // host.
     void DisableHost(THostIndex hostIndex);
+
+    void AppendHost();
 
     // Disables the host. Demote ddisk and pbuffer. If possible, adds ddisk on
     // the new host. Returns the text of the error or message to be logged.
@@ -73,6 +78,7 @@ public:
 
 private:
     size_t HostCount = 0;
+    ui32 DBGIndex = 0;
     ui32 VChunkIndex = 0;
     THostRoles PBufferHosts;
     THostRoles DDiskHosts;

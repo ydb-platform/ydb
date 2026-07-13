@@ -407,6 +407,42 @@ IGraphTransformer::TStatus BlockGuessWrapper(const TExprNode::TPtr& input, TExpr
     return IGraphTransformer::TStatus::Ok;
 }
 
+IGraphTransformer::TStatus BlockWayWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+    Y_UNUSED(output);
+    if (!EnsureArgsCount(*input, 1, ctx.Expr)) {
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    auto variantNode = input->Child(0);
+    if (!EnsureBlockOrScalarType(*variantNode, ctx.Expr)) {
+        return IGraphTransformer::TStatus::Error;
+    }
+    bool isScalar;
+    const TTypeAnnotationNode* itemType = GetBlockItemType(*variantNode->GetTypeAnn(), isScalar);
+
+    const TTypeAnnotationNode* innerItemType = itemType;
+    bool isOptional = innerItemType->GetKind() == ETypeAnnotationKind::Optional;
+    if (isOptional) {
+        innerItemType = innerItemType->Cast<TOptionalExprType>()->GetItemType();
+    }
+    if (!EnsureVariantType(variantNode->Pos(), *innerItemType, ctx.Expr)) {
+        return IGraphTransformer::TStatus::Error;
+    }
+    auto variantType = innerItemType->Cast<TVariantExprType>();
+
+    const TTypeAnnotationNode* wayType = nullptr;
+    if (variantType->GetUnderlyingType()->GetKind() == ETypeAnnotationKind::Tuple) {
+        wayType = ctx.Expr.MakeType<TDataExprType>(EDataSlot::Uint32);
+    } else {
+        wayType = ctx.Expr.MakeType<TDataExprType>(EDataSlot::Utf8);
+    }
+    if (isOptional) {
+        wayType = ctx.Expr.MakeType<TOptionalExprType>(wayType);
+    }
+    input->SetTypeAnn(MakeBlockOrScalarType(wayType, isScalar, ctx.Expr));
+    return IGraphTransformer::TStatus::Ok;
+}
+
 IGraphTransformer::TStatus BlockIfWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
     Y_UNUSED(output);
     if (!EnsureArgsCount(*input, 3U, ctx.Expr)) {

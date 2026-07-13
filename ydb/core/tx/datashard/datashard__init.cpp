@@ -175,8 +175,10 @@ void TDataShard::TTxInitRestored::Complete(const TActorContext& ctx) {
         Self->InMemoryStateActor->ConfirmPersistent();
     }
 
-    // Start MakeSnapshot() if we started in SplitSrcMakeSnapshot state
-    if (Self->State == TShardState::SplitSrcMakeSnapshot) {
+    // Resume split if we rebooted while waiting for in-flight txs to drain.
+    if (Self->State == TShardState::SplitSrcWaitForNoTxInFlight) {
+        Self->CheckSplitCanStart(ctx);
+    } else if (Self->State == TShardState::SplitSrcMakeSnapshot) {
         Self->Execute(Self->CreateTxStartSplit(), ctx);
     } else if (Self->State == TShardState::SplitSrcSendingSnapshot) {
         if (!Self->SplitSrcSnapshotSender.AllAcked()) {

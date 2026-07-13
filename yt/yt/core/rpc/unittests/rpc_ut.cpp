@@ -320,7 +320,7 @@ TYPED_TEST(TNotGrpcTest, ClientNotReading)
         req->set_delayed(true);
         auto invokeResult = req->Invoke();
 
-        WaitFor(req->GetRequestAttachmentsStream()->Write(TSharedRef::FromString("hello")))
+        WaitFor(req->GetRequestAttachmentsStream()->Write(TSharedRef::FromString(std::string("hello"))))
             .ThrowOnError();
         WaitFor(req->GetRequestAttachmentsStream()->Close())
             .ThrowOnError();
@@ -350,7 +350,7 @@ TYPED_TEST(TNotGrpcTest, ClientNotWriting)
         auto req = proxy.StreamingEcho();
         auto invokeResult = req->Invoke();
 
-        WaitFor(req->GetRequestAttachmentsStream()->Write(TSharedRef::FromString("hello")))
+        WaitFor(req->GetRequestAttachmentsStream()->Write(TSharedRef::FromString(std::string("hello"))))
             .ThrowOnError();
         WaitFor(req->GetResponseAttachmentsStream()->Read())
             .ThrowOnError();
@@ -383,7 +383,7 @@ TYPED_TEST(TNotGrpcTest, ServerNotReading)
         req->set_sleep(sleep);
         auto invokeResult = req->Invoke();
 
-        auto data = TSharedRef::FromString("hello");
+        auto data = TSharedRef::FromString(std::string("hello"));
         WaitFor(req->GetRequestAttachmentsStream()->Write(data))
             .ThrowOnError();
 
@@ -545,9 +545,9 @@ TYPED_TEST(TAttachmentsTest, RegularAttachments)
     TTestProxy proxy(this->CreateChannel());
     auto req = proxy.RegularAttachments();
 
-    req->Attachments().push_back(TSharedRef::FromString("Hello"));
-    req->Attachments().push_back(TSharedRef::FromString("from"));
-    req->Attachments().push_back(TSharedRef::FromString("TTestProxy"));
+    req->Attachments().push_back(TSharedRef::FromString(std::string("Hello")));
+    req->Attachments().push_back(TSharedRef::FromString(std::string("from")));
+    req->Attachments().push_back(TSharedRef::FromString(std::string("TTestProxy")));
 
     auto rspOrError = WaitForFast(req->Invoke());
     EXPECT_TRUE(rspOrError.IsOK());
@@ -570,9 +570,9 @@ TYPED_TEST(TNotGrpcTest, DirectPlacementAttachments)
     req->RequestAttachmentsDptParameters().Enabled = true;
     req->ResponseAttachmentsDptParameters().Enabled = true;
 
-    req->Attachments().push_back(TSharedRef::FromString("Hello"));
-    req->Attachments().push_back(TSharedRef::FromString("from"));
-    req->Attachments().push_back(TSharedRef::FromString("TTestProxy"));
+    req->Attachments().push_back(TSharedRef::FromString(std::string("Hello")));
+    req->Attachments().push_back(TSharedRef::FromString(std::string("from")));
+    req->Attachments().push_back(TSharedRef::FromString(std::string("TTestProxy")));
 
     auto rspOrError = WaitForFast(req->Invoke());
     EXPECT_TRUE(rspOrError.IsOK());
@@ -598,9 +598,9 @@ TYPED_TEST(TNotGrpcTest, TrackedRegularAttachments)
     auto memoryUsageTracker = this->GetMemoryUsageTracker();
     memoryUsageTracker->ClearTotalUsage();
 
-    req->Attachments().push_back(TSharedRef::FromString("Hello"));
-    req->Attachments().push_back(TSharedRef::FromString("from"));
-    req->Attachments().push_back(TSharedRef::FromString("TTestProxy"));
+    req->Attachments().push_back(TSharedRef::FromString(std::string("Hello")));
+    req->Attachments().push_back(TSharedRef::FromString(std::string("from")));
+    req->Attachments().push_back(TSharedRef::FromString(std::string("TTestProxy")));
 
     auto rspOrError = WaitForFast(req->Invoke());
     EXPECT_TRUE(rspOrError.IsOK());
@@ -1281,7 +1281,7 @@ TEST_F(TAttachmentsInputStreamTest, EnqueueBeforeRead)
 {
     auto stream = CreateStream();
 
-    auto payload = TSharedRef::FromString("payload");
+    auto payload = TSharedRef::FromString(std::string("payload"));
     stream->EnqueuePayload(MakePayload(0, std::vector<TSharedRef>{payload}));
 
     auto future = stream->Read();
@@ -1297,7 +1297,7 @@ TEST_F(TAttachmentsInputStreamTest, ReadBeforeEnqueue)
     auto future = stream->Read();
     EXPECT_FALSE(future.IsSet());
 
-    auto payload = TSharedRef::FromString("payload");
+    auto payload = TSharedRef::FromString(std::string("payload"));
     stream->EnqueuePayload(MakePayload(0, std::vector<TSharedRef>{payload}));
 
     EXPECT_TRUE(future.IsSet());
@@ -1309,7 +1309,7 @@ TEST_F(TAttachmentsInputStreamTest, CloseBeforeRead)
 {
     auto stream = CreateStream();
 
-    auto payload = TSharedRef::FromString("payload");
+    auto payload = TSharedRef::FromString(std::string("payload"));
     stream->EnqueuePayload(MakePayload(0, {payload}));
     stream->EnqueuePayload(MakePayload(1, {TSharedRef()}));
 
@@ -1328,8 +1328,8 @@ TEST_F(TAttachmentsInputStreamTest, Reordering)
 {
     auto stream = CreateStream();
 
-    auto payload1 = TSharedRef::FromString("payload1");
-    auto payload2 = TSharedRef::FromString("payload2");
+    auto payload1 = TSharedRef::FromString(std::string("payload1"));
+    auto payload2 = TSharedRef::FromString(std::string("payload2"));
 
     stream->EnqueuePayload(MakePayload(1, {payload2}));
     stream->EnqueuePayload(MakePayload(0, {payload1}));
@@ -1409,7 +1409,7 @@ TEST_F(TAttachmentsOutputStreamTest, SinglePull)
 {
     auto stream = CreateStream(100);
 
-    auto payload = TSharedRef::FromString("payload");
+    auto payload = TSharedRef::FromString(std::string("payload"));
     auto future = stream->Write(payload);
     EXPECT_EQ(1, PullCallbackCounter_);
     EXPECT_TRUE(future.IsSet());
@@ -1449,13 +1449,13 @@ TEST_F(TAttachmentsOutputStreamTest, Backpressure)
 {
     auto stream = CreateStream(5);
 
-    auto payload1 = TSharedRef::FromString("abc");
+    auto payload1 = TSharedRef::FromString(std::string("abc"));
     auto future1 = stream->Write(payload1);
     EXPECT_TRUE(future1.IsSet());
     EXPECT_TRUE(WaitForFast(future1).IsOK());
     EXPECT_EQ(1, PullCallbackCounter_);
 
-    auto payload2 = TSharedRef::FromString("def");
+    auto payload2 = TSharedRef::FromString(std::string("def"));
     auto future2 = stream->Write(payload2);
     EXPECT_FALSE(future2.IsSet());
     EXPECT_EQ(2, PullCallbackCounter_);
@@ -1478,7 +1478,7 @@ TEST_F(TAttachmentsOutputStreamTest, Backpressure)
     EXPECT_TRUE(future2.IsSet());
     EXPECT_TRUE(WaitForFast(future2).IsOK());
 
-    auto payload3 = TSharedRef::FromString("x");
+    auto payload3 = TSharedRef::FromString(std::string("x"));
     auto future3 = stream->Write(payload3);
     EXPECT_TRUE(future3.IsSet());
     EXPECT_TRUE(WaitForFast(future3).IsOK());
@@ -1495,7 +1495,7 @@ TEST_F(TAttachmentsOutputStreamTest, Abort1)
 {
     auto stream = CreateStream(5);
 
-    auto payload1 = TSharedRef::FromString("abcabc");
+    auto payload1 = TSharedRef::FromString(std::string("abcabc"));
     auto future1 = stream->Write(payload1);
     EXPECT_FALSE(future1.IsSet());
 
@@ -1515,7 +1515,7 @@ TEST_F(TAttachmentsOutputStreamTest, Abort2)
 {
     auto stream = CreateStream(5);
 
-    auto payload1 = TSharedRef::FromString("abcabc");
+    auto payload1 = TSharedRef::FromString(std::string("abcabc"));
     auto future1 = stream->Write(payload1);
     EXPECT_FALSE(future1.IsSet());
 
@@ -1553,7 +1553,7 @@ TEST_F(TAttachmentsOutputStreamTest, Close2)
 {
     auto stream = CreateStream(5);
 
-    auto payload = TSharedRef::FromString("abc");
+    auto payload = TSharedRef::FromString(std::string("abc"));
     auto future1 = stream->Write(payload);
     EXPECT_TRUE(future1.IsSet());
     EXPECT_TRUE(WaitForFast(future1).IsOK());
@@ -1584,7 +1584,7 @@ TEST_F(TAttachmentsOutputStreamTest, WriteTimeout)
 {
     auto stream = CreateStream(5, TDuration::MilliSeconds(100));
 
-    auto payload = TSharedRef::FromString("abc");
+    auto payload = TSharedRef::FromString(std::string("abc"));
 
     auto future1 = stream->Write(payload);
     EXPECT_TRUE(future1.IsSet());
@@ -1612,7 +1612,7 @@ TEST_F(TAttachmentsOutputStreamTest, CloseTimeout2)
 {
     auto stream = CreateStream(10, TDuration::MilliSeconds(100));
 
-    auto payload = TSharedRef::FromString("abc");
+    auto payload = TSharedRef::FromString(std::string("abc"));
 
     auto future1 = stream->Write(payload);
     EXPECT_TRUE(future1.IsSet());

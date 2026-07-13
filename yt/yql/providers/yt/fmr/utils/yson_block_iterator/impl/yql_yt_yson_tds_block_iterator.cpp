@@ -130,9 +130,76 @@ void TTableDataServiceBlockIterator::FillPrefetchQueue() {
     }
 }
 
+namespace {
+
+// A key column's value is considered null either because the row's binary yson genuinely omits
+// it (IsValid()==false - e.g. a nullable column that a sparse writer drops rather than encoding
+// as an explicit entity) or because it IS encoded, but as the explicit '#' entity marker (e.g.
+// boundary blobs built from a NYT::TNode map, which always sets every key, and represents a NULL
+// value as an entity rather than omitting the key).
+bool IsNullColumnValue(TStringBuf blob, const TColumnOffsetRange& range) {
+    if (!range.IsValid()) {
+        return true;
+    }
+    return SliceRange(blob, range) == TStringBuf(&EntitySymbol, 1);
+}
+
+// FirstRowKeys/LastRowKeys boundaries are built by the coordinator from a task's chunk-stats
+// key columns (e.g. [_yql_key_hash, ...ReduceBy] for MapReduce reduce tasks), which can be a
+// strict PREFIX of the fuller key column set (e.g. [_yql_key_hash, ...SortBy]) this iterator
+// parses actual rows with. TFmrTableKeysBoundary parses its own Row bytes with the SAME
+// (fuller) key columns as the row markup, so any column beyond the boundary's real prefix comes
+// out with an IsValid()==false range - not because the value is legitimately null, but because
+// the boundary blob simply never encoded it. Comparing that as "boundary < row" (the usual
+// null-handling rule) would incorrectly exclude real rows that land exactly on the boundary, so
+// this comparison stops at the boundary's own valid prefix instead of delegating to the
+// generic null-aware CompareKeyRowsAcrossYsonBlocks.
+int CompareRowToBoundaryPrefix(
+    TStringBuf rowBlob,
+    const TRowIndexMarkup& row,
+    TStringBuf boundaryBlob,
+    const TRowIndexMarkup& boundaryMarkup,
+    const std::vector<ESortOrder>& sortOrders
+) {
+    for (ui64 colIdx = 0; colIdx + 1 < boundaryMarkup.size(); ++colIdx) {
+        const auto& boundaryRange = boundaryMarkup[colIdx];
+        if (!boundaryRange.IsValid()) {
+            // Boundary doesn't encode this column (or any further one, since it's a prefix) -
+            // no constraint from here on.
+            break;
+        }
+        const auto& rowRange = row[colIdx];
+
+        // Both sides null (whichever way each happens to encode it) - equal at this column,
+        // keep comparing the remaining columns instead of declaring the row out of bounds.
+        const bool rowIsNull = IsNullColumnValue(rowBlob, rowRange);
+        const bool boundaryIsNull = IsNullColumnValue(boundaryBlob, boundaryRange);
+        if (rowIsNull && boundaryIsNull) {
+            continue;
+        }
+        if (rowIsNull) {
+            return -1;
+        }
+        if (boundaryIsNull) {
+            return 1;
+        }
+
+        int result = CompareYsonValuesImpl(SliceRange(rowBlob, rowRange), SliceRange(boundaryBlob, boundaryRange));
+        if (sortOrders[colIdx] == ESortOrder::Descending) {
+            result = -result;
+        }
+        if (result != 0) {
+            return result;
+        }
+    }
+    return 0;
+}
+
+} // namespace
+
 bool TTableDataServiceBlockIterator::RowInKeyBounds(const TString& blob, const TRowIndexMarkup& row) const {
     if (FirstBoundary_) {
-        int c = CompareKeyRowsAcrossYsonBlocks(
+        int c = CompareRowToBoundaryPrefix(
             blob,
             row,
             FirstBoundary_->Row,
@@ -146,7 +213,7 @@ bool TTableDataServiceBlockIterator::RowInKeyBounds(const TString& blob, const T
         }
     }
     if (LastBoundary_) {
-        int c = CompareKeyRowsAcrossYsonBlocks(
+        int c = CompareRowToBoundaryPrefix(
             blob,
             row,
             LastBoundary_->Row,

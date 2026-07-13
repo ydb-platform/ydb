@@ -33,6 +33,22 @@ void TOracleMock::OnRequestFailed(
     Y_UNUSED(hostIndex, operation, now);
 }
 
+void TOracleMock::OnDDiskDisconnected(THostIndex hostIndex, TInstant now)
+{
+    Y_UNUSED(hostIndex, now);
+}
+
+TDuration TOracleMock::GetDDiskReconnectDelay(THostIndex hostIndex)
+{
+    Y_UNUSED(hostIndex);
+    return TDuration::MilliSeconds(1);
+}
+
+void TOracleMock::OnDDiskConnected(THostIndex hostIndex, TInstant now)
+{
+    Y_UNUSED(hostIndex, now);
+}
+
 void TOracleMock::OnRequestCancelled(
     THostIndex hostIndex,
     EOperation operation,
@@ -80,6 +96,12 @@ TDuration TOracleMock::GetWriteRequestTimeout() const
 TDuration TOracleMock::GetIndirectWriteReplyTimeout() const
 {
     return PBufferReplyTimeout;
+}
+
+TDuration TOracleMock::GetFlushRequestCooldown(THostMask hosts) const
+{
+    Y_UNUSED(hosts);
+    return FlushRequestCooldown;
 }
 
 TDuration TOracleMock::GetFlushRequestTimeout() const
@@ -167,6 +189,10 @@ TDirectBlockGroupMock::TDirectBlockGroupMock()
     {
         Y_ABORT_UNLESS(false, "Should set DumpHandler");
         return NThreading::TFuture<TDBGDumpResponse>();
+    };
+    OnAddHostResultHandler = [](const auto&...)
+    {
+        Y_ABORT_UNLESS(false, "Should set OnAddHostResultHandler");
     };
 }
 
@@ -349,6 +375,24 @@ NThreading::TFuture<TListPBufferResponse> TDirectBlockGroupMock::ListPBuffers(
 NThreading::TFuture<TDBGDumpResponse> TDirectBlockGroupMock::Dump()
 {
     return DumpHandler();
+}
+
+void TDirectBlockGroupMock::OnAddHostResult(
+    const NProto::TError& error,
+    THostIndex newHostIndex,
+    NKikimrBlobStorage::NDDisk::TDDiskId ddiskId,
+    NKikimrBlobStorage::NDDisk::TDDiskId pbufferId)
+{
+    OnAddHostResultHandler(
+        error,
+        newHostIndex,
+        std::move(ddiskId),
+        std::move(pbufferId));
+}
+
+NThreading::TFuture<TDbgSnapshot> TDirectBlockGroupMock::BuildMonSnapshot()
+{
+    return NThreading::MakeFuture(TDbgSnapshot{});
 }
 
 ////////////////////////////////////////////////////////////////////////////////

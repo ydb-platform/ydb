@@ -72,7 +72,7 @@ NMetadata::NModifications::TOperationParsingResult TResourcePoolClassifierManage
     }
 
     if (context.GetActivityType() == EActivityType::Create) {
-        if (!configJson.GetMap().contains("resource_pool")) {
+        if (!configJson.GetMap().contains("resource_pool") && !configJson.GetMap().contains("action")) {
             return TConclusionStatus::Fail("Missing required property resource_pool");
         }
 
@@ -81,6 +81,13 @@ NMetadata::NModifications::TOperationParsingResult TResourcePoolClassifierManage
         if (const auto brokenAt = PathPartBrokenAt(name, extraPathSymbolsAllowed); brokenAt != name.end()) {
             return TConclusionStatus::Fail(TStringBuilder()<< "Symbol '" << *brokenAt << "' is not allowed in the resource pool classifier name '" << name << "'");
         }
+    }
+
+    if (resourcePoolClassifierSettings.Action == EClassifierAction::Reject) {
+        if (configJson.GetMap().contains("resource_pool")) {
+            return TConclusionStatus::Fail("Property resource_pool must not be set when action='reject'");
+        }
+        configJson.InsertValue("resource_pool", DEFAULT_POOL_ID);
     }
     if (auto error = resourcePoolClassifierSettings.Validate()) {
         return TConclusionStatus::Fail(TStringBuilder() << "Invalid resource pool classifier settings: " << *error);

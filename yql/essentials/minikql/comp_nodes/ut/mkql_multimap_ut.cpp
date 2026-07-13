@@ -47,7 +47,7 @@ Y_UNIT_TEST_LLVM(TestOverFlow) {
     const auto data1 = pb.NewDataLiteral<ui32>(1);
     const auto data2 = pb.NewDataLiteral<ui32>(2);
     const auto list = NTest::ConvertValueToLiteralNode(pb, TVector<ui32>{1, 2, 3});
-    const auto pgmReturn = pb.Collect(pb.MultiMap(pb.ToFlow(list),
+    const auto pgmReturn = pb.Collect(pb.MultiMap(pb.ToFlow(list, {}),
                                                   [&](TRuntimeNode item) {
                                                       return TRuntimeNode::TList{pb.Add(item, data1), item, pb.Mul(item, data2)};
                                                   }));
@@ -67,7 +67,7 @@ Y_UNIT_TEST_LLVM(TestFlattenByNarrow) {
                                                                {i32(3), {}, i32(-3)},
                                                            });
 
-    const auto pgmReturn = pb.Collect(pb.NarrowMultiMap(pb.ExpandMap(pb.ToFlow(list),
+    const auto pgmReturn = pb.Collect(pb.NarrowMultiMap(pb.ExpandMap(pb.ToFlow(list, {}),
                                                                      [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U), pb.Nth(item, 2U)}; }),
                                                         [&](TRuntimeNode::TList items) -> TRuntimeNode::TList { return {items[2U], items[1U], items[0U]}; }));
 

@@ -59,6 +59,8 @@ public:
 
     void SetHostState(THostIndex hostIndex, EHostState state);
 
+    void OnHostAppended(size_t newHostCount);
+
     [[nodiscard]] const TVChunkConfig& GetConfig() const;
     [[nodiscard]] ui64 GetPBufferUsedSize(THostIndex hostIndex) const;
     [[nodiscard]] TString DebugPrintDirtyMap();

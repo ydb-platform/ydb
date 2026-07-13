@@ -25,12 +25,14 @@ public:
         const NKikimrTxDataShard::TEvValidateRowConditionRequest& request,
         const TActorId& sender,
         ui64 tabletId,
-        const TUserTable& tableInfo
+        const TUserTable& tableInfo,
+        TScanManager& scanManager
     )
         : TActor(&TThis::StateWork)
         , Request(request)
         , Sender(sender)
         , TabletId(tabletId)
+        , ScanManagerRef(scanManager)
     {
         TVector<TString> columnNames;
         columnNames.reserve(Request.NotNullColumnsSize());
@@ -70,6 +72,15 @@ public:
     }
 
     TAutoPtr<IDestructable> Finish(NTable::IScan::EStatus scanStatus) noexcept final {
+        // Release the shared single-slot scan manager entry registered for
+        // this operation id. Without this, the slot would remain occupied
+        // forever (unlike build_index, which frees it via a dedicated
+        // finalization step), permanently blocking any subsequent
+        // SetColumnConstraint validation on this shard.
+        if (ScanManagerRef.Get(Request.GetId())) {
+            ScanManagerRef.Drop(Request.GetId());
+        }
+
         auto response = MakeHolder<TEvDataShard::TEvValidateRowConditionResponse>();
         response->Record.SetId(Request.GetId());
         response->Record.SetTabletId(TabletId);
@@ -130,6 +141,7 @@ private:
     const TActorId Sender;
     const ui64 TabletId;
     TTags ScanTags;
+    TScanManager& ScanManagerRef;
     NKikimrSetColumnConstraint::EValidateStatus Status = NKikimrSetColumnConstraint::EValidateStatus::INVALID;
     bool IsValid = true;
 };
@@ -225,7 +237,7 @@ void TDataShard::HandleSafe(TEvDataShard::TEvValidateRowConditionRequest::TPtr& 
         << " tabletId# " << TabletID()
         << " localTid# " << userTable.LocalTid);
 
-    auto scan = new TValidateRowConditionScan(record, ev->Sender, TabletID(), userTable);
+    auto scan = new TValidateRowConditionScan(record, ev->Sender, TabletID(), userTable, GetScanManager());
     StartScan(this, scan, id, seqNo, rowVersion, userTable.LocalTid);
 }
 

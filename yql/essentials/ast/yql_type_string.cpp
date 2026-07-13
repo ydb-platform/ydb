@@ -508,7 +508,7 @@ private:
                        Token_ == TOKEN_IDENTIFIER ||
                        Token_ == TOKEN_ESCAPED_IDENTIFIER)
             {
-                TStringBuf argName;
+                TString argName;
                 ui32 argNameFlags = TNodeFlags::Default;
 
                 if (LookaheadNonSpaceChar() == ':') {

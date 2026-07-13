@@ -12,6 +12,7 @@ constexpr TStringBuf DestroyErrorMessage =
     "TICStorageTransportActor is destroyed";
 constexpr TStringBuf CantAcquireDataErrorMessage = "can't acquire data";
 constexpr TStringBuf UndeliveryErrorMessage = "Undelivered";
+constexpr TStringBuf SessionBrokenErrorMessage = "Session broken";
 
 ////////////////////////////////////////////////////////////////////////////////
 

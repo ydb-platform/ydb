@@ -318,87 +318,167 @@
 
 - Java
 
+  Пакетная вставка через `BulkUpsert` эффективнее транзакционного YQL для больших объёмов данных. Для небольших наборов строк см. [UPSERT](./upsert.md). Структура таблицы описана в разделе [Таблицы](../../concepts/datamodel/table.md).
+
   {% list tabs %}
 
   - Native SDK
 
     ```java
-    private static final String TABLE_NAME = "bulk_upsert";
-    private static final int BATCH_SIZE = 1000;
+    import java.time.Instant;
+    import java.util.ArrayList;
+    import java.util.List;
 
-    public static void main(String[] args) {
-      String connectionString = args[0];
+    import tech.ydb.auth.NopAuthProvider;
+    import tech.ydb.common.transaction.TxMode;
+    import tech.ydb.core.grpc.GrpcTransport;
+    import tech.ydb.query.QueryClient;
+    import tech.ydb.query.result.ResultSetReader;
+    import tech.ydb.query.tools.QueryReader;
+    import tech.ydb.query.tools.SessionRetryContext;
+    import tech.ydb.table.TableClient;
+    import tech.ydb.table.query.Params;
+    import tech.ydb.table.settings.BulkUpsertSettings;
+    import tech.ydb.table.values.ListType;
+    import tech.ydb.table.values.ListValue;
+    import tech.ydb.table.values.PrimitiveType;
+    import tech.ydb.table.values.PrimitiveValue;
+    import tech.ydb.table.values.StructType;
+    import tech.ydb.table.values.Value;
 
-      try (GrpcTransport transport = GrpcTransport.forConnectionString(connectionString)
-              .withAuthProvider(NopAuthProvider.INSTANCE) // анонимная аутентификация
-              .build()) {
+    public class BulkUpsertExample {
+        private static final String TABLE_NAME = "bulk_upsert";
+        private static final int BATCH_SIZE = 1000;
 
-          // Для bulk upsert необходимо использовать полный путь к таблице
-          String tablePath = transport.getDatabase() + "/" + TABLE_NAME;
-          try (TableClient tableClient = TableClient.newClient(transport).build()) {
-              SessionRetryContext retryCtx = SessionRetryContext.create(tableClient).build();
-              execute(retryCtx, tablePath);
-          }
-      }
-    }
+        public static void main(String[] args) {
+            String connectionString = System.getenv().getOrDefault(
+                    "YDB_CONNECTION_STRING", "grpc://localhost:2136/local");
 
-    public static void execute(SessionRetryContext retryCtx, String tablePath) {
-      // описание таблицы
-      StructType structType = StructType.of(
-          "app", PrimitiveType.Text,
-          "timestamp", PrimitiveType.Timestamp,
-          "host", PrimitiveType.Text,
-          "http_code", PrimitiveType.Uint32,
-          "message", PrimitiveType.Text
-      );
+            try (GrpcTransport transport = GrpcTransport.forConnectionString(connectionString)
+                    .withAuthProvider(NopAuthProvider.INSTANCE)
+                    .build();
+                 QueryClient queryClient = QueryClient.newClient(transport).build();
+                 TableClient tableClient = TableClient.newClient(transport).build()) {
 
-      // генерация пакета записей
-      List<Value<?>> list = new ArrayList<>(50);
-      for (int i = 0; i < BATCH_SIZE; i += 1) {
-          // добавление новой строки в виде значения-структуры
-          list.add(structType.newValue(
-              "app", PrimitiveValue.newText("App_" + i / 256),
-              "timestamp", PrimitiveValue.newTimestamp(Instant.now().plusSeconds(i)),
-              "host", PrimitiveValue.newText("192.168.0." + i % 256),
-              "http_code", PrimitiveValue.newUint32(i % 113 == 0 ? 404 : 200),
-              "message", PrimitiveValue.newText(i % 3 == 0 ? "GET / HTTP/1.1" : "GET /images/logo.png HTTP/1.1")
-          ));
-      }
+                SessionRetryContext queryRetry = SessionRetryContext.create(queryClient).build();
+                SessionRetryContext tableRetry = SessionRetryContext.create(tableClient).build();
 
-      // Create list of structs
-      ListValue rows = ListType.of(structType).newValue(list);
-      // Do retry operation on errors with best effort
-      retryCtx.supplyStatus(
-          session -> session.executeBulkUpsert(tablePath, rows, new BulkUpsertSettings())
-      ).join().expectSuccess("bulk upsert problem");
+                // Создаём таблицу для пакетной вставки
+                queryRetry.supplyResult(session -> QueryReader.readFrom(session.createQuery("""
+                        CREATE TABLE IF NOT EXISTS bulk_upsert (
+                            app Text,
+                            timestamp Timestamp,
+                            host Text,
+                            http_code Uint32,
+                            message Text,
+                            PRIMARY KEY (app, timestamp, host)
+                        );
+                        """, TxMode.NONE, Params.empty())
+                )).join().getValue();
+
+                // Полный путь к таблице: /local/bulk_upsert
+                String tablePath = transport.getDatabase() + "/" + TABLE_NAME;
+
+                StructType rowType = StructType.of(
+                        "app", PrimitiveType.Text,
+                        "timestamp", PrimitiveType.Timestamp,
+                        "host", PrimitiveType.Text,
+                        "http_code", PrimitiveType.Uint32,
+                        "message", PrimitiveType.Text
+                );
+
+                // Генерация пакета записей
+                List<Value<?>> rows = new ArrayList<>(BATCH_SIZE);
+                for (int i = 0; i < BATCH_SIZE; i++) {
+                    rows.add(rowType.newValue(
+                            "app", PrimitiveValue.newText("App_" + i / 256),
+                            "timestamp", PrimitiveValue.newTimestamp(Instant.now().plusSeconds(i)),
+                            "host", PrimitiveValue.newText("192.168.0." + i % 256),
+                            "http_code", PrimitiveValue.newUint32(i % 113 == 0 ? 404 : 200),
+                            "message", PrimitiveValue.newText(
+                                    i % 3 == 0 ? "GET / HTTP/1.1" : "GET /images/logo.png HTTP/1.1")
+                    ));
+                }
+
+                ListValue batch = ListType.of(rowType).newValue(rows);
+
+                // Пакетная вставка без атомарности всего батча
+                tableRetry.supplyStatus(session ->
+                        session.executeBulkUpsert(tablePath, batch, new BulkUpsertSettings())
+                ).join().expectSuccess("bulk upsert failed");
+
+                // Проверка количества строк
+                QueryReader countReader = queryRetry.supplyResult(session -> QueryReader.readFrom(
+                        session.createQuery(
+                                "SELECT COUNT(*) AS cnt FROM bulk_upsert", TxMode.NONE, Params.empty())
+                )).join().getValue();
+
+                ResultSetReader rs = countReader.getResultSet(0);
+                if (rs.next()) {
+                    System.out.println("Строк в таблице bulk_upsert: " + rs.getColumn("cnt").getUint64());
+                }
+            }
+        }
     }
     ```
 
   - JDBC
 
     ```java
-    private static final int BATCH_SIZE = 1000;
+    import java.sql.Connection;
+    import java.sql.DriverManager;
+    import java.sql.PreparedStatement;
+    import java.sql.ResultSet;
+    import java.sql.SQLException;
+    import java.sql.Statement;
+    import java.sql.Timestamp;
+    import java.time.Instant;
 
-    public static void main(String[] args) {
-        String connectionUrl = args[0];
+    public class JdbcBulkUpsertExample {
+        private static final int BATCH_SIZE = 1000;
 
-        try (Connection conn = DriverManager.getConnection(connectionUrl)) {
-            try (PreparedStatement ps = conn.prepareStatement(
-                    "BULK UPSERT INTO bulk_upsert (app, timestamp, host, http_code, message) VALUES (?, ?, ?, ?, ?);"
-            )) {
-                for (int i = 0; i < BATCH_SIZE; i += 1) {
-                    ps.setString(1, "App_" + String.valueOf(i / 256));
-                    ps.setTimestamp(2, Timestamp.from(Instant.now().plusSeconds(i)));
-                    ps.setString(3, "192.168.0." + i % 256);
-                    ps.setLong(4,i % 113 == 0 ? 404 : 200);
-                    ps.setString(5, i % 3 == 0 ? "GET / HTTP/1.1" : "GET /images/logo.png HTTP/1.1");
-                    ps.addBatch();
+        public static void main(String[] args) throws SQLException {
+            String url = System.getenv().getOrDefault(
+                    "YDB_JDBC_URL", "jdbc:ydb:grpc://localhost:2136/local");
+
+            try (Connection conn = DriverManager.getConnection(url)) {
+                try (Statement stmt = conn.createStatement()) {
+                    stmt.execute("""
+                            CREATE TABLE IF NOT EXISTS bulk_upsert (
+                                app Text,
+                                timestamp Timestamp,
+                                host Text,
+                                http_code Uint32,
+                                message Text,
+                                PRIMARY KEY (app, timestamp, host)
+                            );
+                            """);
                 }
 
-                ps.executeBatch();
+                String bulkSql = """
+                        BULK UPSERT INTO bulk_upsert (app, timestamp, host, http_code, message)
+                        VALUES (?, ?, ?, ?, ?);
+                        """;
+
+                try (PreparedStatement ps = conn.prepareStatement(bulkSql)) {
+                    for (int i = 0; i < BATCH_SIZE; i++) {
+                        ps.setString(1, "App_" + i / 256);
+                        ps.setTimestamp(2, Timestamp.from(Instant.now().plusSeconds(i)));
+                        ps.setString(3, "192.168.0." + i % 256);
+                        ps.setLong(4, i % 113 == 0 ? 404 : 200);
+                        ps.setString(5, i % 3 == 0 ? "GET / HTTP/1.1" : "GET /images/logo.png HTTP/1.1");
+                        ps.addBatch();
+                    }
+                    ps.executeBatch();
+                }
+
+                try (Statement stmt = conn.createStatement();
+                     ResultSet rs = stmt.executeQuery("SELECT COUNT(*) AS cnt FROM bulk_upsert")) {
+                    if (rs.next()) {
+                        System.out.println("Строк в таблице bulk_upsert: " + rs.getLong("cnt"));
+                    }
+                }
             }
-        } catch (SQLException e) {
-            e.printStackTrace();
         }
     }
     ```

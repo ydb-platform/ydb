@@ -57,10 +57,13 @@ class TUdfResolverWithIndex: public IUdfResolver {
     };
 
 public:
-    TUdfResolverWithIndex(TUdfIndex::TPtr udfIndex, IUdfResolver::TPtr fallback, TFileStoragePtr fileStorage)
+    TUdfResolverWithIndex(TUdfIndex::TPtr udfIndex, IUdfResolver::TPtr fallback, TFileStoragePtr fileStorage,
+                          IUrlPreprocessing::TPtr urlPreprocessing, TTokenResolver tokenResolver)
         : UdfIndex_(std::move(udfIndex))
         , Fallback_(std::move(fallback))
         , FileStorage_(std::move(fileStorage))
+        , UrlPreprocessing_(std::move(urlPreprocessing))
+        , TokenResolver_(std::move(tokenResolver))
     {
         Y_ENSURE(UdfIndex_);
         Y_ENSURE(FileStorage_);
@@ -243,10 +246,25 @@ private:
             return it->second;
         }
 
-        // token is empty for urls for now
-        // assumption: file path is frozen already, no need to put into file storage
         const TDownloadLink& downloadLink = resource->Link;
-        TFileLinkPtr link = downloadLink.IsUrl ? FileStorage_->PutUrl(downloadLink.Path, {}) : CreateFakeFileLink(downloadLink.Path, downloadLink.Md5);
+        TFileLinkPtr link;
+        if (downloadLink.IsUrl) {
+            TString url = downloadLink.Path;
+            TString alias;
+            if (UrlPreprocessing_) {
+                std::tie(url, alias) = UrlPreprocessing_->Preprocess(url);
+            }
+
+            TString token;
+            if (TokenResolver_) {
+                token = TokenResolver_(url, alias);
+            }
+
+            link = FileStorage_->PutUrl(url, token);
+        } else {
+            // assumption: file path is frozen already, no need to put into file storage
+            link = CreateFakeFileLink(downloadLink.Path, downloadLink.Md5);
+        }
         TResourceFile::TPtr file = TResourceFile::Create(canonizedModuleName, resource->Modules, link);
         for (auto& d : resource->Modules) {
             auto p = DownloadedFiles_.emplace(d, file);
@@ -264,12 +282,25 @@ private:
     const TUdfIndex::TPtr UdfIndex_;
     const IUdfResolver::TPtr Fallback_;
     const TFileStoragePtr FileStorage_;
+    const IUrlPreprocessing::TPtr UrlPreprocessing_;
+    const TTokenResolver TokenResolver_;
     // module -> downloaded resource file
     mutable TMap<TString, TResourceFile::TPtr> DownloadedFiles_;
 };
 
-IUdfResolver::TPtr CreateUdfResolverWithIndex(TUdfIndex::TPtr udfIndex, IUdfResolver::TPtr fallback, TFileStoragePtr fileStorage) {
-    return new TUdfResolverWithIndex(udfIndex, fallback, fileStorage);
+IUdfResolver::TPtr CreateUdfResolverWithIndex(
+    TUdfIndex::TPtr udfIndex,
+    IUdfResolver::TPtr fallback,
+    TFileStoragePtr fileStorage,
+    IUrlPreprocessing::TPtr urlPreprocessing,
+    TTokenResolver tokenResolver)
+{
+    return new TUdfResolverWithIndex(
+        std::move(udfIndex),
+        std::move(fallback),
+        std::move(fileStorage),
+        std::move(urlPreprocessing),
+        std::move(tokenResolver));
 }
 
 } // namespace NYql::NCommon

@@ -46,6 +46,9 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/resources/ydb_resources.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/coordination/coordination.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/rate_limiter/rate_limiter.h>
+
 #include <thread>
 
 
@@ -7577,6 +7580,260 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
     Y_UNIT_TEST(DefaultMeteringMode) {
         DefaultMeteringMode(false);
         DefaultMeteringMode(true);
+    }
+
+    // Complete end-to-end test: write to a topic via the Topics API and observe the
+    // resulting billing record (schema "ydb.serverless.requests.v1") produced by the
+    // Kesus rate-accounting subsystem.
+    //
+    // Path exercised:
+    //   TopicClient write session (StreamWrite, RLSWITCH(RuTopic))
+    //     -> gRPC check actor selects ruRlTopicConfig, reads DB user-attributes
+    //        serverless_rt_coordination_node_path + serverless_rt_topic_resource_ru
+    //        and calls SetRlPath()
+    //     -> write session (TRlHelpers) with MeteringMode == REQUEST_UNITS acquires RU
+    //        against the coordination-node resource
+    //     -> Kesus TRateAccounting (OnDemand.Enabled) emits a TBillRecord and sends
+    //        TEvWriteMeteringJson to MakeMeteringServiceID()
+    Y_UNIT_TEST(BillingRequestUnits) {
+        // Use a metering file to capture billing records emitted by the Kesus
+        // accounting actor. The TMeteringSink sends TEvWriteMeteringJson to the
+        // named metering service actor (YDB_METER), which is only registered when
+        // SetMeteringFilePath is configured.
+        auto meteringFile = MakeHolder<TTempFileHandle>();
+
+        TServerSettings serverSettings = PQSettings(0);
+        serverSettings.PQConfig.SetTopicsAreFirstClassCitizen(true);
+        serverSettings.PQConfig.SetRoot("/" + serverSettings.DomainName);
+        serverSettings.PQConfig.SetDatabase("/" + serverSettings.DomainName);
+        serverSettings.PQConfig.MutableBillingMeteringConfig()->SetEnabled(true);
+        serverSettings.PQConfig.MutableQuotingConfig()->SetQuotaWaitDurationMs(100);
+
+        serverSettings.SetMeteringFilePath(meteringFile->Name());
+        NPersQueue::TTestServer server(serverSettings);
+
+        server.EnableLogs({
+            NKikimrServices::PQ_WRITE_PROXY,
+            NKikimrServices::QUOTER_SERVICE,
+            NKikimrServices::QUOTER_PROXY,
+            NKikimrServices::KESUS_PROXY,
+            NKikimrServices::KESUS_PROXY_SERVICE,
+            NKikimrServices::KESUS_TABLET,
+            NKikimrServices::METERING_WRITER
+        }, NActors::NLog::PRI_DEBUG);
+
+        const TString coordinationNodePath = "/Root/RtCoordNode";
+        const TString resourcePath = "write_quota";
+        const TString topicPath = "billed-topic";
+        const TString DEFAULT_CLOUD_ID = "somecloud";
+        const TString DEFAULT_FOLDER_ID = "somefolder";
+
+        NYdb::TDriverConfig driverCfg;
+        driverCfg.SetEndpoint(TStringBuilder() << "localhost:" << server.GrpcPort)
+                 .SetDatabase("/" + serverSettings.DomainName)
+                 .SetAuthToken("root@builtin");
+        NYdb::TDriver driver(driverCfg);
+        // 1. Tell the database which coordination-node resource backs topic RU billing.
+        //    The gRPC request-check actor reads these database user attributes and, for
+        //    RuTopic-mode requests (StreamWrite), builds the rate-limiter path via
+        //    MakeRlPath() using the "serverless_rt_coordination_node_path" and
+        //    "serverless_rt_topic_resource_ru" keys. That RlPath propagates into the
+        //    write session actor's TRlContext, enabling RU quota acquisition/metering.
+        {
+            TClient alterClient(server.ServerSettings);
+            UNIT_ASSERT_VALUES_EQUAL(NMsgBusProxy::MSTATUS_OK,
+                alterClient.AlterUserAttributes("/", "Root",
+                    {
+                        {"serverless_rt_coordination_node_path", coordinationNodePath},
+                        {"serverless_rt_topic_resource_ru", resourcePath},
+                        {"cloud_id", DEFAULT_CLOUD_ID},
+                        {"database_id", "root"}
+                    }));
+            Sleep(TDuration::Seconds(5));
+        }
+
+        // 2. Create the coordination node and the metered resource with OnDemand billing.
+        {
+            NYdb::NCoordination::TClient coordinationClient(driver);
+            auto res = coordinationClient.CreateNode(coordinationNodePath).ExtractValueSync();
+            UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
+        }
+        {
+            using namespace NYdb::NRateLimiter;
+            NYdb::NRateLimiter::TRateLimiterClient rateLimiterClient(driver);
+
+            const TString metricFieldsJson = TStringBuilder()
+                << R"({"version":"version",)"
+                << R"("schema":"ydb.serverless.requests.v1",)"
+                << R"("cloud_id":")" << DEFAULT_CLOUD_ID << R"(",)"
+                << R"("folder_id":")" << DEFAULT_FOLDER_ID << R"(",)"
+                << R"("resource_id":"/Root/)" << topicPath << R"(",)"
+                << R"("source_id":"mysource"})";
+
+            auto res = rateLimiterClient.CreateResource(coordinationNodePath, resourcePath,
+                TCreateResourceSettings()
+                    .MaxUnitsPerSecond(1000.0)
+                    // OnDemand accounting bucket capacity is
+                    //   OvershootCoefficient(default 1.1) * MaxUnitsPerSecond * PrefetchCoefficient.
+                    // For a root resource PrefetchCoefficient is NOT defaulted (only inherited from a
+                    // parent), so leaving it unset yields a zero-capacity OnDemand bucket and all the
+                    // consumption is classified as "overshoot" (which we don't meter) instead of
+                    // "ondemand" - no bill would ever be emitted. Set it explicitly (mirrors the
+                    // tablet-level reference test TestQuoterAccountResourcesOnDemand).
+                    .PrefetchCoefficient(300.0)
+                    // Accounting/billing time grid (mapped into the Kesus TAccountingConfig):
+                    //   ReportPeriod -> report_period_ms   (how often the quoter reports consumption)
+                    //   MeterPeriod  -> AccountPeriodMs     (accounting granularity)
+                    //   CollectPeriod-> collect_period_sec  (how far accounting lags wall clock)
+                    //   OnDemand.BillingPeriod -> billing_period_sec (bill cell width)
+                    // These MUST be small so that, within the test lifetime, accounting time
+                    // advances past whole billing cells and flushes bills while the session is
+                    // still reporting. The Kesus billing period is clamped to a minimum of 2s
+                    // (TimeGridForPeriod), so BillingPeriod must be >= 2s to avoid a grid reset.
+                    // Values mirror the reference tablet test TestQuoterAccountResourcesOnDemand.
+                    .MeteringConfig(TMeteringConfig()
+                        .Enabled(true)
+                        .ReportPeriod(std::chrono::milliseconds(1000))
+                        .MeterPeriod(std::chrono::milliseconds(1000))
+                        .CollectPeriod(std::chrono::seconds(2))
+                        .OnDemand(TMetric()
+                            .Enabled(true)
+                            .BillingPeriod(std::chrono::seconds(2))
+                            .MetricFieldsJson(metricFieldsJson))
+                        .Provisioned(TMetric()
+                            .Enabled(true)
+                            .BillingPeriod(std::chrono::seconds(2))
+                            .MetricFieldsJson(metricFieldsJson))
+                        .Overshoot(TMetric()
+                            .Enabled(true)
+                            .BillingPeriod(std::chrono::seconds(2))
+                            .MetricFieldsJson(metricFieldsJson)))
+            ).ExtractValueSync();
+            UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
+            Sleep(TDuration::Seconds(5));
+        }
+
+        // 3. Create a topic that meters in request units.
+        {
+            using namespace NYdb::NTopic;
+            auto topicClient = TTopicClient(driver);
+            auto res = topicClient.CreateTopic(topicPath, TCreateTopicSettings()
+                .MeteringMode(EMeteringMode::RequestUnits)
+                .BeginAddConsumer("reader").EndAddConsumer()
+            ).ExtractValueSync();
+            UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
+        }
+        server.WaitInit(topicPath);
+
+        // 4. Write data to consume request units (WRITE_BLOCK_SIZE == 4KB per RU).
+        //    Spread the writes over many accounting/billing periods (with pauses between
+        //    batches) so the Kesus OnDemand accounting history accumulates non-zero
+        //    consumption across several complete billing periods.
+        //
+        //    IMPORTANT timing subtlety: the Kesus accounting lags real time by CollectPeriod
+        //    (2s), and TBillingMetric::SendBill (rate_accounting.cpp) only flushes an
+        //    accumulated 2s billing cell once accounting time advances into a *strictly
+        //    later* cell. The resource stops ticking its accounting as soon as the write
+        //    session disconnects, so the tail periods never flush. We therefore keep the
+        //    session writing across enough billing periods that earlier cells are flushed
+        //    *while the session is still active*.
+        const ui32 numBatches = 4;
+         using namespace NYdb::NTopic;
+        auto topicClient = TTopicClient(driver);
+        TWriteSessionSettings wSettings;
+        wSettings.Path(topicPath);
+        wSettings.ProducerId("srcId");
+        wSettings.DirectWriteToPartition(false);
+        wSettings.Codec(ECodec::RAW);
+        auto writer = topicClient.CreateSimpleBlockingWriteSession(wSettings);
+        Sleep(TDuration::MilliSeconds(5000));
+        for (ui32 batch = 0; batch < numBatches; ++batch) {
+            TString payload = NUnitTest::RandomString(5_KB, std::rand());
+            Sleep(TDuration::MilliSeconds(500));
+
+            UNIT_ASSERT(writer->Write(payload));
+        }
+        Sleep(TDuration::Seconds(2));
+
+        // 5. Read data back.
+        //    Billing on the read path is driven by TReadSessionActor via NPQ::TRlHelpers:
+        //    it acquires init quota (IsQuotaRequired) and per-response data quota
+        //    (CalcRuConsumption + MaybeRequestQuota), which reports RU consumption to the
+        //    same Kesus resource used for writes (serverless_rt_topic_resource_ru).
+        //
+        //    Same timing subtlety as writes: the read-consumption cells only flush once
+        //    accounting time advances into a strictly later billing cell *while the resource
+        //    is still active/reporting*. A tight read burst followed by an immediate session
+        //    close would leave the read cells unaccounted. We therefore keep the read session
+        //    open and pace the reads across several billing periods so earlier read cells are
+        //    flushed while the session is still alive.
+
+        TReadSessionSettings rSettings;
+        rSettings.ConsumerName("reader").AppendTopics({topicPath});
+        auto readSession = topicClient.CreateReadSession(rSettings);
+
+        ui32 totalMessages = 0;
+        Cerr << "Start reads" << Endl;
+        while (totalMessages < numBatches) {
+            auto ev = readSession->GetEvent(true);
+            UNIT_ASSERT(ev.has_value());
+
+            auto spsEv = std::get_if<NYdb::NTopic::TReadSessionEvent::TStartPartitionSessionEvent>(&*ev);
+            if (spsEv) {
+                spsEv->Confirm();
+                Cerr << "Got start stream event" << Endl;
+                continue;
+            }
+            auto dataEv = std::get_if<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent>(&*ev);
+            UNIT_ASSERT(dataEv);
+            const auto& messages = dataEv->GetMessages();
+            totalMessages += messages.size();
+            Cerr << "Got data event with total " << messages.size() << " messages, current total messages: " << totalMessages << Endl;
+        }
+
+        Sleep(TDuration::Seconds(5));
+
+        // 6. Read the metering file and find our billing record.
+        //    The metering writer actor (registered via SetMeteringFilePath) writes each
+        //    TEvWriteMeteringJson as a single JSON line to the file.
+        if (meteringFile->IsOpen()) {
+            meteringFile->Flush();
+            meteringFile->Close();
+        }
+        auto input = TFileInput(TFile(meteringFile->Name(), RdOnly | OpenExisting));
+
+        TString line;
+        bool found = false;
+        while (input.ReadLine(line)) {
+            Cerr << "Metering file line: " << line << Endl;
+            NJson::TJsonValue lineJson;
+            if (!NJson::ReadJsonTree(line, &lineJson)) {
+                continue;
+            }
+            auto& map = lineJson.GetMap();
+            if (map.contains("schema") &&
+                map.at("schema").GetString() == "ydb.serverless.requests.v1") {
+
+                UNIT_ASSERT_C(!line.empty(), "No billing record with schema 'ydb.serverless.requests.v1' found in the metering file");
+                Cerr << "Captured bill record: " << line << Endl;
+
+                NJson::TJsonValue json;
+                UNIT_ASSERT(NJson::ReadJsonTree(line, &json));
+
+                UNIT_ASSERT_VALUES_EQUAL(json["schema"].GetString(), "ydb.serverless.requests.v1");
+                UNIT_ASSERT_VALUES_EQUAL(json["cloud_id"].GetString(), DEFAULT_CLOUD_ID);
+                UNIT_ASSERT_VALUES_EQUAL(json["folder_id"].GetString(), DEFAULT_FOLDER_ID);
+                UNIT_ASSERT_VALUES_EQUAL(json["resource_id"].GetString(), TString("/Root/") + topicPath);
+                UNIT_ASSERT_VALUES_EQUAL(json["source_id"].GetString(), "mysource");
+                UNIT_ASSERT_VALUES_EQUAL(json["usage"]["unit"].GetString(), "request_unit");
+                UNIT_ASSERT_C(json["usage"]["quantity"].GetInteger() > 0,
+                    "Expected a positive billed quantity, got: " << line);
+                found = true;
+            }
+        }
+        UNIT_ASSERT_C(found, "No billing record with schema 'ydb.serverless.requests.v1' found in the metering file");
+
+        writer->Close(TDuration::Seconds(30));
     }
 
     Y_UNIT_TEST(ConsumerAdvancedMonitoringSettings) {

@@ -410,9 +410,8 @@ TExprNode::TPtr NormalizeMemberNames(TExprNode::TPtr node, TExprContext& ctx, TP
     for (const auto& member : members) {
         const TString colName(TCoMember(member).Name().StringValue());
         if (colName.StartsWith("_alias_")) {
-            auto it = colName.find(".");
-            Y_ENSURE(it != TString::npos, "Invalid _alias_ prefix");
-            const auto newMemberName = colName.substr(7);
+            const auto [alias, column] = SplitAliasedMemberName(colName);
+            const TString newMemberName = alias + "." + column;
             // clang-format off
             auto newMember = Build<TCoMember>(ctx, pos)
                 .Struct(member->ChildPtr(0))

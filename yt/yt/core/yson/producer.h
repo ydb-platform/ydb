@@ -12,45 +12,26 @@ namespace NYT::NYson {
 ////////////////////////////////////////////////////////////////////////////////
 
 //! A callback capable of generating YSON by calling appropriate
-//! methods for its IYsonConsumer argument.
-using TYsonCallback = TCallback<void(IYsonConsumer*)>;
-
-//! A callback capable of generating YSON by calling appropriate
 //! methods for its IYsonConsumer and some additional arguments.
 template <class... TAdditionalArgs>
-using TExtendedYsonCallback = TCallback<void(IYsonConsumer*, TAdditionalArgs...)>;
+using TParametricYsonCallback = TCallback<void(IYsonConsumer*, TAdditionalArgs...)>;
 
-////////////////////////////////////////////////////////////////////////////////
-
-class TYsonProducer
-{
-public:
-    DEFINE_BYVAL_RO_PROPERTY(NYson::EYsonType, Type);
-
-public:
-    TYsonProducer() = default;
-    TYsonProducer(
-        TYsonCallback callback,
-        EYsonType type = NYson::EYsonType::Node);
-
-    void Run(IYsonConsumer* consumer) const;
-
-private:
-    TYsonCallback Callback_;
-};
+//! A callback capable of generating YSON by calling appropriate
+//! methods for its IYsonConsumer argument.
+using TYsonCallback = TParametricYsonCallback<>;
 
 ////////////////////////////////////////////////////////////////////////////////
 
 template <class... TAdditionalArgs>
-class TExtendedYsonProducer
+class TParametricYsonProducer
 {
-    using TUnderlyingCallback = TExtendedYsonCallback<TAdditionalArgs...>;
+    using TUnderlyingCallback = TParametricYsonCallback<TAdditionalArgs...>;
 public:
     DEFINE_BYVAL_RO_PROPERTY(NYson::EYsonType, Type);
 
 public:
-    TExtendedYsonProducer() = default;
-    TExtendedYsonProducer(
+    TParametricYsonProducer() = default;
+    TParametricYsonProducer(
         TUnderlyingCallback callback,
         EYsonType type = NYson::EYsonType::Node);
 
@@ -59,6 +40,9 @@ public:
 private:
     TUnderlyingCallback Callback_;
 };
+
+//! A producer generating a plain YSON with no additional arguments.
+using TYsonProducer = TParametricYsonProducer<>;
 
 ////////////////////////////////////////////////////////////////////////////////
 

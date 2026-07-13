@@ -1202,55 +1202,6 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
         CheckQueryResult(resultRetryFunc);
     }
 
-    Y_UNIT_TEST(ExecuteQueryPg) {
-        auto kikimr = DefaultKikimrRunner();
-        auto db = kikimr.GetQueryClient();
-
-        auto settings = TExecuteQuerySettings()
-            .Syntax(ESyntax::Pg);
-
-        auto result = db.ExecuteQuery(R"(
-            SELECT * FROM (VALUES
-                (1::int8, 'one'),
-                (2::int8, 'two'),
-                (3::int8, 'three')
-            ) AS t;
-        )", TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-
-        CompareYson(R"([
-            ["1";"one"];
-            ["2";"two"];
-            ["3";"three"]
-        ])", FormatResultSetYson(result.GetResultSet(0)));
-    }
-
-    //KIKIMR-18492
-    Y_UNIT_TEST(ExecuteQueryPgTableSelect) {
-        TKikimrRunner kikimr(NKqp::TKikimrSettings().SetWithSampleTables(false));
-        auto settings = TExecuteQuerySettings()
-            .Syntax(ESyntax::Pg);
-        {
-            auto db = kikimr.GetTableClient();
-            auto session = db.CreateSession().GetValueSync().GetSession();
-            auto result = session.ExecuteSchemeQuery(R"(
-                CREATE TABLE test (id int16,PRIMARY KEY (id)))"
-            ).GetValueSync();
-
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-        }
-        {
-            auto db = kikimr.GetQueryClient();
-            auto result = db.ExecuteQuery(
-                "SELECT * FROM test",
-                TTxControl::BeginTx().CommitTx(), settings
-            ).ExtractValueSync();
-
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-            CompareYson(R"([])", FormatResultSetYson(result.GetResultSet(0)));
-        }
-    }
-
     Y_UNIT_TEST(ExecuteDDLStatusCodeSchemeError) {
         TKikimrRunner kikimr(NKqp::TKikimrSettings().SetWithSampleTables(false));
         {

@@ -21,7 +21,6 @@ namespace NKikimr::NSasl {
             std::string Error;
             std::string PreparedUsername;
             std::string Hashes;
-            std::string ArgonHash;
         };
 
         struct TEvSaslPlainLoginResponse : public TEventLocal<TEvSaslPlainLoginResponse, EvSaslPlainLoginResponse> {

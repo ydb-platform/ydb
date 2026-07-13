@@ -3,7 +3,6 @@ RECURSE(
     dq
     providers
     public
-    tests
     tools
     udfs
     utils

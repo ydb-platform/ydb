@@ -1,123 +1,89 @@
 {
-    "Detailed" : {
-        "Operations" : [
+    "Plan" : {
+        "Plans" : [
             {
-                "Id" : 6,
-                "Name" : "DqStage",
-                "Streams" : {
-                    "Program" : [
-                        {
-                            "Name" : "DqSourceWideWrap"
-                        },
-                        {
-                            "Name" : "NarrowMap"
-                        },
-                        {
-                            "Name" : "FlatMap"
-                        }
-                    ]
-                }
-            },
-            {
-                "Id" : 4,
-                "Name" : "DqStage",
-                "Streams" : {
-                    "Program" : [
-                        {
-                            "Name" : "FromFlow"
-                        },
-                        {
-                            "Name" : "MultiHoppingCore"
-                        },
-                        {
-                            "Name" : "FlatMap"
-                        }
-                    ]
-                },
-                "DependsOn" : [
-                    6
-                ]
-            },
-            {
-                "Id" : 3,
-                "Name" : "DqQuery!",
-                "DependsOn" : [
-                    4
-                ]
-            },
-            {
-                "Id" : 2,
-                "Name" : "Commit!",
-                "DependsOn" : [
-                    3
-                ]
-            },
-            {
-                "Id" : 1,
-                "Name" : "Commit!",
-                "DependsOn" : [
-                    2
-                ]
+                "PlanNodeId" : 5,
+                "Plans" : [
+                    {
+                        "PlanNodeId" : 4,
+                        "Plans" : [
+                            {
+                                "PlanNodeId" : 3,
+                                "Plans" : [
+                                    {
+                                        "PlanNodeId" : 2,
+                                        "Plans" : [
+                                            {
+                                                "PlanNodeId" : 1,
+                                                "Operators" : [
+                                                    {
+                                                        "Inputs" : [ ],
+                                                        "ExternalDataSource" : "pq",
+                                                        "Name" : "Read pq",
+                                                        "SourceType" : "pq"
+                                                    }
+                                                ],
+                                                "Node Type" : "Source"
+                                            }
+                                        ],
+                                        "Node Type" : "Stage"
+                                    }
+                                ],
+                                "HashFunc" : "HashV2",
+                                "Node Type" : "HashShuffle",
+                                "KeyColumns" : [
+                                    "crc"
+                                ],
+                                "PlanNodeType" : "Connection"
+                            }
+                        ],
+                        "Node Type" : "Stage"
+                    }
+                ],
+                "Operators" : [
+                    {
+                        "Inputs" : [ ],
+                        "ExternalDataSource" : "solomon",
+                        "Name" : "Write solomon",
+                        "SinkType" : "solomon"
+                    }
+                ],
+                "Node Type" : "Sink"
             }
         ],
-        "OperationRoot" : 1,
-        "Providers" : [ ],
-        "OperationStats" : {
-            "Commit!" : 2,
-            "DqQuery!" : 1,
-            "DqStage" : 2
-        }
+        "Node Type" : "Query",
+        "Stats" : {
+            "ResourcePoolId" : "default"
+        },
+        "PlanNodeType" : "Query"
     },
-    "Basic" : {
-        "nodes" : [
+    "meta" : {
+        "version" : "0.2",
+        "type" : "query"
+    },
+    "tables" : [ ],
+    "SimplifiedPlan" : {
+        "PlanNodeId" : 0,
+        "Plans" : [
             {
-                "id" : 6,
-                "level" : 1,
-                "name" : "DqStage #6",
-                "type" : "op"
-            },
-            {
-                "id" : 4,
-                "level" : 2,
-                "name" : "DqStage #4",
-                "type" : "op"
-            },
-            {
-                "id" : 3,
-                "level" : 3,
-                "name" : "DqQuery!",
-                "type" : "op"
-            },
-            {
-                "id" : 2,
-                "level" : 4,
-                "name" : "Commit!",
-                "type" : "op"
-            },
-            {
-                "id" : 1,
-                "level" : 5,
-                "name" : "Commit!",
-                "type" : "op"
+                "PlanNodeId" : 1,
+                "Operators" : [
+                    {
+                        "ExternalDataSource" : "solomon",
+                        "Name" : "Write solomon",
+                        "SinkType" : "solomon"
+                    }
+                ],
+                "Node Type" : "Write solomon"
             }
         ],
-        "links" : [
-            {
-                "source" : 6,
-                "target" : 4
-            },
-            {
-                "source" : 4,
-                "target" : 3
-            },
-            {
-                "source" : 3,
-                "target" : 2
-            },
-            {
-                "source" : 2,
-                "target" : 1
-            }
-        ]
+        "Node Type" : "Query",
+        "OptimizerStats" : {
+            "EquiJoinsCount" : 0,
+            "CBOTreesOptimized" : 0,
+            "JoinsCount" : 0,
+            "CBOTreesTotal" : 0
+        },
+        "PlanNodeType" : "Query"
     }
 }

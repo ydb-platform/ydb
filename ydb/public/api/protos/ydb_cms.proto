@@ -101,7 +101,7 @@ message DatabaseQuotas {
     // A minimum value of `TtlSettings.run_interval_seconds` that can be specified.
     // Default is 1800 (15 minutes).
     uint32 ttl_min_run_internal_seconds = 4;
-    
+
     message StorageQuotas {
         // in theory an arbitrary string, but in practice "hdd" or "ssd"
         string unit_kind = 1;
@@ -120,7 +120,7 @@ message ScaleRecommenderPolicies {
         message TargetTrackingPolicy {
             oneof target {
                 // A percentage of compute resources' average CPU utilization.
-                uint32 average_cpu_utilization_percent = 1 [(Ydb.value) = "[10; 90]"]; 
+                uint32 average_cpu_utilization_percent = 1 [(Ydb.value) = "[10; 90]"];
             }
         }
 
@@ -216,6 +216,8 @@ message GetDatabaseStatusResult {
     // Outstanding problems related to database resources
     // (e.g. storage pool allocation failures).
     repeated Ydb.Issue.IssueMessage issues = 12;
+    // Current database attributes
+    map<string, string> attributes = 13;
 }
 
 // Change resources allocated for database.

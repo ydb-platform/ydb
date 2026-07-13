@@ -1132,7 +1132,8 @@ void TPartition::Initialize(const TActorContext& ctx) {
                                       DbId,
                                       Config.GetYdbDatabasePath(),
                                       IsServerless,
-                                      FolderId);
+                                      FolderId,
+                                      IsSupportive());
     TotalChannelWritesByHead.resize(NumChannels);
 
     if (!IsSupportive()) {

@@ -51,7 +51,7 @@ public:
     private:
         ui32 KeyIndex;
         std::shared_ptr<IChunkedArray> GlobalChunkedArray;
-        const arrow::BinaryArray* CurrentArrayData;
+        const arrow::Array* CurrentArrayData;
         std::optional<IChunkedArray::TFullChunkedArrayAddress> FullArrayAddress;
         std::optional<IChunkedArray::TFullDataAddress> ChunkAddress;
         ui32 CurrentIndex = 0;
@@ -73,12 +73,19 @@ public:
             return KeyIndex;
         }
 
-        std::string_view GetRawValue() const {
-            auto view = CurrentArrayData->GetView(ChunkAddress->GetAddress().GetLocalIndex(CurrentIndex));
-            return std::string_view(view.data(), view.size());
+        // Current value is exposed as (array, local index); the reader interprets it per the
+        // column's value type.
+        const arrow::Array& GetArray() const {
+            return *CurrentArrayData;
+        }
+        i64 GetLocalIndex() const {
+            return ChunkAddress->GetAddress().GetLocalIndex(CurrentIndex);
         }
 
-        NArrow::NAccessor::TBinaryJsonValueView GetValue() const;
+        NArrow::NAccessor::TBinaryJsonValueView GetValue() const {
+            auto view = static_cast<const arrow::BinaryArray&>(*CurrentArrayData).GetView(GetLocalIndex());
+            return NArrow::NAccessor::TBinaryJsonValueView(TStringBuf(view.data(), view.size()));
+        }
 
         bool HasValue() const {
             return !CurrentArrayData->IsNull(ChunkAddress->GetAddress().GetLocalIndex(CurrentIndex));
@@ -132,8 +139,9 @@ public:
         : Stats(dict)
         , Records(data) {
         AFL_VERIFY(Records->num_columns() == Stats.GetColumnsCount())("records", Records->num_columns())("stats", Stats.GetColumnsCount());
-        for (auto&& i : Records->GetColumns()) {
-            AFL_VERIFY(i->GetDataType()->id() == arrow::binary()->id());
+        for (ui32 i = 0; i < (ui32)Records->num_columns(); ++i) {
+            AFL_VERIFY(Records->GetColumnVerified(i)->GetDataType()->id() == Stats.GetField(i)->type()->id())(
+                "column", Records->GetColumnVerified(i)->GetDataType()->ToString())("stats", Stats.GetField(i)->type()->ToString());
         }
     }
 };

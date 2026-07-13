@@ -1,6 +1,6 @@
 #include <ydb/core/formats/arrow/accessor/common/chunk_data.h>
 #include <ydb/core/formats/arrow/accessor/dictionary/accessor.h>
-#include <ydb/core/formats/arrow/accessor/dictionary/additional_data.h>
+#include <ydb/core/formats/arrow/accessor/common/additional_data.h>
 #include <ydb/core/formats/arrow/accessor/dictionary/constructor.h>
 #include <ydb/core/formats/arrow/accessor/sparsed/accessor.h>
 #include <ydb/core/formats/arrow/filter/filter.h>
@@ -239,5 +239,55 @@ Y_UNIT_TEST_SUITE(DictionaryArrayAccessor) {
     }
     Y_UNIT_TEST(CornerCase256WithNulls) {
         RunCornerCaseVariants(256, true, arrow::Type::UINT16); // 257 variants -> uint16
+    }
+
+    // Low-cardinality column with nulls: records "abc","abcd","abcd",null,"abc",null,"ab",null,null,null.
+    // Distinct non-null values {ab, abc, abcd} => dictionary ["ab","abc","abcd", null-slot].
+    std::shared_ptr<TDictionaryArray> BuildSimpleDict() {
+        TTrivialArray::TPlainBuilder builder;
+        builder.AddRecord(0, "abc");
+        builder.AddRecord(1, "abcd");
+        builder.AddRecord(2, "abcd");
+        builder.AddRecord(4, "abc");
+        builder.AddRecord(6, "ab");
+        auto arr = builder.Finish(10);
+        TChunkConstructionData info(
+            arr->GetRecordsCount(), nullptr, arr->GetDataType(), NSerialization::TSerializerContainer::GetDefaultSerializer());
+        return std::static_pointer_cast<TDictionaryArray>(NDictionary::TConstructor().Construct(arr, info).DetachResult());
+    }
+
+    // VisitValues is the per-record view: it must reconstruct the full-length array (one entry per
+    // record, nulls in place, order preserved, duplicates present), NOT the deduplicated dictionary.
+    // This is what record-indexed callers (e.g. sub-column JSON path evaluation) rely on.
+    Y_UNIT_TEST(VisitValues) {
+        auto dict = BuildSimpleDict();
+        std::vector<std::shared_ptr<arrow::Array>> visited;
+        dict->VisitValues([&](std::shared_ptr<arrow::Array> arr) {
+            AFL_VERIFY(arr);
+            visited.emplace_back(arr);
+        });
+        AFL_VERIFY(visited.size() == 1)("size", visited.size());
+        AFL_VERIFY((ui32)visited[0]->length() == dict->GetRecordsCount())("len", visited[0]->length());
+        AFL_VERIFY(PrepareToCompare(visited[0]->ToString()) == R"(["abc","abcd","abcd",null,"abc",null,"ab",null,null,null])")(
+            "actual", PrepareToCompare(visited[0]->ToString()));
+        AFL_VERIFY(PrepareToCompare(visited[0]->ToString()) == PrepareToCompare(dict->GetChunkedArray()->chunk(0)->ToString()));
+    }
+
+    // VisitDistinctValues is the value-set view for set-membership indexing: it hands over the
+    // deduplicated dictionary directly (no reconstruction). The visited array holds each distinct value
+    // once (plus the trailing null slot) -- strictly shorter than the record count, and never a duplicate
+    // ("abcd" appears twice per record but once here).
+    Y_UNIT_TEST(VisitDistinctValues) {
+        auto dict = BuildSimpleDict();
+        std::vector<std::shared_ptr<arrow::Array>> visited;
+        dict->VisitDistinctValues([&](std::shared_ptr<arrow::Array> arr) {
+            AFL_VERIFY(arr);
+            visited.emplace_back(arr);
+        });
+        AFL_VERIFY(visited.size() == 1)("size", visited.size());
+        // Deduplicated: length == #distinct (+ null slot), strictly less than the record count.
+        AFL_VERIFY((ui32)visited[0]->length() < dict->GetRecordsCount())("len", visited[0]->length());
+        AFL_VERIFY(PrepareToCompare(visited[0]->ToString()) == R"(["ab","abc","abcd",null])")(
+            "actual", PrepareToCompare(visited[0]->ToString()));
     }
 };

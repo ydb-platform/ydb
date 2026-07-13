@@ -1511,6 +1511,10 @@ void TSchemeShard::DescribeTable(
         entry->MutableIncrementalBackupConfig()->CopyFrom(tableInfo.IncrementalBackupConfig());
     }
 
+    if (tableInfo.HasMultiColumnStatistics()) {
+        entry->MutableMultiColumnStatistics()->CopyFrom(tableInfo.MultiColumnStatistics());
+    }
+
     entry->SetIsBackup(tableInfo.IsBackup);
     entry->SetIsRestore(tableInfo.IsRestore);
 }

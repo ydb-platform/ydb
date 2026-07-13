@@ -88,7 +88,7 @@ TQueryInfoList TTpcBaseWorkloadGenerator::GetWorkload(int type) {
     resourcePrefix.to_lower();
     TVector<TString> queries;
     NResource::TResources qresources;
-    const auto prefix = resourcePrefix + "queries/" + ToString(Params.GetSyntax()) + "/q";
+    const auto prefix = resourcePrefix + "queries/yql/q";
     NResource::FindMatch(prefix, &qresources);
     for (const auto& r: qresources) {
         ui32 num;
@@ -126,7 +126,7 @@ void TTpcBaseWorkloadGenerator::PatchQuery(TString& query) const {
         const auto tableFullName = (Params.GetPath() ? Params.GetPath() + "/" : "") + tableName;
         SubstGlobal(query, 
             TStringBuilder() << "{{" << tableName << "}}", 
-            TStringBuilder() << Params.GetTablePathQuote(Params.GetSyntax()) << tableFullName << Params.GetTablePathQuote(Params.GetSyntax())
+            TStringBuilder() << Params.GetTablePathQuote() << tableFullName << Params.GetTablePathQuote()
         );
     }
 }
@@ -164,9 +164,6 @@ void TTpcBaseWorkloadGenerator::FilterHeader(IOutputStream& result, TStringBuf h
 
 TString TTpcBaseWorkloadGenerator::GetHeader(const TString& query) const {
     TStringBuilder header;
-    if (Params.GetSyntax() == TWorkloadBaseParams::EQuerySyntax::PG) {
-        header << "--!syntax_pg" << Endl;
-    }
     switch (FloatMode) {
     case TTpcBaseWorkloadParams::EFloatMode::DOUBLE:
         FilterHeader(header.Out, NResource::Find("consts.yql"), query);
@@ -189,8 +186,15 @@ void TTpcBaseWorkloadParams::ConfigureOpts(NLastGetopt::TOpts& opts, const EComm
         << "    Use Decimal type with canonical precision and scale." << Endl;
     switch (commandType) {
     case TWorkloadParams::ECommandType::Run:
-        opts.AddLongOption( "syntax", "Query syntax [" + GetEnumAllNames<EQuerySyntax>() + "].")
-            .StoreResult(&Syntax).DefaultValue(Syntax);
+        opts.AddLongOption("syntax", "Query syntax [yql]")
+            .Hidden()
+            .Handler1T<TString>("yql", [this](const TString& arg) {
+                if (arg == "yql") {
+                    Syntax = EQuerySyntax::YQL;
+                } else {
+                    throw yexception() << "Unknown syntax option \"" << arg << "\"";
+                }
+            });
         opts.AddLongOption("scale", "Sets the percentage of the benchmark's data size and workload to use, relative to full scale.")
             .DefaultValue(Scale).StoreResult(&Scale);
         break;

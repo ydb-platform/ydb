@@ -78,7 +78,6 @@ PEERDIR(
     ydb/core/kqp/finalize_script_service
     ydb/core/kqp/rm_service
     ydb/core/load_test
-    ydb/core/local_pgwire
     ydb/core/log_backend
     ydb/core/memory_controller
     ydb/core/metering

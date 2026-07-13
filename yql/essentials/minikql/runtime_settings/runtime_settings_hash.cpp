@@ -50,7 +50,7 @@ TRuntimeSettingsStableHash StableHashRuntimeSettings(const TRuntimeSettings& con
 
     std::array<ui8, SHA256_DIGEST_LENGTH> hash_array;
     SHA256_Final(hash_array.data(), &sha);
-    return TRuntimeSettingsStableHash(reinterpret_cast<const char*>(hash_array.data()), sizeof(hash_array));
+    return TRuntimeSettingsStableHash(TString(reinterpret_cast<const char*>(hash_array.data()), sizeof(hash_array)));
 }
 
 } // namespace NYql

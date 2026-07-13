@@ -659,7 +659,7 @@ TRuntimeNode TProgramBuilder::Condense(TRuntimeNode stream, TRuntimeNode state,
 
     if (streamType->IsList()) {
         // TODO: Native implementation for list.
-        return Collect(Condense(ToFlow(stream), state, switcher, handler));
+        return Collect(Condense(ToFlow(stream, {}), state, switcher, handler));
     }
 
     MKQL_ENSURE(streamType->IsFlow() || streamType->IsStream(), "Expected flow or stream.");
@@ -699,7 +699,7 @@ TRuntimeNode TProgramBuilder::Condense1(TRuntimeNode stream, const TUnaryLambda&
 
     if (streamType->IsList()) {
         // TODO: Native implementation for list.
-        return Collect(Condense1(ToFlow(stream), init, switcher, handler));
+        return Collect(Condense1(ToFlow(stream, {}), init, switcher, handler));
     }
 
     MKQL_ENSURE(streamType->IsFlow() || streamType->IsStream(), "Expected flow or stream.");
@@ -6329,6 +6329,28 @@ TRuntimeNode TProgramBuilder::BlockGuess(TRuntimeNode variant, const std::string
     TCallableBuilder callableBuilder(Env_, __func__, returnType);
     callableBuilder.Add(variant);
     callableBuilder.Add(NewDataLiteral<ui32>(structIndex));
+    return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
+}
+
+TRuntimeNode TProgramBuilder::BlockWay(TRuntimeNode variant) {
+    if constexpr (RuntimeVersion < 80) {
+        THROW yexception() << "Runtime version (" << RuntimeVersion << ") too old for " << __func__;
+    }
+    auto blockType = AS_TYPE(TBlockType, variant.GetStaticType());
+    auto inputItemType = blockType->GetItemType();
+    bool isOptional;
+    auto unpacked = UnpackOptional(inputItemType, isOptional);
+    auto variantType = AS_TYPE(TVariantType, unpacked);
+    auto underlying = variantType->GetUnderlyingType();
+    TType* alternativeKeyType = underlying->IsTuple()
+                                    ? NewDataType(NUdf::EDataSlot::Uint32)
+                                    : NewDataType(NUdf::EDataSlot::Utf8);
+    TType* itemReturnType = isOptional ? NewOptionalType(alternativeKeyType)
+                                       : alternativeKeyType;
+    auto returnType = NewBlockType(itemReturnType, blockType->GetShape());
+
+    TCallableBuilder callableBuilder(Env_, __func__, returnType);
+    callableBuilder.Add(variant);
     return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
 }
 

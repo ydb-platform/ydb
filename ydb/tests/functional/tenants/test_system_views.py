@@ -21,8 +21,6 @@ from ydb.tests.oss.ydb_sdk_import import ydb
 
 logger = logging.getLogger(__name__)
 
-pg_sysviews = {'pg_tables', 'tables', 'pg_class'}
-
 
 class BaseSystemViews(object):
     @classmethod
@@ -236,33 +234,23 @@ class TestSysViewsRegistry(BaseSystemViews):
                     sysview_name = child.name
                     sysview_path = os.path.join(sys_dir_path, sysview_name)
 
-                    try:
-                        # Try to get table description
-                        response = session.describe_table(sysview_path)
+                    response = session.describe_table(sysview_path)
 
-                        # Collect column information
-                        columns = []
-                        for col in response.columns:
-                            columns.append({
-                                'name': col.name,
-                                'type': str(col.type)
-                            })
+                    # Collect column information
+                    columns = []
+                    for col in response.columns:
+                        columns.append({
+                            'name': col.name,
+                            'type': str(col.type)
+                        })
 
-                        # Collect primary key information
-                        primary_key = [pk_col for pk_col in response.primary_key]
+                    # Collect primary key information
+                    primary_key = [pk_col for pk_col in response.primary_key]
 
-                        sysviews[sysview_name] = {
-                            'columns': columns,
-                            'primary_key': primary_key
-                        }
-
-                    except Exception as e:
-                        # Some sysviews may be unavailable or have special nature (e.g., pg_* views)
-                        if sysview_name in pg_sysviews:
-                            logger.debug(f"Skipping pg sysview '{sysview_name}': {e}")
-                            continue
-                        else:
-                            raise
+                    sysviews[sysview_name] = {
+                        'columns': columns,
+                        'primary_key': primary_key
+                    }
 
         return sysviews
 
@@ -292,7 +280,7 @@ class TestSysViewsRegistry(BaseSystemViews):
         """Writes content to file for canonization."""
         output_path = os.path.join(yatest.common.output_path(), filename)
         with open(output_path, 'w') as f:
-            f.write(json.dumps(content, indent=2, sort_keys=True, ensure_ascii=False))
+            f.write(json.dumps(content, indent=2, sort_keys=True, ensure_ascii=False) + '\n')
         return output_path
 
     def validate_compatibility(self, canonical_sysviews, current_sysviews):

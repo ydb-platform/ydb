@@ -9,6 +9,7 @@
 #include <ydb/core/tx/columnshard/splitter/blob_info.h>
 
 #include <ydb/library/accessor/accessor.h>
+#include <ydb/library/actors/struct_log/log_stack.h>
 
 namespace NKikimr::NOlap {
 
@@ -173,8 +174,8 @@ public:
     TConclusion<std::shared_ptr<NArrow::TGeneralContainer>> RestoreBatch(
         const ISnapshotSchema& data, const ISnapshotSchema& resultSchema, const std::set<ui32>& seqColumns, const bool restoreAbsent) const {
         THashMap<TChunkAddress, TString> blobs;
-        NActors::TLogContextGuard gLogging = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)(
-            "portion_id", GetPortionResult().GetPortionInfo().GetPortionId());
+        YDB_LOG_CREATE_CONTEXT_COMP(NKikimrServices::TX_COLUMNSHARD,
+            {"portionId", GetPortionResult().GetPortionInfo().GetPortionId()});
         for (auto&& i : GetPortionResult().GetRecordsVerified()) {
             blobs[i.GetAddress()] = GetBlobByAddressVerified(i.ColumnId, i.Chunk);
             Y_ABORT_UNLESS(blobs[i.GetAddress()].size() == i.BlobRange.Size);

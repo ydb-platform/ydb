@@ -169,12 +169,12 @@ Y_UNIT_TEST_LLVM(TestVisitAllTupleFlow) {
     const auto var1 = pb.NewVariant(data1, 0, varType);
     const auto var2 = pb.NewVariant(data2, 1, varType);
     const auto list = pb.NewList(varType, {var1, var2});
-    const auto pgmReturn = pb.FromFlow(pb.FlatMap(pb.ToFlow(list), [&](TRuntimeNode item) {
+    const auto pgmReturn = pb.FromFlow(pb.FlatMap(pb.ToFlow(list, {}), [&](TRuntimeNode item) {
         return pb.VisitAll(item, [&](ui32 index, TRuntimeNode item) {
             if (!index) {
-                return pb.ToFlow(pb.Replicate(at, item, __FILE__, __LINE__, 0U));
+                return pb.ToFlow(pb.Replicate(at, item, __FILE__, __LINE__, 0U), {});
             } else {
-                return pb.ToFlow(pb.NewOptional(item));
+                return pb.ToFlow(pb.NewOptional(item), {});
             }
         });
     }));
@@ -198,12 +198,12 @@ Y_UNIT_TEST_LLVM(TestVisitAllStructFlow) {
     const auto list = pb.NewList(varType, {var2, var1, var2});
 
     const auto xIndex = AS_TYPE(TStructType, structType)->GetMemberIndex("x");
-    const auto pgmReturn = pb.FromFlow(pb.FlatMap(pb.ToFlow(list), [&](TRuntimeNode item) {
+    const auto pgmReturn = pb.FromFlow(pb.FlatMap(pb.ToFlow(list, {}), [&](TRuntimeNode item) {
         return pb.VisitAll(item, [&](ui32 index, TRuntimeNode item) {
             if (xIndex == index) {
-                return pb.ToFlow(pb.Replicate(at, item, __FILE__, __LINE__, 0U));
+                return pb.ToFlow(pb.Replicate(at, item, __FILE__, __LINE__, 0U), {});
             } else {
-                return pb.ToFlow(pb.NewOptional(item));
+                return pb.ToFlow(pb.NewOptional(item), {});
             }
         });
     }));
@@ -227,12 +227,12 @@ Y_UNIT_TEST_LLVM(TestVisitAllStructWideFlow) {
     const auto list = pb.NewList(varType, {var2, var1, var2});
 
     const auto xIndex = AS_TYPE(TStructType, structType)->GetMemberIndex("x");
-    const auto pgmReturn = pb.FromFlow(pb.NarrowMap(pb.FlatMap(pb.ToFlow(list), [&](TRuntimeNode item) {
+    const auto pgmReturn = pb.FromFlow(pb.NarrowMap(pb.FlatMap(pb.ToFlow(list, {}), [&](TRuntimeNode item) {
         return pb.VisitAll(item, [&](ui32 index, TRuntimeNode item) {
             if (xIndex == index) {
-                return pb.ExpandMap(pb.ToFlow(pb.Replicate(at, item, __FILE__, __LINE__, 0U)), [&](TRuntimeNode x) -> TRuntimeNode::TList { return {x, pb.NewDataLiteral(i32(index))}; });
+                return pb.ExpandMap(pb.ToFlow(pb.Replicate(at, item, __FILE__, __LINE__, 0U), {}), [&](TRuntimeNode x) -> TRuntimeNode::TList { return {x, pb.NewDataLiteral(i32(index))}; });
             } else {
-                return pb.ExpandMap(pb.ToFlow(pb.NewOptional(item)), [&](TRuntimeNode x) -> TRuntimeNode::TList { return {x, pb.NewDataLiteral(-i32(index))}; });
+                return pb.ExpandMap(pb.ToFlow(pb.NewOptional(item), {}), [&](TRuntimeNode x) -> TRuntimeNode::TList { return {x, pb.NewDataLiteral(-i32(index))}; });
             }
         });
     }),

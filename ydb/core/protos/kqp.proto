@@ -115,6 +115,25 @@ message TKafkaApiOperationsRequest {
     }
 }
 
+message TTopicDeferredPublicationRequest {
+    enum EOp {
+        Unspecified = 0;
+        Publish = 1;
+        Cancel = 2;
+    }
+
+    message TDestination {
+        optional string Path = 1;
+        optional uint32 PartitionId = 2;
+        optional uint64 TabletId = 3;
+    }
+
+    optional EOp Op = 1;
+    optional uint64 IntPublicationId = 2;
+    optional string ExtPublicationId = 3;
+    repeated TDestination Destinations = 4;
+}
+
 message TTopicOperationsResponse {
     message TWriteId {
         message TKafkaProducerInstanceId {
@@ -154,7 +173,13 @@ message TQueryRequest {
     reserved 19; // (deprecated) StatsMode
     optional NYql.NDqProto.EDqStatsMode StatsMode = 20; // deprecated
     optional Ydb.Table.QueryStatsCollection.Mode CollectStats = 21;
-    optional TTopicOperationsRequest TopicOperations = 22;
+    // QUERY_ACTION_TOPIC carries exactly one topic API per request: Topic, Kafka, or DeferredPublication.
+    // Breaking change: fields 22 and 37 were independent optionals; oneof keeps the last tag on wire if both are set.
+    oneof TopicRequestOperations {
+        TTopicOperationsRequest TopicOperations = 22;
+        TKafkaApiOperationsRequest KafkaApiOperations = 37;
+        TTopicDeferredPublicationRequest DeferredPublication = 42;
+    }
     optional bool UsePublicResponseDataFormat = 23;
     map<string, Ydb.TypedValue> YdbParameters = 24;
     optional bool IsInternalCall = 25;
@@ -169,7 +194,6 @@ message TQueryRequest {
     optional uint64 OutputChunkMaxSize = 34;
     optional string PoolId = 35;
     optional string DatabaseId = 36;
-    optional TKafkaApiOperationsRequest KafkaApiOperations = 37;
     optional Ydb.Query.SchemaInclusionMode SchemaInclusionMode = 38;
     optional Ydb.ResultSet.Format ResultSetFormat = 39;
     optional Ydb.Formats.ArrowFormatSettings ArrowFormatSettings = 40;
@@ -377,7 +401,7 @@ message TSessionInfo {
     optional int64 QueryStartAt = 12;
     optional int64 StateChangeAt = 13;
     optional string UserSID = 14;
-    optional bool PgWire = 15 [default = false];
+    reserved 15; // PgWire
     optional string UserName = 16;
     optional string WmPoolId = 17;
     optional string WmState = 18;
@@ -447,7 +471,7 @@ message TEvCreateSessionRequest {
     // if flag is false, in this case proxy will create session locally.
     optional bool CanCreateRemoteSession = 4 [default = false];
     optional bool SupportsBalancing = 5 [default = false];
-    optional bool PgWire = 6 [default = false];
+    reserved 6; // PgWire
 
     optional string ClientAddress = 7;
     optional string ClientPID = 8;

@@ -12,6 +12,7 @@
 
 #include <library/cpp/containers/stack_vector/stack_vec.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node_impl.h>
+#include <yql/essentials/minikql/arrow/arrow_util.h>
 #include <yql/essentials/minikql/mkql_runtime_version.h>
 #include <yql/essentials/minikql/mkql_node_printer.h>
 #include <yql/essentials/parser/pg_catalog/catalog.h>
@@ -1556,14 +1557,16 @@ bool ConvertArrowTypeImpl(NUdf::EDataSlot slot, std::shared_ptr<arrow::DataType>
             return true;
         }
         case NUdf::EDataSlot::Uuid: {
-            return false;
+            type = arrow::fixed_size_binary(UuidBinarySize);
+            return true;
         }
         case NUdf::EDataSlot::Decimal: {
             type = arrow::fixed_size_binary(sizeof(NYql::NUdf::TUnboxedValuePod));
             return true;
         }
         case NUdf::EDataSlot::DyNumber: {
-            return false;
+            type = arrow::binary();
+            return true;
         }
     }
 }
@@ -2700,14 +2703,13 @@ size_t CalcMaxBlockItemSize(const TType* type) {
             case NUdf::EDataSlot::TzTimestamp64:
                 return sizeof(typename NUdf::TDataType<NUdf::TTzTimestamp64>::TLayout) + sizeof(NYql::NUdf::TTimezoneId);
             case NUdf::EDataSlot::Uuid: {
-                MKQL_ENSURE(false, "Unsupported data slot: " << slot);
+                return UuidBinarySize;
             }
             case NUdf::EDataSlot::Decimal: {
                 return sizeof(NYql::NDecimal::TInt128);
             }
-            case NUdf::EDataSlot::DyNumber: {
-                MKQL_ENSURE(false, "Unsupported data slot: " << slot);
-            }
+            case NUdf::EDataSlot::DyNumber:
+                return sizeof(arrow::BinaryType::offset_type);
         }
     }
 

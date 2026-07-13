@@ -44,13 +44,12 @@ public:
     }
 
     void Bootstrap(const TActorContext &ctx) {
-        LOG_DEBUG_S(ctx, NKikimrServices::CMS,
-                    "TJsonProxyBase::Bootstrap url=" << RequestEvent->Get()->Request.GetPathInfo());
+        YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::CMS, "TJsonProxyBase::Bootstrap",
+            {"url", RequestEvent->Get()->Request.GetPathInfo()});
 
         TAutoPtr<TRequestEvent> request = PrepareRequest(ctx);
         if (!request) {
-            LOG_ERROR_S(ctx, NKikimrServices::CMS,
-                        "TJsonProxyBase no request to send was built");
+            YDB_LOG_ERROR_CTX_COMP(ctx, NKikimrServices::CMS, "TJsonProxyBase no request to send was built");
             return;
         }
 
@@ -66,11 +65,10 @@ public:
         }
 
         std::optional<ui32> followerId = GetFollowerId(ctx);
-        LOG_TRACE_S(ctx, NKikimrServices::CMS,
-                    "TJsonProxyBase send request to " << GetTabletName()
-                        << " tablet " << tid
-                        << ", followerId " << ((followerId) ? ToString(*followerId) : TString("(undefined)"))
-        );
+        YDB_LOG_TRACE_CTX_COMP(ctx, NKikimrServices::CMS, "TJsonProxyBase send request",
+            {"tabletName", GetTabletName()},
+            {"tabletId", tid},
+            {"followerId", ((followerId) ? ToString(*followerId) : TString("(undefined)"))});
 
         NTabletPipe::TClientConfig pipeConfig;
 
@@ -100,8 +98,9 @@ protected:
             CFunc(TEvTabletPipe::TEvClientDestroyed::EventType, Disconnect);
             HFunc(TEvTabletPipe::TEvClientConnected, Handle);
         default:
-            LOG_DEBUG(*TlsActivationContext, NKikimrServices::CMS, "HTTP::StateWork ignored event type: %" PRIx32 " event: %s",
-                      ev->GetTypeRewrite(), ev->ToString().data());
+            YDB_LOG_DEBUG_CTX_COMP(*TlsActivationContext, NKikimrServices::CMS, "HTTP::StateWork ignored event",
+                {"type", ev->GetTypeRewrite()},
+                {"ev", ev->ToString()});
         }
     }
 

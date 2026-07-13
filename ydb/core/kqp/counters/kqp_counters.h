@@ -456,6 +456,8 @@ public:
     ::NMonitoring::TDynamicCounters::TCounterPtr ModifiedRowsCount;
     ::NMonitoring::TDynamicCounters::TCounterPtr LockedRowsCount;
     NMonitoring::THistogramPtr MaxInFlightLockTimeOnExit;
+    ::NMonitoring::TDynamicCounters::TCounterPtr StreamLookupLockTotalQuotaBytesInFlight;
+    ::NMonitoring::TDynamicCounters::TCounterPtr StreamLookupLockTotalQuotaBytesExceeded;
 
     // Sink write counters
     ::NMonitoring::TDynamicCounters::TCounterPtr WriteActorsShardResolve;

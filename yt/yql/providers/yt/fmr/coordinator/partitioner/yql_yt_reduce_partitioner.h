@@ -46,7 +46,11 @@ private:
         const TPartitionerFilterBoundary& filterBoundary
     ) override;
 
-    void ChangeRightKeyBoundaryIfNeeded(TFmrTableKeysBoundary& rightKey, const TFmrTableKeysBoundary& taskRangeLastKey) override;
+    void ChangeRightKeyBoundaryIfNeeded(
+        TFmrTableKeysBoundary& rightKey,
+        bool& isRightInclusive,
+        const TFmrTableKeysBoundary& taskRangeLastKey
+    ) override;
 
 
     void ExtendChunksPerTable(std::unordered_map<TString, std::vector<TChunkUnit>>& chunksByTable) override;

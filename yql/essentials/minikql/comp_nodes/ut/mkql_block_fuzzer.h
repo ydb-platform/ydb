@@ -2,6 +2,7 @@
 
 #include <yql/essentials/minikql/mkql_node.h>
 #include <yql/essentials/minikql/computation/mkql_block_impl.h>
+#include <yql/essentials/minikql/runtime_settings/runtime_settings.h>
 
 #include <util/random/random.h>
 #include <util/generic/ptr.h>
@@ -41,7 +42,7 @@ public:
 
     ui64 ReserveFuzzer();
 
-    void CreateFuzzers(TFuzzOptions options, ui64 fuzzerIndex, const TType* type, const TTypeEnvironment& env);
+    void CreateFuzzers(TFuzzOptions options, ui64 fuzzerIndex, const TType* type, const TTypeEnvironment& env, NYql::EDatumValidationMode validationMode);
 
     void ClearFuzzers();
 

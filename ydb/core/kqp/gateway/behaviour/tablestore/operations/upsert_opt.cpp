@@ -4,6 +4,23 @@
 
 namespace NKikimr::NKqp {
 
+namespace {
+
+template <class T>
+TConclusionStatus ExtractInsertOption(
+    NYql::TObjectSettingsImpl::TFeaturesExtractor& features, const TString& featureId, std::optional<T>& target) {
+    if (auto rawValue = features.Extract(featureId)) {
+        T parsed;
+        if (!TryFromString(*rawValue, parsed)) {
+            return TConclusionStatus::Fail("Incorrect value for " + featureId + ": cannot parse as expected type");
+        }
+        target = parsed;
+    }
+    return TConclusionStatus::Success();
+}
+
+}   // namespace
+
 TConclusionStatus TUpsertOptionsOperation::DoDeserialize(NYql::TObjectSettingsImpl::TFeaturesExtractor& features) {
     auto value = features.Extract<bool>("SCHEME_NEED_ACTUALIZATION", false);
     if (!value) {
@@ -15,6 +32,13 @@ TConclusionStatus TUpsertOptionsOperation::DoDeserialize(NYql::TObjectSettingsIm
         if (*ScanReaderPolicyName != "PLAIN" && *ScanReaderPolicyName != "SIMPLE" && *ScanReaderPolicyName != "TRIVIAL") {
             return TConclusionStatus::Fail("SCAN_READER_POLICY_NAME have to be in ['PLAIN', 'SIMPLE', 'TRIVIAL']");
         }
+    }
+    if (auto status = ExtractInsertOption(features, "INSERT_OPTIONS.BUILD_INDEXES_ENABLED", InsertOptionsBuildIndexesEnabled); status.IsFail()) {
+        return status;
+    }
+    if (auto status = ExtractInsertOption(features, "INSERT_OPTIONS.BUILD_INDEXES_MIN_BLOB_BYTES", InsertOptionsBuildIndexesMinBlobBytes);
+        status.IsFail()) {
+        return status;
     }
     if (const auto className = features.Extract<TString>("COMPACTION_PLANNER.CLASS_NAME")) {
         if (!CompactionPlannerConstructor.Initialize(*className)) {
@@ -65,6 +89,15 @@ void TUpsertOptionsOperation::DoSerializeScheme(NKikimrSchemeOp::TAlterColumnTab
     }
     if (MetadataManagerConstructor.HasObject()) {
         MetadataManagerConstructor.SerializeToProto(*schemaData.MutableOptions()->MutableMetadataManagerConstructor());
+    }
+    if (InsertOptionsBuildIndexesEnabled || InsertOptionsBuildIndexesMinBlobBytes) {
+        auto& options = *schemaData.MutableOptions()->MutableInsertOptions();
+        if (InsertOptionsBuildIndexesEnabled) {
+            options.SetBuildIndexesEnabled(*InsertOptionsBuildIndexesEnabled);
+        }
+        if (InsertOptionsBuildIndexesMinBlobBytes) {
+            options.SetBuildIndexesMinBlobBytes(*InsertOptionsBuildIndexesMinBlobBytes);
+        }
     }
 }
 

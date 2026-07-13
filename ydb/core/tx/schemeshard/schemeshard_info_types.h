@@ -894,6 +894,14 @@ struct TTableInfo : public TSimpleRefCount<TTableInfo> {
         return *TableDescription.MutableTTLSettings();
     }
 
+    bool HasMultiColumnStatistics() const { return TableDescription.MultiColumnStatisticsSize() > 0; }
+    const ::google::protobuf::RepeatedPtrField<NKikimrSchemeOp::TMultiColumnStatisticsDescription>& MultiColumnStatistics() const {
+        return TableDescription.GetMultiColumnStatistics();
+    }
+    ::google::protobuf::RepeatedPtrField<NKikimrSchemeOp::TMultiColumnStatisticsDescription>* MutableMultiColumnStatistics() {
+        return TableDescription.MutableMultiColumnStatistics();
+    }
+
     /**
      * Determine if the detailed metrics settings are configured for the given table.
      *
@@ -1008,6 +1016,7 @@ public:
         bool EnableTableDatetime64;
         bool EnableParameterizedDecimal;
         bool EnableDetailedMetrics;
+        bool EnableColumnStatistics = false;
     };
 
     static TAlterDataPtr CreateAlterData(

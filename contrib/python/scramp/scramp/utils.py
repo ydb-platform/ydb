@@ -1,5 +1,8 @@
+import binascii
 import hmac as hmaca
 from base64 import b64decode, b64encode
+
+from scramp.exceptions import ScramException
 
 
 def hmac(hf, key, msg):
@@ -11,7 +14,7 @@ def h(hf, msg):
 
 
 def xor(bytes1, bytes2):
-    return bytes(a ^ b for a, b in zip(bytes1, bytes2))
+    return bytes(a ^ b for a, b in zip(bytes1, bytes2, strict=True))
 
 
 def b64enc(binary):
@@ -19,7 +22,10 @@ def b64enc(binary):
 
 
 def b64dec(string):
-    return b64decode(string)
+    try:
+        return b64decode(string, validate=True)
+    except binascii.Error as e:
+        raise ScramException("Invalid base64 encoding.") from e
 
 
 def uenc(string):

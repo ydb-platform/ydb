@@ -92,12 +92,11 @@ NMetadata::NInternal::TTableRecord TResourcePoolClassifierConfig::SerializeToRec
     return result;
 }
 
-TClassifierSettings TResourcePoolClassifierConfig::GetClassifierSettings() const {
-    TClassifierSettings resourcePoolClassifierSettings;
+void TResourcePoolClassifierConfig::EnsureSettings() {
+    TClassifierSettings settings;
+    settings.Rank = Rank;
 
-    resourcePoolClassifierSettings.Rank = Rank;
-
-    const auto& properties = resourcePoolClassifierSettings.GetPropertiesMap();
+    const auto& properties = settings.GetPropertiesMap();
     for (const auto& [property, value] : ConfigJson.GetMap()) {
         const auto it = properties.find(property);
         if (it == properties.end()) {
@@ -110,7 +109,7 @@ TClassifierSettings TResourcePoolClassifierConfig::GetClassifierSettings() const
         }
     }
 
-    return resourcePoolClassifierSettings;
+    Settings = std::move(settings);
 }
 
 NJson::TJsonValue TResourcePoolClassifierConfig::GetDebugJson() const {

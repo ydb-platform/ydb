@@ -44,6 +44,23 @@ Y_UNIT_TEST_SUITE(THostMaskTest)
         UNIT_ASSERT(mask.Get(7));
     }
 
+    Y_UNIT_TEST(ShouldMakeFromRoute)
+    {
+        // A route with distinct source and destination sets both bits.
+        auto mask = THostMask::MakeFromRoute(
+            THostRoute{.SourceHostIndex = 1, .DestinationHostIndex = 4});
+        UNIT_ASSERT_VALUES_EQUAL(2u, mask.Count());
+        UNIT_ASSERT(mask.Get(1));
+        UNIT_ASSERT(mask.Get(4));
+        UNIT_ASSERT(!mask.Get(0));
+
+        // A route where source equals destination collapses to a single bit.
+        auto sameHost = THostMask::MakeFromRoute(
+            THostRoute{.SourceHostIndex = 2, .DestinationHostIndex = 2});
+        UNIT_ASSERT_VALUES_EQUAL(1u, sameHost.Count());
+        UNIT_ASSERT(sameHost.Get(2));
+    }
+
     Y_UNIT_TEST(ShouldDoLogicalOps)
     {
         auto first = THostMask::MakeOne(0).Include(THostMask::MakeOne(1));

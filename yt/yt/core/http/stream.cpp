@@ -31,10 +31,10 @@ YT_DEFINE_GLOBAL(const THeaders::THeaderNames, FilteredHeaders, {
     "host",
 });
 
-YT_DEFINE_GLOBAL(const TSharedRef, Http100ContinueBuffer, TSharedRef::FromString("HTTP/1.1 100 Continue\r\n\r\n"));
-YT_DEFINE_GLOBAL(const TSharedRef, CrLfBuffer, TSharedRef::FromString("\r\n"));
-YT_DEFINE_GLOBAL(const TSharedRef, ZeroCrLfBuffer, TSharedRef::FromString("0\r\n"));
-YT_DEFINE_GLOBAL(const TSharedRef, ZeroCrLfCrLfBuffer, TSharedRef::FromString("0\r\n\r\n"));
+YT_DEFINE_GLOBAL(const TSharedRef, Http100ContinueBuffer, TSharedRef::FromString(std::string("HTTP/1.1 100 Continue\r\n\r\n")));
+YT_DEFINE_GLOBAL(const TSharedRef, CrLfBuffer, TSharedRef::FromString(std::string("\r\n")));
+YT_DEFINE_GLOBAL(const TSharedRef, ZeroCrLfBuffer, TSharedRef::FromString(std::string("0\r\n")));
+YT_DEFINE_GLOBAL(const TSharedRef, ZeroCrLfCrLfBuffer, TSharedRef::FromString(std::string("0\r\n\r\n")));
 
 } // namespace
 

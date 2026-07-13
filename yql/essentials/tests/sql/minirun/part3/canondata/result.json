@@ -321,18 +321,39 @@
             "uri": "https://{canondata_backend}/1781765/e6df7efbe28b8ae403e3d9815e1579ecc8bb5445/resource.tar.gz#test.test_blocks-or_scalar-default.txt-Results_/results.txt"
         }
     ],
+    "test.test[blocks-way_struct-default.txt-Debug]": [
+        {
+            "checksum": "b8713131caa9b0843c26fa36a9e9b875",
+            "size": 508,
+            "uri": "https://{canondata_backend}/1031349/8fbf4ab0bc7029bea3b9efacb9424d140baa0ef5/resource.tar.gz#test.test_blocks-way_struct-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[blocks-way_struct-default.txt-Peephole]": [
+        {
+            "checksum": "66ced36da05d422cc45514df250a54ae",
+            "size": 682,
+            "uri": "https://{canondata_backend}/1031349/8fbf4ab0bc7029bea3b9efacb9424d140baa0ef5/resource.tar.gz#test.test_blocks-way_struct-default.txt-Peephole_/opt.yql"
+        }
+    ],
+    "test.test[blocks-way_struct-default.txt-Results]": [
+        {
+            "checksum": "a2a5f566d63cd467abd0f722ffcf7fb6",
+            "size": 763,
+            "uri": "https://{canondata_backend}/1031349/8fbf4ab0bc7029bea3b9efacb9424d140baa0ef5/resource.tar.gz#test.test_blocks-way_struct-default.txt-Results_/results.txt"
+        }
+    ],
     "test.test[combine-no_match-default.txt-Debug]": [
         {
             "checksum": "2c88cc1e9474e5167a2795c8eb8ebf24",
             "size": 1534,
-            "uri": "https://{canondata_backend}/1817427/b606aa4e64748e4a6731f78b7b51c638a583cf24/resource.tar.gz#test.test_combine-no_match-default.txt-Debug_/opt.yql"
+            "uri": "https://{canondata_backend}/1925821/b606aa4e64748e4a6731f78b7b51c638a583cf24/resource.tar.gz#test.test_combine-no_match-default.txt-Debug_/opt.yql"
         }
     ],
     "test.test[combine-no_match-default.txt-Results]": [
         {
             "checksum": "657376a1704e9cd9ff9947f392e9ae6c",
             "size": 9430,
-            "uri": "https://{canondata_backend}/1817427/b606aa4e64748e4a6731f78b7b51c638a583cf24/resource.tar.gz#test.test_combine-no_match-default.txt-Results_/results.txt"
+            "uri": "https://{canondata_backend}/1925821/b606aa4e64748e4a6731f78b7b51c638a583cf24/resource.tar.gz#test.test_combine-no_match-default.txt-Results_/results.txt"
         }
     ],
     "test.test[compute_range-in3-default.txt-Debug]": [

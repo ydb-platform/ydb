@@ -367,6 +367,10 @@ public:
         return result;
     }
 
+    ui32 GetBackgroundSessionsCount() const;
+
+    ui32 GetTxOperatorsCount() const;
+
     void SetExpectedShardsCount(const ui32 value) {
         ExpectedShardsCount = value;
     }

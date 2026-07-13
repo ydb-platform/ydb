@@ -180,6 +180,61 @@ Y_UNIT_TEST_SUITE(TFlushRequestTest)
         UNIT_ASSERT_VALUES_EQUAL(43, response.FlushFailed[1]);
         UNIT_ASSERT_EQUAL_C(route, response.Route, response.Route.DebugPrint());
     }
+
+    Y_UNIT_TEST_F(CooldownDelaysFlushRequest, TBaseFixture)
+    {
+        Init();
+
+        // When the oracle reports a non-zero cooldown, the flush request must
+        // not be issued immediately. Instead it is scheduled after the
+        // cooldown delay.
+        const auto cooldown = TDuration::MilliSeconds(30);
+        DirectBlockGroup->Oracle.FlushRequestCooldown = cooldown;
+        DirectBlockGroup->Oracle.FlushRequestTimeout = TDuration::Seconds(5);
+
+        THostRoute route{.SourceHostIndex = 1, .DestinationHostIndex = 2};
+        TFlushHint hint;
+        hint.Segments.push_back(TPBufferSegment{
+            .Lsn = 42,
+            .Range = TBlockRange64::WithLength(10, 3)});
+
+        auto flushRequest = std::make_shared<TFlushRequestExecutor>(
+            Runtime->GetActorSystem(0),
+            LogTitle,
+            VChunkConfig,
+            DirectBlockGroup,
+            route,
+            std::move(hint),
+            NWilson::TSpan());
+
+        auto future = flushRequest->GetFuture();
+        flushRequest->Run();
+
+        // No flush request is issued yet - only the cooldown was scheduled.
+        UNIT_ASSERT_VALUES_EQUAL(false, future.HasValue());
+        UNIT_ASSERT_VALUES_EQUAL(0, FlushPromises.size());
+        UNIT_ASSERT_VALUES_EQUAL(1, ScheduledTasks.size());
+        UNIT_ASSERT_VALUES_EQUAL(cooldown, ScheduledTasks[0].Delay);
+
+        // Fire the cooldown timer - the actual flush request is now issued.
+        ScheduledTasks[0].Callback();
+
+        UNIT_ASSERT_VALUES_EQUAL(1, FlushPromises.size());
+        // A request timeout is scheduled once the flush actually starts.
+        UNIT_ASSERT_VALUES_EQUAL(2, ScheduledTasks.size());
+        UNIT_ASSERT_VALUES_EQUAL(
+            DirectBlockGroup->Oracle.FlushRequestTimeout,
+            ScheduledTasks[1].Delay);
+
+        SetFlushResult(TDBGFlushResponse{.Errors{MakeError(S_OK)}}, false);
+
+        UNIT_ASSERT_VALUES_EQUAL(true, future.HasValue());
+        const auto& response = future.GetValue();
+        UNIT_ASSERT_VALUES_EQUAL(1, response.FlushOk.size());
+        UNIT_ASSERT_VALUES_EQUAL(42, response.FlushOk[0]);
+        UNIT_ASSERT_VALUES_EQUAL(0, response.FlushFailed.size());
+        UNIT_ASSERT_EQUAL_C(route, response.Route, response.Route.DebugPrint());
+    }
 }
 
 ////////////////////////////////////////////////////////////////////////////////

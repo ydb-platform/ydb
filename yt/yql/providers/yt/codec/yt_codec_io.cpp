@@ -1053,7 +1053,7 @@ protected:
                         cmd = Buf_.Read();
                     }
                 }
-                CHECK_EXPECTED(cmd, EndMapSymbol);
+                CHECK_EXPECTED(cmd, EndListSymbol);
                 break;
             }
 
@@ -1339,15 +1339,10 @@ protected:
             }
 
             try {
-                if (decoder.FieldsVec[i].StructIndex == Max<ui32>()) [[unlikely]] {
-                    SkipSkiffField(decoder.FieldsVec[i].Type, decoder.NativeYtTypeFlags);
-                } else if (decoder.NativeYtTypeFlags && !decoder.FieldsVec[i].ExplicitYson) {
-                    items[i] = ReadSkiffFieldNativeYt(decoder.FieldsVec[i].Type, decoder.NativeYtTypeFlags);
-                } else if (decoder.DefaultValues[i]) {
-                    auto val = ReadSkiffField(decoder.FieldsVec[i].Type, true);
-                    items[i] = val ? NUdf::TUnboxedValue(val.Release().GetOptionalValue()) : decoder.DefaultValues[i];
+                if (decoder.FieldsVec[i].StructIndex != Max<ui32>()) [[likely]] {
+                    items[i] = DecodeItem(decoder.FieldsVec[i], decoder.NativeYtTypeFlags, decoder.DefaultValues[i]);
                 } else {
-                    items[i] = ReadSkiffField(decoder.FieldsVec[i].Type, false);
+                    SkipSkiffField(decoder.FieldsVec[i], decoder.NativeYtTypeFlags);
                 }
             } catch (const TYqlPanic& e) {
                 ythrow TYqlPanic() << "Failed to read field: '" << decoder.FieldsVec[i].Name << "'\n" << e.what();
@@ -1357,43 +1352,35 @@ protected:
         }
     }
 
-    NUdf::TUnboxedValue ReadSkiffField(TType* type, bool withDefVal) {
-        const bool isOptional = withDefVal || type->IsOptional();
-        TType* uwrappedType = type;
-        if (type->IsOptional()) {
-            uwrappedType = static_cast<TOptionalType*>(type)->GetItemType();
-        }
-
-        if (isOptional) {
-            auto marker = Buf_.Read();
-            if (!marker) {
-                return NUdf::TUnboxedValue();
-            }
-        }
-
-        if (uwrappedType->IsData()) {
-            return ReadSkiffData(uwrappedType, 0, Buf_);
-        } else if (!isOptional && uwrappedType->IsPg()) {
-            return NCommon::ReadSkiffPg(static_cast<TPgType*>(uwrappedType), Buf_);
+    NUdf::TUnboxedValue DecodeItem(const TMkqlIOSpecs::TDecoderSpec::TDecodeField& field, ui64 nativeYtTypeFlags, NUdf::TUnboxedValue defVal) {
+        bool useComplex = nativeYtTypeFlags & NTCF_COMPLEX;
+        if (useComplex && !field.ExplicitYson) {
+            return ReadSkiffFieldComplexValue(field.Type, nativeYtTypeFlags);
+        } else if (defVal) {
+            // Default values are supported only for string fields
+            YQL_ENSURE(!useComplex);
+            auto val = ReadSkiffFieldValue(field.Type, 0, true);
+            return val ? NUdf::TUnboxedValue(val.Release().GetOptionalValue()) : defVal;
         } else {
-            // yson content
-            ui32 size;
-            Buf_.ReadMany((char*)&size, sizeof(size));
-            CHECK_STRING_LENGTH_UNSIGNED(size);
-            // parse binary yson...
-            YQL_ENSURE(size > 0);
-            char cmd = Buf_.Read();
-            auto value = ReadYsonValueInTableFormat(uwrappedType, 0, SpecsCache_.GetHolderFactory(), cmd, Buf_);
-            return isOptional ? value.Release().MakeOptional() : value;
+            return ReadSkiffFieldValue(field.Type, field.ExplicitYson ? 0 : nativeYtTypeFlags, false);
         }
     }
 
-    NUdf::TUnboxedValue ReadSkiffFieldNativeYt(TType* type, ui64 nativeYtTypeFlags) {
-        return ReadSkiffNativeYtValue(type, nativeYtTypeFlags, SpecsCache_.GetHolderFactory(), Buf_);
+    NUdf::TUnboxedValue ReadSkiffFieldValue(TType* type, ui64 nativeYtTypeFlags, bool withDefVal) {
+        return ReadSkiffValue(type, nativeYtTypeFlags, SpecsCache_.GetHolderFactory(), Buf_, withDefVal);
     }
 
-    void SkipSkiffField(TType* type, ui64 nativeYtTypeFlags) {
-        return ::NYql::SkipSkiffField(type, nativeYtTypeFlags, Buf_);
+    NUdf::TUnboxedValue ReadSkiffFieldComplexValue(TType* type, ui64 nativeYtTypeFlags) {
+        return ReadSkiffComplexValue(type, nativeYtTypeFlags, SpecsCache_.GetHolderFactory(), Buf_);
+    }
+
+    void SkipSkiffField(const TMkqlIOSpecs::TDecoderSpec::TDecodeField& field, ui64 nativeYtTypeFlags) {
+        bool useComplex = nativeYtTypeFlags & NTCF_COMPLEX;
+        if (useComplex && !field.ExplicitYson) {
+            SkipSkiffComplexValue(field.Type, nativeYtTypeFlags, Buf_);
+        } else {
+            SkipSkiffValue(field.Type, field.ExplicitYson ? 0 : nativeYtTypeFlags, Buf_);
+        }
     }
 };
 
@@ -1426,7 +1413,7 @@ public:
                     if (x->FieldsVec[i].StructIndex != Max<ui32>()) {
                         rowReaderBuilder->AddField(x->FieldsVec[i].Type, x->DefaultValues[i], x->FieldsVec[i].ExplicitYson ? 0 : x->NativeYtTypeFlags);
                     } else {
-                        rowReaderBuilder->SkipField(x->FieldsVec[i].Type, x->NativeYtTypeFlags);
+                        rowReaderBuilder->SkipField(x->FieldsVec[i].Type, x->FieldsVec[i].ExplicitYson ? 0 : x->NativeYtTypeFlags);
                     }
                 }
 
@@ -2078,7 +2065,7 @@ protected:
                 Buf_.Write('\1');
                 value = value.Release().GetOptionalValue();
             }
-            WriteSkiffValue(field.Type, value, field.Optional);
+            WriteSkiffFieldValue(field.Type, value, field.Optional);
         }
     }
 
@@ -2094,19 +2081,15 @@ protected:
                 Buf_.Write('\1');
                 value = value.GetOptionalValue();
             }
-            WriteSkiffValue(field.Type, value, field.Optional);
+            WriteSkiffFieldValue(field.Type, value, field.Optional);
         }
     }
 
-    void WriteSkiffValue(TType* type, const NUdf::TUnboxedValuePod& value, bool wasOptional) {
-        if (NativeYtTypeFlags_) {
-            WriteSkiffNativeYtValue(type, NativeYtTypeFlags_, value, Buf_);
-        } else if (type->IsData()) {
-            WriteSkiffData(type, 0, value, Buf_);
-        } else if (!wasOptional && type->IsPg()) {
-            NCommon::WriteSkiffPg(static_cast<TPgType*>(type), value, Buf_);
+    void WriteSkiffFieldValue(TType* type, const NUdf::TUnboxedValuePod& value, bool wasOptional) {
+        if (NativeYtTypeFlags_ & NTCF_COMPLEX) {
+            WriteSkiffComplexValue(type, NativeYtTypeFlags_, value, Buf_);
         } else {
-            WriteYsonContainerValue(type, 0, value, Buf_);
+            WriteSkiffValue(type, NativeYtTypeFlags_, value, Buf_, wasOptional);
         }
     }
 

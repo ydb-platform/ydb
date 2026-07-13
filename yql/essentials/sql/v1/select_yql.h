@@ -80,8 +80,8 @@ struct TWindow {
 
 struct TYqlTableRefArgs {
     TString Service;
-    TString Cluster;
-    TString Key;
+    TDeferredAtom Cluster;
+    TDeferredAtom Key;
     bool IsAnonymous = false;
 };
 

@@ -12,6 +12,8 @@ namespace {
 
 using TDirectBlockGroupsConnections =
     ::NYdb::NBS::PartitionDirect::NProto::TDirectBlockGroupsConnections;
+using TAddHostInProgress =
+    ::NYdb::NBS::PartitionDirect::NProto::TAddHostInProgress;
 
 using NYdb::NBS::NBlockStore::NStorage::TTestExecutor;
 
@@ -144,6 +146,67 @@ Y_UNIT_TEST_SUITE(TPartitionDatabaseTest)
                 UNIT_ASSERT_VALUES_EQUAL(
                     written.SerializeAsString(),
                     connections->SerializeAsString());
+            });
+    }
+
+    Y_UNIT_TEST(ShouldStoreReadAndClearAddHostInProgress)
+    {
+        TTestExecutor executor;
+
+        executor.WriteTx(
+            [&](NKikimr::NTable::TDatabase& db)
+            {
+                TPartitionDatabase partitionDb(db);
+                partitionDb.InitSchema();
+            });
+
+        // Absent right after init.
+        executor.ReadTx(
+            [&](NKikimr::NTable::TDatabase& db)
+            {
+                TPartitionDatabase partitionDb(db);
+                TMaybe<TAddHostInProgress> loaded;
+                UNIT_ASSERT(partitionDb.ReadAddHostInProgress(loaded));
+                UNIT_ASSERT(!loaded.Defined());
+            });
+
+        executor.WriteTx(
+            [&](NKikimr::NTable::TDatabase& db)
+            {
+                TPartitionDatabase partitionDb(db);
+                TAddHostInProgress intent;
+                intent.SetDirectBlockGroupId(3);
+                intent.SetNewHostIndex(5);
+                partitionDb.StoreAddHostInProgress(intent);
+            });
+
+        // Read back what was stored.
+        executor.ReadTx(
+            [&](NKikimr::NTable::TDatabase& db)
+            {
+                TPartitionDatabase partitionDb(db);
+                TMaybe<TAddHostInProgress> loaded;
+                UNIT_ASSERT(partitionDb.ReadAddHostInProgress(loaded));
+                UNIT_ASSERT(loaded.Defined());
+                UNIT_ASSERT_VALUES_EQUAL(3u, loaded->GetDirectBlockGroupId());
+                UNIT_ASSERT_VALUES_EQUAL(5u, loaded->GetNewHostIndex());
+            });
+
+        executor.WriteTx(
+            [&](NKikimr::NTable::TDatabase& db)
+            {
+                TPartitionDatabase partitionDb(db);
+                partitionDb.ClearAddHostInProgress();
+            });
+
+        // Absent again after clear.
+        executor.ReadTx(
+            [&](NKikimr::NTable::TDatabase& db)
+            {
+                TPartitionDatabase partitionDb(db);
+                TMaybe<TAddHostInProgress> loaded;
+                UNIT_ASSERT(partitionDb.ReadAddHostInProgress(loaded));
+                UNIT_ASSERT(!loaded.Defined());
             });
     }
 

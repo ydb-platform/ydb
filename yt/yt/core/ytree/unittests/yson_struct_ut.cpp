@@ -3477,6 +3477,97 @@ TEST(TYsonStructTest, PolymorphicYsonStruct)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+struct TPostprocessedPolyBase
+    : public TYsonStruct
+{
+    REGISTER_YSON_STRUCT(TPostprocessedPolyBase);
+
+    static void Register(TRegistrar)
+    { }
+};
+
+struct TPostprocessedPolyDerived
+    : public TPostprocessedPolyBase
+{
+    int Value;
+
+    REGISTER_YSON_STRUCT(TPostprocessedPolyDerived);
+
+    static void Register(TRegistrar registrar)
+    {
+        registrar.Parameter("value", &TThis::Value)
+            .Default(0);
+        registrar.Postprocessor([] (TThis* config) {
+            if (config->Value < 0) {
+                THROW_ERROR_EXCEPTION("value must be non-negative");
+            }
+        });
+    }
+};
+
+DEFINE_POLYMORPHIC_YSON_STRUCT(PostprocessedPoly, TPostprocessedPolyBase,
+    ((Base)    (TPostprocessedPolyBase))
+    ((Derived) (TPostprocessedPolyDerived))
+);
+
+struct TPostprocessedPolyHolder
+    : public TYsonStruct
+{
+    TPostprocessedPoly Poly;
+    THashMap<TString, TPostprocessedPoly> PolyMap;
+
+    REGISTER_YSON_STRUCT(TPostprocessedPolyHolder);
+
+    static void Register(TRegistrar registrar)
+    {
+        registrar.Parameter("poly", &TThis::Poly)
+            .Default();
+        registrar.Parameter("poly_map", &TThis::PolyMap)
+            .Default();
+    }
+};
+
+TEST(TYsonStructTest, PolymorphicYsonStructPostprocess)
+{
+    auto makeHolder = [] (INodePtr poly, INodePtr polyMap) {
+        return BuildYsonNodeFluently()
+            .BeginMap()
+                .DoIf(poly != nullptr, [&] (auto fluent) {
+                    fluent.Item("poly").Value(poly);
+                })
+                .DoIf(polyMap != nullptr, [&] (auto fluent) {
+                    fluent.Item("poly_map").Value(polyMap);
+                })
+            .EndMap();
+    };
+    auto derived = [] (int value) {
+        return BuildYsonNodeFluently()
+            .BeginMap()
+                .Item("type").Value("derived")
+                .Item("value").Value(value)
+            .EndMap();
+    };
+    auto singleton = [] (INodePtr value) {
+        return BuildYsonNodeFluently()
+            .BeginMap()
+                .Item("a").Value(value)
+            .EndMap();
+    };
+
+    // The concrete postprocessor runs for a directly-held polymorphic field.
+    EXPECT_NO_THROW(ConvertTo<TIntrusivePtr<TPostprocessedPolyHolder>>(makeHolder(derived(1), nullptr)));
+    EXPECT_THROW(ConvertTo<TIntrusivePtr<TPostprocessedPolyHolder>>(makeHolder(derived(-1), nullptr)), std::exception);
+
+    // ... and for a polymorphic field held in a map.
+    EXPECT_NO_THROW(ConvertTo<TIntrusivePtr<TPostprocessedPolyHolder>>(makeHolder(nullptr, singleton(derived(1)))));
+    EXPECT_THROW(ConvertTo<TIntrusivePtr<TPostprocessedPolyHolder>>(makeHolder(nullptr, singleton(derived(-1)))), std::exception);
+
+    // An empty polymorphic field is skipped, not dereferenced.
+    EXPECT_NO_THROW(ConvertTo<TIntrusivePtr<TPostprocessedPolyHolder>>(makeHolder(nullptr, nullptr)));
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 constexpr const char PolymorphicYsonStructCustomDiscriminatorFieldName[] = "test_type";
 
 DEFINE_POLYMORPHIC_YSON_STRUCT_WITH_CUSTOM_DISCRIMINATOR(MyPolyCustomDiscriminator, PolymorphicYsonStructCustomDiscriminatorFieldName, TPolyBase,

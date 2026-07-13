@@ -12,6 +12,9 @@
 #include <yql/essentials/public/udf/udf_value_builder.h>
 #include <yql/essentials/public/udf/udf_type_inspection.h>
 
+#include <util/generic/guid.h>
+#include <util/system/unaligned_mem.h>
+
 #include <arrow/array/array_base.h>
 #include <arrow/array/concatenate.h>
 #include <arrow/array/util.h>
@@ -529,6 +532,45 @@ public:
 
     void DoAddNotNull(TBlockItem value, size_t count) {
         std::fill(this->DataPtr_ + this->GetCurrLen(), this->DataPtr_ + this->GetCurrLen() + count, value.GetInt128());
+    }
+};
+
+template <bool Nullable>
+class TFixedSizeArrayBuilder<TGUID, Nullable> final: public TFixedSizeArrayBuilderBase<TGUID, Nullable, TFixedSizeArrayBuilder<TGUID, Nullable>> {
+    using TSelf = TFixedSizeArrayBuilder<TGUID, Nullable>;
+    using TBase = TFixedSizeArrayBuilderBase<TGUID, Nullable, TSelf>;
+    using TParams = TArrayBuilderBase::TParams;
+
+public:
+    TFixedSizeArrayBuilder(const ITypeInfoHelper& typeInfoHelper, std::shared_ptr<arrow::DataType> arrowType, arrow::MemoryPool& pool, size_t maxLen, const TParams& params = {})
+        : TBase(typeInfoHelper, std::move(arrowType), pool, maxLen, params)
+    {
+    }
+
+    TFixedSizeArrayBuilder(const TType* type, const ITypeInfoHelper& typeInfoHelper, arrow::MemoryPool& pool, size_t maxLen, const TParams& params = {})
+        : TBase(typeInfoHelper, type, pool, maxLen, params)
+    {
+    }
+
+    void DoAddNotNullFromStringRef(TStringBuf ref) {
+        this->PlaceItem(ReadUnaligned<TGUID>(ref.Data()));
+    }
+
+    void DoAddNotNull(TUnboxedValuePod value) {
+        DoAddNotNullFromStringRef(value.AsStringRef());
+    }
+
+    void DoAddNotNull(TBlockItem value) {
+        DoAddNotNullFromStringRef(value.AsStringRef());
+    }
+
+    void DoAddNotNull(TInputBuffer& input) {
+        this->PlaceItem(input.PopNumber<TGUID>());
+    }
+
+    void DoAddNotNull(TBlockItem value, size_t count) {
+        const TGUID uuid = ReadUnaligned<TGUID>(value.AsStringRef().Data());
+        std::fill(this->DataPtr_ + this->GetCurrLen(), this->DataPtr_ + this->GetCurrLen() + count, uuid);
     }
 };
 

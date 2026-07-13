@@ -1,7 +1,7 @@
 #include "accessor.h"
 #include "constructor.h"
 
-#include <ydb/core/formats/arrow/accessor/dictionary/additional_data.h>
+#include <ydb/core/formats/arrow/accessor/common/additional_data.h>
 #include <ydb/core/formats/arrow/accessor/abstract/accessor.h>
 #include <ydb/core/formats/arrow/serializer/abstract.h>
 

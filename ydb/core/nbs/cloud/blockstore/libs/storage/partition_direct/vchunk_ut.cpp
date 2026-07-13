@@ -220,7 +220,7 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
 
         // Config should stay the same since new config is not persisted yet.
         UNIT_ASSERT_VALUES_EQUAL(
-            "[100] "
+            "[0/100] "
             "PBuffer{Primary;Primary;Primary;HandOff;HandOff} "
             "DDisk{Primary;Primary;Primary;None;None} "
             "Enabled{+++++}",
@@ -245,7 +245,7 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
 
         // Config should be updated.
         UNIT_ASSERT_VALUES_EQUAL(
-            "[100] "
+            "[0/100] "
             "PBuffer{Primary;Primary;Primary;HandOff;HandOff} "
             "DDisk{Primary;Primary;Primary;None;None} "
             "Enabled{-++++}",
@@ -283,7 +283,7 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
 
         // Config should be updated.
         UNIT_ASSERT_VALUES_EQUAL(
-            "[100] "
+            "[0/100] "
             "PBuffer{Primary;Primary;Primary;HandOff;HandOff} "
             "DDisk{Primary;Primary;Primary;None;None} "
             "Enabled{+++++}",
@@ -297,6 +297,71 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
             "H3+{Disabled,0,0};"
             "H4+{Disabled,0,0};",
             AccessBlocksDirtyMap(*vchunk).DebugPrintDDiskState());
+
+        auto onStop = vchunk->Stop();
+        onStop.GetValue(TDuration::Seconds(10));
+    }
+
+    Y_UNIT_TEST_F(ShouldAppendHostAndGrowDirtyMap, TBaseFixture)
+    {
+        Init();
+
+        auto vchunk = std::make_shared<TVChunk>(
+            Runtime->GetActorSystem(0),
+            PartitionDirectService.get(),
+            VChunkConfig,
+            DirectBlockGroup,
+            3,
+            DefaultVChunkSize,
+            Counters);
+        vchunk->Start();
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            DirectBlockGroupHostCount,
+            AccessConfig(*vchunk).GetHostCount());
+
+        {
+            TPromise<void> ready = NewPromise();
+            auto wait = ready.GetFuture();
+            DirectBlockGroup->GetExecutor()->ExecuteSimple(
+                [&]()
+                {
+                    vchunk->OnHostAppended(DirectBlockGroupHostCount + 1);
+                    ready.SetValue();
+                });
+            wait.GetValue(TDuration::Seconds(10));
+        }
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            DirectBlockGroupHostCount,
+            AccessConfig(*vchunk).GetHostCount());
+
+        UNIT_ASSERT_STRING_CONTAINS(
+            AccessBlocksDirtyMap(*vchunk).DebugPrintDDiskState(),
+            "H5-{Disabled,0,0}");
+
+        {
+            UNIT_ASSERT_VALUES_EQUAL(1, ScheduledTasks.size());
+            auto task = RunScheduledTasks();
+            task.Wait(TDuration::Seconds(10));
+        }
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            DirectBlockGroupHostCount + 1,
+            AccessConfig(*vchunk).GetHostCount());
+        UNIT_ASSERT_STRING_CONTAINS(
+            AccessConfig(*vchunk).DebugPrint(),
+            "PBuffer{Primary;Primary;Primary;HandOff;HandOff;None}");
+        UNIT_ASSERT_STRING_CONTAINS(
+            AccessConfig(*vchunk).DebugPrint(),
+            "DDisk{Primary;Primary;Primary;None;None;None}");
+        UNIT_ASSERT_STRING_CONTAINS(
+            AccessConfig(*vchunk).DebugPrint(),
+            "Enabled{+++++-}");
+
+        UNIT_ASSERT_STRING_CONTAINS(
+            AccessBlocksDirtyMap(*vchunk).DebugPrintDDiskState(),
+            "H5-{Disabled,0,0}");
 
         auto onStop = vchunk->Stop();
         onStop.GetValue(TDuration::Seconds(10));
@@ -377,7 +442,7 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
 
         // Config should stay the same since new config is not persisted yet.
         UNIT_ASSERT_VALUES_EQUAL(
-            "[100] "
+            "[0/100] "
             "PBuffer{Primary;Primary;Primary;HandOff;HandOff} "
             "DDisk{Primary;Primary;Primary;None;None} "
             "Enabled{+++++}",
@@ -403,7 +468,7 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
 
         // Config should be updated.
         UNIT_ASSERT_VALUES_EQUAL(
-            "[100] "
+            "[0/100] "
             "PBuffer{HandOff;Primary;Primary;Primary;HandOff} "
             "DDisk{None;Primary;Primary;Primary;None} "
             "Enabled{-+++[0]+}",
@@ -442,7 +507,7 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
 
         // Config should be updated.
         UNIT_ASSERT_VALUES_EQUAL(
-            "[100] "
+            "[0/100] "
             "PBuffer{HandOff;Primary;Primary;Primary;HandOff} "
             "DDisk{None;Primary;Primary;Primary;None} "
             "Enabled{++++[0]+}",
@@ -476,7 +541,7 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
 
         // Config should be updated.
         UNIT_ASSERT_VALUES_EQUAL(
-            "[100] "
+            "[0/100] "
             "PBuffer{HandOff;Primary;Primary;Primary;HandOff} "
             "DDisk{None;Primary;Primary;Primary;None} "
             "Enabled{+++++}",

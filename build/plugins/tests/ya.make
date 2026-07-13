@@ -3,6 +3,7 @@ PY3TEST()
 SUBSCRIBER(g:ymake)
 
 TEST_SRCS(
+    test_cmake_export.py
     test_common.py
     test_requirements.py
 )

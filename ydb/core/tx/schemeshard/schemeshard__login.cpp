@@ -46,8 +46,6 @@ struct TSchemeShard::TTxLogin : TSchemeShard::TRwTxBase {
             };
 
             request.HashToValidate = std::move(hashToValidate);
-        } else if (record.HasPassword()) { // for backward compatibility
-            request.Password = record.GetPassword();
         }
 
         return request;

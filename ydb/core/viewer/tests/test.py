@@ -23,6 +23,17 @@ class TestViewer(object):
         'ImmediateGroupsToCreate',
         'ImmediateSizeToCreate',
     }
+    # Pool-derived rows depend on the async BSC snapshot; keep only
+    # calculator-prefilled rows in canonical /viewer/cluster output.
+    BSC_STORAGE_STATS_STABLE_KEYS = (
+        ('mirror-3-dc', 'Type:ROT'),
+        ('mirror-3-dc', 'Type:SSD'),
+        ('block-4-2', 'Type:ROT'),
+        ('block-4-2', 'Type:SSD'),
+    )
+    BSC_STORAGE_STATS_STABLE_KEY_ORDER = {
+        key: index for index, key in enumerate(BSC_STORAGE_STATS_STABLE_KEYS)
+    }
 
     @pytest.fixture(autouse=True, scope='class')
     @classmethod
@@ -924,11 +935,39 @@ class TestViewer(object):
         result = cls.get_viewer_cluster_with_calculated_storage_stats()
         result = cls.normalize_result(result)
         cls.delete_keys_recursively(result, cls.BSC_STORAGE_STATS_VALUE_FIELDS)
+        if 'StorageStats' in result:
+            stable_key_order = cls.BSC_STORAGE_STATS_STABLE_KEY_ORDER
+
+            def get_storage_stats_key(entry):
+                return (entry.get('ErasureSpecies'), entry.get('PDiskFilter'))
+
+            result['StorageStats'] = sorted(
+                (
+                    entry for entry in result['StorageStats']
+                    if get_storage_stats_key(entry) in stable_key_order
+                ),
+                key=lambda entry: stable_key_order[get_storage_stats_key(entry)],
+            )
         return result
 
     @classmethod
     def test_viewer_tenantinfo(cls):
-        result = cls.get_viewer_db_normalized("/viewer/tenantinfo")
+        result = {}
+        tries = 15
+        all_ready = False
+        while tries > 0:
+            result = cls.get_viewer_db_normalized("/viewer/tenantinfo")
+            all_ready = True
+            for name in cls.databases_and_no_database:
+                tenant_info = result[name].get('TenantInfo', [{}])
+                if tenant_info and 'CoresUsed' not in tenant_info[0]:
+                    all_ready = False
+                    break
+            if all_ready:
+                break
+            tries -= 1
+            time.sleep(1)
+        assert all_ready, "CoresUsed was not populated in /viewer/tenantinfo response after %d retries" % 15
         for name in cls.databases_and_no_database:
             result[name]['TenantInfo'].sort(key=lambda x: x['Name'])
         return result

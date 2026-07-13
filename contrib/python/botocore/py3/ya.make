@@ -2,7 +2,7 @@
 
 PY3_LIBRARY()
 
-VERSION(1.35.99)
+VERSION(1.36.26)
 
 LICENSE(Apache-2.0)
 
@@ -1298,6 +1298,7 @@ RESOURCE_FILES(
     botocore/data/network-firewall/2020-11-12/endpoint-rule-set-1.json
     botocore/data/network-firewall/2020-11-12/examples-1.json
     botocore/data/network-firewall/2020-11-12/paginators-1.json
+    botocore/data/network-firewall/2020-11-12/paginators-1.sdk-extras.json
     botocore/data/network-firewall/2020-11-12/service-2.json
     botocore/data/networkflowmonitor/2023-04-19/endpoint-rule-set-1.json
     botocore/data/networkflowmonitor/2023-04-19/paginators-1.json
@@ -1338,6 +1339,7 @@ RESOURCE_FILES(
     botocore/data/opensearchserverless/2021-11-01/endpoint-rule-set-1.json
     botocore/data/opensearchserverless/2021-11-01/paginators-1.json
     botocore/data/opensearchserverless/2021-11-01/service-2.json
+    botocore/data/opensearchserverless/2021-11-01/waiters-2.json
     botocore/data/opsworks/2013-02-18/endpoint-rule-set-1.json
     botocore/data/opsworks/2013-02-18/examples-1.json
     botocore/data/opsworks/2013-02-18/paginators-1.json

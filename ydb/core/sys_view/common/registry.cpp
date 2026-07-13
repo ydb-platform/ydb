@@ -1,43 +1,7 @@
 #include "registry.h"
 
-#include <yql/essentials/parser/pg_catalog/catalog.h>
-#include <yql/essentials/parser/pg_wrapper/interface/type_desc.h>
-
 namespace NKikimr {
 namespace NSysView {
-
-namespace {
-
-TVector<Schema::PgColumn> GetPgStaticTableColumns(const TString& schema, const TString& tableName) {
-    TVector<Schema::PgColumn> res;
-    auto columns = NYql::NPg::GetStaticColumns().FindPtr(NYql::NPg::TTableInfoKey{schema, tableName});
-    res.reserve(columns->size());
-    for (size_t i = 0; i < columns->size(); i++) {
-        const auto& column = columns->at(i);
-        res.emplace_back(i, column.UdtType, column.Name);
-    }
-    return res;
-}
-
-}
-
-Schema::PgColumn::PgColumn(NIceDb::TColumnId columnId, TStringBuf columnTypeName, TStringBuf columnName)
-    : _ColumnId(columnId)
-    , _ColumnTypeInfo(NPg::TypeDescFromPgTypeId(NYql::NPg::LookupType(TString(columnTypeName)).TypeId))
-    , _ColumnName(columnName)
-{}
-
-const TVector<Schema::PgColumn>& Schema::PgTablesSchemaProvider::GetColumns(TStringBuf tableName) const {
-    TString key(tableName);
-    Y_ENSURE(columnsStorage.contains(key));
-    return columnsStorage.at(key);
-}
-
-Schema::PgTablesSchemaProvider::PgTablesSchemaProvider() {
-    columnsStorage[TString(PgTablesName)] = GetPgStaticTableColumns("pg_catalog", "pg_tables");
-    columnsStorage[TString(InformationSchemaTablesName)] = GetPgStaticTableColumns("information_schema", "tables");
-    columnsStorage[TString(PgClassName)] = GetPgStaticTableColumns("pg_catalog", "pg_class");
-}
 
 const TVector<SysViewsRegistryRecord> SysViewsRegistry::SysViews = {
     {"partition_stats", ESysViewType::EPartitionStats, {ESource::Domain, ESource::SubDomain},  &FillSchema<Schema::PartitionStats>},
@@ -105,10 +69,6 @@ SysViewsRegistry::SysViewsRegistry() {
     for (const auto& registryRecord : RewrittenSysViews) {
         SysViewTypesMap.emplace(registryRecord.Name, registryRecord.Type);
     }
-
-    SysViewTypesMap.emplace(PgTablesName, ESysViewType::EPgTables);
-    SysViewTypesMap.emplace(InformationSchemaTablesName, ESysViewType::EInformationSchemaTables);
-    SysViewTypesMap.emplace(PgClassName, ESysViewType::EPgClass);
 }
 
 const SysViewsRegistry Registry;

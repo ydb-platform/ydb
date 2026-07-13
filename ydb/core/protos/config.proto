@@ -3088,14 +3088,6 @@ message TClientCertificateAuthorization {
     optional string DefaultGroup = 3 [default = "DefaultClientAuth@cert"];
 }
 
-message TLocalPgWireConfig {
-    optional int32 ListeningPort = 1 [default = 5432];
-    optional string SslCertificate = 5 [(Ydb.sensitive) = true];
-    optional string Address = 6 [default = "::"];
-    optional bool TcpNotDelay = 7 [default = true];
-    optional bool EnableLocalPgWire = 8 [default = false];
-}
-
 message TKafkaProxyConfig {
     optional bool EnableKafkaProxy = 1 [default = false];
 
@@ -3321,7 +3313,7 @@ message TAppConfig {
     optional bool YamlConfigEnabled = 64;
     optional TConveyorConfig ScanConveyorConfig = 65;
     optional TColumnShardConfig ColumnShardConfig = 66;
-    optional TLocalPgWireConfig LocalPgWireConfig = 69;
+    reserved 69; // LocalPgWireConfig
     optional TAwsCompatibilityConfig AwsCompatibilityConfig = 70;
     optional TKafkaProxyConfig KafkaProxyConfig = 71;
     optional TConveyorConfig CompConveyorConfig = 72;

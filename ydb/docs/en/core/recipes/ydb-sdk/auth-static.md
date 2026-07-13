@@ -34,17 +34,17 @@ Below are examples of authentication with a username and password in different {
 
     You can also pass them explicitly using the `ydb.WithStaticCredentials` option:
 
-    {% include [auth-static-with-native](../../../_includes/go/auth-static-with-native.md) %}
+    {% include [auth-static-with-native](../../_includes/go/auth-static-with-native.md) %}
 
   - database/sql
 
     You can pass the username and password in the connection string. For example:
 
-    {% include [auth-static-database-sql](../../../_includes/go/auth-static-database-sql.md) %}
+    {% include [auth-static-database-sql](../../_includes/go/auth-static-database-sql.md) %}
 
     You can also pass them explicitly when initializing the driver via a connector using the `ydb.WithStaticCredentials` option:
 
-    {% include [auth-static-with-database-sql](../../../_includes/go/auth-static-with-database-sql.md) %}
+    {% include [auth-static-with-database-sql](../../_includes/go/auth-static-with-database-sql.md) %}
 
   {% endlist %}
 

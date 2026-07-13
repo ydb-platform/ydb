@@ -16,6 +16,8 @@
 #include <ydb/core/grpc_services/base/base.h>
 #include <ydb/core/grpc_services/local_rpc/local_rpc.h>
 
+#include <yql/essentials/public/udf/udf_data_type.h>
+
 using namespace NYdb;
 using namespace NYdb::NTable;
 using namespace NYdb::NScheme;
@@ -663,8 +665,65 @@ void CheckMultiColumnStatisticsProbes(
     auto absent = ExecuteYqlScriptFetchBytes(env,
         "SELECT StablePickle(AsTuple(Just(\"0\"), Just(\"1\"))) AS p;");
 
+    // The cost-based optimizer will build probe keys in C++ via StablePickleTuple() (it cannot run a
+    // YQL script), so cross-check that the helper reproduces the exact StablePickle bytes here.
+    const auto str = [](TStringBuf value) {
+        return TPickleColumnValue{.Type = NScheme::NTypeIds::String, .Value = TString(value)};
+    };
+    UNIT_ASSERT_VALUES_EQUAL(present, StablePickleTuple({str("0"), str("0")}));
+    UNIT_ASSERT_VALUES_EQUAL(absent, StablePickleTuple({str("0"), str("1")}));
+
     CheckMultiColumnCountMinSketch(runtime, pathId, columnTags,
         { { { present, ColumnTableRowsNumber / 20 }, { absent, 0 } } });
+}
+
+namespace {
+
+// Single-quoted YQL string literal with backslash/quote escaping.
+TString YqlQuote(TStringBuf value) {
+    TStringBuilder out;
+    out << '\'';
+    for (char c : value) {
+        if (c == '\\' || c == '\'') {
+            out << '\\';
+        }
+        out << c;
+    }
+    out << '\'';
+    return out;
+}
+
+TString RenderYqlLiteral(const TPickleColumnValue& col) {
+    Y_ENSURE(col.Value, "CheckStablePickleTupleMatchesYql expects present values");
+    const TString quoted = YqlQuote(*col.Value);
+    TString literal;
+    if (col.Type == NScheme::NTypeIds::Decimal) {
+        literal = TStringBuilder() << "Decimal(" << quoted << ","
+            << ui32(col.DecimalPrecision) << "," << ui32(col.DecimalScale) << ")";
+    } else {
+        // The YQL type-constructor callable name equals the data type's name (e.g. "Int32", "Uuid").
+        const TStringBuf ctorName = NUdf::GetDataTypeInfo(NUdf::GetDataSlot(col.Type)).Name;
+        literal = TStringBuilder() << ctorName << "(" << quoted << ")";
+    }
+    return col.Nullable ? (TStringBuilder() << "Just(" << literal << ")") : literal;
+}
+
+} // anonymous namespace
+
+void CheckStablePickleTupleMatchesYql(TTestEnv& env, const std::vector<TPickleColumnValue>& columns) {
+    TStringBuilder script;
+    script << "SELECT StablePickle(AsTuple(";
+    for (size_t i = 0; i < columns.size(); ++i) {
+        if (i > 0) {
+            script << ", ";
+        }
+        script << RenderYqlLiteral(columns[i]);
+    }
+    script << ")) AS p;";
+
+    const TString expected = ExecuteYqlScriptFetchBytes(env, script);
+    const TString actual = StablePickleTuple(columns);
+    UNIT_ASSERT_VALUES_EQUAL_C(expected, actual, "StablePickle mismatch for: " << script);
 }
 
 TAnalyzedTable::TAnalyzedTable(const TPathId& pathId)

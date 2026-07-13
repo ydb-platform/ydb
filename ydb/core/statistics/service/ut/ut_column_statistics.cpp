@@ -133,6 +133,53 @@ Y_UNIT_TEST_SUITE(ColumnStatistics) {
         ValidateCountMinSketch(runtime, tableInfo.PathId);
     }
 
+    Y_UNIT_TEST(StablePickleManyTypes) {
+        TTestEnv env(1, 1);
+        CreateDatabase(env, "Database");
+
+        auto col = [](NScheme::TTypeId type, TStringBuf value) {
+            return TPickleColumnValue{.Type = type, .Value = TString(value)};
+        };
+
+        std::vector<TPickleColumnValue> columns = {
+            col(NScheme::NTypeIds::Bool, "true"),
+            col(NScheme::NTypeIds::Int8, "-8"),
+            col(NScheme::NTypeIds::Uint8, "200"),
+            col(NScheme::NTypeIds::Int16, "-16000"),
+            col(NScheme::NTypeIds::Uint16, "60000"),
+            col(NScheme::NTypeIds::Int32, "-100000"),
+            col(NScheme::NTypeIds::Uint32, "100000"),
+            col(NScheme::NTypeIds::Int64, "-5000000000"),
+            col(NScheme::NTypeIds::Uint64, "5000000000"),
+            col(NScheme::NTypeIds::Float, "1.5"),
+            col(NScheme::NTypeIds::Double, "2.25"),
+            col(NScheme::NTypeIds::String, "hello"),
+            col(NScheme::NTypeIds::Utf8, "мир"),
+            col(NScheme::NTypeIds::Yson, "[1;2]"),
+            col(NScheme::NTypeIds::Json, "{\"a\":1}"),
+            col(NScheme::NTypeIds::JsonDocument, "{\"b\":2}"),
+            col(NScheme::NTypeIds::Uuid, "f9d5cc3f-f1dc-4d9c-b97e-766e57ca4ccb"),
+            col(NScheme::NTypeIds::DyNumber, "-10.23"),
+            col(NScheme::NTypeIds::Date, "2019-09-09"),
+            col(NScheme::NTypeIds::Datetime, "2019-09-09T12:00:00Z"),
+            col(NScheme::NTypeIds::Timestamp, "2019-09-09T12:00:00.000000Z"),
+            col(NScheme::NTypeIds::Interval, "P1D"),
+            col(NScheme::NTypeIds::Date32, "2019-09-09"),
+            col(NScheme::NTypeIds::Datetime64, "2019-09-09T12:00:00Z"),
+            col(NScheme::NTypeIds::Timestamp64, "2019-09-09T12:00:00.000000Z"),
+            col(NScheme::NTypeIds::Interval64, "P1D"),
+            TPickleColumnValue{.Type = NScheme::NTypeIds::Decimal, .Value = "11.3",
+                .DecimalPrecision = 5, .DecimalScale = 2},
+        };
+
+        // The whole heterogeneous tuple at once...
+        CheckStablePickleTupleMatchesYql(env, columns);
+        // ...and each column individually, to localize any per-type mismatch.
+        for (const auto& c : columns) {
+            CheckStablePickleTupleMatchesYql(env, {c});
+        }
+    }
+
     Y_UNIT_TEST(CountMinSketchServerlessStatistics) {
         TTestEnv env(1, 3);
         auto& runtime = *env.GetServer().GetRuntime();

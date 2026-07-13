@@ -1,6 +1,7 @@
 #pragma once
 
 #include <library/cpp/threading/future/async.h>
+#include <ydb/core/statistics/common/stable_pickle.h>
 #include <ydb/core/statistics/events.h>
 #include <ydb/core/protos/analyze_operation.pb.h>
 
@@ -174,6 +175,9 @@ void CheckCountMinSketch(
 void CheckMultiColumnStatisticsProbes(
     TTestEnv& env, TTestActorRuntime& runtime, const TPathId& pathId,
     const std::vector<ui32>& columnTags);
+
+// Asserts that the C++ StablePickleTuple() helper reproduces, byte-for-byte, what YQL's StablePickle(AsTuple(Just(Ctor("value"))...)) does
+void CheckStablePickleTupleMatchesYql(TTestEnv& env, const std::vector<TPickleColumnValue>& columns);
 
 struct TAnalyzedTable {
     TPathId PathId;

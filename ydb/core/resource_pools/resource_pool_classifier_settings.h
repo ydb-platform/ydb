@@ -44,6 +44,7 @@ struct TClassifierSettings : public TSettingsBase {
     TString ResourcePool = DEFAULT_POOL_ID;
     std::optional<TString> MemberName;
     std::optional<TRegexPredicate> HasAppName;
+    std::optional<TRegexPredicate> HasFullScan;
     std::optional<EClassifierAction> Action;
 };
 

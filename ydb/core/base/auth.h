@@ -3,6 +3,10 @@
 #include "appdata_fwd.h"
 #include <ydb/library/aclib/aclib.h>
 
+namespace NKikimrScheme {
+    class TEvModifySchemeTransaction;
+}
+
 namespace NKikimr {
 
 // Check token against given list of allowed sids
@@ -19,5 +23,10 @@ bool IsStrictDatabaseOnlyToken(const TAppData* appData, const TString& userToken
 
 // Check token against database owner
 bool IsDatabaseAdministrator(const NACLib::TUserToken* userToken, const NACLib::TSID& databaseOwner);
+
+// When the AlwaysSetSystemOwner setting is enabled, forces the owner of a scheme
+// modification record to the system basic owner, unless the record is already owned
+// by the system metadata user (objects created by the system itself keep their owner).
+void SetSystemOwnerIfNeeded(NKikimrScheme::TEvModifySchemeTransaction& record, const TAppData* appData);
 
 } // namespace NKikimr

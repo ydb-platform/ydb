@@ -18,7 +18,7 @@ namespace NActors {
         Proxy->Metrics->SetConnected(0);
         SetPrefix(Sprintf("SessionV2 %s [node %" PRIu32 "]", SelfId().ToString().data(), Proxy->PeerNodeId));
         LOG_INFO_IC_SESSION("ICS90", "v2 session created");
-        DirectSession = std::make_shared<TDirectSession>();
+        DirectSession = std::make_shared<TDirectSessionV2>();
     }
 
     void TInterconnectSessionTCPv2::SetNewConnection(TEvHandshakeDone::TPtr& ev) {

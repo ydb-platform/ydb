@@ -1971,9 +1971,8 @@ Y_UNIT_TEST_SUITE(TSchemeShardColumnTableTTL) {
         TTestEnv env(runtime);
         ui64 txId = 100;
 
-        for (auto ct : {"String", "DyNumber"}) {
-            TestCreateColumnTable(runtime, ++txId, "/MyRoot",
-                Sprintf(R"(
+        auto createTableWithTtlColumn = [&](const char* columnType) {
+            return Sprintf(R"(
                 Name: "TTLEnabledTable"
                 Schema {
                     Columns { Name: "key" Type: "Uint64" NotNull: true }
@@ -1990,12 +1989,17 @@ Y_UNIT_TEST_SUITE(TSchemeShardColumnTableTTL) {
                         }
                     }
                 }
-            )",
-            ct), {
-                { NKikimrScheme::StatusSchemeError, "Type 'DyNumber' specified for column 'modified_at' is not supported" },
-                { NKikimrScheme::StatusSchemeError, "Unsupported column type"
-            } });
-        }
+            )", columnType);
+        };
+
+        TestCreateColumnTable(runtime, ++txId, "/MyRoot",
+            createTableWithTtlColumn("String"),
+            {{ NKikimrScheme::StatusSchemeError, "Unsupported column type" }});
+
+        runtime.GetAppData().FeatureFlags.SetEnableColumnshardDyNumber(true);
+        TestCreateColumnTable(runtime, ++txId, "/MyRoot",
+            createTableWithTtlColumn("DyNumber"),
+            {{ NKikimrScheme::StatusSchemeError, "Unsupported column type for TTL in column tables" }});
     }
 
     Y_UNIT_TEST(CreateColumnTableNegative_UnknownColumn) {

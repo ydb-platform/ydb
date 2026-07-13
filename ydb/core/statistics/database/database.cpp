@@ -6,11 +6,26 @@
 #include <ydb/library/query_actor/query_actor.h>
 #include <ydb/public/lib/scheme_types/scheme_type_id.h>
 
+#include <util/string/join.h>
+
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::STATISTICS
 
 namespace NKikimr::NStat {
 
-static constexpr TStringBuf STATISTICS_TABLE = ".metadata/_statistics";
+static constexpr TStringBuf STATISTICS_TABLE = ".metadata/statistics_v2";
+
+// Canonical `column_tags` key for a statistic: the comma-joined ordered tag tuple for multi-column
+// stats, the single decimal tag for single-column stats, or the empty string for stats with no
+// column (SIMPLE/TABLE_SUMMARY). Producer (save) and consumer (load) must agree on this encoding.
+static TString SerializeColumnTags(const TColumnTags& tags) {
+    if (const auto* multi = tags.AsMulti()) {
+        return JoinSeq(",", *multi);
+    }
+    if (const auto single = tags.AsSingle()) {
+        return ToString(*single);
+    }
+    return {};
+}
 
 class TStatisticsTableCreator : public TActorBootstrapped<TStatisticsTableCreator> {
 public:
@@ -32,15 +47,15 @@ public:
 
         Register(
             CreateTableCreator(
-                { ".metadata", "_statistics" },
+                { ".metadata", "statistics_v2" },
                 {
                     Col("owner_id", NScheme::NTypeIds::Uint64),
                     Col("local_path_id", NScheme::NTypeIds::Uint64),
                     Col("stat_type", NScheme::NTypeIds::Uint32),
-                    Col("column_tag", NScheme::NTypeIds::Uint32),
+                    Col("column_tags", NScheme::NTypeIds::String),
                     Col("data", NScheme::NTypeIds::String),
                 },
-                { "owner_id", "local_path_id", "stat_type", "column_tag"},
+                { "owner_id", "local_path_id", "stat_type", "column_tags"},
                 NKikimrServices::STATISTICS,
                 Nothing(),
                 Database,
@@ -101,7 +116,7 @@ public:
             DECLARE $owner_id AS Uint64;
             DECLARE $local_path_id AS Uint64;
             DECLARE $stat_types AS List<Uint32>;
-            DECLARE $column_tags AS List<Optional<Uint32>>;
+            DECLARE $column_tags AS List<String>;
             DECLARE $data AS List<String>;
 
             $to_struct = ($t) -> {
@@ -109,14 +124,14 @@ public:
                     owner_id:$owner_id,
                     local_path_id:$local_path_id,
                     stat_type:$t.0,
-                    column_tag:$t.1,
+                    column_tags:$t.1,
                     data:$t.2,
                 |>;
             };
 
-            UPSERT INTO `.metadata/_statistics`
-                (owner_id, local_path_id, stat_type, column_tag, data)
-            SELECT owner_id, local_path_id, stat_type, column_tag, data FROM
+            UPSERT INTO `)" << STATISTICS_TABLE << R"(`
+                (owner_id, local_path_id, stat_type, column_tags, data)
+            SELECT owner_id, local_path_id, stat_type, column_tags, data FROM
             AS_TABLE(ListMap(ListZip($stat_types, $column_tags, $data), $to_struct));
         )";
 
@@ -141,7 +156,7 @@ public:
         for (const auto& item : Items) {
             columnTags
                 .AddListItem()
-                .OptionalUint32(item.ColumnTag);
+                .String(SerializeColumnTags(item.ColumnTags));
         }
         columnTags.EndList().Build();
 
@@ -215,12 +230,13 @@ NActors::IActor* CreateSaveStatisticsQuery(const NActors::TActorId& replyActorId
 
 void DispatchLoadStatisticsQuery(
         const TActorId& replyToActor, ui64 queryId,
-        const TString& database, const TPathId& pathId, EStatType statType, std::optional<ui32> columnTag) {
+        const TString& database, const TPathId& pathId, EStatType statType, const TColumnTags& columnTags) {
+    const TString serializedColumnTags = SerializeColumnTags(columnTags);
     YDB_LOG_DEBUG("[DispatchLoadStatisticsQuery]",
         {"queryId", queryId},
         {"pathId", pathId},
         {"statType", static_cast<ui32>(statType)},
-        {"columnTag", columnTag});
+        {"columnTags", serializedColumnTags});
 
     const auto statisticsTablePath = CanonizePath(
         TStringBuilder() << database << '/' << STATISTICS_TABLE);
@@ -235,7 +251,7 @@ void DispatchLoadStatisticsQuery(
                 .AddMember("owner_id").Uint64(pathId.OwnerId)
                 .AddMember("local_path_id").Uint64(pathId.LocalPathId)
                 .AddMember("stat_type").Uint32(static_cast<ui32>(statType))
-                .AddMember("column_tag").OptionalUint32(columnTag)
+                .AddMember("column_tags").String(serializedColumnTags)
             .EndStruct()
         .EndList();
     auto keys = keys_builder.Build();
@@ -297,11 +313,11 @@ public:
     }
 
     void OnRunQuery() override {
-        TString sql = R"(
+        TString sql = TStringBuilder() << R"(
             DECLARE $owner_id AS Uint64;
             DECLARE $local_path_id AS Uint64;
 
-            DELETE FROM `.metadata/_statistics`
+            DELETE FROM `)" << STATISTICS_TABLE << R"(`
             WHERE
                 owner_id = $owner_id AND
                 local_path_id = $local_path_id;

@@ -10414,6 +10414,16 @@
                 "ColumnId": 13,
                 "ColumnName": "EndTime",
                 "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 14,
+                "ColumnName": "IsCancelled",
+                "ColumnType": "Bool"
+            },
+            {
+                "ColumnId": 15,
+                "ColumnName": "CancellationReason",
+                "ColumnType": "Utf8"
             }
         ],
         "ColumnsDropped": [],
@@ -10432,7 +10442,9 @@
                     10,
                     11,
                     12,
-                    13
+                    13,
+                    14,
+                    15
                 ],
                 "RoomID": 0,
                 "Codec": 0,

@@ -997,14 +997,6 @@
   "resource_pool_classifiers": {
     "columns": [
       {
-        "name": "Action",
-        "type": "Utf8?"
-      },
-      {
-        "name": "HasFullScan",
-        "type": "Utf8?"
-      },
-      {
         "name": "Name",
         "type": "Utf8?"
       },
@@ -1022,6 +1014,18 @@
       },
       {
         "name": "HasAppName",
+        "type": "Utf8?"
+      },
+      {
+        "name": "Action",
+        "type": "Utf8?"
+      },
+      {
+        "name": "HasFullScan",
+        "type": "Utf8?"
+      },
+      {
+        "name": "HasPath",
         "type": "Utf8?"
       }
     ],

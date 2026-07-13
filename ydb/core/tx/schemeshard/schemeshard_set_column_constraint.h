@@ -29,6 +29,8 @@ struct TEvSetColumnConstraint {
         EvListResponse,
         EvForgetRequest,
         EvForgetResponse,
+        EvCancelRequest,
+        EvCancelResponse,
 
         EvEnd
     };
@@ -103,6 +105,23 @@ struct TEvSetColumnConstraint {
         TEvForgetResponse() = default;
 
         explicit TEvForgetResponse(const ui64 txId) {
+            Record.SetTxId(txId);
+        }
+    };
+
+    struct TEvCancelRequest: public TEventPB<TEvCancelRequest, NKikimrSetColumnConstraint::TEvCancelRequest, EvCancelRequest> {
+        TEvCancelRequest() = default;
+
+        explicit TEvCancelRequest(const TString& dbName, ui64 operationId) {
+            Record.SetDatabaseName(dbName);
+            Record.SetOperationId(operationId);
+        }
+    };
+
+    struct TEvCancelResponse: public TEventPB<TEvCancelResponse, NKikimrSetColumnConstraint::TEvCancelResponse, EvCancelResponse> {
+        TEvCancelResponse() = default;
+
+        explicit TEvCancelResponse(const ui64 txId) {
             Record.SetTxId(txId);
         }
     };

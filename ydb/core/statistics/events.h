@@ -39,7 +39,7 @@ struct TStatTableSummary {
     std::optional<NKikimrStat::TTableSummaryStatistics> Data;
 };
 
-// NB: enum values are serialized into the .metadata/_statistics table.
+// NB: enum values are serialized into the .metadata/statistics_v2 table.
 enum class EStatType {
     // Simple table statistics calculated by aggregating shard statistics reports
     // (row count may be incorrect if the table is not fully compacted as it counts all row versions).

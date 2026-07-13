@@ -205,6 +205,13 @@ void TAnalyzeActor::Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr&
             continue;
         }
 
+        if (desc.ColumnIds.size() < 2) {
+            // A 1-column multi-column statistic is degenerate: its column_tags key would collide
+            // with the single-column stat's key in .metadata/statistics_v2, and single-column CMS
+            // already covers it. Skip gathering it.
+            continue;
+        }
+
         for (auto type : def.GetTypes()) {
             auto statType = ConvertMultiColumnStatType(
                 static_cast<NKikimrSchemeOp::EMultiColumnStatisticsType>(type));

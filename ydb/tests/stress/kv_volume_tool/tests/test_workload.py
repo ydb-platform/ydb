@@ -20,7 +20,7 @@ HDD_POOL = "dynamic_storage_pool:1"
 S3_ACCESS_KEY_SECRET = "kv_volume_tool_s3_access_key"
 S3_SECRET_KEY_SECRET = "kv_volume_tool_s3_secret_key"
 SECRET_OWNER = "root@builtin"
-VIRTUAL_STORAGE_CHANNEL = "4"
+VIRTUAL_STORAGE_CHANNEL = "2"
 S3_OBJECT_PREFIX = "{}/{}".format("blob_depot", BLOB_DEPOT_NAME)
 
 MB = 1024 * 1024

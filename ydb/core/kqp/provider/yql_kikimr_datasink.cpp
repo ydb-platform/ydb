@@ -1862,7 +1862,7 @@ public:
                         .DataSink(node->Child(1))
                         .Secret().Build(key.GetSecretPath())
                         .Value(settings.Value.IsValid() ? settings.Value.Cast() : emptyAtom)
-                        .InheritPermissions(settings.InheritPermissions.IsValid() ? settings.InheritPermissions.Cast() : Build<TCoAtom>(ctx, node->Pos()).Value("0").Done())
+                        .InheritPermissions(settings.InheritPermissions.IsValid() ? settings.InheritPermissions.Cast() : emptyAtom)
                         .ValueParamName(settings.ValueParamName.IsValid() ? settings.ValueParamName.Cast() : emptyAtom)
                         .Done()
                         .Ptr();

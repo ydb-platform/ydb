@@ -1,4 +1,5 @@
 #include "kqp_has_full_scan_matcher.h"
+#include "kqp_has_path_matcher.h"
 #include "kqp_query_classifier.h"
 #include "kqp_workload_service.h"
 
@@ -178,7 +179,7 @@ private:
     }
 
     bool NeedsPreparedQuery(const NResourcePool::TClassifierSettings& settings) const {
-        return settings.HasFullScan.has_value();
+        return settings.HasFullScan.has_value() || settings.HasPath.has_value();
     }
 
     ///
@@ -188,7 +189,8 @@ private:
     /// - Depends on actual query structure and execution characteristics.
     ///
     bool MatchesDynamic(const NResourcePool::TClassifierSettings& settings, const TPreparedQueryHolder& preparedQuery) const {
-        return MatchesFullScan(settings.HasFullScan, preparedQuery.GetPhysicalQuery());
+        return MatchesFullScan(settings.HasFullScan, preparedQuery.GetPhysicalQuery())
+            && MatchesPath(settings.HasPath, preparedQuery.GetQueryTables(), preparedQuery.GetPhysicalQuery());
     }
 
     const TResourcePoolEntry* FindPool(const TString& poolId) const {

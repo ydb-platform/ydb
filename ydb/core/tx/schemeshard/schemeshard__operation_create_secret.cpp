@@ -246,12 +246,18 @@ public:
         if (!acl.empty()) {
             secretPath->ApplyACL(acl);
         } else {
-            /** By default, secrets should not inherit permissions from their parent object, except for the DescribeSchema grant.
-              * This is done to prevent users from accidentally granting permissions to such sensitive objects.
-              * However, the DescribeSchema grant is quite harmless and allows users to view the object's ACL to request access from the owner.
-              * There is also an inherit_permissions flag, which, when set, allows grant inheritance similarly to all other schema objects.
-              */
-            if (!createSecretProto.GetInheritPermissions()) {
+            /*
+            * By default, secrets should not inherit permissions from their parent object, except for the DescribeSchema grant.
+            * This is done to prevent users from accidentally granting permissions to such sensitive objects.
+            *
+            * When the flag is not set explicitly, the default depends on the AlwaysSetSystemOwner setting:
+            * with it enabled, permissions are inherited by default (inherit_permissions = true).
+            */
+            const bool inheritPermissions = createSecretProto.HasInheritPermissions()
+                ? createSecretProto.GetInheritPermissions()
+                : AppData()->AlwaysSetSystemOwner;
+
+            if (!inheritPermissions) {
                 secretPath->ACL = InterruptInheritanceExceptDescribe(dstPath.GetEffectiveACL());
                 secretPath->ACLVersion++;
             }

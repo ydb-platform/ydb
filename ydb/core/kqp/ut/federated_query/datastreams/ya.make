@@ -15,6 +15,8 @@ SRCS(
     common.cpp
     datastreams_ut.cpp
     datastreams_table_mode_ut.cpp
+    # TODO: re-enable once federated fixture wiring supports the HAS_PATH end-to-end shapes
+    # kqp_has_path_ut.cpp
     streaming_ddl_ut.cpp
     streaming_sys_view_ut.cpp
 )

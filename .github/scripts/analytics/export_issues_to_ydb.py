@@ -579,12 +579,6 @@ def build_open_periods(
             'end': end,
         })
 
-    if not periods:
-        periods.append({
-            'start': created_at.date().isoformat(),
-            'end': closed_at.date().isoformat() if closed_at is not None else None,
-        })
-
     return periods
 
 

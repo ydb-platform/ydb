@@ -159,6 +159,33 @@ $issues_in_window = (
     WHERE ip.period_start <= CurrentUtcDate()
       AND (ip.period_end IS NULL OR ip.period_end >= CurrentUtcDate() - $timeline_days * Interval("P1D"))
 );
+$date_spine = (
+    SELECT DISTINCT date_window AS d
+    FROM `test_results/analytics/tests_monitor`
+    WHERE date_window >= CurrentUtcDate() - $timeline_days * Interval("P1D")
+);
+
+$open_on_day = (
+    SELECT
+        dt.d AS date,
+        ip.project_item_id AS project_item_id,
+        ip.issue_number AS issue_number,
+        ip.period_start AS sla_start_date
+    FROM $date_spine AS dt
+    CROSS JOIN $issue_periods AS ip
+    WHERE ip.period_start <= dt.d
+      AND (ip.period_end IS NULL OR ip.period_end > dt.d)
+);
+
+$closed_on_day = (
+    SELECT DISTINCT
+        ip.period_end AS date,
+        ip.project_item_id AS project_item_id,
+        ip.issue_number AS issue_number
+    FROM $issue_periods AS ip
+    WHERE ip.period_end IS NOT NULL
+);
+
 
 SELECT
     dt.d AS date,
@@ -200,18 +227,14 @@ SELECT
     i.releaseblocker_state AS releaseblocker_state,
     i.branch AS branch,
     i.area AS area,
-    p.period_start AS sla_start_date,
+    p.sla_start_date AS sla_start_date,
     CAST(
-        (p.period_start IS NOT NULL) AS Uint8
+        (p.sla_start_date IS NOT NULL) AS Uint8
     ) AS is_open_at_end_of_day,
     CAST(
-        (c.period_end IS NOT NULL) AS Uint8
+        (c.issue_number IS NOT NULL) AS Uint8
     ) AS closed_on_this_day
-FROM (
-    SELECT DISTINCT date_window AS d
-    FROM `test_results/analytics/tests_monitor`
-    WHERE date_window >= CurrentUtcDate() - $timeline_days * Interval("P1D")
-) AS dt
+FROM $date_spine AS dt
 CROSS JOIN (
     SELECT
         t.project_item_id AS project_item_id,
@@ -259,14 +282,13 @@ CROSS JOIN (
         ON m.area = COALESCE(JSON_VALUE(t.info, "$.area"), 'area/-')
     WHERE t.created_date <= CurrentUtcDate()
 ) AS i
-LEFT JOIN $issue_periods AS p
-    ON p.project_item_id = i.project_item_id
+LEFT JOIN $open_on_day AS p
+    ON p.date = dt.d
+    AND p.project_item_id = i.project_item_id
     AND p.issue_number = i.issue_number
-    AND p.period_start <= dt.d
-    AND (p.period_end IS NULL OR p.period_end > dt.d)
-LEFT JOIN $issue_periods AS c
-    ON c.project_item_id = i.project_item_id
+LEFT JOIN $closed_on_day AS c
+    ON c.date = dt.d
+    AND c.project_item_id = i.project_item_id
     AND c.issue_number = i.issue_number
-    AND c.period_end = dt.d
 WHERE i.created_date <= dt.d
   AND dt.d >= $month_start AND dt.d < $month_end;

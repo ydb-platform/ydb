@@ -129,7 +129,7 @@ namespace NYql {
         // key - cluster name, value - TCredentialsProviderPtr
         // It's important to cache credentials providers, because they make IO
         // (synchronous call via Token Accessor client) during the construction.
-        std::unordered_map<TString, NYdb::TCredentialsProviderPtr> CredentialProviders;
+        std::unordered_map<TString, NThreading::TFuture<NYdb::TCredentialsProviderPtr>> CredentialProviders;
         IStructuredTokenCredentialsFactory::TPtr CredentialsFactory;
 
         NConnector::IClient::TPtr GenericClient;

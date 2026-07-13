@@ -22,6 +22,15 @@ namespace NYql::NDq {
         // Returns string containing error, if it happened.
         TString FillCredentials(NYql::TGenericDataSourceInstance& dsi) const;
 
+        // Return true when provider is ready to serve requests
+        bool IsReady() const;
+
+        // Return true when provider is ready to serve requests
+        void WaitReady(TDuration timeout = TDuration::Max()) const;
+
+        // Subscribe to callback when provider is ready to serve requests
+        void Subscribe(std::function<void(void)>&& callback);
+
     private:
         struct BasicAuthCredentials {
             TString Username;
@@ -29,7 +38,7 @@ namespace NYql::NDq {
         };
         std::optional<BasicAuthCredentials> BasicAuthCredentials_;
 
-        NYdb::TCredentialsProviderPtr CredentialsProvider_;
+        NThreading::TFuture<NYdb::TCredentialsProviderPtr> AsyncCredentialsProvider_;
     };
 
     TGenericCredentialsProvider::TPtr

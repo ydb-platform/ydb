@@ -77,6 +77,10 @@ namespace NYql::NDq {
         using TBase = TGenericBaseActor<TGenericLookupActor, TLookupState::TPtr>;
 
         struct TEvLookupRetry : NActors::TEventLocal<TEvLookupRetry, EvRetry> {
+            explicit TEvLookupRetry(TLookupState::TPtr state)
+                : State(std::move(state))
+            {}
+
             TLookupState::TPtr State;
         };
 
@@ -362,6 +366,16 @@ namespace NYql::NDq {
                 .SentTime = TInstant::Now(),
                 .FullscanLimit = fullscanLimit
             });
+            if (Y_UNLIKELY(!CredentialsProvider->IsReady())) { // avoid self-message
+                CredentialsProvider->Subscribe([
+                    actorSystem = TActivationContext::ActorSystem(),
+                    selfId = SelfId(),
+                    state = std::move(state)
+                ]() mutable {
+                    actorSystem->Send(selfId, new TEvLookupRetry(std::move(state)));
+                });
+                return;
+            }
             SendRequest(state);
         }
 
@@ -525,9 +539,8 @@ namespace NYql::NDq {
             auto nextRetry = state->RetryState->GetNextRetryDelay(status);
             if (nextRetry) {
                 YQL_CLOG(WARN, ProviderGeneric) << "ActorId=" << selfId << " Got retrievable GRPC Error from Connector: " << status.ToDebugString() << ", retry scheduled in " << *nextRetry;
-                auto ev = new TEvLookupRetry();
-                ev->State = std::move(state);
-                actorSystem->Schedule(*nextRetry, new IEventHandle(selfId, selfId, ev));
+                actorSystem->Schedule(*nextRetry,
+                        new IEventHandle(selfId, selfId, new TEvLookupRetry(std::move(state))));
                 return;
             }
             SendError(actorSystem, selfId, NConnector::ErrorFromGRPCStatus(status));

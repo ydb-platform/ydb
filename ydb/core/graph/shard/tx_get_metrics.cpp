@@ -25,11 +25,11 @@ public:
     }
 
     void Complete(const TActorContext& ctx) override {
-        YDB_LOG_DEBUG("TTxGetMetric::Complete",
+        YDB_LOG_DEBUG("TTxGetMetrics::Complete",
             {"logPrefix", GetLogPrefix()});
-        YDB_LOG_TRACE("TxGetMetrics returned points for request",
+        YDB_LOG_TRACE("Get metrics request completed",
             {"logPrefix", GetLogPrefix()},
-            {"timeSize", Result.TimeSize()},
+            {"timePointCount", Result.TimeSize()},
             {"cookie", Event->Cookie});
         ctx.Send(Event->Sender, new TEvGraph::TEvMetricsResult(std::move(Result)), 0, Event->Cookie);
     }
@@ -40,9 +40,9 @@ void TGraphShard::ExecuteTxGetMetrics(TEvGraph::TEvGetMetrics::TPtr ev) {
         case EBackendType::Memory: {
             NKikimrGraph::TEvMetricsResult result;
             MemoryBackend.GetMetrics(ev->Get()->Record, result);
-            YDB_LOG_TRACE("GetMetrics returned points for request",
+            YDB_LOG_TRACE("Get metrics request completed",
                 {"logPrefix", GetLogPrefix()},
-                {"timeSize", result.TimeSize()},
+                {"timePointCount", result.TimeSize()},
                 {"cookie", ev->Cookie});
             Send(ev->Sender, new TEvGraph::TEvMetricsResult(std::move(result)), 0, ev->Cookie);
             break;

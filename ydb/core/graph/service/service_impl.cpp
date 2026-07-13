@@ -53,12 +53,12 @@ public:
 
     void ResolveDatabase() {
         if (ResolveTimestamp && (ResolveTimestamp + RESOLVE_TIMEOUT > TActivationContext::Now())) {
-            YDB_LOG_TRACE("ResolveDatabase too soon",
+            YDB_LOG_TRACE("Skipping database resolution, cooldown not elapsed",
                 {"logPrefix", GetLogPrefix()});
             return; // too soon
         }
 
-        YDB_LOG_DEBUG("ResolveDatabase",
+        YDB_LOG_DEBUG("Resolving database",
             {"logPrefix", GetLogPrefix()},
             {"database", Database});
         TAutoPtr<NSchemeCache::TSchemeCacheNavigate> request(new NSchemeCache::TSchemeCacheNavigate());
@@ -82,11 +82,11 @@ public:
     void ConnectShard() {
         if (GraphShardId) {
             if (ConnectTimestamp && (ConnectTimestamp + CONNECT_TIMEOUT > TActivationContext::Now())) {
-                YDB_LOG_TRACE("ConnectShard too soon",
+                YDB_LOG_TRACE("Skipping shard connection, cooldown not elapsed",
                     {"logPrefix", GetLogPrefix()});
                 return; // too soon
             }
-            YDB_LOG_DEBUG("ConnectToShard",
+            YDB_LOG_DEBUG("Connecting to graph shard",
                 {"logPrefix", GetLogPrefix()},
                 {"graphShardId", GraphShardId});
             IActor* pipeActor = NTabletPipe::CreateClient(TBase::SelfId(), GraphShardId, GetPipeClientConfig());
@@ -129,9 +129,9 @@ public:
 
     void DiscardOldRequests(TInstant now) {
         while (!RequestsInFlight.empty() && RequestsInFlight.front().Deadline <= now) {
-            YDB_LOG_WARN("Discarding request with id",
+            YDB_LOG_WARN("Discarding timed-out get metrics request",
                 {"logPrefix", GetLogPrefix()},
-                {"requestsId", RequestsInFlight.front().Id});
+                {"requestId", RequestsInFlight.front().Id});
             TEvGraph::TEvMetricsResult* response = new TEvGraph::TEvMetricsResult();
             response->Record.SetError("Request timed out");
             Send(RequestsInFlight.front().Sender, response, 0, RequestsInFlight.front().Cookie);
@@ -141,7 +141,7 @@ public:
 
     void ResendRequests() {
         for (const TGetMetricsRequest& request : RequestsInFlight) {
-            YDB_LOG_TRACE("Resending request",
+            YDB_LOG_TRACE("Resending pending get metrics request",
                 {"logPrefix", GetLogPrefix()},
                 {"requestId", request.Id});
             NTabletPipe::SendData(SelfId(), GraphShardPipe, new TEvGraph::TEvGetMetrics(request.Request), request.Id);
@@ -149,19 +149,19 @@ public:
     }
 
     void Handle(TEvGraph::TEvSendMetrics::TPtr& ev) {
-        YDB_LOG_TRACE("TEvSendMetrics",
+        YDB_LOG_TRACE("Received send metrics event",
             {"logPrefix", GetLogPrefix()});
         if (GraphShardPipe) {
             NTabletPipe::SendData(SelfId(), GraphShardPipe, ev.Get()->Release());
         } else {
             ConnectShard();
-            YDB_LOG_TRACE("Dropped metrics",
+            YDB_LOG_TRACE("Dropped send metrics event, shard not connected",
                 {"logPrefix", GetLogPrefix()});
         }
     }
 
     void Handle(TEvGraph::TEvGetMetrics::TPtr& ev) {
-        YDB_LOG_TRACE("TEvGetMetrics",
+        YDB_LOG_TRACE("Received get metrics request",
             {"logPrefix", GetLogPrefix()});
         if (!GraphShardPipe) {
             ConnectShard();
@@ -176,30 +176,30 @@ public:
             if (response.DomainDescription) {
                 if (response.DomainDescription->Description.GetProcessingParams().GetGraphShard() != 0) {
                     GraphShardId = response.DomainDescription->Description.GetProcessingParams().GetGraphShard();
-                    YDB_LOG_DEBUG("Database resolved to shard",
+                    YDB_LOG_DEBUG("Database resolved, graph shard found",
                         {"logPrefix", GetLogPrefix()},
                         {"database", Database},
                         {"graphShardId", GraphShardId});
                     ConnectShard();
                     return;
                 } else {
-                    YDB_LOG_DEBUG("Error resolving database - no graph shard (switching to pumpkin mode)",
+                    YDB_LOG_DEBUG("Graph shard not configured for database, entering fallback mode",
                         {"logPrefix", GetLogPrefix()},
                         {"database", Database});
                     return Become(&TGraphService::StatePumpkin);
                 }
             }
-            YDB_LOG_WARN("Error resolving database incomplete response",
+            YDB_LOG_WARN("Failed to resolve database, incomplete scheme cache response",
                 {"logPrefix", GetLogPrefix()},
                 {"database", Database});
         } else {
             if (!request->ResultSet.empty()) {
-                YDB_LOG_WARN("Error resolving database error",
+                YDB_LOG_WARN("Failed to resolve database",
                     {"logPrefix", GetLogPrefix()},
                     {"database", Database},
                     {"status", request->ResultSet.front().Status});
             } else {
-                YDB_LOG_WARN("Error resolving database no response",
+                YDB_LOG_WARN("Failed to resolve database, empty scheme cache response",
                     {"logPrefix", GetLogPrefix()},
                     {"database", Database});
             }
@@ -208,12 +208,12 @@ public:
 
     void Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev) {
         if (ev->Get()->Status == NKikimrProto::OK) {
-            YDB_LOG_DEBUG("Connected to shard",
+            YDB_LOG_DEBUG("Connected to graph shard",
                 {"logPrefix", GetLogPrefix()},
                 {"graphShardId", GraphShardId});
             ResendRequests();
         } else {
-            YDB_LOG_WARN("Error connecting to shard error",
+            YDB_LOG_WARN("Failed to connect to graph shard",
                 {"logPrefix", GetLogPrefix()},
                 {"graphShardId", GraphShardId},
                 {"status", ev->Get()->Status});
@@ -223,7 +223,7 @@ public:
     }
 
     void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr&) {
-        YDB_LOG_WARN("Connection to shard was destroyed",
+        YDB_LOG_WARN("Connection to graph shard lost",
             {"logPrefix", GetLogPrefix()});
         NTabletPipe::CloseClient(TBase::SelfId(), GraphShardPipe);
         GraphShardPipe = {};
@@ -231,23 +231,23 @@ public:
 
     void Handle(TEvGraph::TEvMetricsResult::TPtr& ev) {
         auto id(ev->Cookie);
-        YDB_LOG_TRACE("TEvMetricsResult",
+        YDB_LOG_TRACE("Received metrics result",
             {"logPrefix", GetLogPrefix()},
-            {"id", id});
+            {"requestId", id});
         for (auto it = RequestsInFlight.begin(); it != RequestsInFlight.end(); ++it) {
             if (it->Id == id) {
-                YDB_LOG_TRACE("TEvMetricsResult found request resending",
+                YDB_LOG_TRACE("Delivered metrics result to pending request",
                     {"logPrefix", GetLogPrefix()},
-                    {"id", id},
+                    {"requestId", id},
                     {"sender", it->Sender});
                 Send(it->Sender, ev->Release().Release(), 0, it->Cookie);
                 RequestsInFlight.erase(it);
                 return;
             }
         }
-        YDB_LOG_WARN("Couldn't find request with id",
+        YDB_LOG_WARN("Received metrics result for unknown request",
             {"logPrefix", GetLogPrefix()},
-            {"id", id});
+            {"requestId", id});
     }
 
     void HandleTimeout() {
@@ -259,7 +259,7 @@ public:
     }
 
     void HandlePumpkin(TEvGraph::TEvGetMetrics::TPtr& ev) {
-        YDB_LOG_TRACE("TEvGetMetrics(Pumpkin)",
+        YDB_LOG_TRACE("Received get metrics request in fallback mode",
             {"logPrefix", GetLogPrefix()});
         TEvGraph::TEvMetricsResult* response = new TEvGraph::TEvMetricsResult();
         response->Record.SetError("GraphShard is not enabled on the database");

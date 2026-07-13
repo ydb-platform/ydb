@@ -20,7 +20,7 @@ public:
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
         YDB_LOG_DEBUG("TTxAggregateData::Execute",
             {"logPrefix", GetLogPrefix()},
-            {"settings", Settings});
+            {"aggregateSettings", Settings});
         TInstant now = TActivationContext::Now();
         return Self->LocalBackend.AggregateData(txc, now, Settings);
         return true;

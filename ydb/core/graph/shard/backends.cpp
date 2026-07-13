@@ -131,10 +131,10 @@ double TBaseBackend::GetTimingForPercentile(double percentile, const TVector<ui6
 
 void TMemoryBackend::StoreMetrics(TMetricsData&& data) {
     if (!MetricsValues.empty() && MetricsValues.back().Timestamp >= data.Timestamp) {
-        YDB_LOG_ERROR("Invalid timestamp ordering for and",
+        YDB_LOG_ERROR("Invalid timestamp ordering for incoming metrics",
             {"logPrefix", GetLogPrefix()},
-            {"timestamp", data.Timestamp},
-            {"metricsValuesTimestamp", MetricsValues.back().Timestamp});
+            {"incomingTimestamp", data.Timestamp},
+            {"lastStoredTimestamp", MetricsValues.back().Timestamp});
     }
     TMetricsRecord& record = MetricsValues.emplace_back();
     record.Timestamp = data.Timestamp;
@@ -149,7 +149,7 @@ void TMemoryBackend::StoreMetrics(TMetricsData&& data) {
         }
         record.Values[idx] = value;
     }
-    YDB_LOG_TRACE("Stored metrics",
+    YDB_LOG_TRACE("Stored metrics in memory backend",
         {"logPrefix", GetLogPrefix()});
 }
 
@@ -211,9 +211,9 @@ void TMemoryBackend::GetMetrics(const NKikimrGraph::TEvGetMetrics& get, NKikimrG
 
 void TMemoryBackend::ClearData(TInstant now, const TAggregateSettings& settings) {
     TInstant cutline = now - settings.PeriodToStart;
-    YDB_LOG_DEBUG("Clear data",
+    YDB_LOG_DEBUG("Clearing expired metrics data",
         {"logPrefix", GetLogPrefix()},
-        {"cutline", cutline.ToStringUpToSeconds()});
+        {"cutoffTimestamp", cutline.ToStringUpToSeconds()});
     auto itCutLine = std::upper_bound(MetricsValues.begin(), MetricsValues.end(), cutline);
     size_t before = MetricsValues.size();
     MetricsValues.erase(MetricsValues.begin(), itCutLine);
@@ -222,29 +222,29 @@ void TMemoryBackend::ClearData(TInstant now, const TAggregateSettings& settings)
     } else {
         settings.StartTimestamp = {};
     }
-    YDB_LOG_DEBUG("Cleared logical rows",
+    YDB_LOG_DEBUG("Cleared expired metric records",
         {"logPrefix", GetLogPrefix()},
-        {"delta", before - MetricsValues.size()});
+        {"deletedRecordCount", before - MetricsValues.size()});
 }
 
 void TMemoryBackend::DownsampleData(TInstant now, const TAggregateSettings& settings) {
     const TInstant startTimestamp = TInstant::Seconds(settings.StartTimestamp.Seconds() / settings.SampleSize.Seconds() * settings.SampleSize.Seconds());
     const TInstant endTimestamp = now - settings.PeriodToStart;
-    YDB_LOG_DEBUG("Downsample data from",
+    YDB_LOG_DEBUG("Downsampling metrics data",
         {"logPrefix", GetLogPrefix()},
         {"startTimestamp", settings.StartTimestamp.ToStringUpToSeconds()},
         {"endTimestamp", endTimestamp.ToStringUpToSeconds()});
 
     const auto itStart = std::lower_bound(MetricsValues.begin(), MetricsValues.end(), startTimestamp);
     if (itStart == MetricsValues.end()) {
-        YDB_LOG_TRACE("StartTimestamp beyond the range",
+        YDB_LOG_TRACE("Start timestamp is beyond stored data range",
             {"logPrefix", GetLogPrefix()});
         return;
     }
 
     const auto itStop = std::upper_bound(MetricsValues.begin(), MetricsValues.end(), endTimestamp);
     if (itStop == MetricsValues.begin()) {
-        YDB_LOG_TRACE("EndTimestamp beyond the range",
+        YDB_LOG_TRACE("End timestamp is beyond stored data range",
             {"logPrefix", GetLogPrefix()});
         return;
     }
@@ -273,11 +273,11 @@ void TMemoryBackend::DownsampleData(TInstant now, const TAggregateSettings& sett
             if (values.Timestamps.size() > 1) {
                 itEraseStop = it;
 
-                YDB_LOG_TRACE("Normalizing values from",
+                YDB_LOG_TRACE("Normalizing metric values before downsampling",
                     {"logPrefix", GetLogPrefix()},
-                    {"timestampsCount", values.Timestamps.size()},
+                    {"timestampCount", values.Timestamps.size()},
                     {"firstTimestamp", values.Timestamps.front().Seconds()},
-                    {"lastTimestamps", values.Timestamps.back().Seconds()});
+                    {"lastTimestamp", values.Timestamps.back().Seconds()});
                 NormalizeAndDownsample(values, 1);
             } else {
                 if (itEraseStart + 1 == it) {
@@ -286,7 +286,7 @@ void TMemoryBackend::DownsampleData(TInstant now, const TAggregateSettings& sett
             }
 
             if (!values.Timestamps.empty()) {
-                YDB_LOG_TRACE("Result time is",
+                YDB_LOG_TRACE("Downsampled result timestamp",
                     {"logPrefix", GetLogPrefix()},
                     {"timestamp", values.Timestamps.front().Seconds()});
                 if (it != itEraseStart) {
@@ -319,9 +319,9 @@ void TMemoryBackend::DownsampleData(TInstant now, const TAggregateSettings& sett
         MetricsValues.emplace_back(std::move(val));
     }
 
-    YDB_LOG_DEBUG("Downsampled logical rows",
+    YDB_LOG_DEBUG("Downsampling completed",
         {"logPrefix", GetLogPrefix()},
-        {"delta", before - MetricsValues.size()});
+        {"deletedRecordCount", before - MetricsValues.size()});
 }
 
 void TMemoryBackend::AggregateData(TInstant now, const TAggregateSettings& settings) {
@@ -343,15 +343,15 @@ bool TLocalBackend::StoreMetrics(NTabletFlatExecutor::TTransactionContext& txc, 
         if (itId == MetricsIndex.end()) {
             itId = MetricsIndex.emplace(name, MetricsIndex.size()).first;
             db.Table<Schema::MetricsIndex>().Key(name).Update<Schema::MetricsIndex::Id>(itId->second);
-            YDB_LOG_TRACE("Metric has id",
+            YDB_LOG_TRACE("Registered new metric",
                 {"logPrefix", GetLogPrefix()},
-                {"name", name},
-                {"id", itId->second});
+                {"metricName", name},
+                {"metricId", itId->second});
         }
         ui64 id = itId->second;
         db.Table<Schema::MetricsValues>().Key(data.Timestamp.Seconds(), id).Update<Schema::MetricsValues::Value>(value);
     }
-    YDB_LOG_TRACE("Stored metrics",
+    YDB_LOG_TRACE("Stored metrics in local backend",
         {"logPrefix", GetLogPrefix()});
     return true;
 }
@@ -375,10 +375,10 @@ bool TLocalBackend::GetMetrics(NTabletFlatExecutor::TTransactionContext& txc, co
         }
     }
     TMetricsValues metricValues;
-    YDB_LOG_DEBUG("Querying from",
+    YDB_LOG_DEBUG("Querying metrics from storage",
         {"logPrefix", GetLogPrefix()},
-        {"minTime", minTime},
-        {"maxTime", maxTime});
+        {"timeFrom", minTime},
+        {"timeTo", maxTime});
     auto rowset = db.Table<Schema::MetricsValues>().GreaterOrEqual(minTime).LessOrEqual(maxTime).Select();
     if (!rowset.IsReady()) {
         return false;
@@ -421,9 +421,9 @@ bool TLocalBackend::GetMetrics(NTabletFlatExecutor::TTransactionContext& txc, co
 
 bool TLocalBackend::ClearData(NTabletFlatExecutor::TTransactionContext& txc, TInstant now, const TAggregateSettings& settings) {
     TInstant cutline = now - settings.PeriodToStart;
-    YDB_LOG_DEBUG("Clear data",
+    YDB_LOG_DEBUG("Clearing expired metrics data",
         {"logPrefix", GetLogPrefix()},
-        {"cutline", cutline.ToStringUpToSeconds()});
+        {"cutoffTimestamp", cutline.ToStringUpToSeconds()});
     NIceDb::TNiceDb db(txc.DB);
     ui64 rows = 0;
     auto rowset = db.Table<Schema::MetricsValues>().LessOrEqual(cutline.Seconds()).Select();
@@ -445,16 +445,16 @@ bool TLocalBackend::ClearData(NTabletFlatExecutor::TTransactionContext& txc, TIn
             return false;
         }
     }
-    YDB_LOG_DEBUG("Cleared logical rows",
+    YDB_LOG_DEBUG("Cleared expired metric records",
         {"logPrefix", GetLogPrefix()},
-        {"rows", rows});
+        {"deletedRowCount", rows});
     return true;
 }
 
 bool TLocalBackend::DownsampleData(NTabletFlatExecutor::TTransactionContext& txc, TInstant now, const TAggregateSettings& settings) {
     const TInstant startTimestamp = TInstant::Seconds(settings.StartTimestamp.Seconds() / settings.SampleSize.Seconds() * settings.SampleSize.Seconds());
     const TInstant endTimestamp = now - settings.PeriodToStart;
-    YDB_LOG_DEBUG("Downsample data from",
+    YDB_LOG_DEBUG("Downsampling metrics data",
         {"logPrefix", GetLogPrefix()},
         {"startTimestamp", startTimestamp.ToStringUpToSeconds()},
         {"endTimestamp", endTimestamp.ToStringUpToSeconds()});
@@ -487,22 +487,22 @@ bool TLocalBackend::DownsampleData(NTabletFlatExecutor::TTransactionContext& txc
                     ++rows;
                 }
 
-                YDB_LOG_TRACE("Normalizing values from",
+                YDB_LOG_TRACE("Normalizing metric values before downsampling",
                     {"logPrefix", GetLogPrefix()},
-                    {"timestamps", values.Timestamps.size()},
+                    {"timestampCount", values.Timestamps.size()},
                     {"firstTimestamp", values.Timestamps.front().Seconds()},
-                    {"secondTimestamp", values.Timestamps.back().Seconds()});
+                    {"lastTimestamp", values.Timestamps.back().Seconds()});
                 NormalizeAndDownsample(values, 1);
             }
             if (!values.Timestamps.empty()) {
-                YDB_LOG_TRACE("Result time is",
+                YDB_LOG_TRACE("Downsampled result timestamp",
                     {"logPrefix", GetLogPrefix()},
                     {"timestamp", values.Timestamps.front().Seconds()});
                 for (ui64 id : ids) {
                     if (!values.Values[id].empty()) {
-                        YDB_LOG_TRACE("Updating values with id",
+                        YDB_LOG_TRACE("Updating downsampled metric value",
                             {"logPrefix", GetLogPrefix()},
-                            {"id", id});
+                            {"metricId", id});
                         db.Table<Schema::MetricsValues>().Key(values.Timestamps.front().Seconds(), id).Update<Schema::MetricsValues::Value>(values.Values[id].front());
                     }
                 }
@@ -530,9 +530,9 @@ bool TLocalBackend::DownsampleData(NTabletFlatExecutor::TTransactionContext& txc
             return false;
         }
     }
-    YDB_LOG_DEBUG("Downsampled logical rows",
+    YDB_LOG_DEBUG("Downsampling completed",
         {"logPrefix", GetLogPrefix()},
-        {"rows", rows});
+        {"processedRowCount", rows});
     return true;
 }
 

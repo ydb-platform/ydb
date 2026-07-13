@@ -16,7 +16,7 @@ public:
     TTxType GetTxType() const override { return NGraphShard::TXTYPE_INIT_SCHEMA; }
 
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
-        YDB_LOG_DEBUG("TTxInitScheme::Execute",
+        YDB_LOG_DEBUG("TTxInitSchema::Execute",
             {"logPrefix", GetLogPrefix()});
         NIceDb::TNiceDb db(txc.DB);
         db.Materialize<Schema>();
@@ -25,7 +25,7 @@ public:
     }
 
     void Complete(const TActorContext&) override {
-        YDB_LOG_DEBUG("TTxInitScheme::Complete",
+        YDB_LOG_DEBUG("TTxInitSchema::Complete",
             {"logPrefix", GetLogPrefix()});
         Self->ExecuteTxStartup();
     }

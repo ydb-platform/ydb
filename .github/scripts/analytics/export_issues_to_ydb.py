@@ -759,8 +759,6 @@ def transform_issues_for_ydb(issues: List[Dict[str, Any]], project_fields: Optio
         open_periods = build_open_periods(issue, created_at, closed_at)
         if open_periods:
             info['open_periods'] = open_periods
-            info['open_period_starts'] = ';'.join(p['start'] for p in open_periods)
-            info['open_period_ends'] = ';'.join(p['end'] or '' for p in open_periods)
 
         now = datetime.now(timezone.utc)
         

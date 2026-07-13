@@ -91,7 +91,7 @@ namespace NActors {
         TIntrusivePtr<NInterconnect::TStreamSocket> XdcSocket;
 
         // thread-safe direct send/receive handle shared with users via TEvNodeConnected
-        std::shared_ptr<TDirectSession> DirectSession;
+        std::shared_ptr<TDirectSessionV2> DirectSession;
 
         // subscribers awaiting connection state notifications (actor id -> cookie)
         std::unordered_map<TActorId, ui64, TActorId::THash> Subscribers;

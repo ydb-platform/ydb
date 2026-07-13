@@ -385,7 +385,7 @@ NJson::TJsonValue TOpRoot::GetExecutionJson(ui64& nodeCounter, THashMap<IOperato
     std::set<int> stages;
     ui32 operatorId = 0;
 
-    for (auto it : *this) {
+    for (const auto& it : *this) {
         auto & currOp = it.Current;
         operatorIds.insert({currOp.Get(), operatorId++});
         int stageId = *currOp->Props.StageId;

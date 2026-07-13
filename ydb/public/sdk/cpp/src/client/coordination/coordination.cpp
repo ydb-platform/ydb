@@ -172,6 +172,7 @@ class TSessionContext : public TThrRefBase {
     using TResponse = Ydb::Coordination::SessionResponse;
     using TGrpcStatus = NYdbGrpc::TGrpcStatus;
     using IProcessor = NYdbGrpc::IStreamRequestReadWriteProcessor<TRequest, TResponse>;
+    using TSessionLostCallback = std::function<void()>;
 
     friend class TSession::TImpl;
 
@@ -592,6 +593,32 @@ private:
         return future;
     }
 
+    std::shared_ptr<void> DoSubscribeSessionLost(TSessionLostCallback callback) {
+        TSessionLostCallback callbackToCall;
+        uint64_t callbackId = 0;
+        {
+            std::lock_guard guard(Lock);
+            if (SessionLossNotified || IsClosed() || SessionState == ESessionState::EXPIRED || ConnectionState == EConnectionState::STOPPED) {
+                callbackToCall = std::move(callback);
+            } else {
+                callbackId = NextSessionLostCallbackId++;
+                SessionLostCallbacks.emplace(callbackId, std::move(callback));
+            }
+        }
+
+        if (callbackToCall) {
+            callbackToCall();
+            return {};
+        }
+
+        return std::shared_ptr<void>(
+            new uint64_t(callbackId),
+            [self = TPtr(this), callbackId](void* ptr) {
+                delete static_cast<uint64_t*>(ptr);
+                self->DoUnsubscribeSessionLost(callbackId);
+            });
+    }
+
     TDuration GetConnectTimeout() {
         // Use a separate connect timeout if available
         if (Settings_.ConnectTimeout_) {
@@ -865,6 +892,26 @@ private:
         return dynamic_cast<TOperation*>(it->second.get());
     }
 
+    void DoUnsubscribeSessionLost(uint64_t callbackId) {
+        std::lock_guard guard(Lock);
+        SessionLostCallbacks.erase(callbackId);
+    }
+
+    std::vector<TSessionLostCallback> TakeSessionLostCallbacksLocked() {
+        std::vector<TSessionLostCallback> callbacks;
+        if (SessionLossNotified) {
+            return callbacks;
+        }
+
+        SessionLossNotified = true;
+        callbacks.reserve(SessionLostCallbacks.size());
+        for (auto& [_, callback] : SessionLostCallbacks) {
+            callbacks.emplace_back(std::move(callback));
+        }
+        SessionLostCallbacks.clear();
+        return callbacks;
+    }
+
 private:
     template<class TCallback>
     void RunUserCallback(TCallback&& callback) {
@@ -886,6 +933,7 @@ private:
         std::deque<TResultPromise<bool>> failedSemaphoreOps;
         std::deque<std::unique_ptr<TSimpleOp>> failedSimpleOps;
         TResultPromise<void> closePromise;
+        std::vector<TSessionLostCallback> sessionLostCallbacks;
 
         {
             std::lock_guard guard(Lock);
@@ -942,6 +990,7 @@ private:
                     SessionState = ESessionState::EXPIRED;
                     notifyExpired = true;
                 }
+                sessionLostCallbacks = TakeSessionLostCallbacksLocked();
             } else {
                 context = LocalContext;
                 ConnectionState = EConnectionState::DISCONNECTED;
@@ -1032,6 +1081,10 @@ private:
 
         for (auto& op : failedSimpleOps) {
             op->SetFailure(status);
+        }
+
+        for (auto& callback : sessionLostCallbacks) {
+            callback();
         }
 
         if (closePromise.Initialized()) {
@@ -1795,6 +1848,9 @@ private:
     std::deque<std::unique_ptr<TSimpleOp>> PendingRequests;
     std::unordered_map<uint64_t, std::unique_ptr<TSimpleOp>> SentRequests;
     TResultPromise<void> ReconnectPromise;
+    std::unordered_map<uint64_t, TSessionLostCallback> SessionLostCallbacks;
+    uint64_t NextSessionLostCallbackId = 1;
+    bool SessionLossNotified = false;
 
     // These are used to manage session timeout
     IQueueClientContextPtr SessionStartTimeoutContext;
@@ -2084,6 +2140,10 @@ public:
         return Context->DoDeleteSemaphore(name, force);
     }
 
+    std::shared_ptr<void> SubscribeSessionLost(std::function<void()> callback) {
+        return Context->DoSubscribeSessionLost(std::move(callback));
+    }
+
 private:
     const TIntrusivePtr<TSessionContext> Context;
 };
@@ -2156,6 +2216,10 @@ TAsyncResult<void> TSession::DeleteSemaphore(
     bool force)
 {
     return Impl_->DeleteSemaphore(name, force);
+}
+
+std::shared_ptr<void> TSession::SubscribeSessionLost(std::function<void()> callback) {
+    return Impl_->SubscribeSessionLost(std::move(callback));
 }
 
 }

@@ -388,7 +388,7 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::TakeOrSkip(TExprBase no
         .Input<TYtReadTable>()
             .World(ApplySyncListToWorld(GetWorld(input, {}, ctx).Ptr(), syncList, ctx))
             .DataSource(GetDataSource(input, ctx))
-            .Input(ConvertInputTable(input, ctx, TConvertInputOpts().KeepDirecRead(true).Settings(settings)))
+            .Input(ConvertInputTable(input, ctx, TConvertInputOpts().KeepDirectRead(true).Settings(settings)))
         .Build()
         .Done();
     return KeepColumnOrder(res.Ptr(), node.Ref(), ctx, *State_->Types);
@@ -1003,7 +1003,7 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::PushPruneKeysIntoYtOper
         State_->Configuration->RuntimeClusterSelection.Get().GetOrElse(DEFAULT_RUNTIME_CLUSTER_SELECTION);
     auto cluster = DeriveClusterFromInput(op.Input(), selectionMode);
     if (!cluster || !IsYtCompleteIsolatedLambda(extractorLambda.Ref(), syncList, *cluster, false, selectionMode)) {
-        return {};
+        return node;
     }
 
     auto outItemType = SilentGetSequenceItemType(op.Input().Ref(), true);

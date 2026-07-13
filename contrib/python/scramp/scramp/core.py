@@ -77,6 +77,8 @@ CHANNEL_TYPES = (
     "tls-unique-for-telnet",
 )
 
+MAX_ITERATION_COUNT = 10_000_000  # DoS guard
+
 
 def _make_cb_data(name, ssl_socket):
     if name == "tls-unique":
@@ -137,6 +139,10 @@ class ScramMechanism:
     def make_auth_info(self, password, iteration_count=None, salt=None):
         if iteration_count is None:
             iteration_count = self.iteration_count
+        if iteration_count < self.iteration_count:
+            raise ScramException(
+                f"The iteration count must be at least {self.iteration_count}"
+            )
         salt, stored_key, server_key = _make_auth_info(
             self.hf, password, iteration_count, salt=salt
         )
@@ -175,8 +181,8 @@ def _validate_channel_binding(channel_binding):
     channel_type, channel_data = channel_binding
     if channel_type not in CHANNEL_TYPES:
         raise ScramException(
-            "The channel_binding parameter must either be None or a tuple with the "
-            "first element a str specifying one of the channel types {CHANNEL_TYPES}."
+            f"The channel_binding parameter must either be None or a tuple with the "
+            f"first element a str specifying one of the channel types {CHANNEL_TYPES}."
         )
 
     if not isinstance(channel_data, bytes):
@@ -207,6 +213,7 @@ class ScramClient:
         mech = sorted(mechs, key=attrgetter("strength"))[-1]
         self.hf, self.use_binding = mech.hf, mech.use_binding
         self.mechanism_name = mech.name
+        self.iterations = mech.iteration_count
 
         self.c_nonce = _make_nonce() if c_nonce is None else c_nonce
         self.username = username
@@ -229,7 +236,7 @@ class ScramClient:
         self._set_stage(ClientStage.set_server_first)
         self.server_first = message
         self.nonce, self.salt, self.iterations = _set_server_first(
-            message, self.c_nonce
+            message, self.c_nonce, self.iterations
         )
 
     def get_client_final(self):
@@ -351,8 +358,7 @@ def _make_auth_message(client_first_bare, server_first, client_final_without_pro
 
 
 def _make_salted_password(hf, password, salt, iterations):
-    hash_name = hf.__name__.split("_")[-1]
-    return hashlib.pbkdf2_hmac(hash_name, uenc(saslprep(password)), salt, iterations)
+    return hashlib.pbkdf2_hmac(hf().name, uenc(saslprep(password)), salt, iterations)
 
 
 def _c_key_stored_key_s_key(hf, salted_password):
@@ -518,14 +524,19 @@ def _get_server_first(nonce, salt, iterations):
     return ",".join((f"r={nonce}", f"s={salt}", f"i={iterations}"))
 
 
-def _set_server_first(server_first, c_nonce):
-    msg = _parse_message(server_first, "server first", {"r", "s", "i"})
+def _set_server_first(server_first, c_nonce, min_iteration_count):
+    msg = _parse_message(server_first, "server first", {"r", "s", "i"}, {"e"})
     if "e" in msg:
         raise ScramException(f"The server returned the error: {msg['e']}")
 
     nonce = msg["r"]
     salt = msg["s"]
     iterations = int(msg["i"])
+    if not (min_iteration_count <= iterations <= MAX_ITERATION_COUNT):
+        raise ScramException(
+            f"Server iteration count must be between {min_iteration_count} "
+            f"and {MAX_ITERATION_COUNT} inclusive"
+        )
 
     if not nonce.startswith(c_nonce):
         raise ScramException("Client nonce doesn't match.", SERVER_ERROR_OTHER_ERROR)

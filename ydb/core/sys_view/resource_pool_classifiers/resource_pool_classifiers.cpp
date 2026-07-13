@@ -107,6 +107,10 @@ private:
                     const auto& action = config.GetConfigJson()["action"].GetString();
                     return TCell(action.data(), action.size());
                 }});
+                insert({TSchema::HasFullScan::ColumnId, [] (const NKqp::TResourcePoolClassifierConfig& config) {
+                    const auto& hasFullScan = config.GetConfigJson()["has_full_scan"].GetString();
+                    return TCell(hasFullScan.data(), hasFullScan.size());
+                }});
             }
         };
         static TExtractorsMap extractors;

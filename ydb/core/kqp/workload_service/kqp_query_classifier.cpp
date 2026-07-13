@@ -1,3 +1,4 @@
+#include "kqp_has_full_scan_matcher.h"
 #include "kqp_query_classifier.h"
 #include "kqp_workload_service.h"
 
@@ -47,7 +48,8 @@ public:
             }
 
             if (NeedsPreparedQuery(settings)) {
-                return *PreClassifyResult = TPendingCompilation{.ResumeRank = rank};
+                PreClassifyResult = TPendingCompilation{.ResumeRank = rank};
+                return *PreClassifyResult;
             }
 
             if (settings.Action == NResourcePool::EClassifierAction::Reject) {
@@ -175,8 +177,8 @@ private:
         return true;
     }
 
-    bool NeedsPreparedQuery(const NResourcePool::TClassifierSettings&) const {
-        return false;
+    bool NeedsPreparedQuery(const NResourcePool::TClassifierSettings& settings) const {
+        return settings.HasFullScan.has_value();
     }
 
     ///
@@ -185,10 +187,8 @@ private:
     /// - Involves SQL analysis, plan building, or computations.
     /// - Depends on actual query structure and execution characteristics.
     ///
-    /// Currently returns true (no dynamic filtering applied).
-    ///
-    bool MatchesDynamic(const NResourcePool::TClassifierSettings&, const TPreparedQueryHolder&) const {
-        return true;
+    bool MatchesDynamic(const NResourcePool::TClassifierSettings& settings, const TPreparedQueryHolder& preparedQuery) const {
+        return MatchesFullScan(settings.HasFullScan, preparedQuery.GetPhysicalQuery());
     }
 
     const TResourcePoolEntry* FindPool(const TString& poolId) const {

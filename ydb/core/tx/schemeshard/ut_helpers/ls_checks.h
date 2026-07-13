@@ -123,6 +123,7 @@ namespace NLs {
     void IsDirectory(const NKikimrScheme::TEvDescribeSchemeResult& record);
     void IsReplication(const NKikimrScheme::TEvDescribeSchemeResult& record);
     void IsTransfer(const NKikimrScheme::TEvDescribeSchemeResult& record);
+    void IsTestShardSet(const NKikimrScheme::TEvDescribeSchemeResult& record);
     void CheckPathType(const NKikimrScheme::TEvDescribeSchemeResult& record, const NKikimrSchemeOp::EPathType pathType);
     TCheckFunc CheckColumns(const TString& name, const TSet<TString>& columns, const TSet<TString>& droppedColumns, const TSet<TString> keyColumns, bool strictCount = false);
     TCheckFunc CheckColumnType(const ui64 columnIndex, const TString& columnTypename);
@@ -226,6 +227,9 @@ namespace NLs {
     TCheckFunc ServerlessComputeResourcesMode(NKikimrSubDomains::EServerlessComputeResourcesMode serverlessComputeResourcesMode);
 
     TCheckFunc IncrementalBackup(bool flag);
+
+    TCheckFunc CheckMultiColumnStatistics(const TString& name, const TVector<TString>& columns, const TVector<NKikimrSchemeOp::EMultiColumnStatisticsType>& types);
+    TCheckFunc CheckColumnTableMultiColumnStatistics(const TString& name, const TVector<TString>& columns, const TVector<NKikimrSchemeOp::EMultiColumnStatisticsType>& types);
 
     struct TInverseTag {
         bool Value = false;

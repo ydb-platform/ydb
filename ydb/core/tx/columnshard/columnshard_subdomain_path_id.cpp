@@ -1,12 +1,15 @@
 #include "columnshard_impl.h"
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD
+
 namespace NKikimr::NColumnShard {
 
 class TTxPersistSubDomainOutOfSpace: public NTabletFlatExecutor::TTransactionBase<TColumnShard> {
 public:
-    TTxPersistSubDomainOutOfSpace(TColumnShard* self, bool outOfSpace)
+    TTxPersistSubDomainOutOfSpace(TColumnShard* self, bool outOfSpace, bool smallBlobsQuotaExceeded)
         : TTransactionBase(self)
         , OutOfSpace(outOfSpace)
+        , SmallBlobsQuotaExceeded(smallBlobsQuotaExceeded)
     {
     }
 
@@ -21,6 +24,10 @@ public:
             Schema::SaveSpecialValue(db, Schema::EValueIds::SubDomainOutOfSpace, ui64(OutOfSpace ? 1 : 0));
             Self->SpaceWatcher->SubDomainOutOfSpace = OutOfSpace;
         }
+        if (Self->SpaceWatcher->SubDomainSmallBlobsQuotaExceeded != SmallBlobsQuotaExceeded) {
+            Schema::SaveSpecialValue(db, Schema::EValueIds::SubDomainSmallBlobsQuotaExceeded, ui64(SmallBlobsQuotaExceeded ? 1 : 0));
+            Self->SpaceWatcher->SubDomainSmallBlobsQuotaExceeded = SmallBlobsQuotaExceeded;
+        }
 
         return true;
     }
@@ -31,6 +38,7 @@ public:
 
 private:
     const bool OutOfSpace;
+    const bool SmallBlobsQuotaExceeded;
 };
 
 class TTxPersistSubDomainPathId: public NTabletFlatExecutor::TTransactionBase<TColumnShard> {
@@ -80,7 +88,8 @@ void TSpaceWatcher::StartWatchingSubDomainPathId() {
     }
 
     if (!WatchingSubDomainPathId) {
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("started_watching_subdomain", *SubDomainPathId);
+        YDB_LOG_DEBUG("",
+            {"startedWatchingSubdomain", *SubDomainPathId});
         Self->Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvWatchPathId(TPathId(Self->CurrentSchemeShardId, *SubDomainPathId)));
         WatchingSubDomainPathId = *SubDomainPathId;
     }
@@ -92,15 +101,20 @@ void TSpaceWatcher::Handle(NActors::TEvents::TEvPoison::TPtr&, const TActorConte
 
 void TColumnShard::Handle(TEvTxProxySchemeCache::TEvWatchNotifyUpdated::TPtr& ev, const TActorContext& ctx) {
     const auto* msg = ev->Get();
-    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("notify_subdomain", msg->PathId);
-    const bool outOfSpace = msg->Result->GetPathDescription().GetDomainDescription().GetDomainState().GetDiskQuotaExceeded();
+    YDB_LOG_DEBUG("",
+        {"notifySubdomain", msg->PathId});
+    const auto& domainState = msg->Result->GetPathDescription().GetDomainDescription().GetDomainState();
+    const bool outOfSpace = domainState.GetDiskQuotaExceeded();
+    const bool smallBlobsQuotaExceeded = domainState.GetSmallBlobsQuotaExceeded();
 
-    Execute(new TTxPersistSubDomainOutOfSpace(this, outOfSpace), ctx);
+    Execute(new TTxPersistSubDomainOutOfSpace(this, outOfSpace, smallBlobsQuotaExceeded), ctx);
 }
 
 void TColumnShard::Handle(TEvTxProxySchemeCache::TEvWatchNotifyUnavailable::TPtr& ev, const TActorContext& ctx) {
     const auto* msg = ev->Get();
-    AFL_CRIT(NKikimrServices::TX_COLUMNSHARD)("event", "scheme shard unavailable, will restart to try again")("path_id", msg->PathId);
+    YDB_LOG_CRIT("",
+        {"event", "scheme shard unavailable, will restart to try again"},
+        {"pathId", msg->PathId});
     // This event may arrive while the tablet is still in StateInit, with init transactions
     // in flight. HandlePoison detaches the executor first (so those transactions stop
     // calling back into this object) and then dies - unlike a bare Die(), which would
@@ -122,8 +136,10 @@ void TSpaceWatcher::Handle(NSchemeShard::TEvSchemeShard::TEvSubDomainPathIdFound
     if (FindSubDomainPathIdActor == ev->Sender) {
         FindSubDomainPathIdActor = {};
     }
-    AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("event", "subdomain_found")("scheme_shard_id", msg->SchemeShardId)(
-        "local_path_id", msg->LocalPathId);
+    YDB_LOG_INFO("",
+        {"event", "subdomain_found"},
+        {"schemeShardId", msg->SchemeShardId},
+        {"localPathId", msg->LocalPathId});
     Self->Execute(new TTxPersistSubDomainPathId(Self, msg->LocalPathId), ctx);
 }
 

@@ -3,6 +3,8 @@
 
 #include <ydb/core/formats/arrow/accessor/sub_columns/constructor.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD
+
 namespace NKikimr::NOlap::NCompaction {
 
 const TSubColumnsMerger::TSettings& TSubColumnsMerger::GetSettings() const {
@@ -28,7 +30,9 @@ void TSubColumnsMerger::DoStart(const std::vector<std::shared_ptr<NArrow::NAcces
     auto splitted = commonStats.SplitByVolume(GetSettings(), statRecordsCount);
     ResultColumnStats = splitted.ExtractColumns();
     ResultColumnStats->CreateJsonPathAccessorTrieCache();
-    //    AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("columns", ResultColumnStats->DebugJson())("others", splitted.ExtractOthers().DebugJson());
+    //    YDB_LOG_ERROR("",
+    //          {"columns", ResultColumnStats->DebugJson()},
+    //          {"others", splitted.ExtractOthers().DebugJson()});
     RemapKeyIndex.RegisterColumnStats(*ResultColumnStats);
     for (auto&& i : OrderedIterators) {
         i.Start();
@@ -46,13 +50,14 @@ TColumnPortionResult TSubColumnsMerger::DoExecute(const TChunkMergeContext& cont
         const auto startRecord = [&](const ui32 /*sourceRecordIndex*/) {
             builder.StartRecord();
         };
-        const auto addKV = [&](const ui32 sourceKeyIndex, const std::string_view value, const bool isColumnKey) {
+        const auto addKV = [&](const ui32 sourceKeyIndex, const NBinaryJson::TBinaryJson& value, const bool isColumnKey) {
             auto commonKeyInfo = RemapKeyIndex.RemapIndex(sourceIdx, sourceKeyIndex, isColumnKey);
+            TStringBuf valueBuf(value.data(), value.size());
             if (commonKeyInfo.GetIsColumnKey()) {
-                builder.AddColumnKV(commonKeyInfo.GetCommonKeyIndex(), value);
+                builder.AddColumnKV(commonKeyInfo.GetCommonKeyIndex(), valueBuf);
                 columnStats.Add(value.size());
             } else {
-                builder.AddOtherKV(commonKeyInfo.GetCommonKeyIndex(), value);
+                builder.AddOtherKV(commonKeyInfo.GetCommonKeyIndex(), valueBuf);
                 otherStats.Add(value.size());
             }
         };

@@ -1,4 +1,3 @@
-/* syntax version 1 */
 DECLARE $x AS List<String?>;
 
 SELECT

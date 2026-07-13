@@ -59,7 +59,6 @@ public:
     FEATURE_FLAG_SETTER(EnableChangefeedsOnIndexTables)
     FEATURE_FLAG_SETTER(EnableBackupService)
     FEATURE_FLAG_SETTER(EnableGranularTimecast)
-    FEATURE_FLAG_SETTER(EnablePgSyntax)
     FEATURE_FLAG_SETTER(EnableTieringInColumnShard)
     FEATURE_FLAG_SETTER(EnableMetadataObjectsOnServerless)
     FEATURE_FLAG_SETTER(EnableOlapCompression)
@@ -88,6 +87,7 @@ public:
     FEATURE_FLAG_SETTER(EnableDataShardSplitHistogramOmission)
     FEATURE_FLAG_SETTER(EnableCsDictionaryEncoding)
     FEATURE_FLAG_SETTER(EnableDataShardDetailedMetrics)
+    FEATURE_FLAG_SETTER(EnableTopicDeferredPublish)
     #undef FEATURE_FLAG_SETTER
 };
 

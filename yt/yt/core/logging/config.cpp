@@ -13,6 +13,7 @@
 namespace NYT::NLogging {
 
 using namespace NYTree;
+using namespace NYson;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -58,6 +59,8 @@ void TLogWriterConfig::Register(TRegistrar registrar)
         .Default(false);
     registrar.Parameter("json_format", &TThis::JsonFormat)
         .Default();
+    registrar.Parameter("yson_format", &TThis::YsonFormat)
+        .Default(EYsonFormat::Text);
 
     registrar.Postprocessor([] (TThis* config) {
         // COMPAT(max42).

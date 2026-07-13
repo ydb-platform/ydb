@@ -12,12 +12,16 @@
 #include <ydb/core/tx/columnshard/engines/reader/simple_reader/iterator/sys_view/portions/schema.h>
 #include <ydb/core/tx/columnshard/engines/storage/indexes/max/meta.h>
 #include <ydb/core/tx/columnshard/hooks/testing/controller.h>
+#include <ydb/core/tx/columnshard/transactions/operators/backup.h>
+#include <ydb/core/tx/columnshard/transactions/operators/restore.h>
 #include <ydb/core/tx/data_events/common/modification_type.h>
 #include <ydb/core/tx/data_events/payload_helper.h>
 #include <ydb/core/tx/long_tx_service/public/snapshot_registry.h>
 #include <ydb/core/tx/tiering/manager.h>
 #include <ydb/core/tx/tiering/tier/object.h>
 #include <ydb/core/tx/tx_processing.h>
+
+#include <ydb/public/lib/value/value.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -196,12 +200,18 @@ ui32 WaitWriteResult(TTestBasicRuntime& runtime, ui64 shardId, std::vector<ui64>
 }
 
 bool WriteDataImpl(TTestBasicRuntime& runtime, TActorId& sender, const ui64 shardId, const ui64 tableId, const ui64 writeId, const TString& data,
-    const std::shared_ptr<arrow::Schema>& schema, std::vector<ui64>* writeIds, const NEvWrite::EModificationType mType, const ui64 lockId) {
+    const std::shared_ptr<arrow::Schema>& schema, std::vector<ui64>* writeIds, const NEvWrite::EModificationType mType, const ui64 lockId,
+    const std::optional<TDuration>& timeout = std::nullopt) {
     const TString dedupId = ToString(writeId);
 
     auto write = std::make_unique<NEvents::TDataEvents::TEvWrite>(writeId, NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE);
     if (lockId) {
         write->SetLockId(lockId, 1);
+    }
+    if (timeout) {
+        // When the shard throttles the write (e.g. small-blobs/compaction overload), it holds the request in its
+        // queue until this timeout elapses and then rejects it with OVERLOADED; set it so a blocked write fails fast.
+        write->Record.SetTimeoutSeconds(timeout->Seconds());
     }
     auto& operation = write->AddOperation(TEnumOperator<NEvWrite::EModificationType>::SerializeToWriteProto(mType), TTableId(0, tableId, 1), {},
         0, NKikimrDataEvents::FORMAT_ARROW);
@@ -219,8 +229,8 @@ bool WriteDataImpl(TTestBasicRuntime& runtime, TActorId& sender, const ui64 shar
 
 bool WriteData(TTestBasicRuntime& runtime, TActorId& sender, const ui64 shardId, const ui64 writeId, const ui64 tableId, const TString& data,
     const std::vector<NArrow::NTest::TTestColumn>& ydbSchema, std::vector<ui64>* writeIds, const NEvWrite::EModificationType mType,
-    const ui64 lockId) {
-    return WriteDataImpl(runtime, sender, shardId, tableId, writeId, data, NArrow::MakeArrowSchema(ydbSchema), writeIds, mType, lockId);
+    const ui64 lockId, const std::optional<TDuration>& timeout) {
+    return WriteDataImpl(runtime, sender, shardId, tableId, writeId, data, NArrow::MakeArrowSchema(ydbSchema), writeIds, mType, lockId, timeout);
 }
 
 bool WriteData(TTestBasicRuntime& runtime, TActorId& sender, const ui64 writeId, const ui64 tableId, const TString& data,
@@ -508,6 +518,80 @@ void TTestSchema::InitSchema(const std::vector<NArrow::NTest::TTestColumn>& colu
         plannerConstructor->SetClassName("tiling++");
         plannerConstructor->MutableTiling()->SetJson("{}");
     }
+}
+
+namespace {
+
+NKikimrMiniKQL::TResult LocalMiniKQL(TTestBasicRuntime& runtime, ui64 tabletId, const TString& query) {
+    TActorId sender = runtime.AllocateEdgeActor();
+
+    auto evTx = new TEvTablet::TEvLocalMKQL;
+    evTx->Record.MutableProgram()->MutableProgram()->SetText(query);
+    ForwardToTablet(runtime, tabletId, sender, evTx);
+
+    auto event = runtime.GrabEdgeEvent<TEvTablet::TEvLocalMKQLResponse>(sender);
+    UNIT_ASSERT(event);
+    UNIT_ASSERT_VALUES_EQUAL_C(event->Get()->Record.GetStatus(), NKikimrProto::OK, event->Get()->Record.GetMiniKQLErrors());
+    return event->Get()->Record.GetExecutionEngineEvaluatedResponse();
+}
+
+}   // namespace
+
+ui64 CountLocalDbTableRows(
+    TTestBasicRuntime& runtime, ui64 tabletId, const TString& tableName, const TString& rangeSpec, const TString& fieldsSpec) {
+    const TString query = Sprintf(R"(
+        (
+            (let range %s)
+            (let fields %s)
+            (return (AsList
+                (SetResult 'Result (SelectRange '%s range fields '()))
+            ))
+        )
+    )", rangeSpec.c_str(), fieldsSpec.c_str(), tableName.c_str());
+    const auto result = LocalMiniKQL(runtime, tabletId, query);
+    return NClient::TValue::Create(result)[0]["List"].Size();
+}
+
+ui64 CountTxInfoRows(TTestBasicRuntime& runtime, ui64 tabletId) {
+    const auto result = LocalMiniKQL(runtime, tabletId, R"(
+        (
+            (let range '(
+                '('TxId (Null) (Void))
+            ))
+            (let fields '('TxId))
+            (return (AsList
+                (SetResult 'Result (SelectRange 'TxInfo range fields '()))
+            ))
+        )
+    )");
+    return NClient::TValue::Create(result)[0]["List"].Size();
+}
+
+ui64 CountBackgroundSessionsRows(TTestBasicRuntime& runtime, ui64 tabletId) {
+    const auto result = LocalMiniKQL(runtime, tabletId, R"(
+        (
+            (let range '(
+                '('ClassName (Null) (Void))
+                '('Identifier (Null) (Void))
+            ))
+            (let fields '('ClassName))
+            (return (AsList
+                (SetResult 'Result (SelectRange 'BackgroundSessions range fields '()))
+            ))
+        )
+    )");
+    return NClient::TValue::Create(result)[0]["List"].Size();
+}
+
+void VerifyNoBackupOrRestoreArtifacts(TTestBasicRuntime& runtime, const NYDBTest::NColumnShard::TController* csController, ui64 tabletId) {
+    UNIT_ASSERT(csController);
+    UNIT_ASSERT_VALUES_EQUAL(NColumnShard::TBackupTransactionOperator::GetCounter().Val(), 0);
+    UNIT_ASSERT_VALUES_EQUAL(NColumnShard::TRestoreTransactionOperator::GetCounter().Val(), 0);
+    UNIT_ASSERT_VALUES_EQUAL(csController->GetBackgroundSessionsCount(), 0);
+    UNIT_ASSERT_VALUES_EQUAL(csController->GetTxOperatorsCount(), 0);
+
+    UNIT_ASSERT_VALUES_EQUAL(CountTxInfoRows(runtime, tabletId), 0u);
+    UNIT_ASSERT_VALUES_EQUAL(CountBackgroundSessionsRows(runtime, tabletId), 0u);
 }
 
 }   // namespace NKikimr::NTxUT

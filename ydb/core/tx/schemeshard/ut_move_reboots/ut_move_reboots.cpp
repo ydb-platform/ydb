@@ -600,5 +600,75 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveRebootsTest) {
             }
         });
     }
+
+    Y_UNIT_TEST(MoveTableWithMultiColumnStatistics) {
+        TTestWithReboots t;
+        t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
+            TPathVersion pathVersion;
+            {
+                TInactiveZone inactive(activeZone);
+                TestCreateTable(runtime, ++t.TxId, "/MyRoot", R"(
+                    Name: "Table"
+                    Columns { Name: "key" Type: "Uint32" }
+                    Columns { Name: "value" Type: "Utf8" }
+                    KeyColumnNames: ["key"]
+                    MultiColumnStatistics { Name: "s1" ColumnNames: "value" Types: COUNT_MIN_SKETCH }
+                )");
+                t.TestEnv->TestWaitNotification(runtime, t.TxId);
+                pathVersion = TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"),
+                    {NLs::PathExist});
+            }
+
+            t.TestEnv->ReliablePropose(runtime, MoveTableRequest(++t.TxId, "/MyRoot/Table", "/MyRoot/TableMove", TTestTxConfig::SchemeShard, {pathVersion}),
+                {NKikimrScheme::StatusAccepted, NKikimrScheme::StatusMultipleModifications, NKikimrScheme::StatusPreconditionFailed});
+            t.TestEnv->TestWaitNotification(runtime, t.TxId);
+
+            {
+                TInactiveZone inactive(activeZone);
+                TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"), {NLs::PathNotExist});
+                TestDescribeResult(DescribePath(runtime, "/MyRoot/TableMove", true, true), {
+                    NLs::PathExist,
+                    NLs::CheckMultiColumnStatistics("s1", {"value"}, {NKikimrSchemeOp::EMultiColumnStatisticsType::COUNT_MIN_SKETCH}),
+                });
+            }
+        });
+    }
+
+    Y_UNIT_TEST(MoveColumnTableWithMultiColumnStatistics) {
+        TTestWithReboots t;
+        t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
+            TPathVersion pathVersion;
+            {
+                TInactiveZone inactive(activeZone);
+                runtime.GetAppData().FeatureFlags.SetEnableMoveColumnTable(true);
+                TestCreateColumnTable(runtime, ++t.TxId, "/MyRoot", R"(
+                    Name: "Table"
+                    ColumnShardCount: 1
+                    Schema {
+                        Columns { Name: "timestamp" Type: "Timestamp" NotNull: true }
+                        Columns { Name: "data" Type: "Utf8" }
+                        KeyColumnNames: "timestamp"
+                    }
+                    MultiColumnStatistics { Name: "s1" ColumnNames: "data" Types: COUNT_MIN_SKETCH }
+                )");
+                t.TestEnv->TestWaitNotification(runtime, t.TxId);
+                pathVersion = TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"),
+                    {NLs::PathExist});
+            }
+
+            t.TestEnv->ReliablePropose(runtime, MoveTableRequest(++t.TxId, "/MyRoot/Table", "/MyRoot/TableMove", TTestTxConfig::SchemeShard, {pathVersion}),
+                {NKikimrScheme::StatusAccepted, NKikimrScheme::StatusMultipleModifications, NKikimrScheme::StatusPreconditionFailed});
+            t.TestEnv->TestWaitNotification(runtime, t.TxId);
+
+            {
+                TInactiveZone inactive(activeZone);
+                TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"), {NLs::PathNotExist});
+                TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/TableMove", true, true), {
+                    NLs::PathExist,
+                    NLs::CheckColumnTableMultiColumnStatistics("s1", {"data"}, {NKikimrSchemeOp::EMultiColumnStatisticsType::COUNT_MIN_SKETCH}),
+                });
+            }
+        });
+    }
 }
 

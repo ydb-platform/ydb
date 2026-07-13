@@ -16,7 +16,7 @@ import subprocess
 import sys
 from typing import List, Optional
 
-from ..common import PATHS, ensure_dir, die, repo_relative, setup_logging
+from ..common import PATHS, REPO_ROOT, ensure_dir, die, repo_relative, setup_logging
 
 
 log = logging.getLogger("timing.collect")
@@ -93,6 +93,7 @@ def main(argv: Optional[List[str]] = None) -> int:
             pass
 
     env = os.environ.copy()
+    env["YDB_REPO_ROOT"] = str(REPO_ROOT)
     env["YDB_TIMETRACE_DIR"] = str(tt_dir)
     env["YDB_TIMETRACE_GRANULARITY"] = args.granularity
     if args.force_retry:

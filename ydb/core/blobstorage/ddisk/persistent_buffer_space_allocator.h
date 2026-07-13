@@ -3,7 +3,7 @@
 #include "defs.h"
 #include "persistent_buffer_header.h"
 
-#include <library/cpp/containers/absl_flat_hash/flat_hash_map.h>
+#include <library/cpp/containers/absl/flat_hash_map.h>
 
 namespace NKikimr::NDDisk {
 
@@ -65,6 +65,9 @@ namespace NKikimr::NDDisk {
         ui32 VerifyFreeSpace();
 
     public:
+        ui32 LastLockedOwnedChunksIdx = Max<ui32>();
+        ui32 LockedChunkIdx = Max<ui32>();
+
         std::vector<ui32> OwnedChunks;
 
         TPersistentBufferSpaceAllocator(ui32 sectorsInChunk = 32768);
@@ -73,6 +76,12 @@ namespace NKikimr::NDDisk {
         void Free(const std::span<TPersistentBufferSectorInfo> locations);
         void MarkOccupied(std::span<const TPersistentBufferSectorInfo> locations);
         void AddNewChunk(ui32 chunkIdx);
+        void LockNextChunk();
+        bool IsChunkLocked() const {
+            return LockedChunkIdx != Max<ui32>();
+        }
+        void UnlockChunk();
+        bool DeallocateChunk();
         ui32 GetFreeSpace() const {
             return FreeSpace;
         }

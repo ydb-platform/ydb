@@ -7,8 +7,16 @@
 namespace NKikimr {
 namespace NSchemeShard {
 
+class TSchemeShard;
+struct TSetColumnConstraintOperationInfo;
+
 TString SerializeSetColumnConstraintColumnNames(const std::vector<TString>& columns);
 std::vector<TString> DeserializeSetColumnConstraintColumnNames(const TString& serialized);
+
+void FillSetColumnConstraint(
+    NKikimrSetColumnConstraint::TSetColumnConstraint& proto,
+    const TSetColumnConstraintOperationInfo& operationInfo,
+    TSchemeShard* self);
 
 
 struct TEvSetColumnConstraint {
@@ -17,6 +25,10 @@ struct TEvSetColumnConstraint {
         EvCreateResponse,
         EvGetRequest,
         EvGetResponse,
+        EvListRequest,
+        EvListResponse,
+        EvForgetRequest,
+        EvForgetResponse,
 
         EvEnd
     };
@@ -58,6 +70,42 @@ struct TEvSetColumnConstraint {
     };
 
     struct TEvGetResponse: public TEventPB<TEvGetResponse, NKikimrSetColumnConstraint::TEvGetResponse, EvGetResponse> {};
+
+    struct TEvListRequest: public TEventPB<TEvListRequest, NKikimrSetColumnConstraint::TEvListRequest, EvListRequest> {
+        TEvListRequest() = default;
+
+        explicit TEvListRequest(const TString& dbName, ui64 pageSize, const TString& pageToken) {
+            Record.SetDatabaseName(dbName);
+            Record.SetPageSize(pageSize);
+            Record.SetPageToken(pageToken);
+        }
+    };
+
+    struct TEvListResponse: public TEventPB<TEvListResponse, NKikimrSetColumnConstraint::TEvListResponse, EvListResponse> {
+        TEvListResponse() = default;
+    };
+
+    struct TEvForgetRequest: public TEventPB<TEvForgetRequest, NKikimrSetColumnConstraint::TEvForgetRequest, EvForgetRequest> {
+        TEvForgetRequest() = default;
+
+        explicit TEvForgetRequest(
+            const ui64 txId,
+            const TString& dbName,
+            ui64 operationId)
+        {
+            Record.SetTxId(txId);
+            Record.SetDatabaseName(dbName);
+            Record.SetOperationId(operationId);
+        }
+    };
+
+    struct TEvForgetResponse: public TEventPB<TEvForgetResponse, NKikimrSetColumnConstraint::TEvForgetResponse, EvForgetResponse> {
+        TEvForgetResponse() = default;
+
+        explicit TEvForgetResponse(const ui64 txId) {
+            Record.SetTxId(txId);
+        }
+    };
 }; // TEvSetColumnConstraint
 
 } // NSchemeShard

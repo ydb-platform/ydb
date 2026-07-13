@@ -345,6 +345,11 @@ namespace NSchemeShardUT_Private {
     DROP_BY_PATH_ID_HELPERS(DropStreamingQuery);
     void TestCreateStreamingQueryOrReplace(TTestActorRuntime& runtime, ui64 txId, const TString& parentPath, const TString& scheme, const TVector<TExpectedResult>& expectedResults);
 
+    // test shard set
+    GENERIC_HELPERS(CreateTestShardSet);
+    GENERIC_HELPERS(DropTestShardSet);
+    TString CreateTestShardSetConfig(const TString& name, ui64 count = 1);
+
     #undef DROP_BY_PATH_ID_HELPERS
     #undef GENERIC_WITH_ATTRS_HELPERS
     #undef GENERIC_HELPERS
@@ -646,12 +651,15 @@ namespace NSchemeShardUT_Private {
         TTestActorRuntime& runtime, ui64 schemeShard, ui64 tabletId,
         NKikimrScheme::TEvFindTabletSubDomainPathIdResult::EStatus expected = NKikimrScheme::TEvFindTabletSubDomainPathIdResult::SUCCESS);
 
-    void CreateAlterLoginCreateUser(TTestActorRuntime& runtime, ui64 txId, const TString& database,
-        const TString& user, const TString& password,
-        const TVector<TExpectedResult>& expectedResults = {{NKikimrScheme::StatusSuccess}});
+    struct TTestPasswordHashes {
+        TString HashedPassword;  // new-format hash (base64 JSON)
+        TString ScramServerKey;
+    };
+
+    TTestPasswordHashes MakeTestPasswordHashes(const TString& password);
 
     void CreateAlterLoginCreateUser(TTestActorRuntime& runtime, ui64 txId, const TString& database,
-        const TString& user, const TString& hashedPassword, const TString& hashedPasswordOldFormat,
+        const TString& user, const TString& hashedPassword,
         const TVector<TExpectedResult>& expectedResults = {{NKikimrScheme::StatusSuccess}});
 
     void CreateAlterLoginRemoveUser(TTestActorRuntime& runtime, ui64 txId, const TString& database,
@@ -672,8 +680,7 @@ namespace NSchemeShardUT_Private {
         const TString& member, const TString& group,
         const TVector<TExpectedResult>& expectedResults = {{NKikimrScheme::StatusSuccess}});
 
-    NKikimrScheme::TEvLoginResult Login(TTestActorRuntime& runtime,
-        const TString& user, const TString& password);
+    NKikimrScheme::TEvLoginResult LoginExternal(TTestActorRuntime& runtime, const TString& user);
 
     NKikimrScheme::TEvLoginResult Login(TTestActorRuntime& runtime,
         const TString& user, NLoginProto::ESaslAuthMech::SaslAuthMech authMech,
@@ -691,12 +698,6 @@ namespace NSchemeShardUT_Private {
 
     void ChangeIsEnabledUser(TTestActorRuntime& runtime, ui64 txId, const TString& database,
         const TString& user, bool isEnabled);
-
-    void ChangePasswordUser(TTestActorRuntime& runtime, ui64 txId, const TString& database,
-        const TString& user, const TString& password);
-
-    void ChangePasswordHashUser(TTestActorRuntime& runtime, ui64 txId, const TString& database,
-        const TString& user, const TString& hash);
 
     // Mimics data query to a single table with multiple partitions
     class TFakeDataReq {
@@ -800,7 +801,17 @@ namespace NSchemeShardUT_Private {
 
     void MeteringDataEqual(const TString& leftMsg, const TString& rightMsg);
 
-    NKikimrSetColumnConstraint::TEvCreateResponse TestSetColumnConstraint(TTestActorRuntime& runtime, ui64 txId, ui64 schemeShard, const TString& dbName, const TString& tablePath, const TVector<TString>& notNullColumns, bool skipSettings = false);
+    NKikimrSetColumnConstraint::TEvCreateResponse TestSetColumnConstraint(TTestActorRuntime& runtime, ui64 txId, ui64 schemeShard, const TString& dbName, const TString& tablePath, const TVector<TString>& notNullColumns);
+    NKikimrSetColumnConstraint::TEvCreateResponse TestSetColumnConstraintWithoutSettings(TTestActorRuntime& runtime, ui64 txId, ui64 schemeShard, const TString& dbName, const TString& tablePath, const TVector<TString>& notNullColumns);
+    NKikimrSetColumnConstraint::TEvCreateResponse TestSetColumnConstraint(TTestActorRuntime& runtime, ui64 txId, ui64 schemeShard, const TString& dbName, const TString& tablePath, const TVector<TString>& notNullColumns, const TString& userSID);
+    NKikimrSetColumnConstraint::TEvCreateResponse TestSetColumnConstraint(TTestActorRuntime& runtime, ui64 txId, ui64 schemeShard, const TString& dbName, const TString& tablePath, const TVector<TString>& notNullColumns, const TString& userSID, bool skipSettings);
     void AsyncSetColumnConstraint(TTestActorRuntime& runtime, ui64 txId, ui64 schemeShard, const TString& dbName, const TString& tablePath, const TVector<TString>& notNullColumns);
+    NKikimrSetColumnConstraint::TEvListResponse TestListSetColumnConstraint(TTestActorRuntime& runtime, ui64 schemeShard, const TString &dbName);
+    NKikimrSetColumnConstraint::TEvListResponse TestListSetColumnConstraint(TTestActorRuntime& runtime, ui64 schemeShard, const TString &dbName,
+            ui64 pageSize, const TString& pageToken, Ydb::StatusIds::StatusCode expectedStatus = Ydb::StatusIds::SUCCESS);
+    NKikimrSetColumnConstraint::TEvForgetResponse TestForgetSetColumnConstraint(TTestActorRuntime& runtime, ui64 schemeshardId, ui64 txId, const TString& dbName, ui64 operationId,
+            Ydb::StatusIds::StatusCode expectedStatus = Ydb::StatusIds::SUCCESS);
+    NKikimrSetColumnConstraint::TEvForgetResponse TestForgetSetColumnConstraint(TTestActorRuntime& runtime, ui64 txId, const TString& dbName, ui64 operationId,
+            Ydb::StatusIds::StatusCode expectedStatus = Ydb::StatusIds::SUCCESS);
     void TestCheckColumnsNotNull(TTestActorRuntime& runtime, const TString& tablePath, const std::map<TString, bool>& expectedColumnNotNullStates);
 } //NSchemeShardUT_Private

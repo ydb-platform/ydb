@@ -1,5 +1,3 @@
-/* syntax version 1 */
-/* postgres can not */
 $make_struct = Callable(
     Callable<(String) -> Struct<lel: Int32>>,
     ($_string) -> {

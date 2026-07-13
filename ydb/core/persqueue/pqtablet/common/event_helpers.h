@@ -33,6 +33,12 @@ bool IsWriteTxOperation(const NKikimrPQ::TPartitionOperation& operation)
     return !isRead;
 }
 
+inline
+bool IsDeferredPublicationTxOperation(const NKikimrPQ::TPartitionOperation& operation)
+{
+    return operation.HasWrite() && operation.GetWrite().HasDeferredPublication();
+}
+
 template <class C>
 bool AllExistingWritesSkipConflictCheck(const C& ops)
 {

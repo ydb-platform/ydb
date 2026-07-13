@@ -3,6 +3,7 @@
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/kqp/expr_nodes/kqp_expr_nodes.h>
 #include <ydb/core/kqp/opt/cbo/cbo_interesting_orderings.h>
+#include <ydb/core/kqp/opt/cbo/cbo_optimizer_hints.h>
 #include <ydb/core/kqp/opt/cbo/solver/kqp_opt_join_cost_based.h>
 #include <ydb/core/kqp/opt/cbo/solver/kqp_opt_stat.h>
 #include <ydb/core/kqp/opt/kqp_opt.h>
@@ -247,30 +248,12 @@ void InferStatisticsForKqpTable(
     // full path.
     {
         auto optHints = kqpCtx.GetOptimizerHints();
-        THashSet<TString> candidates;
-        if (!alias.empty()) {
-            candidates.insert(alias);
-        }
-        TString pathStr = path.StringValue();
-        candidates.insert(pathStr);
-        if (auto pos = pathStr.rfind('/'); pos != TString::npos && pos + 1 < pathStr.size()) {
-            candidates.insert(pathStr.substr(pos + 1));
-        }
-
-        auto applySingleLabelHint = [&](TCardinalityHints& hints, double& target) {
-            for (auto& h : hints.Hints) {
-                if (h.JoinLabels.size() == 1 && candidates.contains(h.JoinLabels[0])) {
-                    target = h.ApplyHint(target);
-                    break;
-                }
-            }
-        };
-
+        auto candidates = BuildTableHintCandidates(alias, path.StringValue());
         if (optHints.CardinalityHints) {
-            applySingleLabelHint(*optHints.CardinalityHints, stats->Nrows);
+            ApplySingleLabelHint(*optHints.CardinalityHints, candidates, stats->Nrows);
         }
         if (optHints.BytesHints) {
-            applySingleLabelHint(*optHints.BytesHints, stats->ByteSize);
+            ApplySingleLabelHint(*optHints.BytesHints, candidates, stats->ByteSize);
         }
     }
 

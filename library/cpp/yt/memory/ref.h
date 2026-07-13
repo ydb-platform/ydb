@@ -54,6 +54,9 @@ public:
     //! Creates a TRef for a part of existing range.
     TRef Slice(size_t startOffset, size_t endOffset) const;
 
+    //! Returns |true| if #other's range lies entirely within this range.
+    bool Contains(TRef other) const;
+
     //! Compares the content for bitwise equality.
     static bool AreBitwiseEqual(TRef lhs, TRef rhs);
 };
@@ -158,9 +161,6 @@ public:
 
     //! Same as above but the memory tag is specified in #tagCookie.
     static TSharedRef FromString(std::string str, TRefCountedTypeCookie tagCookie);
-
-    //! Creates a TSharedRef from a zero-terminated C string.
-    static TSharedRef FromString(const char* str);
 
     //! Creates a TSharedRef for a given blob taking ownership of its content.
     static TSharedRef FromBlob(TBlob&& blob);

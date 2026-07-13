@@ -5,6 +5,7 @@ import json
 import os
 import re
 import subprocess
+import typing
 
 try:
     from StringIO import StringIO
@@ -814,6 +815,7 @@ def _REGISTER_NO_CHECK_IMPORTS(unit: ymake.Unit):
         unit.onresource(['DONT_COMPRESS', '-', 'py/no_check_imports/{}="{}"'.format(_common.pathid(s), s)])
 
 
+@ymake.macro
 @df.with_fields(
     (
         df.TestedProjectName.normalized_basename,
@@ -825,7 +827,7 @@ def _REGISTER_NO_CHECK_IMPORTS(unit: ymake.Unit):
         df.NoCheck.value,
     )
 )
-def onadd_check_py_imports(fields, unit, *args):
+def ADD_CHECK_PY_IMPORTS(fields: typing.Any, unit: ymake.Unit, *args: tuple[str, ...]):
     if unit.get("CPP_ANALYSIS_MODE") == "yes":  # graph changed for clang_tidy and iwyu tests
         return
 
@@ -851,6 +853,7 @@ def onadd_check_py_imports(fields, unit, *args):
         unit.set_property(["DART_DATA", data])
 
 
+@ymake.macro
 @df.with_fields(
     PY_EXEC_FIELDS_BASE
     + (
@@ -864,7 +867,7 @@ def onadd_check_py_imports(fields, unit, *args):
         df.ParallelTestsInSingleNode.value,
     )
 )
-def onadd_pytest_bin(fields, unit, *args):
+def ADD_PYTEST_BIN(fields: typing.Any, unit: ymake.Unit, *args: tuple[str, ...]):
     if unit.get("CPP_ANALYSIS_MODE") == "yes":  # graph changed for clang_tidy and iwyu tests
         return
     flat_args, spec_args = _common.sort_by_keywords({'RUNNER_BIN': 1}, args)
@@ -891,6 +894,7 @@ def onadd_pytest_bin(fields, unit, *args):
         unit.set_property(["DART_DATA", data])
 
 
+@ymake.macro
 @df.with_fields(
     (
         df.SourceFolderPath.normalized,
@@ -926,7 +930,7 @@ def onadd_pytest_bin(fields, unit, *args):
         df.ParallelTestsInSingleNode.value,
     )
 )
-def onjava_test(fields, unit, *args):
+def JAVA_TEST(fields: typing.Any, unit: ymake.Unit, *args: tuple[str, ...]):
     if unit.get("CPP_ANALYSIS_MODE") == "yes":  # graph changed for clang_tidy and iwyu tests
         return
 
@@ -953,6 +957,7 @@ def onjava_test(fields, unit, *args):
         unit.set_property(['DART_DATA', data])
 
 
+@ymake.macro
 @df.with_fields(
     (
         df.SourceFolderPath.normalized,
@@ -965,7 +970,7 @@ def onjava_test(fields, unit, *args):
         df.Classpath.value,
     )
 )
-def onjava_test_deps(fields, unit, *args):
+def JAVA_TEST_DEPS(fields: typing.Any, unit: ymake.Unit, *args: tuple[str, ...]):
     if unit.get("CPP_ANALYSIS_MODE") == "yes":  # graph changed for clang_tidy and iwyu tests
         return
 
@@ -999,6 +1004,7 @@ def RUN(unit: ymake.Unit, *args: tuple[str, ...]):
     unit.set(["EXECTEST_COMMAND_VALUE", exectest_cmd])
 
 
+@ymake.macro
 @df.with_fields(
     PY_EXEC_FIELDS_BASE
     + (
@@ -1008,7 +1014,7 @@ def RUN(unit: ymake.Unit, *args: tuple[str, ...]):
         df.DockerImage.value,
     )
 )
-def onsetup_exectest(fields, unit, *args):
+def SETUP_EXECTEST(fields: typing.Any, unit: ymake.Unit, *args: tuple[str, ...]):
     if unit.get("CPP_ANALYSIS_MODE") == "yes":  # graph changed for clang_tidy and iwyu tests
         return
     command = unit.get(["EXECTEST_COMMAND_VALUE"])
@@ -1044,6 +1050,7 @@ def SETUP_RUN_PYTHON(unit: ymake.Unit):
         unit.ondepends('contrib/tools/python')
 
 
+@ymake.macro
 @df.with_fields(
     (
         df.TestFiles.cpp_linter_files,
@@ -1051,7 +1058,7 @@ def SETUP_RUN_PYTHON(unit: ymake.Unit):
     )
     + LINTER_FIELDS_BASE
 )
-def on_add_cpp_linter_check(fields, unit, *args):
+def _ADD_CPP_LINTER_CHECK(fields: typing.Any, unit: ymake.Unit, *args: tuple[str, ...]):
     if unit.get("CPP_ANALYSIS_MODE") == "yes":
         return
 
@@ -1085,6 +1092,7 @@ def on_add_cpp_linter_check(fields, unit, *args):
         unit.set_property(["DART_DATA", data])
 
 
+@ymake.macro
 @df.with_fields(
     (
         df.TestFiles.py_linter_files,
@@ -1092,7 +1100,7 @@ def on_add_cpp_linter_check(fields, unit, *args):
     )
     + LINTER_FIELDS_BASE
 )
-def on_add_py_linter_check(fields, unit, *args):
+def _ADD_PY_LINTER_CHECK(fields: typing.Any, unit: ymake.Unit, *args: tuple[str, ...]):
     if unit.get("CPP_ANALYSIS_MODE") == "yes":
         return
 
@@ -1127,6 +1135,7 @@ def on_add_py_linter_check(fields, unit, *args):
         unit.set_property(["DART_DATA", data])
 
 
+@ymake.macro
 @df.with_fields(
     (
         df.TestFiles.from_macro_args,
@@ -1134,7 +1143,7 @@ def on_add_py_linter_check(fields, unit, *args):
     )
     + LINTER_FIELDS_BASE
 )
-def on_add_custom_explicit_linter_check(fields, unit, *args):
+def _ADD_CUSTOM_EXPLICIT_LINTER_CHECK(fields: typing.Any, unit: ymake.Unit, *args: tuple[str, ...]):
     if unit.get("TIDY") == "yes":
         return
     no_lint_value = _common.get_no_lint_value(unit)

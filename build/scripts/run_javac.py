@@ -9,6 +9,7 @@ import re
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 import build_java_with_error_prone2 as java_error_prone
 import setup_java_tmpdir as java_tmpdir
+import javac_daemon_client as jdc
 
 
 def parse_args():
@@ -90,10 +91,45 @@ def main():
             sys.stderr.write('No files to compile, javac is not launched.\n')
 
     else:
-        p = subprocess.Popen(cmd, stderr=subprocess.PIPE)
-        _, err = p.communicate()
-        rc = p.wait()
-        err = err.decode()
+        # cmd[0] is either the javac binary (plain javac) or the java binary (kotlin).
+        if jdc.is_enabled() and not opts.error_prone:
+            if opts.kotlin:
+                # cmd = [java_bin, (<jvm args>...,) '-jar', kotlin_compiler.jar, kotlinc_args...]
+                # Derive javac_bin from java_bin (same JDK).
+                java_bin = cmd[0]
+                javac_bin = os.path.join(os.path.dirname(java_bin), 'javac')
+                # Find '-jar' sentinel to split JVM args from kotlinc args.
+                jar_idx = cmd.index('-jar')
+                kotlin_compiler = cmd[jar_idx + 1]
+                # Keep the launcher/compiler split from the command line:
+                #   pre-'-jar'  -> JVM launcher flags (-D props, --add-opens,
+                #                  --enable-native-access, -Xss, ...)
+                #   post-'-jar' -> kotlinc compiler args (pure compiler options;
+                #                  bare --enable-native-access etc. here are NOT
+                #                  launcher flags and pass straight through).
+                # The client classifies only the launcher flags: semantic ones
+                # select/launch the right side-daemon, resource flags force a
+                # subprocess fallback so they are never silently dropped.
+                jvm_launcher_flags = cmd[1:jar_idx]
+                kotlinc_args = cmd[jar_idx + 2 :]
+                rc, err_bytes = jdc.compile_kotlin(
+                    javac_bin, kotlin_compiler, kotlinc_args, jvm_launcher_flags=jvm_launcher_flags
+                )
+            else:
+                # Pass "-J..." launcher flags through to the daemon client.
+                # The client classifies them (java.conf sends e.g. -J--add-opens
+                # for error-prone, -J-Xss128m for lombok): semantic flags route to
+                # a side-daemon launched with them; resource flags (-Xss/-Xmx/-XX:)
+                # force a subprocess fallback so they are never silently dropped.
+                # (Previously all -J flags were stripped here, which silently lost
+                # required settings — Issue B.)
+                rc, err_bytes = jdc.compile_raw(cmd[0], cmd[1:])
+            err = err_bytes.decode('utf-8', errors='replace')
+        else:
+            p = subprocess.Popen(cmd, stderr=subprocess.PIPE)
+            _, err_bytes = p.communicate()
+            rc = p.wait()
+            err = err_bytes.decode()
 
         if opts.remove_notes:
             err = remove_notes(err)

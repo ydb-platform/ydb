@@ -1,4 +1,3 @@
-/* postgres can not */
 $in = (
     select * from plato.Input where key = "150"
     union all

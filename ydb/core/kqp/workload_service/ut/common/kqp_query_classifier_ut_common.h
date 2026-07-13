@@ -21,7 +21,8 @@ inline TResourcePoolClassifierConfig MakeClassifierConfig(
     const TString& database, const TString& name, i64 rank,
     const TString& resourcePool,
     std::optional<TString> memberName = std::nullopt,
-    std::optional<TString> hasAppName = std::nullopt)
+    std::optional<TString> hasAppName = std::nullopt,
+    std::optional<TString> action = std::nullopt)
 {
     NJson::TJsonValue json(NJson::JSON_MAP);
     json["resource_pool"] = resourcePool;
@@ -30,6 +31,9 @@ inline TResourcePoolClassifierConfig MakeClassifierConfig(
     }
     if (hasAppName) {
         json["has_app_name"] = *hasAppName;
+    }
+    if (action) {
+        json["action"] = *action;
     }
 
     TResourcePoolClassifierConfig config;
@@ -79,6 +83,7 @@ struct TClassifyTestCase {
     i64 Rank = 100;
     std::optional<TString> ClassifierMemberName;
     std::optional<TString> ClassifierHasAppName;
+    std::optional<TString> ClassifierAction;
 
     TString ContextAppName;
     TString ContextMemberName;
@@ -92,6 +97,7 @@ struct TClassifyTestCase {
         TString ResourcePool;
         std::optional<TString> MemberName;
         std::optional<TString> HasAppName;
+        std::optional<TString> Action;
     };
     std::vector<TExtraClassifier> ExtraClassifiers;
 
@@ -99,12 +105,12 @@ struct TClassifyTestCase {
         std::vector<TResourcePoolClassifierConfig> configs;
         configs.push_back(MakeClassifierConfig(
             TEST_DB, "c_main", Rank, ResourcePool,
-            ClassifierMemberName, ClassifierHasAppName));
+            ClassifierMemberName, ClassifierHasAppName, ClassifierAction));
 
         for (const auto& extra : ExtraClassifiers) {
             configs.push_back(MakeClassifierConfig(
                 TEST_DB, extra.Name, extra.Rank, extra.ResourcePool,
-                extra.MemberName, extra.HasAppName));
+                extra.MemberName, extra.HasAppName, extra.Action));
         }
 
         auto classifierSnap = MakeClassifierSnapshot(std::move(configs));

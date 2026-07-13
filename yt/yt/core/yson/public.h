@@ -12,9 +12,9 @@ namespace NYT::NYson {
 
 enum class ETokenType;
 
-class TYsonProducer;
 template <class... TAdditionalArgs>
-class TExtendedYsonProducer;
+class TParametricYsonProducer;
+using TYsonProducer = TParametricYsonProducer<>;
 
 class TYsonInput;
 class TYsonOutput;

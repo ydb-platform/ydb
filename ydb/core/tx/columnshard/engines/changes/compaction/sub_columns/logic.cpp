@@ -53,12 +53,10 @@ TColumnPortionResult TSubColumnsMerger::DoExecute(const TChunkMergeContext& cont
         const auto addKV = [&](const ui32 sourceKeyIndex, const NArrow::NAccessor::NSubColumns::TGeneralIterator& iter, const bool isColumnKey) {
             auto commonKeyInfo = RemapKeyIndex.RemapIndex(sourceIdx, sourceKeyIndex, isColumnKey);
             if (commonKeyInfo.GetIsColumnKey()) {
-                builder.AddColumnKV(commonKeyInfo.GetCommonKeyIndex(), iter);
-                columnStats.Add(iter.GetValueSize());
+                columnStats.Add(builder.AddColumnKV(commonKeyInfo.GetCommonKeyIndex(), iter));
             } else {
                 const auto bj = iter.GetValueAsBinaryJson();
-                builder.AddOtherKV(commonKeyInfo.GetCommonKeyIndex(), TStringBuf(bj.data(), bj.size()));
-                otherStats.Add(bj.size());
+                otherStats.Add(builder.AddOtherKV(commonKeyInfo.GetCommonKeyIndex(), TStringBuf(bj.data(), bj.size())));
             }
         };
         const auto finishRecord = [&]() {

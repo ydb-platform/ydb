@@ -95,7 +95,8 @@ private:
         {
         }
 
-        void AddRecord(const ui32 recordIndex, const TGeneralIterator& it) {
+        // Returns the number of value bytes actually stored, since a re-encoded value's stored size differs from its size in the source.
+        ui32 AddRecord(const ui32 recordIndex, const TGeneralIterator& it) {
             const bool passthrough = it.GetValueType() == TargetValueType;
 
             struct TVisitor {
@@ -103,29 +104,34 @@ private:
                 const TGeneralIterator& It;
                 const bool Passthrough;
 
-                void operator()(TSparsedBuilder& builder) const {
+                ui32 operator()(TSparsedBuilder& builder) const {
                     // Sparsed columns are always binary-backed, so the passthrough value is its storage bytes.
                     if (Passthrough) {
                         builder.AddRecord(RecordIndex, It.GetStorageView());
+                        return It.GetValueSize();
                     } else {
                         const auto bj = It.GetValueAsBinaryJson();
                         builder.AddRecord(RecordIndex, TStringBuf(bj.data(), bj.size()));
+                        return bj.size();
                     }
                 }
 
-                void operator()(TPlainRuntimeBuilder& builder) const {
+                ui32 operator()(TPlainRuntimeBuilder& builder) const {
                     if (Passthrough) {
                         builder.AddNativeValue(RecordIndex, It.GetArray(), It.GetLocalIndex());
+                        return It.GetValueSize();
                     } else {
                         const auto bj = It.GetValueAsBinaryJson();
                         builder.AddBinaryValue(RecordIndex, TStringBuf(bj.data(), bj.size()));
+                        return bj.size();
                     }
                 }
             };
 
-            std::visit(TVisitor{ recordIndex, it, passthrough }, Builder);
+            const ui32 storedSize = std::visit(TVisitor{ recordIndex, it, passthrough }, Builder);
             ++FilledRecordsCount;
-            FilledRecordsSize += it.GetValueSize();
+            FilledRecordsSize += storedSize;
+            return storedSize;
         }
 
         std::shared_ptr<NArrow::NAccessor::IChunkedArray> Finish(const ui32 recordsCount) {
@@ -164,15 +170,17 @@ public:
 
     void FinishRecord();
 
-    void AddColumnKV(const ui32 commonKeyIndex, const TGeneralIterator& iter) {
+    ui32 AddColumnKV(const ui32 commonKeyIndex, const TGeneralIterator& iter) {
         AFL_VERIFY(commonKeyIndex < ColumnBuilders.size());
-        ColumnBuilders[commonKeyIndex].AddRecord(RecordIndex, iter);
-        SumValuesSize += iter.GetValueSize();
+        const ui32 storedSize = ColumnBuilders[commonKeyIndex].AddRecord(RecordIndex, iter);
+        SumValuesSize += storedSize;
+        return storedSize;
     }
 
-    void AddOtherKV(const ui32 commonKeyIndex, const std::string_view value) {
+    ui32 AddOtherKV(const ui32 commonKeyIndex, const std::string_view value) {
         OthersBuilder->Add(RecordIndex, commonKeyIndex, value);
         SumValuesSize += value.size();
+        return value.size();
     }
 };
 

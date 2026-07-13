@@ -60,7 +60,14 @@ jobs:
             const hasDocs = files.some((f) => f.filename.startsWith('ydb/docs/'));
             core.setOutput('has_docs', hasDocs ? 'true' : 'false');
 
-      - name: Dispatch docs build
+      - name: Checkout PR head
+        if: steps.docs-changes.outputs.has_docs == 'true'
+        uses: actions/checkout@v5
+        with:
+          ref: refs/pull/${{ github.event.pull_request.number }}/head
+
+      - name: Get commit SHA
+        id: sha
         if: steps.docs-changes.outputs.has_docs == 'true'
         run: echo "value=$(git rev-parse HEAD)" >> $GITHUB_OUTPUT
 

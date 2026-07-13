@@ -32,17 +32,20 @@ $issue_periods = (
     FROM `github_data/issue_open_periods` AS p
     UNION ALL
     SELECT
-        t.project_item_id AS project_item_id,
-        t.issue_number AS issue_number,
-        t.created_date AS period_start,
-        Cast(t.closed_at AS Date) AS period_end
-    FROM `github_data/issues` AS t
-    WHERE NOT EXISTS (
-        SELECT 1
-        FROM `github_data/issue_open_periods` AS p
-        WHERE p.issue_number = t.issue_number
-          AND p.project_item_id = t.project_item_id
-    )
+        t2.project_item_id AS project_item_id,
+        t2.issue_number AS issue_number,
+        t2.created_date AS period_start,
+        Cast(t2.closed_at AS Date) AS period_end
+    FROM `github_data/issues` AS t2
+    LEFT JOIN (
+        SELECT DISTINCT
+            ep.project_item_id AS project_item_id,
+            ep.issue_number AS issue_number
+        FROM `github_data/issue_open_periods` AS ep
+    ) AS has_periods
+        ON has_periods.issue_number = t2.issue_number
+        AND has_periods.project_item_id = t2.project_item_id
+    WHERE has_periods.issue_number IS NULL
 );
 
 $issues_in_window = (

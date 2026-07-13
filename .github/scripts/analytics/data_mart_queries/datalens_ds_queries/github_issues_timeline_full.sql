@@ -119,12 +119,15 @@ CROSS JOIN (
                 t2.created_date AS period_start,
                 Cast(t2.closed_at AS Date) AS period_end
             FROM `github_data/issues` AS t2
-            WHERE NOT EXISTS (
-                SELECT 1
-                FROM `github_data/issue_open_periods` AS p2
-                WHERE p2.issue_number = t2.issue_number
-                  AND p2.project_item_id = t2.project_item_id
-            )
+            LEFT JOIN (
+                SELECT DISTINCT
+                    ep.project_item_id AS project_item_id,
+                    ep.issue_number AS issue_number
+                FROM `github_data/issue_open_periods` AS ep
+            ) AS has_periods
+                ON has_periods.issue_number = t2.issue_number
+                AND has_periods.project_item_id = t2.project_item_id
+            WHERE has_periods.issue_number IS NULL
         ) AS ip
         WHERE ip.period_start <= CurrentUtcDate()
           AND (ip.period_end IS NULL OR ip.period_end >= CurrentUtcDate() - $timeline_days * Interval("P1D"))
@@ -159,12 +162,15 @@ LEFT JOIN (
             t2.created_date AS period_start,
             Cast(t2.closed_at AS Date) AS period_end
         FROM `github_data/issues` AS t2
-        WHERE NOT EXISTS (
-            SELECT 1
-            FROM `github_data/issue_open_periods` AS p2
-            WHERE p2.issue_number = t2.issue_number
-              AND p2.project_item_id = t2.project_item_id
-        )
+        LEFT JOIN (
+            SELECT DISTINCT
+                ep.project_item_id AS project_item_id,
+                ep.issue_number AS issue_number
+            FROM `github_data/issue_open_periods` AS ep
+        ) AS has_periods
+            ON has_periods.issue_number = t2.issue_number
+            AND has_periods.project_item_id = t2.project_item_id
+        WHERE has_periods.issue_number IS NULL
     ) AS ip
     WHERE ip.period_start <= dt_open.d
       AND (ip.period_end IS NULL OR ip.period_end > dt_open.d)
@@ -191,12 +197,15 @@ LEFT JOIN (
             t2.created_date AS period_start,
             Cast(t2.closed_at AS Date) AS period_end
         FROM `github_data/issues` AS t2
-        WHERE NOT EXISTS (
-            SELECT 1
-            FROM `github_data/issue_open_periods` AS p2
-            WHERE p2.issue_number = t2.issue_number
-              AND p2.project_item_id = t2.project_item_id
-        )
+        LEFT JOIN (
+            SELECT DISTINCT
+                ep.project_item_id AS project_item_id,
+                ep.issue_number AS issue_number
+            FROM `github_data/issue_open_periods` AS ep
+        ) AS has_periods
+            ON has_periods.issue_number = t2.issue_number
+            AND has_periods.project_item_id = t2.project_item_id
+        WHERE has_periods.issue_number IS NULL
     ) AS ip
     WHERE ip.period_end IS NOT NULL
 ) AS c

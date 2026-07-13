@@ -210,13 +210,14 @@ TMaybe<TString> ParseLegacyReadPayload(const TString& raw) {
 TMaybe<TString> TryReadFirstTopicMessage(
     NPersQueue::TTestServer& server,
     const TString& topicShortName,
-    TDuration timeout = TDuration::Seconds(30))
+    TDuration timeout = TDuration::Seconds(30),
+    ui32 partitionId = 0)
 {
     const TString topic = "rt3.dc1--" + topicShortName;
     const TInstant deadline = TInstant::Now() + timeout;
     while (TInstant::Now() < deadline) {
         THolder<NMsgBusProxy::TBusPersQueue> request = TRequestReadPQ{
-            topic, 0, 0, 100, "user", 0}.GetRequest();
+            topic, partitionId, 0, 100, "user", 0}.GetRequest();
         request.Get()->Record.SetTicket("root@builtin");
 
         const auto response = server.AnnoyingClient->CallPersQueueGRPC(request->Record);
@@ -2003,6 +2004,70 @@ Y_UNIT_TEST(PublishAfterStreamWriteClearsRegistryAndMakesDataVisible) {
     const auto message = TryReadFirstTopicMessage(fixture.Server, fixture.TopicShortName);
     UNIT_ASSERT(message.Defined());
     UNIT_ASSERT_VALUES_EQUAL(*message, TString(payload));
+}
+
+Y_UNIT_TEST(PublishAfterStreamWriteToTwoPartitionsMakesDataVisible) {
+    auto fixture = TDeferredStreamWriteFixture::Enabled("finalize-two-partitions-topic", "ext-two-partitions");
+    GrantPublicationRegistryDelete(fixture.Server, "root@builtin");
+
+    constexpr TStringBuf payload0 = "deferred-payload-part-0";
+    constexpr TStringBuf payload1 = "deferred-payload-part-1";
+    {
+        auto session = fixture.OpenWriteStream("producer-part-0", 0);
+        WriteAndExpectWriteResponse(*session->Stream, MakeStreamWriteRequest(
+            1,
+            TString(payload0),
+            std::make_pair(fixture.IntPublicationId, fixture.ExtPublicationId)));
+    }
+    {
+        auto session = fixture.OpenWriteStream("producer-part-1", 1);
+        WriteAndExpectWriteResponse(*session->Stream, MakeStreamWriteRequest(
+            1,
+            TString(payload1),
+            std::make_pair(fixture.IntPublicationId, fixture.ExtPublicationId)));
+    }
+
+    const auto publishOutcome = CallPublish(*fixture.DeferredStub, "/Root", fixture.IntPublicationId);
+    UNIT_ASSERT(publishOutcome.RpcStatus.ok());
+    UNIT_ASSERT(publishOutcome.Operation.ready());
+    UNIT_ASSERT_VALUES_EQUAL(publishOutcome.Operation.status(), Ydb::StatusIds::SUCCESS);
+    UNIT_ASSERT_VALUES_EQUAL(CountPublications(fixture.Server, "root@builtin"), 0u);
+
+    const auto message0 = TryReadFirstTopicMessage(fixture.Server, fixture.TopicShortName, TDuration::Seconds(30), 0);
+    const auto message1 = TryReadFirstTopicMessage(fixture.Server, fixture.TopicShortName, TDuration::Seconds(30), 1);
+    UNIT_ASSERT(message0.Defined());
+    UNIT_ASSERT(message1.Defined());
+    UNIT_ASSERT_VALUES_EQUAL(*message0, TString(payload0));
+    UNIT_ASSERT_VALUES_EQUAL(*message1, TString(payload1));
+}
+
+Y_UNIT_TEST(CancelAfterStreamWriteToTwoPartitionsClearsRegistryWithoutData) {
+    auto fixture = TDeferredStreamWriteFixture::Enabled("finalize-cancel-two-partitions-topic", "ext-cancel-two-partitions");
+    GrantPublicationRegistryDelete(fixture.Server, "root@builtin");
+
+    {
+        auto session = fixture.OpenWriteStream("producer-cancel-0", 0);
+        WriteAndExpectWriteResponse(*session->Stream, MakeStreamWriteRequest(
+            1,
+            "deferred-payload-cancel-0",
+            std::make_pair(fixture.IntPublicationId, fixture.ExtPublicationId)));
+    }
+    {
+        auto session = fixture.OpenWriteStream("producer-cancel-1", 1);
+        WriteAndExpectWriteResponse(*session->Stream, MakeStreamWriteRequest(
+            1,
+            "deferred-payload-cancel-1",
+            std::make_pair(fixture.IntPublicationId, fixture.ExtPublicationId)));
+    }
+
+    const auto cancelOutcome = CallCancelPublication(*fixture.DeferredStub, "/Root", fixture.IntPublicationId);
+    UNIT_ASSERT(cancelOutcome.RpcStatus.ok());
+    UNIT_ASSERT(cancelOutcome.Operation.ready());
+    UNIT_ASSERT_VALUES_EQUAL(cancelOutcome.Operation.status(), Ydb::StatusIds::SUCCESS);
+    UNIT_ASSERT_VALUES_EQUAL(CountPublications(fixture.Server, "root@builtin"), 0u);
+
+    UNIT_ASSERT(!TryReadFirstTopicMessage(fixture.Server, fixture.TopicShortName, TDuration::Seconds(2), 0).Defined());
+    UNIT_ASSERT(!TryReadFirstTopicMessage(fixture.Server, fixture.TopicShortName, TDuration::Seconds(2), 1).Defined());
 }
 
 Y_UNIT_TEST(CancelAfterStreamWriteClearsRegistryWithoutData) {

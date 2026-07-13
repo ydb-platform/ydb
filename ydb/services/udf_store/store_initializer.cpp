@@ -32,7 +32,7 @@ void TUdfStoreInitializer::HandleTableCreated(TEvTableCreator::TEvCreateTableRes
             << "failed to create meta table: " << ev->Get()->Issues.ToString();
         ALS_ERROR(NKikimrServices::METADATA_PROVIDER)
             << "TUdfStoreInitializer: " << errorMessage;
-        Send(ParentId, new TEvUdfStoreInit::TEvStoreInitFailed(errorMessage));
+        Send(ParentId, new TEvStoreInitFailed(errorMessage));
         PassAway();
         return;
     }
@@ -68,7 +68,7 @@ void TUdfStoreInitializer::HandleKvVolumeCreated(
 {
     ALS_INFO(NKikimrServices::METADATA_PROVIDER)
         << "TUdfStoreInitializer: KV volume '" << KvVolumePath << "' created successfully";
-    Send(ParentId, new TEvUdfStoreInit::TEvStoreInitialized{KvVolumePath});
+    Send(ParentId, new TEvStoreInitialized{KvVolumePath});
     PassAway();
 }
 
@@ -77,7 +77,7 @@ void TUdfStoreInitializer::HandleRequestFailed(NMetadata::NRequest::TEvRequestFa
         << "failed to create KV volume: " << ev->Get()->GetErrorMessage();
     ALS_ERROR(NKikimrServices::METADATA_PROVIDER)
         << "TUdfStoreInitializer: " << errorMessage;
-    Send(ParentId, new TEvUdfStoreInit::TEvStoreInitFailed(errorMessage));
+    Send(ParentId, new TEvStoreInitFailed(errorMessage));
     PassAway();
 }
 

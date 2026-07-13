@@ -1,8 +1,6 @@
 #include "service.h"
-#include "store_initializer.h"
 #include "metadata_subscription/fetcher.h"
-#include "kv_body_store.h"
-#include "metadata_subscription/udf_meta.h"
+
 
 #include <ydb/services/metadata/service.h>
 #include <ydb/core/base/appdata.h>
@@ -36,7 +34,7 @@ void TUdfStoreService::Bootstrap() {
     Register(new TUdfStoreInitializer(SelfId(), KvStorageMedia));
 }
 
-void TUdfStoreService::Handle(TEvUdfStoreInit::TEvStoreInitialized::TPtr& ev) {
+void TUdfStoreService::Handle(TEvStoreInitialized::TPtr& ev) {
     KvVolumePath = ev->Get()->KvVolumePath;
     ALS_INFO(NKikimrServices::METADATA_PROVIDER)
         << "TUdfStoreService: infrastructure initialized, KV Volume path: " << KvVolumePath;
@@ -44,13 +42,13 @@ void TUdfStoreService::Handle(TEvUdfStoreInit::TEvStoreInitialized::TPtr& ev) {
         new NMetadata::NProvider::TEvSubscribeExternal(std::make_shared<TSnapshotsFetcher>()));
 }
 
-void TUdfStoreService::Handle(TEvUdfStoreInit::TEvStoreInitFailed::TPtr& ev) {
+void TUdfStoreService::Handle(TEvStoreInitFailed::TPtr& ev) {
     ALS_ERROR(NKikimrServices::METADATA_PROVIDER)
         << "TUdfStoreService: infrastructure initialization failed: " << ev->Get()->ErrorMessage;
     PassAway();
 }
 
-void TUdfStoreService::Handle(NProvider::TEvRefreshSubscriberData::TPtr& ev) {
+void TUdfStoreService::Handle(NMetadata::NProvider::TEvRefreshSubscriberData::TPtr& ev) {
     auto snapshot = ev->Get()->GetSnapshotPtrAs<TSnapshot>();
     if (!snapshot) {
         ALS_ERROR(NKikimrServices::METADATA_PROVIDER)
@@ -147,7 +145,7 @@ void TUdfStoreService::FetchNextBody() {
         pending.ExpectedSize));
 }
 
-void TUdfStoreService::Handle(TEvKvBodyStore::TEvReadBodyResponse::TPtr& ev) {
+void TUdfStoreService::Handle(TEvReadBodyResponse::TPtr& ev) {
     if (PendingUdfs.empty()) {
         ALS_WARN(NKikimrServices::METADATA_PROVIDER)
             << "TUdfStoreService: received unexpected TEvReadBodyResponse for UDF '"

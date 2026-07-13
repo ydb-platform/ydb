@@ -74,16 +74,15 @@ bool TUdfMeta::DeserializeFromRecord(const TDecoder& decoder, const Ydb::Value& 
     return true;
 }
 
-NInternal::TTableRecord TUdfMeta::SerializeToRecord() const {
-    //NOT IMPLEMENTED
-    return NInternal::TTableRecord{};
+NMetadata::NInternal::TTableRecord TUdfMeta::SerializeToRecord() const {
+    return {};
 }
 
 TString TUdfMeta::SerializeToString() const {
     return TStringBuilder() << "{" << "Md5: " << Md5 << ", Size: " << Size << ", Name: " << Name << ", Type: " << Type << ", Manifest: " << Manifest << "}";
 }
 
-IClassBehaviour::TPtr TUdfMeta::GetBehaviour() {
+NMetadata::IClassBehaviour::TPtr TUdfMeta::GetBehaviour() {
     return TUdfBehaviour::GetInstance();
 }
 

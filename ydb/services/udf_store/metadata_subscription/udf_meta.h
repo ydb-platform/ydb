@@ -8,14 +8,12 @@
 
 namespace NKikimr::NUdfStore {
 
-using namespace NMetadata;
-
 enum class EUdfType {
     NATIVE_UNSAFE,
     WASM
 };
 
-class TUdfMeta: public NModifications::TObject<TUdfMeta> {
+class TUdfMeta: public NMetadata::NModifications::TObject<TUdfMeta> {
 public:
     static inline const TString Md5ColName = "md5"; //Utf8 (PK)
     static inline const TString SizeColName = "size"; // Uint64
@@ -30,14 +28,14 @@ private:
     YDB_ACCESSOR_DEF(EUdfType, Type);
     YDB_ACCESSOR_DEF(TString, Manifest);
 public:
-    static IClassBehaviour::TPtr GetBehaviour();
+    static NMetadata::IClassBehaviour::TPtr GetBehaviour();
     static TVector<NKikimrSchemeOp::TColumnDescription> GetColumnDescription();
     static TVector<TString> GetPk();
 
     // TDecoder maps table columns to field indices.
     // Note: Body is NOT a table column; it is stored in a KV tablet.
-    class TDecoder: public NInternal::TDecoderBase {
-        using TBase = NInternal::TDecoderBase;
+    class TDecoder: public NMetadata::NInternal::TDecoderBase {
+        using TBase = NMetadata::NInternal::TDecoderBase;
     private:
         YDB_ACCESSOR(i32, Md5Idx, -1);
         YDB_ACCESSOR(i32, SizeIdx, -1);
@@ -52,10 +50,7 @@ public:
     };
 
     bool DeserializeFromRecord(const TDecoder& decoder, const Ydb::Value& rawValue);
-    NInternal::TTableRecord SerializeToRecord() const;
-    static TString GetTypeId() {
-        return "UdfMeta";
-    }
+    NMetadata::NInternal::TTableRecord SerializeToRecord() const;
     TString SerializeToString() const;
 
     bool operator<(const TUdfMeta& other) const {

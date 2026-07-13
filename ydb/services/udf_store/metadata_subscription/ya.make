@@ -3,7 +3,6 @@ YQL_LAST_ABI_VERSION()
 
 SRCS(
     udf_meta.cpp
-    manager.cpp
     snapshot.cpp
 )
 

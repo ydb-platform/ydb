@@ -22,7 +22,7 @@ CLUSTER_CONFIG = dict(
     }
 )
 
-UDF_OUTPUT_DIR = "/tmp/ydb_udfs"
+UDF_OUTPUT_DIR = yatest.common.output_path("ydb_udfs")
 
 
 # ---------------------------------------------------------------------------
@@ -274,7 +274,7 @@ def test_using_native_unsafe_udf():
         # Dicts::StrToInt("Sorted") returns a dict mapping number-word strings to ints,
         # e.g. {b'zero': 0, b'one': 1, ..., b'nine': 9}.
         rows = udf_query_result[0][0].rows
-        assert len(rows) == 1, "UDF query returned wrong number no rows"
+        assert len(rows) == 1, "UDF query returned wrong number of rows"
         result_value = list(rows[0].values())[0]
         assert isinstance(result_value, dict), (
             f"Dicts::StrToInt('Sorted') expected a dict, got {type(result_value)}: {result_value!r}"

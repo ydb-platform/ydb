@@ -7,7 +7,6 @@ ENV(YDB_DICTS_UDF_PATH="yql/essentials/udfs/examples/dicts/libdicts_udf.so")
 ENV(YDB_UPLOAD_UDF_PATH="ydb/tests/functional/udf_store/upload_udf/upload_udf")
 
 TEST_SRCS(
-    conftest.py
     test_udf_store.py
 )
 
@@ -22,7 +21,6 @@ DEPENDS(
 PEERDIR(
     ydb/tests/functional/udf_store/lib
     ydb/tests/library
-    ydb/tests/library/fixtures
     ydb/tests/oss/ydb_sdk_import
 )
 

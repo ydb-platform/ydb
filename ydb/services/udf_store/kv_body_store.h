@@ -1,4 +1,5 @@
 #pragma once
+#include "events.h"
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/core/base/tablet_pipe.h>
@@ -12,25 +13,6 @@
 
 namespace NKikimr::NUdfStore {
 
-// Events for KV body read operations
-struct TEvKvBodyStore {
-    enum EEv {
-        EvReadBodyResponse = EventSpaceBegin(NActors::TEvents::ES_PRIVATE) + 100,
-        EvEnd
-    };
-
-    struct TEvReadBodyResponse : public NActors::TEventLocal<TEvReadBodyResponse, EvReadBodyResponse> {
-        bool Success;
-        TString Name;
-        TString ErrorMessage;
-
-        TEvReadBodyResponse(bool success, const TString& name, const TString& errorMessage = {})
-            : Success(success)
-            , Name(name)
-            , ErrorMessage(errorMessage)
-        {}
-    };
-};
 
 // Actor that reads a UDF body from a KV tablet via the actor system,
 // then saves it to disk and loads it into the function registry.

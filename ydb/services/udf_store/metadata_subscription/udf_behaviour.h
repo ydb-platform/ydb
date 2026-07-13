@@ -1,22 +1,22 @@
 #pragma once
 #include "udf_meta.h"
-#include "initializer.h"
-#include "manager.h"
-#include <ydb/services/metadata/manager/common.h>
+#include <ydb/services/metadata/abstract/initialization.h>
+#include <ydb/services/metadata/manager/abstract.h>
 
 namespace NKikimr::NUdfStore {
 
-class TUdfBehaviour: public TClassBehaviour<TUdfMeta> {
-private:
-protected:
-    virtual NInitializer::IInitializationBehaviour::TPtr ConstructInitializer() const override {
-        return std::make_shared<TUdfInitializer>();
+class TUdfBehaviour: public NMetadata::TClassBehaviour<TUdfMeta> {
+    virtual NMetadata::NInitializer::IInitializationBehaviour::TPtr ConstructInitializer() const override {
+        return {};
     }
-    virtual NModifications::IOperationsManager::TPtr ConstructOperationsManager() const override {
-        return std::make_shared<TUdfManager>();
+    virtual NMetadata::NModifications::IOperationsManager::TPtr ConstructOperationsManager() const override {
+        return {};
     }
     virtual TString GetInternalStorageTablePath() const override {
         return "udf_store/meta";
+    }
+    virtual TString GetTypeId() const override {
+        return "UdfMeta";
     }
 
 public:
@@ -26,9 +26,6 @@ public:
         return result;
     }
 
-    virtual TString GetTypeId() const override {
-        return TUdfMeta::GetTypeId();
-    }
 };
 
 } // namespace NKikimr::NUdfStore

@@ -49,10 +49,10 @@ private:
     void FetchNextBody();
 
 protected:
-    void Handle(TEvUdfStoreInit::TEvStoreInitialized::TPtr& ev);
-    void Handle(TEvUdfStoreInit::TEvStoreInitFailed::TPtr& ev);
+    void Handle(TEvStoreInitialized::TPtr& ev);
+    void Handle(TEvStoreInitFailed::TPtr& ev);
     void Handle(NMetadata::NProvider::TEvRefreshSubscriberData::TPtr& ev);
-    void Handle(TEvKvBodyStore::TEvReadBodyResponse::TPtr& ev);
+    void Handle(TEvReadBodyResponse::TPtr& ev);
 
 public:
     TUdfStoreService(const NKikimrConfig::TUdfStoreConfig& config, TIntrusivePtr<NMiniKQL::IMutableFunctionRegistry> functionRegistry)
@@ -66,10 +66,10 @@ public:
 
     STATEFN(StateMain) {
         switch (ev->GetTypeRewrite()) {
-            hFunc(TEvUdfStoreInit::TEvStoreInitialized, Handle);
-            hFunc(TEvUdfStoreInit::TEvStoreInitFailed, Handle);
-            hFunc(NProvider::TEvRefreshSubscriberData, Handle);
-            hFunc(TEvKvBodyStore::TEvReadBodyResponse, Handle);
+            hFunc(TEvStoreInitialized, Handle);
+            hFunc(TEvStoreInitFailed, Handle);
+            hFunc(NMetadata::NProvider::TEvRefreshSubscriberData, Handle);
+            hFunc(TEvReadBodyResponse, Handle);
             default:
                 break;
         }

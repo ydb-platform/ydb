@@ -1,39 +1,13 @@
 #pragma once
 
+#include "events.h"
 #include <ydb/services/metadata/request/common.h>
 #include <ydb/services/metadata/request/request_actor_cb.h>
 #include <ydb/library/table_creator/table_creator.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
-#include <ydb/library/actors/core/events.h>
-#include <ydb/library/actors/core/event_local.h>
 #include <ydb/library/actors/core/hfunc.h>
 
 namespace NKikimr::NUdfStore {
-
-// Events produced by TUdfStoreInitializer.
-struct TEvUdfStoreInit {
-    enum EEv {
-        EvStoreInitialized = EventSpaceBegin(NActors::TEvents::ES_PRIVATE),
-        EvStoreInitFailed,
-        EvEnd
-    };
-
-    // Sent to the parent actor when the meta table and KV volume are ready.
-    struct TEvStoreInitialized : public NActors::TEventLocal<TEvStoreInitialized, EvStoreInitialized> {
-        TEvStoreInitialized(const TString& kvVolumePath)
-            : KvVolumePath(kvVolumePath)
-        {}
-        TString KvVolumePath;
-    };
-
-    // Sent to the parent actor when infrastructure initialization fails.
-    struct TEvStoreInitFailed : public NActors::TEventLocal<TEvStoreInitFailed, EvStoreInitFailed> {
-        explicit TEvStoreInitFailed(TString errorMessage)
-            : ErrorMessage(std::move(errorMessage))
-        {}
-        TString ErrorMessage;
-    };
-};
 
 // Actor that sequentially initializes UDF store infrastructure:
 //   1. Creates the metadata table .metadata/udf_store/meta via CreateTableCreator.

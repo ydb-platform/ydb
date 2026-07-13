@@ -6,9 +6,9 @@
 
 namespace NKikimr::NUdfStore {
 
-class TSnapshot: public NFetcher::ISnapshot {
+class TSnapshot: public NMetadata::NFetcher::ISnapshot {
 private:
-    using TBase = NFetcher::ISnapshot;
+    using TBase = NMetadata::NFetcher::ISnapshot;
     using TUdfs = std::map<TString, TUdfMeta>;
     YDB_READONLY_DEF(TUdfs, Udfs);
 protected:

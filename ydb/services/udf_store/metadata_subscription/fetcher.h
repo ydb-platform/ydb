@@ -6,8 +6,8 @@
 
 namespace NKikimr::NUdfStore {
 
-class TSnapshotsFetcher: public NFetcher::TSnapshotsFetcher<TSnapshot> {
-    virtual std::vector<IClassBehaviour::TPtr> DoGetManagers() const override {
+class TSnapshotsFetcher: public NMetadata::NFetcher::TSnapshotsFetcher<TSnapshot> {
+    virtual std::vector<NMetadata::IClassBehaviour::TPtr> DoGetManagers() const override {
         return  {
             TUdfMeta::GetBehaviour()
         };

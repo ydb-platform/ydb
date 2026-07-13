@@ -423,6 +423,10 @@ class ServiceModel:
         return self._get_metadata_property('protocol')
 
     @CachedProperty
+    def protocols(self):
+        return self._get_metadata_property('protocols')
+
+    @CachedProperty
     def endpoint_prefix(self):
         return self._get_metadata_property('endpointPrefix')
 

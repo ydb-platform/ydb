@@ -220,7 +220,7 @@ const NJson::TJsonValue* FindConnectionNode(const NJson::TJsonValue& node, const
         if (planNodeType != map.end() && nodeType != map.end()
             && planNodeType->second.IsString() && nodeType->second.IsString()
             && planNodeType->second.GetStringSafe() == "Connection"
-            && nodeType->second.GetStringSafe().StartsWith(connectionName))
+            && nodeType->second.GetStringSafe() == connectionName)
         {
             return &node;
         }
@@ -635,6 +635,21 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         UNIT_ASSERT_C(!GetStringField(*joinOp, "JoinAlgo").empty(), plan);
         const auto condition = GetStringField(*joinOp, "Condition");
         UNIT_ASSERT_C(condition.Contains("t1.a") && condition.Contains("t2.b") && condition.Contains(" = "), plan);
+
+        const auto* hashShuffle = FindConnectionNode(simplifiedPlan, "HashShuffle");
+        UNIT_ASSERT_C(hashShuffle, plan);
+        UNIT_ASSERT_VALUES_EQUAL_C(GetStringField(*hashShuffle, "Node Type"), "HashShuffle", plan);
+        UNIT_ASSERT_C(!GetStringField(*hashShuffle, "HashFunc").empty(), plan);
+        const auto& hashShuffleMap = hashShuffle->GetMapSafe();
+        UNIT_ASSERT_C(hashShuffleMap.contains("KeyColumns") && hashShuffleMap.at("KeyColumns").IsArray(), plan);
+        UNIT_ASSERT_C(!hashShuffleMap.at("KeyColumns").GetArraySafe().empty(), plan);
+
+        NJson::TJsonValue planJson;
+        UNIT_ASSERT_C(NJson::ReadJsonTree(plan, &planJson, true), plan);
+        const auto* executionHashShuffle = FindConnectionNode(planJson.GetMapSafe().at("Plan"), "HashShuffle");
+        UNIT_ASSERT_C(executionHashShuffle, plan);
+        UNIT_ASSERT_C(executionHashShuffle->GetMapSafe().contains("KeyColumns"), plan);
+        UNIT_ASSERT_C(executionHashShuffle->GetMapSafe().contains("HashFunc"), plan);
     }
 
     Y_UNIT_TEST(ExplainJoin) {
@@ -760,10 +775,11 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
 
         const auto* mergeConnection = FindConnectionNode(simplifiedSortPlan, "Merge");
         UNIT_ASSERT_C(mergeConnection, sortPlan);
-        UNIT_ASSERT_C(GetStringField(*mergeConnection, "Node Type").StartsWith("Merge"), sortPlan);
+        UNIT_ASSERT_VALUES_EQUAL_C(GetStringField(*mergeConnection, "Node Type"), "Merge", sortPlan);
         const auto mergeSortBy = GetStringField(*mergeConnection, "SortBy");
         UNIT_ASSERT_C(mergeSortBy.Contains("a desc nulls first"), sortPlan);
         UNIT_ASSERT_C(mergeSortBy.Contains("b asc nulls first"), sortPlan);
+        UNIT_ASSERT_C(mergeConnection->GetMapSafe().contains("SortColumns"), sortPlan);
     }
 
     Y_UNIT_TEST(ExplainReadPushdown) {
@@ -1102,6 +1118,79 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         UNIT_ASSERT_C(filters[0].IsString(), joinJson.GetStringRobust());
         const auto joinFilter = filters[0].GetStringSafe();
         UNIT_ASSERT_C(joinFilter.Contains("t1.b < t2.c"), joinFilter);
+    }
+
+    Y_UNIT_TEST(OperatorIteratorMovePreservesDeepTraversal) {
+        const auto pos = NYql::TPositionHandle();
+        TIntrusivePtr<IOperator> op = MakeIntrusive<TOpEmptySource>(pos);
+        for (size_t i = 0; i < 30; ++i) {
+            op = MakeIntrusive<TOpJoin>(
+                op,
+                MakeIntrusive<TOpEmptySource>(pos),
+                pos,
+                "Cross",
+                TVector<std::pair<TInfoUnit, TInfoUnit>>{});
+        }
+        TOpRoot root(op, pos, TVector<TString>{});
+
+        auto source = root.begin();
+        TOpIterator moved(std::move(source));
+        UNIT_ASSERT(source == TOpEnd{});
+        ++source;
+        UNIT_ASSERT(source == TOpEnd{});
+
+        auto assigned = root.begin();
+        assigned = std::move(moved);
+        UNIT_ASSERT(moved == TOpEnd{});
+        ++moved;
+        UNIT_ASSERT(moved == TOpEnd{});
+
+        size_t count = 0;
+        IOperator* last = nullptr;
+        for (; assigned != TOpEnd{}; ++assigned) {
+            last = assigned->Current.Get();
+            ++count;
+        }
+
+        UNIT_ASSERT_VALUES_EQUAL(count, 61);
+        UNIT_ASSERT_VALUES_EQUAL(last, op.Get());
+    }
+
+    Y_UNIT_TEST(ComputeParentsHandlesSharedDagAndIgnoresInactiveSubplans) {
+        const auto pos = NYql::TPositionHandle();
+        auto shared = MakeIntrusive<TOpEmptySource>(pos);
+        auto join = MakeIntrusive<TOpJoin>(
+            shared,
+            shared,
+            pos,
+            "Cross",
+            TVector<std::pair<TInfoUnit, TInfoUnit>>{});
+        TOpRoot root(join, pos, TVector<TString>{});
+
+        auto inactiveChild = MakeIntrusive<TOpEmptySource>(pos);
+        auto inactiveSubplan = MakeIntrusive<TOpJoin>(
+            inactiveChild,
+            MakeIntrusive<TOpEmptySource>(pos),
+            pos,
+            "Cross",
+            TVector<std::pair<TInfoUnit, TInfoUnit>>{});
+        const TInfoUnit inactiveIU("inactive_subplan", true);
+        root.PlanProps.Subplans.Add(inactiveIU, TSubplanEntry{inactiveSubplan, {}, ESubplanType::EXPR, inactiveIU, {}});
+
+        root.ComputeParents();
+
+        UNIT_ASSERT(join->Parents.empty());
+        UNIT_ASSERT_VALUES_EQUAL(shared->Parents.size(), 2);
+        bool hasLeftEdge = false;
+        bool hasRightEdge = false;
+        for (const auto& [parent, childIndex] : shared->Parents) {
+            UNIT_ASSERT_VALUES_EQUAL(parent, join.Get());
+            hasLeftEdge |= childIndex == 0;
+            hasRightEdge |= childIndex == 1;
+        }
+        UNIT_ASSERT(hasLeftEdge);
+        UNIT_ASSERT(hasRightEdge);
+        UNIT_ASSERT(inactiveChild->Parents.empty());
     }
 
     Y_UNIT_TEST(NameConstraintsPropagateThroughUnary) {
@@ -7741,7 +7830,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
 
         const auto& planMap = planNode.GetMapSafe();
         if (auto nodeType = planMap.find("Node Type");
-                nodeType != planMap.end() && nodeType->second.GetStringSafe().StartsWith("HashShuffle")) {
+                nodeType != planMap.end() && nodeType->second.GetStringSafe() == "HashShuffle") {
             hashFuncs.push_back(planMap.at("HashFunc").GetStringSafe());
         }
 
@@ -7768,7 +7857,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
 
         const auto& planMap = planNode.GetMapSafe();
         if (auto nodeType = planMap.find("Node Type");
-                nodeType != planMap.end() && nodeType->second.GetStringSafe().StartsWith("HashShuffle")) {
+                nodeType != planMap.end() && nodeType->second.GetStringSafe() == "HashShuffle") {
             TVector<TString> keyColumns;
             for (const auto& key : planMap.at("KeyColumns").GetArraySafe()) {
                 keyColumns.push_back(key.GetStringSafe());
@@ -7821,7 +7910,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
 
         const auto& planMap = planNode.GetMapSafe();
         if (auto nodeType = planMap.find("Node Type"); nodeType != planMap.end()) {
-            return nodeType->second.GetStringSafe().StartsWith("HashShuffle");
+            return nodeType->second.GetStringSafe() == "HashShuffle";
         }
 
         return false;

@@ -25,6 +25,10 @@
 
 #include <library/cpp/testing/hook/hook.h>
 
+#include <ydb/library/testlib/parquet_helpers/parquet_helpers.h>
+
+#include <arrow/api.h>
+
 #include <util/string/builder.h>
 #include <util/string/cast.h>
 #include <util/string/printf.h>
@@ -325,11 +329,14 @@ namespace {
             return {};
         }
 
-        ui64 ExportWithRetryInjection(ui64 txId, const TString& compression = "", const TString& encryptionBlock = "", ui64 minWriteBatchSize = 1) {
+        ui64 ExportWithRetryInjection(ui64 txId, const TString& compression = "", const TString& encryptionBlock = "", ui64 minWriteBatchSize = 1, const TString& formatBlock = "") {
             Runtime().SetLogPriority(NKikimrServices::DATASHARD_BACKUP, NActors::NLog::PRI_DEBUG);
 
             if (encryptionBlock) {
                 Runtime().GetAppData().FeatureFlags.SetEnableEncryptedExport(true);
+            }
+            if (formatBlock.Contains("parquet")) {
+                Runtime().GetAppData().FeatureFlags.SetEnableExportInParquet(true);
             }
 
             THolder<IEventHandle> injectResult;
@@ -380,8 +387,8 @@ namespace {
             }
 
             TString extraSettings;
-            if (compressionLine || encryptionBlock) {
-                extraSettings = compressionLine + "\n" + encryptionBlock;
+            if (compressionLine || encryptionBlock || formatBlock) {
+                extraSettings = compressionLine + "\n" + encryptionBlock + "\n" + formatBlock;
             }
 
             const auto exportId = ++txId;
@@ -3239,7 +3246,7 @@ partitioning_settings {
 
         const auto* metadataChecksum = S3Mock().GetData().FindPtr("/metadata.json.sha256");
         UNIT_ASSERT(metadataChecksum);
-        UNIT_ASSERT_VALUES_EQUAL(*metadataChecksum, "a5a7ca9bce00ac9d7e5b48a30a46f139592845cad0664b3fda92af32583b7d52 metadata.json");
+        UNIT_ASSERT_VALUES_EQUAL(*metadataChecksum, "1ddcace3524e08b6a7e88bb82a5f9d53dd64911c9bc59ce2ae75b2219aeeb935 metadata.json");
 
         const auto* schemeChecksum = S3Mock().GetData().FindPtr("/scheme.pb.sha256");
         UNIT_ASSERT(schemeChecksum);
@@ -3306,7 +3313,7 @@ partitioning_settings {
 
         const auto* metadataChecksum = S3Mock().GetData().FindPtr("/metadata.json.sha256");
         UNIT_ASSERT(metadataChecksum);
-        UNIT_ASSERT_VALUES_EQUAL(*metadataChecksum, "a5a7ca9bce00ac9d7e5b48a30a46f139592845cad0664b3fda92af32583b7d52 metadata.json");
+        UNIT_ASSERT_VALUES_EQUAL(*metadataChecksum, "1ddcace3524e08b6a7e88bb82a5f9d53dd64911c9bc59ce2ae75b2219aeeb935 metadata.json");
 
         const auto* schemeChecksum = S3Mock().GetData().FindPtr("/scheme.pb.sha256");
         UNIT_ASSERT(schemeChecksum);
@@ -4934,6 +4941,103 @@ CREATE EXTERNAL TABLE IF NOT EXISTS `ExternalTable` (
         TestGetImport(Runtime(), importId, "/MyRoot", Ydb::StatusIds::SUCCESS);
     }
 
+    Y_UNIT_TEST(ShouldNotCorruptParquetBufferOnRetry) {
+        EnvOptions().EnableChecksumsExport(true);
+        Env();
+        ui64 txId = 100;
+
+        TestCreateTable(Runtime(), ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "key" Type: "Uint32" }
+            Columns { Name: "value" Type: "Utf8" }
+            KeyColumnNames: ["key"]
+        )");
+        Env().TestWaitNotification(Runtime(), txId);
+
+        UpdateRow(Runtime(), "Table", 1, "valueA");
+        UpdateRow(Runtime(), "Table", 2, "valueB");
+
+        // Use a small row group size so that each row is flushed as a separate part,
+        // forcing multipart uploads and exercising the upload retry path.
+        txId = ExportWithRetryInjection(txId, "", "", 1, R"(parquet { row_group_size: 1 })");
+
+        const auto* data = S3Mock().GetData().FindPtr("/data_00.parquet");
+        UNIT_ASSERT(data);
+
+        const auto table = NTestUtils::ReadParquet(*data);
+        UNIT_ASSERT_VALUES_EQUAL_C(table->num_rows(), 2, "Buffer corruption detected");
+        UNIT_ASSERT_VALUES_EQUAL(table->num_columns(), 2);
+
+        const auto keyColumn = table->GetColumnByName("key");
+        const auto valueColumn = table->GetColumnByName("value");
+        UNIT_ASSERT(keyColumn);
+        UNIT_ASSERT(valueColumn);
+
+        const auto keys = std::static_pointer_cast<arrow::Int64Array>(keyColumn->chunk(0));
+        const auto values = std::static_pointer_cast<arrow::StringArray>(valueColumn->chunk(0));
+
+        UNIT_ASSERT_VALUES_EQUAL(keys->Value(0), 1);
+        UNIT_ASSERT_VALUES_EQUAL(keys->Value(1), 2);
+        UNIT_ASSERT_VALUES_EQUAL(values->GetString(0), "valueA");
+        UNIT_ASSERT_VALUES_EQUAL(values->GetString(1), "valueB");
+    }
+
+    Y_UNIT_TEST(ShouldNotCorruptCompressedParquetBufferOnRetry) {
+        EnvOptions().EnableChecksumsExport(true);
+        Env();
+        ui64 txId = 100;
+
+        TestCreateTable(Runtime(), ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "key" Type: "Uint32" }
+            Columns { Name: "value" Type: "Utf8" }
+            KeyColumnNames: ["key"]
+        )");
+        Env().TestWaitNotification(Runtime(), txId);
+
+        auto generateValue = [](size_t size, ui32 seed) {
+            TString result;
+            result.reserve(size);
+            for (size_t i = 0; i < size; ++i) {
+                seed = seed * 1103515245 + 12345;
+                result.push_back('a' + (seed >> 16) % 26);
+            }
+            return result;
+        };
+        const TString value1 = generateValue(256'000, 1);
+        const TString value2 = generateValue(256'000, 2);
+        WriteRow(Runtime(), ++txId, "/MyRoot/Table", 0, 1, value1);
+        Env().TestWaitNotification(Runtime(), txId);
+        WriteRow(Runtime(), ++txId, "/MyRoot/Table", 0, 2, value2);
+        Env().TestWaitNotification(Runtime(), txId);
+
+        // Use a small row group size so that each row is flushed as a separate part,
+        // forcing multipart uploads and exercising the upload retry path.
+        // For Parquet the "zstd" codec is applied internally to the file, so it can be
+        // read back directly with arrow without external decompression.
+        txId = ExportWithRetryInjection(txId, "zstd", "", 1, R"(parquet { row_group_size: 1 })");
+
+        const auto* data = S3Mock().GetData().FindPtr("/data_00.parquet");
+        UNIT_ASSERT(data);
+
+        const auto table = NTestUtils::ReadParquet(*data);
+        UNIT_ASSERT_VALUES_EQUAL_C(table->num_rows(), 2, "Compressed buffer corruption detected");
+        UNIT_ASSERT_VALUES_EQUAL(table->num_columns(), 2);
+
+        const auto keyColumn = table->GetColumnByName("key");
+        const auto valueColumn = table->GetColumnByName("value");
+        UNIT_ASSERT(keyColumn);
+        UNIT_ASSERT(valueColumn);
+
+        const auto keys = std::static_pointer_cast<arrow::Int64Array>(keyColumn->chunk(0));
+        const auto values = std::static_pointer_cast<arrow::StringArray>(valueColumn->chunk(0));
+
+        UNIT_ASSERT_VALUES_EQUAL(keys->Value(0), 1);
+        UNIT_ASSERT_VALUES_EQUAL(keys->Value(1), 2);
+        UNIT_ASSERT_VALUES_EQUAL(values->GetString(0), value1);
+        UNIT_ASSERT_VALUES_EQUAL(values->GetString(1), value2);
+    }
+
     Y_UNIT_TEST(ShouldNotCorruptEncryptedBufferOnRetry) {
         Env();
         Runtime().GetAppData().FeatureFlags.SetEnableEncryptedExport(true);
@@ -4975,6 +5079,41 @@ CREATE EXTERNAL TABLE IF NOT EXISTS `ExternalTable` (
         const TString expected = "1,\"valueA\"\n2,\"valueB\"\n";
         const TString decrypted(decryptedData.Data(), decryptedData.Size());
         UNIT_ASSERT_VALUES_EQUAL_C(decrypted, expected, "Encrypted buffer corruption detected");
+    }
+
+    Y_UNIT_TEST(ShouldRejectParquetExportWithEncryption) {
+        Env();
+        Runtime().GetAppData().FeatureFlags.SetEnableEncryptedExport(true);
+        Runtime().GetAppData().FeatureFlags.SetEnableExportInParquet(true);
+        ui64 txId = 100;
+
+        TestCreateTable(Runtime(), ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "key" Type: "Uint32" }
+            Columns { Name: "value" Type: "Utf8" }
+            KeyColumnNames: ["key"]
+        )");
+        Env().TestWaitNotification(Runtime(), txId);
+
+        TestExport(Runtime(), ++txId, "/MyRoot", Sprintf(R"(
+            ExportToS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              destination_prefix: "export1"
+              parquet { }
+              encryption_settings {
+                encryption_algorithm: "AES-128-GCM"
+                symmetric_key {
+                    key: "0123456789012345"
+                }
+              }
+              items {
+                source_path: "/MyRoot/Table"
+                destination_prefix: ""
+              }
+            }
+        )", S3Port()), {}, {}, Ydb::StatusIds::BAD_REQUEST);
+        Env().TestWaitNotification(Runtime(), txId);
     }
 
     Y_UNIT_TEST(CancelColumnTableExportDuringSlowS3ViaSSPipeline) {

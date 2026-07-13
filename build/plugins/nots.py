@@ -1246,10 +1246,12 @@ def _NODE_MODULES_CONFIGURE(unit: NotsUnitType) -> None:
                     )
 
 
+@ymake.macro
 @_with_report_configure_error
-def on_ts_test_for_configure(
-    unit: NotsUnitType, test_runner: TsTestType, default_config: str, node_modules_filename: str
+def _TS_TEST_FOR_CONFIGURE(
+    unit: NotsUnitType, test_runner: str, default_config: str, node_modules_filename: str
 ) -> None:
+    test_runner = TsTestType(test_runner)
     if not _is_tests_enabled(unit):
         return
 

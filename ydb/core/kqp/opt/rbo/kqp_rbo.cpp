@@ -100,7 +100,7 @@ void TRuleBasedStage::RunStage(TOpRoot& root, TRBOContext& ctx) {
     while (fired && numMatches < maxNumOfMatches) {
         fired = false;
 
-        for (auto iter : root) {
+        for (const auto& iter : root) {
             for (const auto& rule : Rules) {
                 auto op = iter.Current;
                 if (!rule->QuickMatch(op)) {

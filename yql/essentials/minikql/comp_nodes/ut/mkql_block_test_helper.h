@@ -114,7 +114,7 @@ public:
     {
         auto blockNode = ConvertNodeFuzzied(data);
         auto blockList = Pb_.NewList(blockNode.GetStaticType(), {blockNode});
-        auto pgmReturn = Pb_.Collect(Pb_.ForwardList(Pb_.FromBlocks(Pb_.ToFlow(blockList))));
+        auto pgmReturn = Pb_.Collect(Pb_.ForwardList(Pb_.FromBlocks(Pb_.ToFlow(blockList, {}))));
         auto graph = Setup_.BuildGraph(pgmReturn);
         auto value = graph->GetValue();
         return {std::move(graph), std::move(value)};

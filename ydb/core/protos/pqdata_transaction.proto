@@ -58,9 +58,20 @@ message TPartitionOperation {
             optional TKafkaProducerInstanceId KafkaProducerInstanceId = 1;
         };
 
+        message TDeferredPublicationApi {
+            enum EOp {
+                Unspecified = 0;
+                Publish = 1;
+                Cancel = 2;
+            };
+
+            optional EOp Op = 1;
+        };
+
         oneof Api {
             TTopicApi Topic = 1;
             TKafkaApi Kafka = 2;
+            TDeferredPublicationApi DeferredPublication = 3;
         };
     };
 
@@ -86,9 +97,16 @@ message TWriteId {
         optional TKafkaProducerInstanceId KafkaProducerInstanceId = 1;
     };
 
+    message TDeferredPublicationApi {
+        optional uint64 IntPublicationId = 1;
+        // Informational copy from BeginPublication; not used to look up the registry on each write.
+        optional string ExtPublicationId = 2;
+    };
+
     oneof Id {
         TTopicApi TopicApi = 5;
         TKafkaApi KafkaApi = 6;
+        TDeferredPublicationApi DeferredPublicationApi = 7;
     }
 };
 

@@ -62,8 +62,9 @@ void TMergedBuilder::FlushData() {
         if (ColumnBuilders[idx].GetFilledRecordsCount()) {
             auto accessor = ColumnBuilders[idx].Finish(RecordIndex);
             accessor = MaybeDictionaryEncode(accessor, ColumnBuilders[idx].GetFilledRecordsCount());
+            // For now compaction reencodes all columns into BinaryJson
             statsBuilder.Add(ResultColumnStats.GetColumnName(idx), ColumnBuilders[idx].GetFilledRecordsCount(),
-                ColumnBuilders[idx].GetFilledRecordsSize(), accessor->GetType());
+                ColumnBuilders[idx].GetFilledRecordsSize(), accessor->GetType(), NArrow::NAccessor::NSubColumns::EValueType::BinaryJson);
             arrays.emplace_back(std::move(accessor));
         }
     }

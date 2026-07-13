@@ -949,7 +949,7 @@ namespace NKikimr::NBsController {
 
         bool RegisterPDisk(const TPDiskRecord& pdisk) {
             // calculate disk position
-            const TPDiskLayoutPosition p(DomainMapper, pdisk.Location, pdisk.PDiskId, Geom);
+            const TPDiskLayoutPosition p(DomainMapper, pdisk.Location, pdisk.DiskScope, pdisk.PDiskId, Geom);
 
             // insert PDisk into specific map
             TPDisks::iterator it;

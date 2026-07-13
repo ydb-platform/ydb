@@ -1,6 +1,8 @@
 # Project
 
 Before editing, read the nearest `AGENTS.md` to the code you change.
+Directory-local `AGENTS.md` files take priority over this file when they
+conflict.
 
 ## Build & Test
 
@@ -13,6 +15,9 @@ Before editing, read the nearest `AGENTS.md` to the code you change.
 
 # Run specific test
 ./ya make --build relwithdebinfo -tA <folder> -F *test-filter*
+
+# Run tests repeatedly (e.g. to catch flakes)
+./ya make --build relwithdebinfo -tA <folder> -F *test-filter* --test-retries N
 ```
 
 - Tests include build

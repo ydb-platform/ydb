@@ -37,4 +37,5 @@ Protocol layers (each has its own `AGENTS.md`):
 ## Tests
 
 `./ya make --build relwithdebinfo -tA ydb/core/persqueue` (or a narrower `ut/`).
-Monorepo rules: [`agents/GUIDE.md`](../../agents/GUIDE.md) · [`agents/TESTS.md`](../../agents/TESTS.md).
+Monorepo rules: [`agents/CODESTYLE.md`](../../agents/CODESTYLE.md) ·
+[`agents/GUIDE.md`](../../agents/GUIDE.md) · [`agents/TESTS.md`](../../agents/TESTS.md).

@@ -196,8 +196,6 @@ Y_UNIT_TEST_SUITE(HasPathDatastreams) {
     // KindExternalTable — External Table on top of an ObjectStorage EDS.
     // Both the ET path and the underlying EDS path land in tx.Tables (B walk).
     Y_UNIT_TEST_F(ExternalTableMatches, TStreamingTestFixture) {
-        LogSettings.AddLogPriority(NKikimrServices::KQP_SESSION, NLog::PRI_DEBUG);
-
         ExecSchemeQuery(RejectClassifierDdl(
             "hp_et", "/Root/et_s3"));
 

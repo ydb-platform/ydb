@@ -155,20 +155,19 @@ private:
 };
 
 // Thread-safe light
-// State changes are serialized by an internal lock. When the state is derived from
-// data shared between threads, pass a callable so it is evaluated under the lock:
-// this makes the observed sequence of states consistent with real time. A state
-// computed before the call may be stale by the time the lock is acquired, so
-// concurrent writers could publish states in the wrong order and leave the light
-// stuck in a state that is no longer true. Note that rapid intermediate flips
-// happening between two calls are coalesced and do not affect the switch count.
+// State changes are serialized by an internal lock. The callable may also mutate
+// state whose access is confined to these callbacks, making the mutation and its
+// monitoring transition one ordered operation. If shared state is changed outside
+// the callback, Set only samples it: rapid intermediate flips may be coalesced and
+// do not affect the switch count. Computing a state before the call is unsafe
+// because it may be stale by the time the lock is acquired.
 class TLight : public TLightBase {
 private:
     TSpinLock Lock;
     bool CurrentState = false;
 public:
     // computeState is invoked under a spin lock, it must be cheap and non-blocking
-    template <typename TComputeState, typename = std::enable_if_t<std::is_invocable_r_v<bool, TComputeState>>>
+    template <typename TComputeState, typename = std::enable_if_t<std::is_invocable_r_v<bool, TComputeState&>>>
     void Set(TComputeState&& computeState) {
         TGuard<TSpinLock> g(Lock);
         const bool state = computeState();

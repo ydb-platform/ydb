@@ -20,7 +20,6 @@
 #include <library/cpp/testing/unittest/registar.h>
 #include <util/stream/null.h>
 #include <util/system/tempfile.h>
-#include <atomic>
 #include <cstring>
 #include <thread>
 
@@ -146,31 +145,35 @@ Y_UNIT_TEST_SUITE(TPDiskUtil) {
     }
 
     Y_UNIT_TEST(LightConcurrent) {
-        // Concurrent writers publish a shared state; each callable is evaluated
-        // under the light's lock, so no ordering of the calls can leave the light
-        // in a state that is no longer true after all writers finish
+        // Concurrent writers update and publish shared state under the light's
+        // lock, so every mutation is reflected in the final state.
         TLight l;
         TIntrusivePtr<::NMonitoring::TDynamicCounters> c(new ::NMonitoring::TDynamicCounters());
         l.Initialize(c, TLightCounterConfig::WithDefaultLightSet("l"));
         auto state = c->GetCounter("l_state");
+        auto count = c->GetCounter("l_count");
 
-        std::atomic<i64> inFlight = 0;
-        auto isBusy = [&] { return inFlight.load() > 0; };
+        i64 inFlight = 0;
         TVector<std::thread> threads;
         for (ui32 t = 0; t < 8; ++t) {
             threads.emplace_back([&] {
                 for (ui32 i = 0; i < 10000; ++i) {
-                    ++inFlight;
-                    l.Set(isBusy);
-                    --inFlight;
-                    l.Set(isBusy);
+                    l.Set([&] {
+                        ++inFlight;
+                        return inFlight > 0;
+                    });
+                    l.Set([&] {
+                        --inFlight;
+                        return inFlight > 0;
+                    });
                 }
             });
         }
         for (std::thread& thread : threads) {
             thread.join();
         }
-        l.Set(isBusy);
+        UNIT_ASSERT_EQUAL(inFlight, 0);
+        UNIT_ASSERT_GT(count->Val(), 0);
         UNIT_ASSERT_EQUAL(state->Val(), 0);
     }
 

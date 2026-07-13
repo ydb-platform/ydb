@@ -685,8 +685,13 @@ private:
             ui64 queryId = NextLoadQueryCookie++;
             LoadQueriesInFlight[queryId] = std::make_pair(requestId, reqIndex);
 
-            DispatchLoadStatisticsQuery(
-                SelfId(), queryId, database, req.PathId, request.StatType, req.ColumnTag);
+            if (const auto* multiTags = req.ColumnTags.AsMulti()) {
+                DispatchLoadMultiColumnStatisticsQuery(
+                    SelfId(), queryId, database, req.PathId, request.StatType, *multiTags);
+            } else {
+                DispatchLoadStatisticsQuery(
+                    SelfId(), queryId, database, req.PathId, request.StatType, req.ColumnTags.AsSingle());
+            }
 
             ++request.ReplyCounter;
             ++reqIndex;

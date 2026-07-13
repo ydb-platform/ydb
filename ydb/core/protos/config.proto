@@ -2158,6 +2158,12 @@ message TImmediateControlsConfig {
             MaxValue: 1,
             DefaultValue: 0
         }];
+        optional uint64 UsePerChannelReadQueues = 5 [(ControlOptions) = {
+            Description: "Use separate KeyValue read request queues per storage channel",
+            MinValue: 0,
+            MaxValue: 1,
+            DefaultValue: 0
+        }];
     }
 
     message TKQPSessionControls {
@@ -3249,6 +3255,13 @@ message TOpaqueConfig {
     // Empty
 }
 
+message TUdfStoreConfig {
+    optional bool Enabled = 1 [default = false];
+    optional string KvStorageMedia = 2 [default = "ssd"];
+    optional bool EnableUnsafeNativeUdf = 3 [default = false];
+    optional string UnsafeNativeUdfDir = 4;
+}
+
 message TAppConfig {
     option (NMarkers.Root) = true;
     optional TActorSystemConfig ActorSystemConfig = 1;
@@ -3339,6 +3352,7 @@ message TAppConfig {
     optional TGroupedMemoryLimiterConfig CompGroupedMemoryLimiterConfig = 92;
     optional TBlockstoreConfig BlockstoreConfig = 93;
     optional TOpaqueConfig PrivateDatabaseConfig = 94 [(NMarkers.AllowInDatabaseConfig) = true, (NMarkers.OpaqueConfig) = true];
+    optional TUdfStoreConfig UdfStoreConfig = 95;
 
     repeated TNamedConfig NamedConfigs = 100;
     optional string ClusterYamlConfig = 101;

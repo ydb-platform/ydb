@@ -1,6 +1,7 @@
 LIBRARY()
 
 SRCS(
+    kqp_has_full_scan_matcher.cpp
     kqp_query_classifier.cpp
     kqp_workload_service.cpp
 )

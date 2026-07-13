@@ -275,7 +275,7 @@ private:
                     FilteredRow[i++] = parsedData[rowId];
                 }
                 with_lock(Self.Alloc) {
-                DataPacker->AddWideItem(FilteredRow.data(), FilteredRow.size());
+                    DataPacker->AddWideItem(FilteredRow.data(), FilteredRow.size());
                 }
 
                 ++newNumberRows;

@@ -733,7 +733,7 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
         ResourceLimit = info.ResourceLimit;
 
         YDB_LOG_DEBUG_CTX(ctx, "TLocalNodeRegistrar: updated resource limit",
-            {"resourceLimit", ResourceLimit});
+            {"resourceLimit", ResourceLimit.ShortDebugString()});
 
         UpdateCacheQuota();
 
@@ -1206,7 +1206,7 @@ class TDomainLocal : public TActorBootstrapped<TDomainLocal> {
                 {"logPrefix", LogPrefix},
                 {"hiveId", id},
                 {"domainName", info.DomainName},
-                {"resourceLimit", info.ResourceLimit});
+                {"resourceLimit", info.ResourceLimit.ShortDebugString()});
         }
     }
 
@@ -1230,7 +1230,7 @@ class TDomainLocal : public TActorBootstrapped<TDomainLocal> {
                 {"logPrefix", LogPrefix},
                 {"tenantName", task.Info.TenantName},
                 {"hiveId", hId},
-                {"resourceLimit", task.Info.ResourceLimit});
+                {"resourceLimit", task.Info.ResourceLimit.ShortDebugString()});
             RegisterLocalNode(task.Info.TenantName, task.Info.ResourceLimit, hId, {domainKey}, ctx);
         }
     }
@@ -1298,7 +1298,7 @@ class TDomainLocal : public TActorBootstrapped<TDomainLocal> {
         YDB_LOG_DEBUG_CTX(ctx, "TDomainLocal::HandleResolve: received response from schemeshard",
             {"logPrefix", LogPrefix},
             {"schemeRoot", SchemeRoot},
-            {"schemeResult", rec});
+            {"schemeResult", rec.ShortDebugString()});
 
         if (!ResolveTasks.contains(rec.GetPath())) {
             YDB_LOG_DEBUG_CTX(ctx, "TDomainLocal::HandleResolve: missing resolve task for path",
@@ -1390,7 +1390,7 @@ class TDomainLocal : public TActorBootstrapped<TDomainLocal> {
                         {"logPrefix", LogPrefix},
                         {"tenantName", tenant.Info.TenantName},
                         {"hiveId", hiveId},
-                        {"resourceLimit", tenant.Info.ResourceLimit});
+                        {"resourceLimit", tenant.Info.ResourceLimit.ShortDebugString()});
                     RegisterLocalNode(tenant.Info.TenantName, tenant.Info.ResourceLimit, hiveId, servicedDomains, ctx);
                     tenant.HiveIds.emplace(hiveId);
                 }

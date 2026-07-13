@@ -346,14 +346,14 @@ private:
         auto &rec = ev->Get()->Record;
 
         YDB_LOG_INFO_CTX(ctx, "TLabelsMaintainer::Handle TEvConsole::TEvConfigNotificationRequest: received monitoring config",
-            {"monitoringConfig", rec.GetConfig()});
+            {"monitoringConfig", rec.GetConfig().ShortDebugString()});
 
         ApplyConfig(rec.GetConfig().GetMonitoringConfig(), ctx);
 
         auto resp = MakeHolder<TEvConsole::TEvConfigNotificationResponse>(rec);
 
         YDB_LOG_TRACE_CTX(ctx, "TLabelsMaintainer::Handle TEvConsole::TEvConfigNotificationRequest: send config notification response",
-            {"response", resp->Record});
+            {"response", resp->Record.ShortDebugString()});
 
         ctx.Send(ev->Sender, resp.Release(), 0, ev->Cookie);
     }
@@ -364,7 +364,7 @@ private:
         CurrentStatus.CopyFrom(ev->Get()->Record);
 
         YDB_LOG_INFO_CTX(ctx, "TLabelsMaintainer::Handle TEvTenantPool::TEvTenantPoolStatus: received tenant pool status",
-            {"tenantPoolStatus", CurrentStatus});
+            {"tenantPoolStatus", CurrentStatus.ShortDebugString()});
 
         UpdateDatabaseLabels(ctx);
     }

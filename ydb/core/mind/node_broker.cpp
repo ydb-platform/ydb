@@ -1400,7 +1400,7 @@ void TNodeBroker::TDirtyState::DbUpdateConfig(const NKikimrNodeBroker::TConfig &
 {
     YDB_LOG_DEBUG_CTX(TActorContext::AsActorContext(), "TNodeBroker::DbUpdateConfig: update config in database",
         {"dbLogPrefix", DbLogPrefix()},
-        {"config", config});
+        {"config", config.ShortDebugString()});
 
     TString value;
     Y_PROTOBUF_SUPPRESS_NODISCARD config.SerializeToString(&value);
@@ -1609,7 +1609,7 @@ void TNodeBroker::Handle(TEvNodeBroker::TEvRegistrationRequest::TPtr &ev,
                          const TActorContext &ctx)
 {
     YDB_LOG_TRACE_CTX(ctx, "TNodeBroker::Handle TEvNodeBroker::TEvRegistrationRequest",
-        {"request", ev->Get()->Record});
+        {"request", ev->Get()->Record.ShortDebugString()});
     TabletCounters->Cumulative()[COUNTER_REGISTRATION_REQUESTS].Increment(1);
 
     class TResolveTenantActor : public TActorBootstrapped<TResolveTenantActor> {
@@ -1689,7 +1689,7 @@ void TNodeBroker::Handle(TEvNodeBroker::TEvRegistrationRequest::TPtr &ev,
                 ServicedSubDomain = TSubDomainKey(response.DomainInfo->DomainKey.OwnerId, response.DomainInfo->DomainKey.LocalPathId);
             } else {
                 YDB_LOG_WARN_CTX(ctx, "TResolveTenantActor: cannot resolve tenant",
-                    {"request", Ev->Get()->Record},
+                    {"request", Ev->Get()->Record.ShortDebugString()},
                     {"response", response.ToString(*AppData()->TypeRegistry)});
             }
 
@@ -1702,7 +1702,7 @@ void TNodeBroker::Handle(TEvNodeBroker::TEvRegistrationRequest::TPtr &ev,
 
         void Finish(const TActorContext& ctx) {
             YDB_LOG_TRACE_CTX(ctx, "TResolveTenantActor: finished resolving tenant scope",
-                {"request", Ev->Get()->Record},
+                {"request", Ev->Get()->Record.ShortDebugString()},
                 {"scopeId", ScopeIdToString(ScopeId)},
                 {"servicedSubDomain", ServicedSubDomain});
 
@@ -1721,7 +1721,7 @@ void TNodeBroker::Handle(TEvNodeBroker::TEvRegistrationRequest::TPtr &ev,
 void TNodeBroker::Handle(TEvNodeBroker::TEvGracefulShutdownRequest::TPtr &ev,
                          const TActorContext &ctx) {
     YDB_LOG_TRACE_CTX(ctx, "TNodeBroker::Handle TEvNodeBroker::TEvGracefulShutdownRequest",
-        {"request", ev->Get()->Record});
+        {"request", ev->Get()->Record.ShortDebugString()});
     TabletCounters->Cumulative()[COUNTER_GRACEFUL_SHUTDOWN_REQUESTS].Increment(1);
     Execute(CreateTxGracefulShutdown(ev), ctx);
 }

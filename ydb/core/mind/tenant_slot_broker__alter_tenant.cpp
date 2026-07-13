@@ -101,7 +101,7 @@ public:
         auto &rec = Event->Get()->Record;
 
         YDB_LOG_DEBUG_CTX(ctx, "TTxAlterTenant Execute",
-            {"record", rec});
+            {"record", rec.ShortDebugString()});
 
         THashMap<TSlotDescription, ui64> newSlots;
         for (auto &slot : rec.GetRequiredSlots()) {

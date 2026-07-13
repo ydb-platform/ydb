@@ -21,7 +21,7 @@ public:
 
         YDB_LOG_DEBUG_CTX(ctx, "TTxUpdateSlotStatus Execute: update for node",
             {"nodeId", nodeId},
-            {"record", rec});
+            {"record", rec.ShortDebugString()});
 
         auto slot = Self->GetSlot(nodeId, rec.GetSlotStatus().GetId());
         if (!slot) {

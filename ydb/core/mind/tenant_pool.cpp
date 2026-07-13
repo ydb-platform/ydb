@@ -289,7 +289,7 @@ public:
             YDB_LOG_DEBUG_CTX(ctx, "TDomainTenantPool::UpdateTenant: send request to add tenant with resources",
                 {"logPrefix", LogPrefix},
                 {"tenantName", tenant->Name},
-                {"resourceLimit", tenant->ResourceLimit});
+                {"resourceLimit", tenant->ResourceLimit.ShortDebugString()});
 
             auto event = MakeHolder<TEvLocal::TEvAddTenant>(tenant->Name,
                                                             tenant->ResourceLimit);
@@ -299,7 +299,7 @@ public:
                 YDB_LOG_DEBUG_CTX(ctx, "TDomainTenantPool::UpdateTenant: send request to alter tenant with resources",
                     {"logPrefix", LogPrefix},
                     {"tenantName", tenant->Name},
-                    {"resourceLimit", tenant->ResourceLimit});
+                    {"resourceLimit", tenant->ResourceLimit.ShortDebugString()});
 
                 auto event = MakeHolder<TEvLocal::TEvAlterTenant>(tenant->Name,
                                                                   tenant->ResourceLimit);
@@ -494,7 +494,7 @@ public:
 
         YDB_LOG_DEBUG_CTX(ctx, "TDomainTenantPool::Handle TEvConsole::TEvConfigNotificationRequest: got new monitoring config",
             {"logPrefix", LogPrefix},
-            {"config", rec.GetConfig()});
+            {"config", rec.GetConfig().ShortDebugString()});
 
         ApplyConfig(rec.GetConfig().GetMonitoringConfig(), ctx);
 
@@ -502,7 +502,7 @@ public:
 
         YDB_LOG_TRACE_CTX(ctx, "TDomainTenantPool::Handle TEvConsole::TEvConfigNotificationRequest: send TEvConfigNotificationResponse",
             {"logPrefix", LogPrefix},
-            {"response", resp->Record});
+            {"response", resp->Record.ShortDebugString()});
 
         ctx.Send(ev->Sender, resp.Release(), 0, ev->Cookie);
     }

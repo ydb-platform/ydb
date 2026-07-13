@@ -61,7 +61,7 @@ public:
             Self->FillNodeInfo(Self->Committed.Nodes.at(NodeId), *Response->Record.MutableNode());
 
         YDB_LOG_INFO_CTX(ctx, "TTxRegisterNode: reply",
-            {"response", Response->Record});
+            {"response", Response->Record.ShortDebugString()});
 
         if (ScopeId != NActors::TScopeId()) {
             auto& record = Response->Record;

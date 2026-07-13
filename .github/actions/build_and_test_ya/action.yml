@@ -6,6 +6,9 @@ inputs:
     description: "limit build and test to specific target"
   build_preset:
     type: string
+  target_platform:
+    default: "DEFAULT-LINUX-X86_64"
+    description: "target platform"
   run_build:
     type: boolean
     default: true
@@ -110,6 +113,7 @@ runs:
       with:
         build_target: ${{ inputs.build_target }}
         build_preset: ${{ inputs.build_preset }}
+        target_platform: ${{ inputs.target_platform }}
         test_size: ${{ inputs.test_size }}
         test_type: ${{ inputs.test_type }}
         run_tests: ${{ inputs.run_tests }}

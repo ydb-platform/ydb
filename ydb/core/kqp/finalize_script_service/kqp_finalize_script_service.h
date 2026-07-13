@@ -13,7 +13,7 @@ class TMetadataProviderConfig;
 namespace NKikimr::NKqp {
 
 IActor* CreateKqpFinalizeScriptService(const NKikimrConfig::TQueryServiceConfig& queryServiceConfig,
-    const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup,
+    const TIntrusivePtr<TKqpFederatedQuerySetup>& federatedQuerySetup,
     std::shared_ptr<NYql::NDq::IS3ActorsFactory> s3ActorsFactory);
 
 }  // namespace NKikimr::NKqp

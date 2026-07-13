@@ -957,7 +957,7 @@ private:
     ui32 StatementResultIndex;
     NYql::NDq::IDqAsyncIoFactory::TPtr AsyncIoFactory;
     TPreparedQueryHolder::TConstPtr PreparedQuery;
-    const std::optional<TKqpFederatedQuerySetup> FederatedQuerySetup;
+    const TIntrusivePtr<TKqpFederatedQuerySetup> FederatedQuerySetup;
     const TGUCSettings::TPtr GUCSettings;
     TShardIdToTableInfoPtr ShardIdToTableInfo;
 

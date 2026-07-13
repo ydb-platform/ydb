@@ -52,7 +52,7 @@ namespace NKikimr::NKqp {
         TDuration LeaseCheckStartupTimeout = TDuration::Seconds(15);
     };
 
-    struct TKqpFederatedQuerySetup {
+    struct TKqpFederatedQuerySetup : public TThrRefBase {
         // This Driver must be declared FIRST in this struct.
         // Placing it first (destruction is in reverse order) ensures
         // it outlives all other objects here that might hold
@@ -74,19 +74,57 @@ namespace NKikimr::NKqp {
         NYql::IPqGatewayFactory::TPtr PqGatewayFactory;
         NKikimr::TDeferredActorLogBackend::TSharedAtomicActorSystemPtr ActorSystemPtr;
         TScriptExecutionSettings ScriptExecutionSettings = {};
+
+        TKqpFederatedQuerySetup(
+            std::shared_ptr<NYdb::TDriver> driver,
+            NYql::IHTTPGateway::TPtr httpGateway,
+            NYql::NConnector::IClient::TPtr connectorClient,
+            NYql::ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
+            NYql::IDatabaseAsyncResolver::TPtr databaseAsyncResolver,
+            const NYql::TS3GatewayConfig& s3GatewayConfig,
+            const NYql::TGenericGatewayConfig& genericGatewayConfig,
+            const NYql::TYtGatewayConfig& ytGatewayConfig,
+            NYql::IYtGateway::TPtr ytGateway,
+            const NYql::TSolomonGatewayConfig& solomonGatewayConfig,
+            NMiniKQL::TComputationNodeFactory computationFactory,
+            const NYql::NDq::TS3ReadActorFactoryConfig& s3ReadActorFactoryConfig,
+            NYql::TTaskTransformFactory dqTaskTransformFactory,
+            const NYql::TPqGatewayConfig& pqGatewayConfig,
+            NYql::IPqGatewayFactory::TPtr pqGatewayFactory,
+            NKikimr::TDeferredActorLogBackend::TSharedAtomicActorSystemPtr actorSystemPtr,
+            const TScriptExecutionSettings& scriptExecutionSettings = {})
+            : Driver(std::move(driver))
+            , HttpGateway(std::move(httpGateway))
+            , ConnectorClient(std::move(connectorClient))
+            , CredentialsFactory(std::move(credentialsFactory))
+            , DatabaseAsyncResolver(std::move(databaseAsyncResolver))
+            , S3GatewayConfig(s3GatewayConfig)
+            , GenericGatewayConfig(genericGatewayConfig)
+            , YtGatewayConfig(ytGatewayConfig)
+            , YtGateway(std::move(ytGateway))
+            , SolomonGatewayConfig(solomonGatewayConfig)
+            , ComputationFactory(std::move(computationFactory))
+            , S3ReadActorFactoryConfig(s3ReadActorFactoryConfig)
+            , DqTaskTransformFactory(std::move(dqTaskTransformFactory))
+            , PqGatewayConfig(pqGatewayConfig)
+            , PqGatewayFactory(std::move(pqGatewayFactory))
+            , ActorSystemPtr(std::move(actorSystemPtr))
+            , ScriptExecutionSettings(scriptExecutionSettings)
+        {
+        }
     };
 
     struct IKqpFederatedQuerySetupFactory {
         using TPtr = std::shared_ptr<IKqpFederatedQuerySetupFactory>;
         virtual void Cleanup();
-        virtual std::optional<TKqpFederatedQuerySetup> Make(NActors::TActorSystem* actorSystem) = 0;
+        virtual TIntrusivePtr<TKqpFederatedQuerySetup> Make(NActors::TActorSystem* actorSystem) = 0;
         virtual void SetScriptExecutionSettings(const TScriptExecutionSettings& settings) = 0;
         virtual ~IKqpFederatedQuerySetupFactory() = default;
     };
 
     struct TKqpFederatedQuerySetupFactoryNoop : public IKqpFederatedQuerySetupFactory {
-        std::optional<TKqpFederatedQuerySetup> Make(NActors::TActorSystem*) override {
-            return std::nullopt;
+        TIntrusivePtr<TKqpFederatedQuerySetup> Make(NActors::TActorSystem*) override {
+            return nullptr;
         }
 
         void SetScriptExecutionSettings(const TScriptExecutionSettings&) override {
@@ -101,7 +139,7 @@ namespace NKikimr::NKqp {
             const NKikimr::TAppData* appData,
             const NKikimrConfig::TAppConfig& appConfig);
 
-        std::optional<TKqpFederatedQuerySetup> Make(NActors::TActorSystem* actorSystem) override;
+        TIntrusivePtr<TKqpFederatedQuerySetup> Make(NActors::TActorSystem* actorSystem) override;
 
         void SetScriptExecutionSettings(const TScriptExecutionSettings& settings) override;
 
@@ -171,14 +209,14 @@ namespace NKikimr::NKqp {
             ScriptExecutionSettings = settings;
         }
 
-        std::optional<TKqpFederatedQuerySetup> Make(NActors::TActorSystem*) override {
-            return TKqpFederatedQuerySetup{
+        TIntrusivePtr<TKqpFederatedQuerySetup> Make(NActors::TActorSystem*) override {
+            return MakeIntrusive<TKqpFederatedQuerySetup>(
                 Driver, HttpGateway, ConnectorClient, CredentialsFactory,
                 DatabaseAsyncResolver, S3GatewayConfig, GenericGatewayConfig,
                 YtGatewayConfig, YtGateway, SolomonGatewayConfig,
                 ComputationFactory, S3ReadActorFactoryConfig,
                 DqTaskTransformFactory, PqGatewayConfig, PqGatewayFactory, ActorSystemPtr,
-                ScriptExecutionSettings};
+                ScriptExecutionSettings);
         }
 
         void Cleanup() override {
@@ -211,7 +249,7 @@ namespace NKikimr::NKqp {
         const NKikimr::TAppData* appData,
         const NKikimrConfig::TAppConfig& config);
 
-    NMiniKQL::TComputationNodeFactory MakeKqpFederatedQueryComputeFactory(NMiniKQL::TComputationNodeFactory baseComputeFactory, const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup);
+    NMiniKQL::TComputationNodeFactory MakeKqpFederatedQueryComputeFactory(NMiniKQL::TComputationNodeFactory baseComputeFactory, const TIntrusivePtr<TKqpFederatedQuerySetup>& federatedQuerySetup);
 
     // Used only for unit tests
     bool WaitHttpGatewayFinalization(NMonitoring::TDynamicCounterPtr countersRoot, TDuration timeout = TDuration::Minutes(1), TDuration refreshPeriod = TDuration::MilliSeconds(100));
@@ -233,7 +271,7 @@ namespace NKikimr::NKqp {
     };
 
     NThreading::TFuture<TGetSchemeEntryResult> GetSchemeEntryType(
-        const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup,
+        const TIntrusivePtr<TKqpFederatedQuerySetup>& federatedQuerySetup,
         const TString& endpoint,
         const TString& database,
         bool useTls,

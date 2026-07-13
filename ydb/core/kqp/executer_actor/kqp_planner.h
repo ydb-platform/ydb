@@ -56,7 +56,7 @@ public:
         const ui64 MkqlMemoryLimit;
         const NYql::NDq::IDqAsyncIoFactory::TPtr AsyncIoFactory;
         const bool AllowSinglePartitionOpt;
-        const std::optional<TKqpFederatedQuerySetup>& FederatedQuerySetup;
+        const TIntrusivePtr<TKqpFederatedQuerySetup>& FederatedQuerySetup;
         const ui64 OutputChunkMaxSize = 0;
         const TGUCSettings::TPtr GUCSettings;
         const bool MayRunTasksLocally = false;
@@ -134,7 +134,7 @@ private:
     THashSet<ui64> PendingComputeTasks; // Not started yet, waiting resources
 
     const TIntrusivePtr<TUserRequestContext>& UserRequestContext;
-    const std::optional<TKqpFederatedQuerySetup> FederatedQuerySetup;
+    const TIntrusivePtr<TKqpFederatedQuerySetup> FederatedQuerySetup;
     const ui64 OutputChunkMaxSize;
     const TGUCSettings::TPtr GUCSettings;
     TString SerializedGUCSettings;

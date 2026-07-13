@@ -247,7 +247,7 @@ public:
             std::shared_ptr<NKikimr::NKqp::NComputeActor::IKqpNodeComputeActorFactory> caFactory,
             const TString& sessionId, TIntrusiveConstPtr<NYql::TKikimrConfiguration> kqpConfig,
             const TKqpSettings::TConstPtr& kqpSettings, const TKqpWorkerSettings& workerSettings,
-            std::optional<TKqpFederatedQuerySetup> federatedQuerySetup,
+            TIntrusivePtr<TKqpFederatedQuerySetup> federatedQuerySetup,
             NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory,
             TIntrusivePtr<TModuleResolverState> moduleResolverState, TIntrusivePtr<TKqpCounters> counters,
             const TActorId& kqpTempTablesAgentActor,
@@ -4019,7 +4019,7 @@ private:
     TKqpWorkerSettings Settings;
     NYql::NDq::IDqAsyncIoFactory::TPtr AsyncIoFactory;
     TIntrusivePtr<TModuleResolverState> ModuleResolverState;
-    std::optional<TKqpFederatedQuerySetup> FederatedQuerySetup;
+    TIntrusivePtr<TKqpFederatedQuerySetup> FederatedQuerySetup;
     TKqpSettings::TConstPtr KqpSettings;
     std::optional<TActorId> WorkerId;
     TActorId ExecuterId;
@@ -4054,7 +4054,7 @@ IActor* CreateKqpSessionActor(const TActorId& owner,
     std::shared_ptr<NKikimr::NKqp::NComputeActor::IKqpNodeComputeActorFactory> caFactory, const TString& sessionId,
     TIntrusiveConstPtr<NYql::TKikimrConfiguration> kqpConfig,
     const TKqpSettings::TConstPtr& kqpSettings, const TKqpWorkerSettings& workerSettings,
-    std::optional<TKqpFederatedQuerySetup> federatedQuerySetup,
+    const TIntrusivePtr<TKqpFederatedQuerySetup>& federatedQuerySetup,
     NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory,
     TIntrusivePtr<TModuleResolverState> moduleResolverState, TIntrusivePtr<TKqpCounters> counters,
     const TActorId& kqpTempTablesAgentActor,

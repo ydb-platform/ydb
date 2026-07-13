@@ -145,7 +145,7 @@ public:
 std::shared_ptr<IKqpNodeComputeActorFactory> MakeKqpCaFactory(const NKikimrConfig::TTableServiceConfig::TResourceManager& config,
         std::shared_ptr<NRm::IKqpResourceManager> resourceManager,
         NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory,
-        const std::optional<TKqpFederatedQuerySetup> federatedQuerySetup,
+        const TIntrusivePtr<TKqpFederatedQuerySetup> federatedQuerySetup,
         std::shared_ptr<NYql::NDq::IDqChannelService> channelService);
 
 } // namespace NKikimr::NKqp::NComputeActor

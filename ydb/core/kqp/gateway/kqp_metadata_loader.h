@@ -26,7 +26,7 @@ public:
         NYql::TKikimrConfiguration::TPtr config,
         bool needCollectSchemeData = false,
         TKqpTempTablesState::TConstPtr tempTablesState = nullptr,
-        const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup = std::nullopt)
+        const TIntrusivePtr<TKqpFederatedQuerySetup>& federatedQuerySetup = nullptr)
         : Cluster(cluster)
         , NeedCollectSchemeData(needCollectSchemeData)
         , ActorSystem(actorSystem)
@@ -75,7 +75,7 @@ private:
     TActorSystem* ActorSystem;
     NYql::TKikimrConfiguration::TPtr Config;
     TKqpTempTablesState::TConstPtr TempTablesState;
-    std::optional<TKqpFederatedQuerySetup> FederatedQuerySetup;
+    TIntrusivePtr<TKqpFederatedQuerySetup> FederatedQuerySetup;
 };
 
 } // namespace NKikimr::NKqp

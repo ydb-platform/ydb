@@ -19,7 +19,7 @@ class TKqpFinalizeScriptService : public TActorBootstrapped<TKqpFinalizeScriptSe
 
 public:
     TKqpFinalizeScriptService(const NKikimrConfig::TQueryServiceConfig& queryServiceConfig,
-        const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup,
+        const TIntrusivePtr<TKqpFederatedQuerySetup>& federatedQuerySetup,
         std::shared_ptr<NYql::NDq::IS3ActorsFactory> s3ActorsFactory)
         : QueryServiceConfig(queryServiceConfig)
         , FederatedQuerySetup(federatedQuerySetup)
@@ -182,7 +182,7 @@ private:
 
 private:
     const NKikimrConfig::TQueryServiceConfig QueryServiceConfig;
-    const std::optional<TKqpFederatedQuerySetup> FederatedQuerySetup;
+    const TIntrusivePtr<TKqpFederatedQuerySetup> FederatedQuerySetup;
     const bool EnableBackgroundLeaseChecks = true;
     const TDuration LeaseCheckStartupTimeout;
 
@@ -200,7 +200,7 @@ private:
 }  // anonymous namespace
 
 IActor* CreateKqpFinalizeScriptService(const NKikimrConfig::TQueryServiceConfig& queryServiceConfig,
-    const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup,
+    const TIntrusivePtr<TKqpFederatedQuerySetup>& federatedQuerySetup,
     std::shared_ptr<NYql::NDq::IS3ActorsFactory> s3ActorsFactory) {
     return new TKqpFinalizeScriptService(queryServiceConfig, federatedQuerySetup, std::move(s3ActorsFactory));
 }

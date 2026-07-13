@@ -10,7 +10,7 @@ namespace NKikimr::NKqp::NComputeActor {
 class TKqpCaFactory : public IKqpNodeComputeActorFactory {
     std::shared_ptr<NRm::IKqpResourceManager> ResourceManager_;
     NYql::NDq::IDqAsyncIoFactory::TPtr AsyncIoFactory;
-    const std::optional<TKqpFederatedQuerySetup> FederatedQuerySetup;
+    const TIntrusivePtr<TKqpFederatedQuerySetup> FederatedQuerySetup;
     std::shared_ptr<NYql::NDq::IDqChannelService> ChannelService;
 
     std::atomic<bool> VerboseMemoryLimitException = false;
@@ -34,7 +34,7 @@ public:
     TKqpCaFactory(const NKikimrConfig::TTableServiceConfig::TResourceManager& config,
         std::shared_ptr<NRm::IKqpResourceManager> resourceManager,
         NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory,
-        const std::optional<TKqpFederatedQuerySetup> federatedQuerySetup,
+        const TIntrusivePtr<TKqpFederatedQuerySetup> federatedQuerySetup,
         std::shared_ptr<NYql::NDq::IDqChannelService> channelService)
         : ResourceManager_(resourceManager)
         , AsyncIoFactory(asyncIoFactory)
@@ -192,7 +192,7 @@ public:
 std::shared_ptr<IKqpNodeComputeActorFactory> MakeKqpCaFactory(const NKikimrConfig::TTableServiceConfig::TResourceManager& config,
         std::shared_ptr<NRm::IKqpResourceManager> resourceManager,
         NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory,
-        const std::optional<TKqpFederatedQuerySetup> federatedQuerySetup,
+        const TIntrusivePtr<TKqpFederatedQuerySetup> federatedQuerySetup,
         std::shared_ptr<NYql::NDq::IDqChannelService> channelService)
 {
     return std::make_shared<TKqpCaFactory>(config, resourceManager, asyncIoFactory, federatedQuerySetup, channelService);

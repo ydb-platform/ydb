@@ -34,7 +34,7 @@ using TCallableActorBuilderFunc = std::function<
     IComputationNode*(
         TCallable& callable, const TComputationNodeFactoryContext& ctx, TKqpScanComputeContext& computeCtx)>;
 
-TComputationNodeFactory GetKqpActorComputeFactory(TKqpScanComputeContext* computeCtx, const std::optional<NKqp::TKqpFederatedQuerySetup>& federatedQuerySetup) {
+TComputationNodeFactory GetKqpActorComputeFactory(TKqpScanComputeContext* computeCtx, const TIntrusivePtr<NKqp::TKqpFederatedQuerySetup>& federatedQuerySetup) {
     MKQL_ENSURE_S(computeCtx);
 
     auto computeFactory = NKqp::MakeKqpFederatedQueryComputeFactory(
@@ -169,7 +169,7 @@ IDqOutputConsumer::TPtr TKqpTaskRunnerExecutionContext::CreateOutputConsumer(con
 
 NYql::NDq::IDqAsyncIoFactory::TPtr CreateKqpAsyncIoFactory(
     TIntrusivePtr<TKqpCounters> counters,
-    std::optional<TKqpFederatedQuerySetup> federatedQuerySetup,
+    TIntrusivePtr<TKqpFederatedQuerySetup> federatedQuerySetup,
     std::shared_ptr<NYql::NDq::IS3ActorsFactory> s3ActorsFactory,
     TIntrusivePtr<TVectorIndexLevelsCache> vectorIndexLevelsCache
     ) {

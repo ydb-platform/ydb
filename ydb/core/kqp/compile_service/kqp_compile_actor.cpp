@@ -58,7 +58,7 @@ public:
         const TGUCSettings::TPtr& gUCSettings,
         const TMaybe<TString>& applicationName, const TString& uid, const TKqpQueryId& queryId,
         const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, const TString& clientAddress,
-        TKqpDbCountersPtr dbCounters, std::optional<TKqpFederatedQuerySetup> federatedQuerySetup,
+        TKqpDbCountersPtr dbCounters, TIntrusivePtr<TKqpFederatedQuerySetup> federatedQuerySetup,
         const TIntrusivePtr<TUserRequestContext>& userRequestContext,
         NWilson::TTraceId traceId, TKqpTempTablesState::TConstPtr tempTablesState, bool collectFullDiagnostics,
         bool perStatementResult,
@@ -740,7 +740,7 @@ private:
     TIntrusivePtr<TKqpCounters> Counters;
     TGUCSettings::TPtr GUCSettings;
     TMaybe<TString> ApplicationName;
-    std::optional<TKqpFederatedQuerySetup> FederatedQuerySetup;
+    TIntrusivePtr<TKqpFederatedQuerySetup> FederatedQuerySetup;
     TString Uid;
     TKqpQueryId QueryId;
     TKqpQueryRef QueryRef;
@@ -786,7 +786,7 @@ IActor* CreateKqpCompileActor(const TActorId& owner, const TKqpSettings::TConstP
     const TQueryServiceConfig& queryServiceConfig,
     TIntrusivePtr<TModuleResolverState> moduleResolverState, TIntrusivePtr<TKqpCounters> counters,
     const TString& uid, const TKqpQueryId& query, const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, const TString& clientAddress,
-    std::optional<TKqpFederatedQuerySetup> federatedQuerySetup, TKqpDbCountersPtr dbCounters, const TGUCSettings::TPtr& gUCSettings,
+    TIntrusivePtr<TKqpFederatedQuerySetup> federatedQuerySetup, TKqpDbCountersPtr dbCounters, const TGUCSettings::TPtr& gUCSettings,
     const TMaybe<TString>& applicationName, const TIntrusivePtr<TUserRequestContext>& userRequestContext,
     NWilson::TTraceId traceId, TKqpTempTablesState::TConstPtr tempTablesState,
     ECompileActorAction compileAction, TMaybe<TQueryAst> queryAst, bool collectFullDiagnostics,

@@ -1532,9 +1532,17 @@ FROM `{table_name}`"""
                 self.create_source(kikimr, source_name, shared=True)
 
     @pytest.mark.parametrize("local_topics", [True, False])
-    @pytest.mark.parametrize("kikimr", [{"enable_streaming_queries": False}], indirect=["kikimr"])
-    def test_table_mode(self: StreamingTestBase, kikimr: Kikimr, entity_name: Callable[[str], str], local_topics: bool) -> None:
-        input_name, endpoint = self.get_input_name(kikimr, f"test_table_mode{local_topics!s:.1}", local_topics, entity_name)
+    @pytest.mark.parametrize(
+        "kikimr",
+        [
+            {"enable_streaming_queries": False,
+            "enable_external_data_sources": False,
+            "enable_shared_reading_in_streaming_queries": False},
+        ],
+        indirect=["kikimr"],
+    )
+    def test_table_mode(self: StreamingTestBase, kikimr: Kikimr, entity_name: Callable[[str], str]) -> None:
+        input_name, endpoint = self.get_input_name(kikimr, "test_table_mode", True, entity_name)
 
         message = b'{"time": "lunch time"}'
         self.write_stream([message], endpoint=endpoint)

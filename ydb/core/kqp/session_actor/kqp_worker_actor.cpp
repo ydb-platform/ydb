@@ -104,7 +104,7 @@ public:
     }
 
     TKqpWorkerActor(const TActorId& owner, const TString& sessionId, const TKqpSettings::TConstPtr& kqpSettings,
-        const TKqpWorkerSettings& workerSettings, std::optional<TKqpFederatedQuerySetup> federatedQuerySetup,
+        const TKqpWorkerSettings& workerSettings, TIntrusivePtr<TKqpFederatedQuerySetup> federatedQuerySetup,
         TIntrusivePtr<TModuleResolverState> moduleResolverState, TIntrusivePtr<TKqpCounters> counters,
         const TQueryServiceConfig& queryServiceConfig, const TGUCSettings::TPtr& gUCSettings
         )
@@ -1073,7 +1073,7 @@ private:
     TActorId Owner;
     TString SessionId;
     TKqpWorkerSettings Settings;
-    std::optional<TKqpFederatedQuerySetup> FederatedQuerySetup;
+    TIntrusivePtr<TKqpFederatedQuerySetup> FederatedQuerySetup;
     TIntrusivePtr<TModuleResolverState> ModuleResolverState;
     TIntrusivePtr<TKqpCounters> Counters;
     TIntrusivePtr<TKqpRequestCounters> RequestCounters;
@@ -1093,7 +1093,7 @@ private:
 
 IActor* CreateKqpWorkerActor(const TActorId& owner, const TString& sessionId,
     const TKqpSettings::TConstPtr& kqpSettings, const TKqpWorkerSettings& workerSettings,
-    std::optional<TKqpFederatedQuerySetup> federatedQuerySetup,
+    TIntrusivePtr<TKqpFederatedQuerySetup> federatedQuerySetup,
     TIntrusivePtr<TModuleResolverState> moduleResolverState, TIntrusivePtr<TKqpCounters> counters,
     const TQueryServiceConfig& queryServiceConfig, const TGUCSettings::TPtr& gUCSettings
     )

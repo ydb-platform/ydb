@@ -54,7 +54,7 @@ public:
         std::shared_ptr<NComputeActor::IKqpNodeComputeActorFactory> caFactory,
         const TIntrusivePtr<TKqpCounters>& counters,
         NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory,
-        const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup)
+        const TIntrusivePtr<TKqpFederatedQuerySetup>& federatedQuerySetup)
         : Config(config.GetResourceManager())
         , Counters(counters)
         , ResourceManager_(std::move(resourceManager))
@@ -468,7 +468,7 @@ private:
     std::shared_ptr<NRm::IKqpResourceManager> ResourceManager_;
     std::shared_ptr<NComputeActor::IKqpNodeComputeActorFactory> CaFactory_;
     NYql::NDq::IDqAsyncIoFactory::TPtr AsyncIoFactory;
-    const std::optional<TKqpFederatedQuerySetup> FederatedQuerySetup;
+    const TIntrusivePtr<TKqpFederatedQuerySetup> FederatedQuerySetup;
 
     // state sharded by TxId
     std::shared_ptr<TNodeState> State_;
@@ -492,7 +492,7 @@ IActor* CreateKqpNodeService(const NKikimrConfig::TTableServiceConfig& tableServ
     std::shared_ptr<NRm::IKqpResourceManager> resourceManager,
     std::shared_ptr<NComputeActor::IKqpNodeComputeActorFactory> caFactory,
     TIntrusivePtr<TKqpCounters> counters, NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory,
-    const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup)
+    const TIntrusivePtr<TKqpFederatedQuerySetup>& federatedQuerySetup)
 {
     return new TKqpNodeService(tableServiceConfig, std::move(resourceManager), std::move(caFactory),
         counters, std::move(asyncIoFactory), federatedQuerySetup);

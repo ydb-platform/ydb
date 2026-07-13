@@ -14,7 +14,7 @@ namespace NKikimr {
 
 namespace NMiniKQL {
     class TKqpScanComputeContext;
-    TComputationNodeFactory GetKqpActorComputeFactory(TKqpScanComputeContext* computeCtx, const std::optional<NKqp::TKqpFederatedQuerySetup>& federatedQuerySetup);
+    TComputationNodeFactory GetKqpActorComputeFactory(TKqpScanComputeContext* computeCtx, const TIntrusivePtr<NKqp::TKqpFederatedQuerySetup>& federatedQuerySetup);
 } // namespace NMiniKQL
 
 namespace NKqp {
@@ -67,7 +67,7 @@ IActor* CreateKqpComputeActor(const TActorId& executerId, ui64 txId, NYql::NDqPr
     NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory, const NYql::NDq::TComputeRuntimeSettings& settings,
     const NYql::NDq::TComputeMemoryLimits& memoryLimits, NWilson::TTraceId traceId,
     TIntrusivePtr<NActors::TProtoArenaHolder> arena,
-    const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup, const TGUCSettings::TPtr& GUCSettings,
+    const TIntrusivePtr<TKqpFederatedQuerySetup>& federatedQuerySetup, const TGUCSettings::TPtr& GUCSettings,
     NScheduler::TSchedulableActorOptions schedulableOptions,
     NKikimrConfig::TTableServiceConfig::EBlockTrackingMode mode,
     TIntrusiveConstPtr<NACLib::TUserToken> userToken,
@@ -89,7 +89,7 @@ IActor* CreateKqpScanFetcher(const NKikimrKqp::TKqpSnapshot& snapshot, std::vect
 
 NYql::NDq::IDqAsyncIoFactory::TPtr CreateKqpAsyncIoFactory(
     TIntrusivePtr<TKqpCounters> counters,
-    std::optional<TKqpFederatedQuerySetup> federatedQuerySetup,
+    TIntrusivePtr<TKqpFederatedQuerySetup> federatedQuerySetup,
     std::shared_ptr<NYql::NDq::IS3ActorsFactory> s3ActorsFactory,
     TIntrusivePtr<TVectorIndexLevelsCache> vectorIndexLevelsCache);
 

@@ -13,7 +13,7 @@ namespace NKikimr::NKqp {
 
 IActor* CreateScriptFinalizerActor(TEvScriptFinalizeRequest::TPtr request,
     const NKikimrConfig::TQueryServiceConfig& queryServiceConfig,
-    const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup,
+    const TIntrusivePtr<TKqpFederatedQuerySetup>& federatedQuerySetup,
     std::shared_ptr<NYql::NDq::IS3ActorsFactory> s3ActorsFactory);
 
 }  // namespace NKikimr::NKqp

@@ -2034,7 +2034,7 @@ private:
     TKqpSettings::TConstPtr KqpSettings;
     TIntrusiveConstPtr<NYql::TKikimrConfiguration> KqpConfig;
     IKqpFederatedQuerySetupFactory::TPtr FederatedQuerySetupFactory;
-    std::optional<TKqpFederatedQuerySetup> FederatedQuerySetup;
+    TIntrusivePtr<TKqpFederatedQuerySetup> FederatedQuerySetup;
     std::shared_ptr<IQueryReplayBackendFactory> QueryReplayFactory;
     NYql::NConnector::IClient::TPtr ConnectorClient;
     std::shared_ptr<NYql::NDq::IDqChannelService> ChannelService;

@@ -28,7 +28,7 @@ struct TKqpPartitionedExecuterSettings {
     TPreparedQueryHolder::TConstPtr PreparedQuery;
     const TIntrusivePtr<TUserRequestContext>& UserRequestContext;
     ui32 StatementResultIndex;
-    std::optional<TKqpFederatedQuerySetup>& FederatedQuerySetup;
+    TIntrusivePtr<TKqpFederatedQuerySetup> FederatedQuerySetup;
     const TGUCSettings::TPtr& GUCSettings;
     const TShardIdToTableInfoPtr& ShardIdToTableInfo;
     ui64 WriteBufferInitialMemoryLimit;

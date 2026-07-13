@@ -25,7 +25,7 @@ class TScriptFinalizerActor : public TActorBootstrapped<TScriptFinalizerActor> {
 public:
     TScriptFinalizerActor(TEvScriptFinalizeRequest::TPtr request,
         const NKikimrConfig::TQueryServiceConfig& queryServiceConfig,
-        const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup,
+        const TIntrusivePtr<TKqpFederatedQuerySetup>& federatedQuerySetup,
         std::shared_ptr<NYql::NDq::IS3ActorsFactory> s3ActorsFactor)
         : ReplyActor(request->Sender)
         , ExecutionId(request->Get()->Description.ExecutionId)
@@ -224,7 +224,7 @@ private:
     TEvScriptFinalizeRequest::TPtr Request;
 
     const TDuration FinalizationTimeout;
-    const std::optional<TKqpFederatedQuerySetup> FederatedQuerySetup;
+    const TIntrusivePtr<TKqpFederatedQuerySetup> FederatedQuerySetup;
     const TCompressor Compressor;
     std::shared_ptr<NYql::NDq::IS3ActorsFactory> S3ActorsFactor;
 
@@ -240,7 +240,7 @@ private:
 
 IActor* CreateScriptFinalizerActor(TEvScriptFinalizeRequest::TPtr request,
     const NKikimrConfig::TQueryServiceConfig& queryServiceConfig,
-    const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup,
+    const TIntrusivePtr<TKqpFederatedQuerySetup>& federatedQuerySetup,
     std::shared_ptr<NYql::NDq::IS3ActorsFactory> s3ActorsFactory
     ) {
     return new TScriptFinalizerActor(std::move(request), queryServiceConfig, federatedQuerySetup, std::move(s3ActorsFactory));

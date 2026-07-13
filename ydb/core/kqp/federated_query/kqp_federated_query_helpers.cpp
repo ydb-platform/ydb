@@ -49,7 +49,7 @@ namespace {
 
     NThreading::TFuture<TGetSchemeEntryResult> GetSchemeEntryTypeImpl(
         TActorSystem* actorSystem,
-        const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup,
+        const TIntrusivePtr<TKqpFederatedQuerySetup>& federatedQuerySetup,
         const TString& endpoint,
         const TString& database,
         bool useTls,
@@ -319,7 +319,7 @@ namespace {
         }
     }
 
-    std::optional<TKqpFederatedQuerySetup> TKqpFederatedQuerySetupFactoryDefault::Make(NActors::TActorSystem* actorSystem) {
+    TIntrusivePtr<TKqpFederatedQuerySetup> TKqpFederatedQuerySetupFactoryDefault::Make(NActors::TActorSystem* actorSystem) {
         if (!ActorSystemPtr->load(std::memory_order_relaxed)) {
             ActorSystemPtr->store(actorSystem, std::memory_order_relaxed);
         }
@@ -328,7 +328,7 @@ namespace {
             LocalTopicClientSettings->ActorSystem = actorSystem;
         }
 
-        auto result = TKqpFederatedQuerySetup{
+        auto result = MakeIntrusive<TKqpFederatedQuerySetup>(
             Driver,
             HttpGateway,
             ConnectorClient,
@@ -345,13 +345,13 @@ namespace {
             PqGatewayConfig,
             MakePqGatewayFactory(Driver, LocalTopicClientSettings),
             ActorSystemPtr,
-            ScriptExecutionSettings,
-        };
+            ScriptExecutionSettings
+        );
 
         // Init DatabaseAsyncResolver only if all requirements are met
         if (DatabaseResolverActorId && MdbEndpointGenerator &&
             (GenericGatewaysConfig.HasMdbGateway() || GenericGatewaysConfig.HasYdbMvpEndpoint())) {
-            result.DatabaseAsyncResolver = std::make_shared<NFq::TDatabaseAsyncResolverImpl>(
+            result->DatabaseAsyncResolver = std::make_shared<NFq::TDatabaseAsyncResolverImpl>(
                 actorSystem,
                 DatabaseResolverActorId.value(),
                 GenericGatewaysConfig.GetYdbMvpEndpoint(),
@@ -375,9 +375,9 @@ namespace {
         const NKikimr::TAppData* appData,
         const NKikimrConfig::TAppConfig& appConfig) {
         // If Query Service is disabled, just do nothing
-        if (!appData->FeatureFlags.GetEnableScriptExecutionOperations()) {
-            return std::make_shared<TKqpFederatedQuerySetupFactoryNoop>();
-        }
+        // if (!appData->FeatureFlags.GetEnableScriptExecutionOperations()) {
+        //     return std::make_shared<TKqpFederatedQuerySetupFactoryNoop>();
+        // }
 
         for (const auto& source : appConfig.GetQueryServiceConfig().GetAvailableExternalDataSources()) {
             if (!IsValidExternalDataSourceType(source)) {
@@ -387,7 +387,7 @@ namespace {
         return std::make_shared<NKikimr::NKqp::TKqpFederatedQuerySetupFactoryDefault>(setup, appData, appConfig);
     }
 
-    NMiniKQL::TComputationNodeFactory MakeKqpFederatedQueryComputeFactory(NMiniKQL::TComputationNodeFactory baseComputeFactory, const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup) {
+    NMiniKQL::TComputationNodeFactory MakeKqpFederatedQueryComputeFactory(NMiniKQL::TComputationNodeFactory baseComputeFactory, const TIntrusivePtr<TKqpFederatedQuerySetup>& federatedQuerySetup) {
         auto ytComputeFactory = NYql::GetDqYtFactory();
         auto federatedComputeFactory = federatedQuerySetup ? federatedQuerySetup->ComputationFactory : nullptr;
 
@@ -450,7 +450,7 @@ namespace {
     }
 
     NThreading::TFuture<TGetSchemeEntryResult> GetSchemeEntryType(
-        const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup,
+        const TIntrusivePtr<TKqpFederatedQuerySetup>& federatedQuerySetup,
         const TString& endpoint,
         const TString& database,
         bool useTls,

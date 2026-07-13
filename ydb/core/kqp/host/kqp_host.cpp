@@ -1198,7 +1198,7 @@ public:
 
     TKqpHost(TIntrusivePtr<IKqpGateway> gateway, const TString& cluster, const TString& database, const TGUCSettings::TPtr& gUCSettings,
         const TMaybe<TString>& applicationName, TKikimrConfiguration::TPtr config, IModuleResolver::TPtr moduleResolver,
-        std::optional<TKqpFederatedQuerySetup> federatedQuerySetup, const TIntrusiveConstPtr<NACLib::TUserToken>& userToken,
+        const TIntrusivePtr<TKqpFederatedQuerySetup>& federatedQuerySetup, const TIntrusiveConstPtr<NACLib::TUserToken>& userToken,
         const NKikimr::NMiniKQL::IFunctionRegistry* funcRegistry, bool keepConfigChanges, bool isInternalCall,
         TKqpTempTablesState::TConstPtr tempTablesState = nullptr, NActors::TActorSystem* actorSystem = nullptr,
         NYql::TExprContext* ctx = nullptr, const NKikimrConfig::TQueryServiceConfig& queryServiceConfig = NKikimrConfig::TQueryServiceConfig(),
@@ -2104,32 +2104,35 @@ private:
         TypesCtx->OptimizerFlags.insert("rewriteswitchoverextractmembers");
 
         TypesCtx->IgnoreExpandPg = SessionCtx->ConfigPtr()->GetEnableNewRBO();
-
-        bool addExternalDataSources = (queryType == EKikimrQueryType::Script || queryType == EKikimrQueryType::Query
-            || queryType == EKikimrQueryType::YqlScript || queryType == EKikimrQueryType::YqlScriptStreaming) && AppData()->FeatureFlags.GetEnableExternalDataSources();
+        bool isSupportedQueryType = queryType == EKikimrQueryType::Script || queryType == EKikimrQueryType::Query
+        || queryType == EKikimrQueryType::YqlScript || queryType == EKikimrQueryType::YqlScriptStreaming;
+        
+        TVector<std::function<TFuture<void>()>> finalizers;
+        if (isSupportedQueryType) {
+            if (FederatedQuerySetup->PqGatewayFactory) {
+                InitPqProvider(finalizers);
+            }
+        }
+        bool addExternalDataSources = isSupportedQueryType && AppData()->FeatureFlags.GetEnableExternalDataSources();
         if (addExternalDataSources && FederatedQuerySetup) {
             InitS3Provider(queryType);
             InitGenericProvider();
             InitSolomonProvider();
 
-            TVector<std::function<TFuture<void>()>> finalizers;
             if (FederatedQuerySetup->YtGateway) {
                 InitYtProvider(finalizers);
             }
-            if (FederatedQuerySetup->PqGatewayFactory) {
-                InitPqProvider(finalizers);
-            }
-
-            if (!finalizers.empty()) {
-                DataProvidersFinalizer = [finalizers = std::move(finalizers)](const NYql::IGraphTransformer::TStatus&) {
-                    TVector<TFuture<void>> futures;
-                    for (const auto& f : finalizers) {
-                        futures.push_back(f());
-                    }
-                    return WaitAll(futures);
-                };
-            }
             TypesCtx->StreamLookupJoin = Config->GetEnableDqSourceStreamLookupJoin();
+        }
+
+        if (!finalizers.empty()) {
+            DataProvidersFinalizer = [finalizers = std::move(finalizers)](const NYql::IGraphTransformer::TStatus&) {
+                TVector<TFuture<void>> futures;
+                for (const auto& f : finalizers) {
+                    futures.push_back(f());
+                }
+                return WaitAll(futures);
+            };
         }
 
         InitPgProvider();
@@ -2316,7 +2319,7 @@ private:
     IModuleResolver::TPtr ModuleResolver;
     bool KeepConfigChanges;
     bool IsInternalCall;
-    std::optional<TKqpFederatedQuerySetup> FederatedQuerySetup;
+    TIntrusivePtr<TKqpFederatedQuerySetup> FederatedQuerySetup;
 
     TIntrusivePtr<TKikimrSessionContext> SessionCtx;
     TKikimrConfiguration::TPtr Config;
@@ -2362,7 +2365,7 @@ Ydb::Table::QueryStatsCollection::Mode GetStatsMode(NYql::EKikimrStatsMode stats
 
 TIntrusivePtr<IKqpHost> CreateKqpHost(TIntrusivePtr<IKqpGateway> gateway, const TString& cluster,
     const TString& database, TKikimrConfiguration::TPtr config, IModuleResolver::TPtr moduleResolver,
-    std::optional<TKqpFederatedQuerySetup> federatedQuerySetup, const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, const TGUCSettings::TPtr& gUCSettings,
+    const TIntrusivePtr<TKqpFederatedQuerySetup>& federatedQuerySetup, const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, const TGUCSettings::TPtr& gUCSettings,
     const NKikimrConfig::TQueryServiceConfig& queryServiceConfig, const TMaybe<TString>& applicationName, const NKikimr::NMiniKQL::IFunctionRegistry* funcRegistry, bool keepConfigChanges,
     bool isInternalCall, TKqpTempTablesState::TConstPtr tempTablesState, NActors::TActorSystem* actorSystem, NYql::TExprContext* ctx, const TIntrusivePtr<TUserRequestContext>& userRequestContext,
     bool usePessimisticLocks)

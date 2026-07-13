@@ -244,7 +244,7 @@ public:
         const TKqpSettings::TConstPtr& kqpSettings,
         TIntrusivePtr<TModuleResolverState> moduleResolverState, TIntrusivePtr<TKqpCounters> counters,
         std::shared_ptr<IQueryReplayBackendFactory> queryReplayFactory,
-        std::optional<TKqpFederatedQuerySetup> federatedQuerySetup
+        TIntrusivePtr<TKqpFederatedQuerySetup> federatedQuerySetup
         )
         : QueryCache(std::move(queryCache))
         , TableServiceConfig(tableServiceConfig)
@@ -1039,7 +1039,7 @@ private:
 
     TKqpRequestsQueue RequestsQueue;
     std::shared_ptr<IQueryReplayBackendFactory> QueryReplayFactory;
-    std::optional<TKqpFederatedQuerySetup> FederatedQuerySetup;
+    TIntrusivePtr<TKqpFederatedQuerySetup> FederatedQuerySetup;
 
     bool CollectDiagnostics = false;
 };
@@ -1533,7 +1533,7 @@ IActor* CreateKqpCompileService(
     const TTableServiceConfig& tableServiceConfig, const TQueryServiceConfig& queryServiceConfig,
     const TKqpSettings::TConstPtr& kqpSettings, TIntrusivePtr<TModuleResolverState> moduleResolverState, TIntrusivePtr<TKqpCounters> counters,
     std::shared_ptr<IQueryReplayBackendFactory> queryReplayFactory,
-    std::optional<TKqpFederatedQuerySetup> federatedQuerySetup)
+    TIntrusivePtr<TKqpFederatedQuerySetup> federatedQuerySetup)
 {
     return new TKqpCompileService(
         std::move(queryCache),

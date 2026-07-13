@@ -254,7 +254,7 @@ IActor* CreateKqpCompileService(
     const NKikimrConfig::TQueryServiceConfig& queryServiceConfig,
     const TKqpSettings::TConstPtr& kqpSettings, TIntrusivePtr<TModuleResolverState> moduleResolverState,
     TIntrusivePtr<TKqpCounters> counters, std::shared_ptr<IQueryReplayBackendFactory> queryReplayFactory,
-    std::optional<TKqpFederatedQuerySetup> federatedQuerySetup
+    TIntrusivePtr<TKqpFederatedQuerySetup> federatedQuerySetup
     );
 
 IActor* CreateKqpCompileComputationPatternService(const NKikimrConfig::TTableServiceConfig& serviceConfig,
@@ -266,7 +266,7 @@ IActor* CreateKqpCompileActor(const TActorId& owner, const TKqpSettings::TConstP
     TIntrusivePtr<TModuleResolverState> moduleResolverState, TIntrusivePtr<TKqpCounters> counters,
     const TString& uid, const TKqpQueryId& query,
     const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, const TString& clientAddress,
-    std::optional<TKqpFederatedQuerySetup> federatedQuerySetup,
+    TIntrusivePtr<TKqpFederatedQuerySetup> federatedQuerySetup,
     TKqpDbCountersPtr dbCounters, const TGUCSettings::TPtr& gUCSettings, const TMaybe<TString>& applicationName,
     const TIntrusivePtr<TUserRequestContext>& userRequestContext, NWilson::TTraceId traceId = {},
     TKqpTempTablesState::TConstPtr tempTablesState = nullptr,

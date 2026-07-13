@@ -577,6 +577,10 @@
         "type": "Utf8?"
       },
       {
+        "name": "HasFullScan",
+        "type": "Utf8?"
+      },
+      {
         "name": "Name",
         "type": "Utf8?"
       },

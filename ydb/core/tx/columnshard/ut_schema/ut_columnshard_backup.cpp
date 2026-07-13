@@ -183,6 +183,8 @@ Y_UNIT_TEST_SUITE(BackupWithRestart) {
         TestWaitCondition(runtime, "export", [&]() {
             return NTestUtils::GetObjectKeys("test", s3Client).size() == 3;
         });
+
+        VerifyNoBackupOrRestoreArtifacts(runtime, csControllerGuard.operator->());
     }
 
     Y_UNIT_TEST_DUO(BackupWithUncommittedData, Reboot) {
@@ -274,6 +276,8 @@ Y_UNIT_TEST_SUITE(BackupWithRestart) {
         TestWaitCondition(runtime, "export", [&]() {
             return NTestUtils::GetObjectKeys("test", s3Client).size() == 3;
         });
+
+        VerifyNoBackupOrRestoreArtifacts(runtime, csControllerGuard.operator->());
     }
 
     Y_UNIT_TEST_DUO(BackupWithMultipleRestarts, Reboot) {
@@ -359,6 +363,8 @@ Y_UNIT_TEST_SUITE(BackupWithRestart) {
         TestWaitCondition(runtime, "export", [&]() {
             return NTestUtils::GetObjectKeys("test", s3Client).size() == 3;
         });
+
+        VerifyNoBackupOrRestoreArtifacts(runtime, csControllerGuard.operator->());
     }
 
     Y_UNIT_TEST_DUO(BackupDuringPropose, Reboot) {
@@ -424,6 +430,8 @@ Y_UNIT_TEST_SUITE(BackupWithRestart) {
         TestWaitCondition(runtime, "export", [&]() {
             return NTestUtils::GetObjectKeys("test", s3Client).size() == 3;
         });
+
+        VerifyNoBackupOrRestoreArtifacts(runtime, csControllerGuard.operator->());
     }
 
     Y_UNIT_TEST_DUO(BackupWithSchemaVerification, Reboot) {
@@ -498,6 +506,8 @@ Y_UNIT_TEST_SUITE(BackupWithRestart) {
         // Verify that the export completed successfully even after reboot
         auto keys = NTestUtils::GetObjectKeys("test", s3Client);
         UNIT_ASSERT_EQUAL(keys.size(), 3);
+
+        VerifyNoBackupOrRestoreArtifacts(runtime, csControllerGuard.operator->());
     }
 
     Y_UNIT_TEST_DUO(BackupWithComplexSchema, Reboot) {
@@ -587,6 +597,8 @@ Y_UNIT_TEST_SUITE(BackupWithRestart) {
         // Verify export completed
         auto keys = NTestUtils::GetObjectKeys("test", s3Client);
         UNIT_ASSERT_EQUAL(keys.size(), 3);
+
+        VerifyNoBackupOrRestoreArtifacts(runtime, csControllerGuard.operator->());
     }
 
     Y_UNIT_TEST_DUO(BackupDuringExportExecution, Reboot) {
@@ -670,6 +682,8 @@ Y_UNIT_TEST_SUITE(BackupWithRestart) {
         // Verify export completed
         auto keys = NTestUtils::GetObjectKeys("test", s3Client);
         UNIT_ASSERT_EQUAL(keys.size(), 3);
+
+        VerifyNoBackupOrRestoreArtifacts(runtime, csControllerGuard.operator->());
     }
 }
 

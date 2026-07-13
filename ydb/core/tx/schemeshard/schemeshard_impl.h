@@ -929,6 +929,7 @@ public:
     void PersistRemoveKesusInfo(NIceDb::TNiceDb& db, TPathId pathId);
     void PersistRemoveTableIndex(NIceDb::TNiceDb& db, TPathId tableId);
     void PersistRemoveTable(NIceDb::TNiceDb& db, TPathId tableId, const TActorContext& ctx);
+    void ClearBackupRestoreHistory(NIceDb::TNiceDb& db, TPathId pathId, const TMap<TTxId, TTableInfo::TBackupRestoreResult>& history);
     void PersistRevertedMigration(NIceDb::TNiceDb& db, TPathId pathId, TTabletId abandonedSchemeShardId);
     void UpdateDiskSpaceUsage(NIceDb::TNiceDb& db, TPathId pathId, const TPartitionStats& newPartitionStats, const TPartitionStats& oldPartitionStats, const TActorContext &ctx);
 

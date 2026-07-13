@@ -40,6 +40,8 @@ NKikimrKqp::TTopicDeferredPublicationRequest::EOp MapFinalizeOp(EFinalizePublica
             return NKikimrKqp::TTopicDeferredPublicationRequest::Publish;
         case EFinalizePublicationOp::Cancel:
             return NKikimrKqp::TTopicDeferredPublicationRequest::Cancel;
+        default:
+            Y_ABORT("unexpected EFinalizePublicationOp");
     }
 }
 

@@ -7,6 +7,9 @@ inputs:
     required: true
     default: "relwithdebinfo"
     description: "relwithdebinfo, release-asan, release-tsan"
+  target_platform:
+    default: "DEFAULT-LINUX-X86_64"
+    description: "target platform"
   test_type:
     required: false
     type: string
@@ -139,7 +142,8 @@ runs:
         echo "LAST_BUILD_RESULTS_REPORT=$PUBLIC_DIR/last_report.json" >> $GITHUB_ENV
         echo "SUMMARY_LINKS=$PUBLIC_DIR/summary_links.txt" >> $GITHUB_ENV
         echo "BUILD_PRESET=${{ inputs.build_preset }}" >> $GITHUB_ENV
-
+        echo "TARGET_PLATFORM=${{ inputs.target_platform }}" >> $GITHUB_ENV
+        
         python3 -m pip install ydb ydb[yc] codeowners humanize plotly
 
     - name: Setup cache
@@ -236,6 +240,20 @@ runs:
           *)
             echo "Invalid preset: $BUILD_PRESET"
             exit 1
+            ;;
+        esac
+        
+        case "$TARGET_PLATFORM" in
+          DEFAULT-LINUX-AARCH64)
+            params+=(
+              -DMKQL_DISABLE_CODEGEN=1
+              --target-platform=DEFAULT-LINUX-AARCH64
+            )
+            ;;
+          *)
+            params+=(
+              "--target-platform=$TARGET_PLATFORM"
+            )
             ;;
         esac
 

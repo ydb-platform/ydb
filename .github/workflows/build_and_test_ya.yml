@@ -9,6 +9,9 @@ on:
         description: "limit build and test to specific target"
       build_preset:
         type: string
+      target_platform:
+        type: string
+        default: "DEFAULT-LINUX-X86_64"
       runner_label:
         type: string
         default: "linux"
@@ -79,6 +82,7 @@ jobs:
       with:
         build_preset: ${{ inputs.build_preset }}
         build_target: ${{ inputs.build_target }}
+        target_platform: ${{ inputs.target_platform }}
         increment: false
         run_tests: ${{ inputs.run_tests }}
         test_size: ${{ inputs.test_size }}

@@ -589,6 +589,7 @@ public:
             .CheckpointId = ev.CheckpointId,
             .StreamingQueryPath = ev.StreamingQueryPath,
             .CustomerSuppliedId = ev.CustomerSuppliedId,
+            .WatermarkLateEventsPolicy = ev.WatermarkLateEventsPolicy,
             .StreamingDisposition = ev.StreamingDisposition,
         }, QueryServiceConfig));
 

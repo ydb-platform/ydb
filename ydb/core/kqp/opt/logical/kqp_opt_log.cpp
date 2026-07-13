@@ -1,6 +1,7 @@
 #include "kqp_opt_log_rules.h"
 #include "kqp_opt_cbo.h"
 
+#include <ydb/core/kqp/common/kqp_user_request_context.h>
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/kqp/opt/kqp_opt_impl.h>
 #include <ydb/core/kqp/opt/physical/kqp_opt_phy_rules.h>
@@ -157,6 +158,13 @@ protected:
             if (!input) {
                 return node;
             }
+
+            TMaybe<NHoppingWindow::EPolicy> defaultLatePolicy;
+            if (KqpCtx.UserRequestContext && KqpCtx.UserRequestContext->WatermarkLateEventsPolicy) {
+                const auto policy = to_lower(KqpCtx.UserRequestContext->WatermarkLateEventsPolicy);
+                defaultLatePolicy = TryFromString<NHoppingWindow::EPolicy>(policy).GetOrElse(NHoppingWindow::EPolicy::Drop);
+            }
+
             output = NHopping::RewriteAsHoppingWindow(
                 node,
                 ctx,
@@ -164,7 +172,9 @@ protected:
                 input.Cast(),
                 false,
                 TDuration::MilliSeconds(TDqSettings::TDefault::WatermarksLateArrivalDelayMs),
-                KqpCtx.Config->GetEnableWatermarks());
+                KqpCtx.Config->GetEnableWatermarks(),
+                defaultLatePolicy
+            );
         } else {
             NDq::TSpillingSettings spillingSettings(KqpCtx.Config->GetEnabledSpillingNodes());
             output = DqRewriteAggregate(node, ctx, TypesCtx, false, KqpCtx.Config->HasOptEnableOlapPushdown() || KqpCtx.Config->HasOptUseFinalizeByKey(), KqpCtx.Config->HasOptUseFinalizeByKey(), spillingSettings.IsAggregationSpillingEnabled());

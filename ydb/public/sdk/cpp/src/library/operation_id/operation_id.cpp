@@ -82,6 +82,9 @@ std::string ProtoToString(const Ydb::TOperationId& proto) {
         case Ydb::TOperationId::ANALYZE:
             res << "ydb://analyze";
             break;
+        case Ydb::TOperationId::SET_NOT_NULL:
+            res << "ydb://setnotnull";
+            break;
         default:
             Y_ABORT_UNLESS(false, "unexpected kind");
     }

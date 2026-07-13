@@ -11,6 +11,7 @@
 #include <ydb/core/tx/schemeshard/schemeshard_export.h>
 #include <ydb/core/tx/schemeshard/schemeshard_forced_compaction.h>
 #include <ydb/core/tx/schemeshard/schemeshard_import.h>
+#include <ydb/core/tx/schemeshard/schemeshard_set_column_constraint.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/library/operation_id/operation_id.h>
 
@@ -47,6 +48,8 @@ class TCancelOperationRPC: public TRpcOperationRequestActor<TCancelOperationRPC,
             return "[CancelForcedCompaction]";
         case TOperationId::ANALYZE:
             return "[CancelAnalyze]";
+        case TOperationId::SET_NOT_NULL:
+            return "[CancelSetNotNull]";
         default:
             return "[Untagged]";
         }
@@ -62,6 +65,8 @@ class TCancelOperationRPC: public TRpcOperationRequestActor<TCancelOperationRPC,
             return new TEvIndexBuilder::TEvCancelRequest(TxId, GetDatabaseName(), RawOperationId);
         case TOperationId::COMPACTION:
             return new TEvForcedCompaction::TEvCancelRequest(TxId, GetDatabaseName(), RawOperationId);
+        case TOperationId::SET_NOT_NULL:
+            return new TEvSetColumnConstraint::TEvCancelRequest(TxId, GetDatabaseName(), RawOperationId);
         default:
             Y_ABORT("unreachable");
         }
@@ -72,7 +77,8 @@ class TCancelOperationRPC: public TRpcOperationRequestActor<TCancelOperationRPC,
         return kind == TOperationId::EXPORT
             || kind == TOperationId::IMPORT
             || kind == TOperationId::BUILD_INDEX
-            || kind == TOperationId::COMPACTION;
+            || kind == TOperationId::COMPACTION
+            || kind == TOperationId::SET_NOT_NULL;
     }
 
     void HandleNavigateResult(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
@@ -187,7 +193,16 @@ class TCancelOperationRPC: public TRpcOperationRequestActor<TCancelOperationRPC,
         Reply(record.GetStatus(), record.GetIssues());
     }
 
-public:
+    void Handle(TEvSetColumnConstraint::TEvCancelResponse::TPtr& ev) {
+        const auto& record = ev->Get()->Record;
+
+        LOG_D("Handle TEvSetColumnConstraint::TEvCancelResponse"
+            << ": record# " << record.ShortDebugString());
+
+        Reply(record.GetStatus(), record.GetIssues());
+    }
+
+    public:
     using TRpcOperationRequestActor::TRpcOperationRequestActor;
 
     void Bootstrap() {
@@ -201,6 +216,7 @@ public:
             case TOperationId::IMPORT:
             case TOperationId::BUILD_INDEX:
             case TOperationId::COMPACTION:
+            case TOperationId::SET_NOT_NULL:
                 if (!TryGetId(OperationId, RawOperationId)) {
                     return Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, "Unable to extract operation id");
                 }
@@ -251,6 +267,7 @@ public:
             hFunc(TEvImport::TEvCancelImportResponse, Handle);
             hFunc(TEvIndexBuilder::TEvCancelResponse, Handle);
             hFunc(TEvForcedCompaction::TEvCancelResponse, Handle);
+            hFunc(TEvSetColumnConstraint::TEvCancelResponse, Handle);
             hFunc(NKqp::TEvCancelScriptExecutionOperationResponse, Handle);
             hFunc(NStat::TEvStatistics::TEvAnalyzeOpCancelResponse, Handle);
             hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, HandleNavigateResult);
@@ -297,3 +314,4 @@ IActor* TEvCancelOperationRequest::CreateRpcActor(NKikimr::NGRpcService::IReques
 
 } // namespace NGRpcService
 } // namespace NKikimr
+

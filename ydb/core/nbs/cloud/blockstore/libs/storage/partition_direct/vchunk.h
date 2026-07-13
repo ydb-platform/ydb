@@ -67,6 +67,8 @@ public:
 
     // This vchunk's contribution to the tablet-wide cleanup watermark: the
     // smallest lsn still held in PBuffers, or nullopt when nothing is inflight.
+    // Until the dirty map is restored it returns 0 (the blocking bound), so
+    // the cleanup cannot erase records that are not accounted for yet.
     // Must run on the executor thread.
     [[nodiscard]] std::optional<ui64> GetSafeBarrierForErase() const;
 

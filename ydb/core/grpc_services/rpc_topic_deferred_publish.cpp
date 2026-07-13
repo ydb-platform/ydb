@@ -7,6 +7,7 @@
 #include <ydb/core/persqueue/deferred_publish/events.h>
 #include <ydb/core/persqueue/deferred_publish/finalize_publication_actor.h>
 #include <ydb/core/persqueue/deferred_publish/list_publications_query.h>
+#include <ydb/core/persqueue/deferred_publish/query_utils.h>
 #include <ydb/core/persqueue/deferred_publish/registry_actor.h>
 #include <ydb/library/aclib/aclib.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
@@ -20,6 +21,7 @@ namespace {
 
 constexpr TStringBuf NotImplementedMessage = "Topic deferred publish is not implemented yet";
 constexpr TStringBuf DisabledMessage = "Topic deferred publish is not enabled";
+constexpr TStringBuf AuthenticationRequiredMessage = "Authentication is required";
 
 TString GetSerializedUserToken(const IRequestOpCtx* request) {
     if (request == nullptr) {
@@ -117,6 +119,22 @@ bool ValidateDeferredPublishDatabase(
     return true;
 }
 
+bool RequireAuthenticatedCaller(IRequestOpCtx* request, TString* callerSid) {
+    if (request->GetSerializedToken().empty()) {
+        request->RaiseIssue(NYql::TIssue(TString(AuthenticationRequiredMessage)));
+        return false;
+    }
+
+    const TString sid = GetUserSID(request);
+    if (!NPQ::NDeferredPublish::IsAuthenticatedCallerSid(sid)) {
+        request->RaiseIssue(NYql::TIssue(TString(AuthenticationRequiredMessage)));
+        return false;
+    }
+
+    *callerSid = sid;
+    return true;
+}
+
 class TBeginPublicationRequestActor
     : public NActors::TActorBootstrapped<TBeginPublicationRequestActor> {
 public:
@@ -145,6 +163,14 @@ public:
             return;
         }
 
+        TString callerSid;
+        if (!RequireAuthenticatedCaller(Request.get(), &callerSid)) {
+            Ydb::Topic::DeferredPublish::BeginPublicationResult result;
+            Request->SendResult(result, Ydb::StatusIds::UNAUTHORIZED);
+            PassAway();
+            return;
+        }
+
         const auto* protoRequest = TEvBeginPublicationRequest::GetProtoRequest(Request);
         if (protoRequest->ext_publication_id().empty()) {
             Request->RaiseIssue(NYql::TIssue("ext_publication_id must not be empty"));
@@ -165,7 +191,7 @@ public:
                 event->Database = *database;
                 event->ExtPublicationId = protoRequest->ext_publication_id();
                 event->WriterIdentity = writerIdentity;
-                event->CreatedBy = GetUserSID(Request.get());
+                event->CreatedBy = callerSid;
                 return event;
             }());
         Become(&TBeginPublicationRequestActor::StateFunc);
@@ -222,6 +248,14 @@ public:
             return;
         }
 
+        TString callerSid;
+        if (!RequireAuthenticatedCaller(Request.get(), &callerSid)) {
+            Ydb::Topic::DeferredPublish::ListPublicationsResult result;
+            Request->SendResult(result, Ydb::StatusIds::UNAUTHORIZED);
+            PassAway();
+            return;
+        }
+
         const auto* protoRequest = TEvListPublicationsRequest::GetProtoRequest(Request);
         TMaybe<TString> writerIdentityFilter;
         if (protoRequest->has_writer_identity()) {
@@ -229,7 +263,7 @@ public:
         }
 
         Register(NPQ::NDeferredPublish::CreateListPublicationsQueryActor(
-            SelfId(), *database, writerIdentityFilter));
+            SelfId(), *database, callerSid, writerIdentityFilter));
         Become(&TListPublicationsRequestActor::StateFunc);
     }
 
@@ -292,9 +326,17 @@ public:
             return;
         }
 
+        TString callerSid;
+        if (!RequireAuthenticatedCaller(Request.get(), &callerSid)) {
+            Ydb::Topic::DeferredPublish::DescribePublicationResult result;
+            Request->SendResult(result, Ydb::StatusIds::UNAUTHORIZED);
+            PassAway();
+            return;
+        }
+
         const auto* protoRequest = TEvDescribePublicationRequest::GetProtoRequest(Request);
         Register(NPQ::NDeferredPublish::CreateDescribePublicationQueryActor(
-            SelfId(), *database, protoRequest->int_publication_id()));
+            SelfId(), *database, protoRequest->int_publication_id(), callerSid));
         Become(&TDescribePublicationRequestActor::StateFunc);
     }
 
@@ -367,13 +409,22 @@ public:
             return;
         }
 
+        TString callerSid;
+        if (!RequireAuthenticatedCaller(Request.get(), &callerSid)) {
+            Ydb::Topic::DeferredPublish::PublishResult result;
+            Request->SendResult(result, Ydb::StatusIds::UNAUTHORIZED);
+            PassAway();
+            return;
+        }
+
         const auto* protoRequest = TEvPublishRequest::GetProtoRequest(Request);
         Register(NPQ::NDeferredPublish::CreateFinalizePublicationActor(
             SelfId(),
             *database,
             protoRequest->int_publication_id(),
             NPQ::NDeferredPublish::EFinalizePublicationOp::Publish,
-            GetSerializedUserToken(Request.get())));
+            GetSerializedUserToken(Request.get()),
+            callerSid));
         Become(&TPublishRequestActor::StateFunc);
     }
 
@@ -427,13 +478,22 @@ public:
             return;
         }
 
+        TString callerSid;
+        if (!RequireAuthenticatedCaller(Request.get(), &callerSid)) {
+            Ydb::Topic::DeferredPublish::CancelPublicationResult result;
+            Request->SendResult(result, Ydb::StatusIds::UNAUTHORIZED);
+            PassAway();
+            return;
+        }
+
         const auto* protoRequest = TEvCancelPublicationRequest::GetProtoRequest(Request);
         Register(NPQ::NDeferredPublish::CreateFinalizePublicationActor(
             SelfId(),
             *database,
             protoRequest->int_publication_id(),
             NPQ::NDeferredPublish::EFinalizePublicationOp::Cancel,
-            GetSerializedUserToken(Request.get())));
+            GetSerializedUserToken(Request.get()),
+            callerSid));
         Become(&TCancelPublicationRequestActor::StateFunc);
     }
 

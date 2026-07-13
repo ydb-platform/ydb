@@ -7,6 +7,7 @@ namespace NKikimr::NPQ::NDeferredPublish {
 NActors::IActor* CreateDescribePublicationQueryActor(
     const NActors::TActorId& replyTo,
     const TString& database,
-    ui64 intPublicationId);
+    ui64 intPublicationId,
+    const TString& callerSid);
 
 } // namespace NKikimr::NPQ::NDeferredPublish

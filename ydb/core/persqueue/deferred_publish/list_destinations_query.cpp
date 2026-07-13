@@ -28,6 +28,7 @@ public:
 
             SELECT
                 p.`ext_publication_id` AS ext_publication_id,
+                p.`created_by` AS created_by,
                 d.`path` AS destination_path,
                 d.`destination_blob` AS destination_blob
             FROM `)" << PublicationsTablePath() << R"(` AS p
@@ -56,6 +57,9 @@ public:
         while (parser.TryNextRow()) {
             if (data.ExtPublicationId.empty()) {
                 data.ExtPublicationId = parser.ColumnParser("ext_publication_id").GetUtf8();
+                if (const auto createdBy = parser.ColumnParser("created_by").GetOptionalUtf8()) {
+                    data.CreatedBy = TString(*createdBy);
+                }
             }
 
             const auto destinationPath = parser.ColumnParser("destination_path").GetOptionalUtf8();

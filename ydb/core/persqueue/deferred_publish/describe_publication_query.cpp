@@ -15,10 +15,12 @@ public:
     TDescribePublicationQuery(
         const NActors::TActorId& replyTo,
         const TString& database,
-        ui64 intPublicationId)
+        ui64 intPublicationId,
+        const TString& callerSid)
         : TQueryBase(NKikimrServices::PERSQUEUE, {}, database, /* isSystemUser */ true)
         , ReplyTo(replyTo)
         , IntPublicationId(intPublicationId)
+        , CallerSid(callerSid)
     {}
 
     void OnRunQuery() override {
@@ -86,6 +88,11 @@ public:
         }
 
         Publication = std::move(publication);
+        if (!IsPublicationOwnedByCaller(CallerSid, Publication->CreatedBy)) {
+            Publication = Nothing();
+            Finish(Ydb::StatusIds::UNAUTHORIZED, "Access denied");
+            return;
+        }
         Finish();
     }
 
@@ -109,6 +116,7 @@ public:
 private:
     const NActors::TActorId ReplyTo;
     const ui64 IntPublicationId;
+    const TString CallerSid;
     TMaybe<TDescribePublicationData> Publication;
 };
 
@@ -117,9 +125,10 @@ private:
 NActors::IActor* CreateDescribePublicationQueryActor(
     const NActors::TActorId& replyTo,
     const TString& database,
-    ui64 intPublicationId)
+    ui64 intPublicationId,
+    const TString& callerSid)
 {
-    return new TDescribePublicationQuery(replyTo, database, intPublicationId);
+    return new TDescribePublicationQuery(replyTo, database, intPublicationId, callerSid);
 }
 
 } // namespace NKikimr::NPQ::NDeferredPublish

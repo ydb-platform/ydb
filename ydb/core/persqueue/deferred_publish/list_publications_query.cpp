@@ -15,23 +15,27 @@ public:
     TListPublicationsQuery(
         const NActors::TActorId& replyTo,
         const TString& database,
+        const TString& callerSid,
         const TMaybe<TString>& writerIdentityFilter)
         : TQueryBase(NKikimrServices::PERSQUEUE, {}, database, /* isSystemUser */ true)
         , ReplyTo(replyTo)
+        , CallerSid(callerSid)
         , WriterIdentityFilter(writerIdentityFilter)
     {}
 
     void OnRunQuery() override {
         TString sql = TStringBuilder() << R"(
             -- TListPublicationsQuery::OnRunQuery
+            DECLARE $created_by AS Text;
             DECLARE $writer_identity AS Optional<Text>;
 
             SELECT
                 `int_publication_id`,
                 `ext_publication_id`,
                 `writer_identity`
-            FROM `)" << PublicationsTablePath() << R"(`
-            WHERE ($writer_identity IS NULL OR `writer_identity` = $writer_identity)
+            FROM `)" << PublicationsTablePath() << R"(` 
+            WHERE `created_by` = $created_by
+                AND ($writer_identity IS NULL OR `writer_identity` = $writer_identity)
             ORDER BY `int_publication_id`;
         )";
 
@@ -42,6 +46,9 @@ public:
 
         NYdb::TParamsBuilder params;
         params
+            .AddParam("$created_by")
+                .Utf8(CallerSid)
+                .Build()
             .AddParam("$writer_identity")
                 .OptionalUtf8(writerIdentity)
                 .Build();
@@ -85,6 +92,7 @@ public:
 
 private:
     const NActors::TActorId ReplyTo;
+    const TString CallerSid;
     const TMaybe<TString> WriterIdentityFilter;
     TVector<TPublicationSummary> Publications;
 };
@@ -94,9 +102,10 @@ private:
 NActors::IActor* CreateListPublicationsQueryActor(
     const NActors::TActorId& replyTo,
     const TString& database,
+    const TString& callerSid,
     const TMaybe<TString>& writerIdentityFilter)
 {
-    return new TListPublicationsQuery(replyTo, database, writerIdentityFilter);
+    return new TListPublicationsQuery(replyTo, database, callerSid, writerIdentityFilter);
 }
 
 } // namespace NKikimr::NPQ::NDeferredPublish

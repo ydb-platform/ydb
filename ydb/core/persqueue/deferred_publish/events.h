@@ -36,6 +36,7 @@ struct TDestinationRow {
 
 struct TListDestinationsData {
     TString ExtPublicationId;
+    TMaybe<TString> CreatedBy;
     TVector<TDestinationRow> Destinations;
 };
 

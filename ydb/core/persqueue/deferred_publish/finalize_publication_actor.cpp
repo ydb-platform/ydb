@@ -3,6 +3,7 @@
 #include "delete_publication_query.h"
 #include "destination_blob.h"
 #include "list_destinations_query.h"
+#include "query_utils.h"
 #include "tables_creator.h"
 
 #include <ydb/core/kqp/common/events/events.h>
@@ -110,12 +111,14 @@ public:
         TString database,
         ui64 intPublicationId,
         EFinalizePublicationOp op,
-        TString userToken)
+        TString userToken,
+        TString callerSid)
         : ReplyTo(replyTo)
         , Database(std::move(database))
         , IntPublicationId(intPublicationId)
         , Op(op)
         , UserToken(std::move(userToken))
+        , CallerSid(std::move(callerSid))
     {}
 
     void StartListDestinations() {
@@ -264,6 +267,12 @@ private:
         Y_ABORT_UNLESS(response.Data.Defined());
         ListDestinationsData = *response.Data;
 
+        if (!IsPublicationOwnedByCaller(CallerSid, ListDestinationsData->CreatedBy)) {
+            NYql::TIssues issues;
+            issues.AddIssue("Access denied");
+            return ReplyAndPassAway(Ydb::StatusIds::UNAUTHORIZED, issues);
+        }
+
         if (ListDestinationsData->Destinations.empty()) {
             if (Op == EFinalizePublicationOp::Cancel) {
                 return StartDeleteOnly();
@@ -361,6 +370,7 @@ private:
     const ui64 IntPublicationId;
     const EFinalizePublicationOp Op;
     const TString UserToken;
+    const TString CallerSid;
 
     TMaybe<TListDestinationsData> ListDestinationsData;
     NKikimrKqp::TTopicDeferredPublicationRequest DeferredPublicationRequest;
@@ -376,9 +386,10 @@ NActors::IActor* CreateFinalizePublicationActor(
     const TString& database,
     ui64 intPublicationId,
     EFinalizePublicationOp op,
-    const TString& userToken)
+    const TString& userToken,
+    const TString& callerSid)
 {
-    return new TFinalizePublicationActor(replyTo, database, intPublicationId, op, userToken);
+    return new TFinalizePublicationActor(replyTo, database, intPublicationId, op, userToken, callerSid);
 }
 
 } // namespace NKikimr::NPQ::NDeferredPublish

@@ -59,7 +59,9 @@ void FillClientContext(
     const TString& authTicket = "root@builtin")
 {
     context.AddMetadata(NYdb::YDB_DATABASE_HEADER, database);
-    context.AddMetadata(NYdb::YDB_AUTH_TICKET_HEADER, authTicket);
+    if (!authTicket.empty()) {
+        context.AddMetadata(NYdb::YDB_AUTH_TICKET_HEADER, authTicket);
+    }
 }
 
 std::unique_ptr<Ydb::Topic::DeferredPublish::V1::TopicDeferredPublishService::Stub> MakeStub(
@@ -87,7 +89,7 @@ TBeginPublicationOutcome CallBeginPublication(
     grpc::ClientContext context;
     if (setDatabaseHeader) {
         FillClientContext(context, database, authTicket);
-    } else {
+    } else if (!authTicket.empty()) {
         context.AddMetadata(NYdb::YDB_AUTH_TICKET_HEADER, authTicket);
     }
 
@@ -120,10 +122,11 @@ struct TListPublicationsOutcome {
 TListPublicationsOutcome CallListPublications(
     Ydb::Topic::DeferredPublish::V1::TopicDeferredPublishService::Stub& stub,
     const TString& database,
-    const TMaybe<TString>& writerIdentity = Nothing())
+    const TMaybe<TString>& writerIdentity = Nothing(),
+    const TString& authTicket = "root@builtin")
 {
     grpc::ClientContext context;
-    FillClientContext(context, database);
+    FillClientContext(context, database, authTicket);
 
     Ydb::Topic::DeferredPublish::ListPublicationsRequest request;
     if (writerIdentity.Defined()) {
@@ -143,10 +146,11 @@ struct TDescribePublicationOutcome {
 TDescribePublicationOutcome CallDescribePublication(
     Ydb::Topic::DeferredPublish::V1::TopicDeferredPublishService::Stub& stub,
     const TString& database,
-    ui64 intPublicationId)
+    ui64 intPublicationId,
+    const TString& authTicket = "root@builtin")
 {
     grpc::ClientContext context;
-    FillClientContext(context, database);
+    FillClientContext(context, database, authTicket);
 
     Ydb::Topic::DeferredPublish::DescribePublicationRequest request;
     request.set_int_publication_id(intPublicationId);
@@ -1318,6 +1322,116 @@ Y_UNIT_TEST(BeginPublicationStoresCreatedByForWriterBuiltin) {
         TString(extPublicationId),
         TString(writerIdentity),
         TString(WriterBuiltinUser));
+}
+
+Y_UNIT_TEST(BeginPublicationRejectsMissingAuth) {
+    auto server = MakeServerWithDeferredPublishEnabled();
+    server.AnnoyingClient->GrantConnect("root@builtin");
+
+    const auto outcome = CallBeginPublication(
+        *MakeStub(server),
+        "/Root",
+        "no-auth-pub",
+        Nothing(),
+        true,
+        TString());
+    UNIT_ASSERT(outcome.RpcStatus.ok());
+    UNIT_ASSERT_VALUES_EQUAL(outcome.Operation.status(), Ydb::StatusIds::UNAUTHORIZED);
+    UNIT_ASSERT(outcome.Operation.ready());
+    UNIT_ASSERT_GT(outcome.Operation.issues_size(), 0);
+}
+
+Y_UNIT_TEST(ListPublicationsReturnsOnlyCallerPublications) {
+    auto server = MakeServerWithDeferredPublishEnabled();
+    server.AnnoyingClient->GrantConnect("root@builtin");
+    server.AnnoyingClient->GrantConnect(TString(WriterBuiltinUser));
+
+    auto rootStub = MakeStub(server);
+    auto writerStub = MakeStub(server);
+
+    const ui64 rootIntId = BeginPublicationIntId(
+        CallBeginPublication(*rootStub, "/Root", "pub-root", Nothing(), true, "root@builtin"));
+    BeginPublicationIntId(CallBeginPublication(
+        *writerStub,
+        "/Root",
+        "pub-writer",
+        Nothing(),
+        true,
+        TString(WriterBuiltinUser)));
+
+    {
+        const auto outcome = CallListPublications(*rootStub, "/Root");
+        UNIT_ASSERT_VALUES_EQUAL(outcome.Operation.status(), Ydb::StatusIds::SUCCESS);
+        Ydb::Topic::DeferredPublish::ListPublicationsResult result;
+        UNIT_ASSERT(outcome.Operation.result().UnpackTo(&result));
+        UNIT_ASSERT_VALUES_EQUAL(result.publications_size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(result.publications(0).int_publication_id(), rootIntId);
+        UNIT_ASSERT_VALUES_EQUAL(result.publications(0).ext_publication_id(), "pub-root");
+    }
+
+    {
+        const auto outcome = CallListPublications(
+            *writerStub, "/Root", Nothing(), TString(WriterBuiltinUser));
+        UNIT_ASSERT_VALUES_EQUAL(outcome.Operation.status(), Ydb::StatusIds::SUCCESS);
+        Ydb::Topic::DeferredPublish::ListPublicationsResult result;
+        UNIT_ASSERT(outcome.Operation.result().UnpackTo(&result));
+        UNIT_ASSERT_VALUES_EQUAL(result.publications_size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(result.publications(0).ext_publication_id(), "pub-writer");
+    }
+}
+
+Y_UNIT_TEST(DescribePublicationRejectsNonOwner) {
+    auto server = MakeServerWithDeferredPublishEnabled();
+    server.AnnoyingClient->GrantConnect("root@builtin");
+    server.AnnoyingClient->GrantConnect(TString(WriterBuiltinUser));
+
+    auto rootStub = MakeStub(server);
+    auto writerStub = MakeStub(server);
+
+    const ui64 rootIntId = BeginPublicationIntId(
+        CallBeginPublication(*rootStub, "/Root", "describe-owner-pub"));
+
+    const auto outcome = CallDescribePublication(
+        *writerStub, "/Root", rootIntId, TString(WriterBuiltinUser));
+    UNIT_ASSERT(outcome.RpcStatus.ok());
+    UNIT_ASSERT_VALUES_EQUAL(outcome.Operation.status(), Ydb::StatusIds::UNAUTHORIZED);
+    UNIT_ASSERT(outcome.Operation.ready());
+}
+
+Y_UNIT_TEST(PublishRejectsNonOwner) {
+    auto server = MakeServerWithDeferredPublishEnabled();
+    server.AnnoyingClient->GrantConnect("root@builtin");
+    server.AnnoyingClient->GrantConnect(TString(WriterBuiltinUser));
+
+    auto rootStub = MakeStub(server);
+    auto writerStub = MakeStub(server);
+
+    const ui64 rootIntId = BeginPublicationIntId(
+        CallBeginPublication(*rootStub, "/Root", "publish-owner-pub"));
+
+    const auto outcome = CallPublish(
+        *writerStub, "/Root", rootIntId, TString(WriterBuiltinUser));
+    UNIT_ASSERT(outcome.RpcStatus.ok());
+    UNIT_ASSERT_VALUES_EQUAL(outcome.Operation.status(), Ydb::StatusIds::UNAUTHORIZED);
+    UNIT_ASSERT(outcome.Operation.ready());
+}
+
+Y_UNIT_TEST(CancelPublicationRejectsNonOwner) {
+    auto server = MakeServerWithDeferredPublishEnabled();
+    server.AnnoyingClient->GrantConnect("root@builtin");
+    server.AnnoyingClient->GrantConnect(TString(WriterBuiltinUser));
+
+    auto rootStub = MakeStub(server);
+    auto writerStub = MakeStub(server);
+
+    const ui64 rootIntId = BeginPublicationIntId(
+        CallBeginPublication(*rootStub, "/Root", "cancel-owner-pub"));
+
+    const auto outcome = CallCancelPublication(
+        *writerStub, "/Root", rootIntId, TString(WriterBuiltinUser));
+    UNIT_ASSERT(outcome.RpcStatus.ok());
+    UNIT_ASSERT_VALUES_EQUAL(outcome.Operation.status(), Ydb::StatusIds::UNAUTHORIZED);
+    UNIT_ASSERT(outcome.Operation.ready());
 }
 
 Y_UNIT_TEST(BeginPublicationDoesNotInsertDestinationRows) {

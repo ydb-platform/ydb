@@ -1,8 +1,6 @@
 {% include [index.md](_includes/index.md) %}
 
 
-<<<<<<< HEAD
-=======
 To work with {{ ydb-short-name }}, OpenSource SDKs are available for the following programming languages:
 
 | Language | GitHub Repository | API Reference |
@@ -40,4 +38,3 @@ See also:
 - [Documentation for application developers](../../dev/index.md)
 - [Test applications](../../dev/example-app/index.md)
 - [Code recipes](../../recipes/ydb-sdk/index.md)
->>>>>>> b1a26609898 (add .deb package docs (#44456))

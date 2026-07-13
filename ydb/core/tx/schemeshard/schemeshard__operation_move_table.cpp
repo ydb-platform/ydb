@@ -282,7 +282,7 @@ public:
             tableInfo->AlterVersion += 1;
 
             // copy table info
-            context.SS->Tables[dstPath.Base()->PathId] = tableInfo;
+            context.SS->Tables.Set(dstPath.Base()->PathId, tableInfo, context.MemChanges);
             context.SS->PersistTable(db, dstPath.Base()->PathId);
             context.SS->PersistAllTablePartitionStats(db, dstPath.Base()->PathId, tableInfo);
             {
@@ -302,7 +302,6 @@ public:
         } else {
             Y_ABORT();
         }
-        context.SS->IncrementPathDbRefCount(dstPath.Base()->PathId, "move table info");
 
         dstPath->StepCreated = step;
         context.SS->PersistCreateStep(db, dstPath.Base()->PathId, step);
@@ -940,7 +939,6 @@ public:
         context.MemChanges.GrabPath(context.SS, srcPath.Base()->PathId);
         context.MemChanges.GrabPath(context.SS, srcPath.Base()->ParentPathId);
         context.MemChanges.GrabNewTxState(context.SS, OperationId);
-        context.MemChanges.GrabNewIndex(context.SS, allocatedPathId);
 
         context.DbChanges.PersistPath(allocatedPathId);
         context.DbChanges.PersistPath(dstParent.Base()->PathId);

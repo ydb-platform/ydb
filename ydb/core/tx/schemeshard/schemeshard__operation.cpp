@@ -326,6 +326,11 @@ void TSchemeShard::AbortOperationPropose(const TTxId txId, TOperationContext& co
 
     context.MemChanges.UnDo(context.SS);
 
+    // expected empty here; disarm defensively, UnDo owns the counters
+    for (auto& [key, ref] : operation->Publications) {
+        ref.Disarm();
+    }
+
     // And remove aborted operation from existence
     Operations.erase(txId);
 }
@@ -1723,9 +1728,9 @@ void TOperation::AddPart(ISubOperation::TPtr part) {
     Parts.push_back(part);
 }
 
-bool TOperation::AddPublishingPath(TPathId pathId, ui64 version) {
+bool TOperation::AddPublishingPath(TSchemeShard* ss, TPathId pathId, ui64 version) {
     Y_ABORT_UNLESS(!IsReadyToNotify());
-    return Publications.emplace(pathId, version).second;
+    return Publications.emplace(TPublishPath(pathId, version), TPathRef(ss, pathId, "publish path")).second;
 }
 
 bool TOperation::IsPublished() const {

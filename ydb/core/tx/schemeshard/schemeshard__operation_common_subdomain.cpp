@@ -334,7 +334,7 @@ bool TPropose::HandleReply(TEvPrivate::TEvOperationPlan::TPtr& ev, TOperationCon
             /* isExternal */ path->PathType == TPathElement::EPathType::EPathTypeExtSubDomain,
             context.SS);
 
-    context.SS->SubDomains[pathId] = alter;
+    context.SS->SubDomains.SetUntracked(pathId, alter);
     context.SS->PersistSubDomain(db, pathId, *alter);
     context.SS->PersistSubDomainSchemeQuotas(db, pathId, *alter);
 

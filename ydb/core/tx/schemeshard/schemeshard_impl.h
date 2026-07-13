@@ -13,6 +13,7 @@
 #include "schemeshard_forced_compaction.h"
 #include "schemeshard_import.h"
 #include "schemeshard_info_types.h"
+#include "schemeshard_self_ref_map.h"
 #include "schemeshard_path.h"
 #include "schemeshard_path_element.h"
 #include "schemeshard_private.h"
@@ -263,6 +264,10 @@ public:
 
     // In RO mode we don't accept any modifications from users but process all in-flight operations in normal way
     bool IsReadOnlyMode = false;
+    // Set at the start of destruction so TPathRef::Release() during member
+    // teardown does not touch already-destroyed members (PathsById,
+    // CleanDroppedPathsCandidates, ...).
+    bool IsBeingDestroyed = false;
 
     bool IsDomainSchemeShard = false;
 
@@ -284,7 +289,11 @@ public:
     THashMap<TPathId, TPathElement::TPtr> PathsById;
     TLocalPathId NextLocalPathId = 0;
 
-    THashMap<TPathId, TTableInfo::TPtr> Tables;
+    // Every TSelfRefMap below registers here via SetSchemeShard, so Clear()
+    // disarms+drops them all by iteration (no hand-maintained list to forget).
+    TVector<ISelfRefMap*> SelfRefMaps;
+
+    TSelfRefMap<TTableInfo::TPtr> Tables;
     THashMap<TPathId, TTableInfo::TPtr> TTLEnabledTables;
 
     // Batch processing for conditional erase responses
@@ -294,11 +303,11 @@ public:
     TDuration CondEraseResponseBatchMaxTime = TDuration::MilliSeconds(100);
     ui32 MaxTTLShardsInFlight = 0;
 
-    THashMap<TPathId, TTableIndexInfo::TPtr> Indexes;
-    THashMap<TPathId, TCdcStreamInfo::TPtr> CdcStreams;
-    THashMap<TPathId, TSequenceInfo::TPtr> Sequences;
-    THashMap<TPathId, TReplicationInfo::TPtr> Replications;
-    THashMap<TPathId, TBlobDepotInfo::TPtr> BlobDepots;
+    TSelfRefMap<TTableIndexInfo::TPtr> Indexes;
+    TSelfRefMap<TCdcStreamInfo::TPtr> CdcStreams;
+    TSelfRefMap<TSequenceInfo::TPtr> Sequences;
+    TSelfRefMap<TReplicationInfo::TPtr> Replications;
+    TSelfRefMap<TBlobDepotInfo::TPtr> BlobDepots;
 
     THashMap<TPathId, TTxId> TablesWithSnapshots;
     THashMap<TTxId, TSet<TPathId>> SnapshotTables;
@@ -306,24 +315,24 @@ public:
 
     THashMap<TPathId, TTxId> LockedPaths;
 
-    THashMap<TPathId, TTopicInfo::TPtr> Topics;
-    THashMap<TPathId, TRtmrVolumeInfo::TPtr> RtmrVolumes;
-    THashMap<TPathId, TSolomonVolumeInfo::TPtr> SolomonVolumes;
-    THashMap<TPathId, TSubDomainInfo::TPtr> SubDomains;
-    THashMap<TPathId, TBlockStoreVolumeInfo::TPtr> BlockStoreVolumes;
-    THashMap<TPathId, TFileStoreInfo::TPtr> FileStoreInfos;
-    THashMap<TPathId, TKesusInfo::TPtr> KesusInfos;
-    THashMap<TPathId, TOlapStoreInfo::TPtr> OlapStores;
-    THashMap<TPathId, TExternalTableInfo::TPtr> ExternalTables;
-    THashMap<TPathId, TExternalDataSourceInfo::TPtr> ExternalDataSources;
-    THashMap<TPathId, TViewInfo::TPtr> Views;
-    THashMap<TPathId, TResourcePoolInfo::TPtr> ResourcePools;
-    THashMap<TPathId, TBackupCollectionInfo::TPtr> BackupCollections;
-    THashMap<TPathId, TSysViewInfo::TPtr> SysViews;
-    THashMap<TPathId, TSecretInfo::TPtr> Secrets;
-    THashMap<TPathId, TStreamingQueryInfo::TPtr> StreamingQueries;
+    TSelfRefMap<TTopicInfo::TPtr> Topics;
+    TSelfRefMap<TRtmrVolumeInfo::TPtr> RtmrVolumes;
+    TSelfRefMap<TSolomonVolumeInfo::TPtr> SolomonVolumes;
+    TSelfRefMap<TSubDomainInfo::TPtr> SubDomains;
+    TSelfRefMap<TBlockStoreVolumeInfo::TPtr> BlockStoreVolumes;
+    TSelfRefMap<TFileStoreInfo::TPtr> FileStoreInfos;
+    TSelfRefMap<TKesusInfo::TPtr> KesusInfos;
+    TSelfRefMap<TOlapStoreInfo::TPtr> OlapStores;
+    TSelfRefMap<TExternalTableInfo::TPtr> ExternalTables;
+    TSelfRefMap<TExternalDataSourceInfo::TPtr> ExternalDataSources;
+    TSelfRefMap<TViewInfo::TPtr> Views;
+    TSelfRefMap<TResourcePoolInfo::TPtr> ResourcePools;
+    TSelfRefMap<TBackupCollectionInfo::TPtr> BackupCollections;
+    TSelfRefMap<TSysViewInfo::TPtr> SysViews;
+    TSelfRefMap<TSecretInfo::TPtr> Secrets;
+    TSelfRefMap<TStreamingQueryInfo::TPtr> StreamingQueries;
     THashSet<TPathId> TableInBackupCollections;
-    THashMap<TPathId, TTestShardSetInfo::TPtr> TestShardSets;
+    TSelfRefMap<TTestShardSetInfo::TPtr> TestShardSets;
 
     TTempDirsState TempDirsState;
 
@@ -336,6 +345,8 @@ public:
     THashMap<TTxId, TOperation::TPtr> Operations;
     THashMap<TTxId, TPublicationInfo> Publications;
     THashMap<TOperationId, TTxState> TxInFlight;
+    THashMap<TPathId, TPathRef> ParentDbRefs; // child row's ref on its parent, keyed by child path id
+    THashMap<TPathId, TPathRef> SelfDbRefs; // path's own type info record ref
     THashMap<TOperationId, NKikimrSchemeOp::TLongIncrementalRestoreOp> LongIncrementalRestoreOps;
 
     // Simplified state tracking for sequential incremental restore
@@ -801,8 +812,13 @@ public:
     bool ReadSysValue(NIceDb::TNiceDb& db, ui64 sysTag, TString& value, TString defValue = TString());
     bool ReadSysValue(NIceDb::TNiceDb& db, ui64 sysTag, ui64& value, ui64 defVal = 0);
 
+    void AcquireSelfDbRef(const TPathId& pathId, const char* reason);
+    void ReleaseSelfDbRef(const TPathId& pathId);
     void IncrementPathDbRefCount(const TPathId& pathId, const TStringBuf& debug = TStringBuf());
     void DecrementPathDbRefCount(const TPathId& pathId, const TStringBuf& debug = TStringBuf());
+
+    // Debug-only: assert every self-ref map is consistent with PathsById.
+    void DebugCheckSelfRefIntegrity() const;
 
     // incompatible changes
     void BumpIncompatibleChanges(NIceDb::TNiceDb& db, ui64 incompatibleChange);
@@ -2240,6 +2256,7 @@ public:
     }
 
     TSchemeShard(const TActorId &tablet, TTabletStorageInfo *info);
+    ~TSchemeShard();
 
     //TTabletId TabletID() const { return TTabletId(ITablet::TabletID()); }
     TTabletId SelfTabletId() const { return TTabletId(ITablet::TabletID()); }

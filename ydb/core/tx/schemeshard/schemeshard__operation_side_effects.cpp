@@ -623,7 +623,7 @@ void TSideEffects::DoPersistPublishPaths(TSchemeShard* ss, NTabletFlatExecutor::
             Y_ABORT_UNLESS(ss->PathsById.contains(pathId));
 
             const ui64 version = ss->GetPathVersion(TPath::Init(pathId, ss)).GetGeneralVersion();
-            if (operation->AddPublishingPath(pathId, version)) {
+            if (operation->AddPublishingPath(ss, pathId, version)) {
                 ss->PersistPublishingPath(db, txId, pathId, version);
             }
         }
@@ -1061,8 +1061,8 @@ void TSideEffects::DoDoneTransactions(TSchemeShard *ss, NTabletFlatExecutor::TTr
                 LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                         "Publication details: "
                         << " tx: " << txId
-                        << ", " << pub.first
-                        << ", " << pub.second);
+                        << ", " << pub.first.first
+                        << ", " << pub.first.second);
             }
 
             ss->Publications[txId] = {

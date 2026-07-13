@@ -28,14 +28,6 @@ void TMemoryChanges::GrabPath(TSchemeShard* ss, const TPathId& pathId) {
     Grab<TPathElement>(pathId, ss->PathsById, Paths);
 }
 
-void TMemoryChanges::GrabNewTable(TSchemeShard* ss, const TPathId& pathId) {
-    GrabNew(pathId, ss->Tables, Tables);
-}
-
-void TMemoryChanges::GrabTable(TSchemeShard* ss, const TPathId& pathId) {
-    Grab<TTableInfo>(pathId, ss->Tables, Tables);
-}
-
 void TMemoryChanges::GrabNewColumnTable(TSchemeShard* ss, const TPathId& pathId) {
     Y_ABORT_UNLESS(!ss->ColumnTables.contains(pathId));
     ColumnTables.emplace(pathId, nullptr);
@@ -67,30 +59,6 @@ void TMemoryChanges::GrabDomain(TSchemeShard* ss, const TPathId& pathId) {
     }
 }
 
-void TMemoryChanges::GrabNewIndex(TSchemeShard* ss, const TPathId& pathId) {
-    GrabNew(pathId, ss->Indexes, Indexes);
-}
-
-void TMemoryChanges::GrabIndex(TSchemeShard* ss, const TPathId& pathId) {
-    Grab<TTableIndexInfo>(pathId, ss->Indexes, Indexes);
-}
-
-void TMemoryChanges::GrabNewSequence(TSchemeShard* ss, const TPathId& pathId) {
-    GrabNew(pathId, ss->Sequences, Sequences);
-}
-
-void TMemoryChanges::GrabSequence(TSchemeShard* ss, const TPathId& pathId) {
-    Grab<TSequenceInfo>(pathId, ss->Sequences, Sequences);
-}
-
-void TMemoryChanges::GrabNewCdcStream(TSchemeShard* ss, const TPathId& pathId) {
-    GrabNew(pathId, ss->CdcStreams, CdcStreams);
-}
-
-void TMemoryChanges::GrabCdcStream(TSchemeShard* ss, const TPathId& pathId) {
-    Grab<TCdcStreamInfo>(pathId, ss->CdcStreams, CdcStreams);
-}
-
 void TMemoryChanges::GrabNewTableSnapshot(TSchemeShard* ss, const TPathId& pathId, TTxId snapshotTxId) {
     Y_ABORT_UNLESS(!ss->TablesWithSnapshots.contains(pathId));
     TablesWithSnapshots.emplace(pathId, snapshotTxId);
@@ -105,54 +73,6 @@ void TMemoryChanges::GrabLongLock(TSchemeShard* ss, const TPathId& pathId, TTxId
     Y_ABORT_UNLESS(ss->LockedPaths.contains(pathId));
     Y_ABORT_UNLESS(ss->LockedPaths.at(pathId) == lockTxId);
     LockedPaths.emplace(pathId, lockTxId); // will be restored on UnDo()
-}
-
-void TMemoryChanges::GrabNewExternalTable(TSchemeShard* ss, const TPathId& pathId) {
-    GrabNew(pathId, ss->ExternalTables, ExternalTables);
-}
-
-void TMemoryChanges::GrabExternalTable(TSchemeShard* ss, const TPathId& pathId) {
-    Grab<TExternalTableInfo>(pathId, ss->ExternalTables, ExternalTables);
-}
-
-void TMemoryChanges::GrabNewExternalDataSource(TSchemeShard* ss, const TPathId& pathId) {
-    GrabNew(pathId, ss->ExternalDataSources, ExternalDataSources);
-}
-
-void TMemoryChanges::GrabExternalDataSource(TSchemeShard* ss, const TPathId& pathId) {
-    Grab<TExternalDataSourceInfo>(pathId, ss->ExternalDataSources, ExternalDataSources);
-}
-
-void TMemoryChanges::GrabNewView(TSchemeShard* ss, const TPathId& pathId) {
-    GrabNew(pathId, ss->Views, Views);
-}
-
-void TMemoryChanges::GrabView(TSchemeShard* ss, const TPathId& pathId) {
-    Grab<TViewInfo>(pathId, ss->Views, Views);
-}
-
-void TMemoryChanges::GrabNewResourcePool(TSchemeShard* ss, const TPathId& pathId) {
-    GrabNew(pathId, ss->ResourcePools, ResourcePools);
-}
-
-void TMemoryChanges::GrabResourcePool(TSchemeShard* ss, const TPathId& pathId) {
-    Grab<TResourcePoolInfo>(pathId, ss->ResourcePools, ResourcePools);
-}
-
-void TMemoryChanges::GrabNewBackupCollection(TSchemeShard* ss, const TPathId& pathId) {
-    GrabNew(pathId, ss->BackupCollections, BackupCollections);
-}
-
-void TMemoryChanges::GrabBackupCollection(TSchemeShard* ss, const TPathId& pathId) {
-    Grab<TBackupCollectionInfo>(pathId, ss->BackupCollections, BackupCollections);
-}
-
-void TMemoryChanges::GrabNewSysView(TSchemeShard* ss, const TPathId& pathId) {
-    GrabNew(pathId, ss->SysViews, SysViews);
-}
-
-void TMemoryChanges::GrabSysView(TSchemeShard* ss, const TPathId& pathId) {
-    Grab<TSysViewInfo>(pathId, ss->SysViews, SysViews);
 }
 
 void TMemoryChanges::GrabNewLongIncrementalRestoreOp(TSchemeShard* ss, const TOperationId& opId) {
@@ -180,22 +100,6 @@ void TMemoryChanges::GrabNewBCPathToFullBackup(TSchemeShard* ss, const TPathId& 
     BCPathToFullBackup.emplace(bcPathId, std::nullopt);
 }
 
-void TMemoryChanges::GrabNewSecret(TSchemeShard* ss, const TPathId& pathId) {
-    GrabNew(pathId, ss->Secrets, Secrets);
-}
-
-void TMemoryChanges::GrabSecret(TSchemeShard* ss, const TPathId& pathId) {
-    Grab<TSecretInfo>(pathId, ss->Secrets, Secrets);
-}
-
-void TMemoryChanges::GrabNewStreamingQuery(TSchemeShard* ss, const TPathId& pathId) {
-    GrabNew(pathId, ss->StreamingQueries, StreamingQueries);
-}
-
-void TMemoryChanges::GrabStreamingQuery(TSchemeShard* ss, const TPathId& pathId) {
-    Grab<TStreamingQueryInfo>(pathId, ss->StreamingQueries, StreamingQueries);
-}
-
 void TMemoryChanges::GrabNewSharedShard(TSchemeShard* ss, const TShardIdx& shardIdx, const TPathId& pathId) {
     auto shardIt = ss->SharedShards.find(shardIdx);
     if (shardIt != ss->SharedShards.end()) {
@@ -212,14 +116,6 @@ void TMemoryChanges::GrabSharedShard(TSchemeShard* ss, const TShardIdx& shardIdx
     SharedShardEntries.emplace(shardIdx, pathId, pathIt->second);
 }
 
-void TMemoryChanges::GrabNewTestShardSet(TSchemeShard* ss, const TPathId& pathId) {
-    GrabNew(pathId, ss->TestShardSets, TestShardSets);
-}
-
-void TMemoryChanges::GrabTestShardSet(TSchemeShard* ss, const TPathId& pathId) {
-    Grab<TTestShardSetInfo>(pathId, ss->TestShardSets, TestShardSets);
-}
-
 void TMemoryChanges::UnDo(TSchemeShard* ss) {
     // be aware of the order of grab & undo ops
     // stack is the best way to manage it right
@@ -229,39 +125,24 @@ void TMemoryChanges::UnDo(TSchemeShard* ss) {
         if (elem) {
             ss->PathsById[id] = elem;
         } else {
+            // counter rollback is owned by the Paths snapshots - disarm, do not release
+            if (auto refIt = ss->ParentDbRefs.find(id); refIt != ss->ParentDbRefs.end()) {
+                refIt->second.Disarm();
+                ss->ParentDbRefs.erase(refIt);
+            }
+            if (auto refIt = ss->SelfDbRefs.find(id); refIt != ss->SelfDbRefs.end()) {
+                refIt->second.Disarm();
+                ss->SelfDbRefs.erase(refIt);
+            }
             ss->PathsById.erase(id);
         }
         Paths.pop();
     }
 
-    while (Indexes) {
-        const auto& [id, elem] = Indexes.top();
-        if (elem) {
-            ss->Indexes[id] = elem;
-        } else {
-            ss->Indexes.erase(id);
-        }
-        Indexes.pop();
-    }
-
-    while (Sequences) {
-        const auto& [id, elem] = Sequences.top();
-        if (elem) {
-            ss->Sequences[id] = elem;
-        } else {
-            ss->Sequences.erase(id);
-        }
-        Sequences.pop();
-    }
-
-    while (CdcStreams) {
-        const auto& [id, elem] = CdcStreams.top();
-        if (elem) {
-            ss->CdcStreams[id] = elem;
-        } else {
-            ss->CdcStreams.erase(id);
-        }
-        CdcStreams.pop();
+    // Self-ref map rollbacks recorded by TSelfRefMap::Set, undone LIFO.
+    while (SelfRefUndos) {
+        SelfRefUndos.top()();
+        SelfRefUndos.pop();
     }
 
     while (TablesWithSnapshots) {
@@ -289,16 +170,6 @@ void TMemoryChanges::UnDo(TSchemeShard* ss) {
         LockedPaths.pop();
     }
 
-    while (Tables) {
-        const auto& [id, elem] = Tables.top();
-        if (elem) {
-            ss->Tables[id] = elem;
-        } else {
-            ss->Tables.erase(id);
-        }
-        Tables.pop();
-    }
-
     while (ColumnTables) {
         const auto& [id, elem] = ColumnTables.top();
         // Drop current entry first (if any), then re-create with the saved value (if any)
@@ -323,8 +194,7 @@ void TMemoryChanges::UnDo(TSchemeShard* ss) {
     // Restore ss->SubDomains entries to saved copies of TSubDomainInfo objects.
     // No copy, simple pointer replacement.
     for (const auto& [id, savedState] : SubDomains) {
-        auto& subdomain = ss->SubDomains[id];
-        subdomain = savedState;
+        auto& subdomain = ss->SubDomains.UndoRestore(id, savedState);
         if (ss->GetCurrentSubDomainPathId() == id) {
             subdomain->UpdateCounters(ss);
         }
@@ -334,9 +204,7 @@ void TMemoryChanges::UnDo(TSchemeShard* ss) {
     while (TxStates) {
         const auto& [id, elem] = TxStates.top();
         if (!elem) {
-            // Path DbRefCount rollback is owned by the Paths snapshots
-            // restored above; disarm the refs so the erase does not
-            // double-release against the restored counters.
+            // counter rollback is owned by the Paths snapshots - disarm, do not release
             if (auto* txState = ss->TxInFlight.FindPtr(id)) {
                 txState->DisarmPathRefs();
             }
@@ -345,66 +213,6 @@ void TMemoryChanges::UnDo(TSchemeShard* ss) {
             Y_ABORT("No such cases are exist");
         }
         TxStates.pop();
-    }
-
-    while (ExternalTables) {
-        const auto& [id, elem] = ExternalTables.top();
-        if (elem) {
-            ss->ExternalTables[id] = elem;
-        } else {
-            ss->ExternalTables.erase(id);
-        }
-        ExternalTables.pop();
-    }
-
-    while (ExternalDataSources) {
-        const auto& [id, elem] = ExternalDataSources.top();
-        if (elem) {
-            ss->ExternalDataSources[id] = elem;
-        } else {
-            ss->ExternalDataSources.erase(id);
-        }
-        ExternalDataSources.pop();
-    }
-
-    while (Views) {
-        const auto& [id, elem] = Views.top();
-        if (elem) {
-            ss->Views[id] = elem;
-        } else {
-            ss->Views.erase(id);
-        }
-        Views.pop();
-    }
-
-    while (ResourcePools) {
-        const auto& [id, elem] = ResourcePools.top();
-        if (elem) {
-            ss->ResourcePools[id] = elem;
-        } else {
-            ss->ResourcePools.erase(id);
-        }
-        ResourcePools.pop();
-    }
-
-    while (BackupCollections) {
-        const auto& [id, elem] = BackupCollections.top();
-        if (elem) {
-            ss->BackupCollections[id] = elem;
-        } else {
-            ss->BackupCollections.erase(id);
-        }
-        BackupCollections.pop();
-    }
-
-    while (SysViews) {
-        const auto& [id, elem] = SysViews.top();
-        if (elem) {
-            ss->SysViews[id] = elem;
-        } else {
-            ss->SysViews.erase(id);
-        }
-        SysViews.pop();
     }
 
     while (LongIncrementalRestoreOps) {
@@ -447,26 +255,6 @@ void TMemoryChanges::UnDo(TSchemeShard* ss) {
         BCPathToFullBackup.pop();
     }
 
-    while (Secrets) {
-        const auto& [id, elem] = Secrets.top();
-        if (elem) {
-            ss->Secrets[id] = elem;
-        } else {
-            ss->Secrets.erase(id);
-        }
-        Secrets.pop();
-    }
-
-    while (StreamingQueries) {
-        const auto& [id, elem] = StreamingQueries.top();
-        if (elem) {
-            ss->StreamingQueries[id] = elem;
-        } else {
-            ss->StreamingQueries.erase(id);
-        }
-        StreamingQueries.pop();
-    }
-
     while (SharedShardEntries) {
         const auto& [shardIdx, pathId, elem] = SharedShardEntries.top();
         if (elem) {
@@ -483,15 +271,9 @@ void TMemoryChanges::UnDo(TSchemeShard* ss) {
         SharedShardEntries.pop();
     }
 
-    while (TestShardSets) {
-        const auto& [id, elem] = TestShardSets.top();
-        if (elem) {
-            ss->TestShardSets[id] = elem;
-        } else {
-            ss->TestShardSets.erase(id);
-        }
-        TestShardSets.pop();
-    }
+#ifndef NDEBUG
+    ss->DebugCheckSelfRefIntegrity();
+#endif
 }
 
 }

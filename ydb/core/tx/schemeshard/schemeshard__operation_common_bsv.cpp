@@ -74,7 +74,7 @@ bool TConfigureParts::ProgressState(TOperationContext& context) {
 
     txState->ClearShardsInProgress();
 
-    TBlockStoreVolumeInfo::TPtr volume = context.SS->BlockStoreVolumes[txState->TargetPathId];
+    TBlockStoreVolumeInfo::TPtr volume = context.SS->BlockStoreVolumes.at(txState->TargetPathId);
     Y_VERIFY_S(volume, "volume is null. PathId: " << txState->TargetPathId);
 
     ui64 version = volume->AlterVersion;

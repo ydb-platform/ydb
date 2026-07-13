@@ -315,7 +315,7 @@ public:
         path->StepCreated = step;
         context.SS->PersistCreateStep(db, pathId, step);
 
-        TTableInfo::TPtr table = context.SS->Tables[pathId];
+        TTableInfo::TPtr table = context.SS->Tables.at(pathId);
         Y_ABORT_UNLESS(table);
         table->AlterVersion = NEW_TABLE_ALTER_VERSION;
 
@@ -740,9 +740,8 @@ public:
             newTable->SetIncrementalRestoreTable();
         }
 
-        context.SS->Tables[newTable->PathId] = tableInfo;
+        context.SS->Tables.Set(newTable->PathId, tableInfo, context.MemChanges);
         context.SS->TabletCounters->Simple()[COUNTER_TABLE_COUNT].Add(1);
-        context.SS->IncrementPathDbRefCount(newTable->PathId, "new path created");
 
         if ((parentPath.Base()->IsDirectory() || parentPath.Base()->IsDomainRoot()) && parentPath.Base()->HasActiveChanges()) {
             TTxId parentTxId = parentPath.Base()->PlannedToCreate() ? parentPath.Base()->CreateTxId : parentPath.Base()->LastTxId;

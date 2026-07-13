@@ -59,7 +59,7 @@ public:
         Y_ABORT_UNLESS(secretInfo->Description.GetVersion() + 1 == alterData->Description.GetVersion());
 
         NIceDb::TNiceDb db(context.GetDB());
-        context.SS->Secrets[secretPathId] = alterData;
+        context.SS->Secrets.Set(secretPathId, alterData, context.MemChanges);
         context.SS->PersistSecretAlterRemove(db, secretPathId);
         context.SS->PersistSecret(db, secretPathId, *alterData);
 
@@ -165,7 +165,6 @@ public:
         }
 
         context.MemChanges.GrabPath(context.SS, secretPath.Base()->PathId);
-        context.MemChanges.GrabSecret(context.SS, secretPath.Base()->PathId);
         context.MemChanges.GrabNewTxState(context.SS, OperationId);
 
         context.DbChanges.PersistPath(secretPath.Base()->PathId);

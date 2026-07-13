@@ -181,19 +181,19 @@ private:
     bool AckPublish(
         NIceDb::TNiceDb& db,
         TTxId txId, TPathId pathId, ui64 version,
-        TSet<std::pair<TPathId, ui64>>& paths,
+        TMap<std::pair<TPathId, ui64>, TPathRef>& paths,
         const TActorContext& ctx
     ) {
         auto it = paths.lower_bound({pathId, 0});
-        while (it != paths.end() && it->first == pathId && it->second <= version) {
+        while (it != paths.end() && it->first.first == pathId && it->first.second <= version) {
             LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                        "AckPublish"
                            << ", at schemeshard: " << Self->TabletID()
                            << ", txId: " << txId
                            << ", pathId: " << pathId
-                           << ", version: " << it->second);
+                           << ", version: " << it->first.second);
 
-            Self->PersistRemovePublishingPath(db, txId, pathId, it->second);
+            Self->PersistRemovePublishingPath(db, txId, pathId, it->first.second);
 
             auto eraseIt = it;
             ++it;

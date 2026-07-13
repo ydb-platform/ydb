@@ -142,7 +142,6 @@ public:
 
                 // Get coordinated version from source table's AlterData (shared across both drop and create)
                 // GrabTable is needed for proper rollback if operation fails
-                context.MemChanges.GrabTable(context.SS, txState->SourcePathId);
                 auto srcTable = context.SS->Tables.at(txState->SourcePathId);
                 srcTable->InitAlterData(OperationId);
                 ui64 coordVersion = srcTable->AlterData->CoordinatedSchemaVersion.GetOrElse(srcTable->AlterVersion + 1);
@@ -228,7 +227,7 @@ public:
         path->StepCreated = step;
         context.SS->PersistCreateStep(db, pathId, step);
 
-        TTableInfo::TPtr table = context.SS->Tables[pathId];
+        TTableInfo::TPtr table = context.SS->Tables.at(pathId);
         Y_ABORT_UNLESS(table);
         table->AlterVersion = NEW_TABLE_ALTER_VERSION;
         context.SS->PersistTableCreated(db, pathId);
@@ -306,7 +305,6 @@ public:
             }
 
             if (hasCdcChanges && context.SS->Tables.contains(srcPathId)) {
-                context.MemChanges.GrabTable(context.SS, srcPathId);
                 auto srcTable = context.SS->Tables.at(srcPathId);
 
                 // Don't call InitAlterData() here - it was already called in ConfigureParts,
@@ -328,7 +326,6 @@ public:
                 if (parentPathId && context.SS->PathsById.contains(parentPathId)) {
                     auto parentPath = context.SS->PathsById.at(parentPathId);
                     if (parentPath->IsTableIndex() && context.SS->Indexes.contains(parentPathId)) {
-                        context.MemChanges.GrabIndex(context.SS, parentPathId);
                         auto index = context.SS->Indexes.at(parentPathId);
                         if (index->AlterVersion < srcTable->AlterVersion) {
                             index->AlterVersion = srcTable->AlterVersion;
@@ -352,7 +349,6 @@ public:
                         continue;
                     }
                     if (context.SS->Indexes.contains(childPathId)) {
-                        context.MemChanges.GrabIndex(context.SS, childPathId);
                         auto index = context.SS->Indexes.at(childPathId);
                         if (index->AlterVersion < srcTable->AlterVersion) {
                             index->AlterVersion = srcTable->AlterVersion;
@@ -371,7 +367,6 @@ public:
             context.OnComplete.PublishToSchemeBoard(OperationId, srcPathId);
 
             if (txState->CdcPathId != InvalidPathId && context.SS->CdcStreams.contains(txState->CdcPathId)) {
-                context.MemChanges.GrabCdcStream(context.SS, txState->CdcPathId);
                 auto stream = context.SS->CdcStreams.at(txState->CdcPathId);
                 if (stream->AlterData) {
                     stream->FinishAlter();
@@ -389,7 +384,6 @@ public:
                         streamPath->PathState == TPathElement::EPathState::EPathStateDrop &&
                         streamPath->DropTxId == OperationId.GetTxId()) {
 
-                        context.MemChanges.GrabCdcStream(context.SS, id);
 
                         context.SS->PersistRemoveCdcStream(db, id);
                         context.SS->CdcStreams.erase(id);
@@ -716,7 +710,6 @@ public:
                 }
 
                 context.MemChanges.GrabPath(context.SS, oldStreamPath.Base()->PathId);
-                context.MemChanges.GrabCdcStream(context.SS, oldStreamPath.Base()->PathId);
 
                 oldStreamPath.Base()->PathState = TPathElement::EPathState::EPathStateDrop;
                 oldStreamPath.Base()->LastTxId = OperationId.GetTxId();
@@ -812,7 +805,6 @@ public:
         context.MemChanges.GrabPath(context.SS, srcPath.Base()->PathId);
         context.MemChanges.GrabNewTxState(context.SS, OperationId);
         context.MemChanges.GrabDomain(context.SS, parent.GetPathIdForDomain());
-        context.MemChanges.GrabNewTable(context.SS, allocatedPathId);
 
         context.DbChanges.PersistPath(allocatedPathId);
         context.DbChanges.PersistPath(parent.Base()->PathId);
@@ -871,8 +863,7 @@ public:
 
         Y_ABORT_UNLESS(tableInfo->GetPartitions().back()->EndOfRange.empty(), "End of last range must be +INF");
 
-        context.SS->Tables[newTable->PathId] = tableInfo;
-        context.SS->IncrementPathDbRefCount(newTable->PathId);
+        context.SS->Tables.Set(newTable->PathId, tableInfo, context.MemChanges);
 
         if (parent.Base()->HasActiveChanges()) {
             TTxId parentTxId = parent.Base()->PlannedToCreate() ? parent.Base()->CreateTxId : parent.Base()->LastTxId;

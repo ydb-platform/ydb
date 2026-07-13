@@ -624,7 +624,7 @@ public:
         subDomain->SetAlterPrivate(nullptr);
 
         alterData->SetVersion(alterData->GetVersion() + 1);
-        context.SS->SubDomains[pathId] = alterData;
+        context.SS->SubDomains.SetUntracked(pathId, alterData);
 
         context.SS->PersistSubDomainVersion(db, pathId, *alterData);
         context.SS->PersistSubDomainSchemeQuotas(db, pathId, *alterData);
@@ -677,7 +677,7 @@ public:
 
         alterData->SetAlterPrivate(subDomain);
         subDomain->SetAlterPrivate(nullptr);
-        context.SS->SubDomains[pathId] = alterData;
+        context.SS->SubDomains.SetUntracked(pathId, alterData);
 
         item->SwapChildren(HiddenChildren);
         item->PreSerializedChildrenListing.clear();

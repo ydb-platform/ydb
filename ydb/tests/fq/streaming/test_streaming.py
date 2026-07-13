@@ -1531,7 +1531,6 @@ FROM `{table_name}`"""
             ):
                 self.create_source(kikimr, source_name, shared=True)
 
-    @pytest.mark.parametrize("local_topics", [True, False])
     @pytest.mark.parametrize(
         "kikimr",
         [

@@ -1963,11 +1963,10 @@ private:
     }
 
     void InitSharedReading() {
-        if (!FeatureFlags.GetEnableSharedReadingInStreamingQueries() || RowDispatcherService) {
+        if (!FeatureFlags.GetEnableSharedReadingInStreamingQueries() || !FeatureFlags.GetEnableStreamingQueries() || RowDispatcherService) {
             return;
         }
         AFL_VERIFY(FederatedQuerySetup);
-        AFL_VERIFY(FeatureFlags.GetEnableStreamingQueries());
 
         const auto& pqGatewayFactory = FederatedQuerySetup->PqGatewayFactory;
         Y_VALIDATE(pqGatewayFactory, "Missing PQ gateway factory in federated query setup");

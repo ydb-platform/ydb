@@ -1,7 +1,7 @@
 name: Prestable sync
 on:
-  schedule:
-    - cron: "30 0 * * *"   # At 00:30 -- for PR creation
+  # schedule:
+    # - cron: "30 0 * * *"   # At 00:30 -- for PR creation
   workflow_dispatch:
 concurrency:
   group: ${{ github.workflow }}

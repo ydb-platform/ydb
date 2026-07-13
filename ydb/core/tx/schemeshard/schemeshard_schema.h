@@ -1848,7 +1848,7 @@ struct Schema : NIceDb::Schema {
     struct LoginSids : Table<93> {
         struct SidName : Column<1, NScheme::NTypeIds::String> {};
         struct SidType : Column<2, NScheme::NTypeIds::Uint64> { using Type = NLoginProto::ESidType::SidType; };
-        struct SidHash : Column<3, NScheme::NTypeIds::String> {};
+        struct SidHash : Column<3, NScheme::NTypeIds::String> {}; // deprecated
         struct LastSuccessfulAttempt : Column<4, NScheme::NTypeIds::Timestamp> {};
         struct LastFailedAttempt : Column<5, NScheme::NTypeIds::Timestamp> {};
         struct FailedAttemptCount : Column<6, NScheme::NTypeIds::Uint32> {using Type = ui32; static constexpr Type Default = 0;};

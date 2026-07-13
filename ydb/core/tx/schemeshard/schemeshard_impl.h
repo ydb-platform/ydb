@@ -444,6 +444,7 @@ public:
     ui32 MaxCdcInitialScanShardsInFlight = 10;
     ui32 MaxRestoreBuildIndexShardsInFlight = 0;
     ui32 MaxBuildIndexShardsInFlight = 0;
+    ui32 MaxStoredIndexBuilds = 0;
 
     TDuration StatsMaxExecuteTime;
     TDuration StatsBatchTimeout;
@@ -1060,6 +1061,10 @@ public:
 
     struct TTxMonitoring;
     //OnRenderAppHtmlPage
+
+    struct TTxMoveShardToStoragePool;
+    NTabletFlatExecutor::ITransaction* CreateTxMoveShardToStoragePool(TEvPrivate::TEvMoveShardToStoragePool::TPtr& ev);
+    void Handle(TEvPrivate::TEvMoveShardToStoragePool::TPtr& ev, const TActorContext& ctx);
 
     struct TTxInit;
     NTabletFlatExecutor::ITransaction* CreateTxInit();

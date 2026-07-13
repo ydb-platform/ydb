@@ -25,21 +25,6 @@ namespace NSchemeShardUT_Private {
 
 TCertStorage CertStorage;
 
-void SetPasswordCheckerParameters(TTestActorRuntime &runtime, ui64 schemeShard, const NLogin::TPasswordComplexity::TInitializer& initializer) {
-    auto request = MakeHolder<NConsole::TEvConsole::TEvConfigNotificationRequest>();
-
-    ::NKikimrProto::TPasswordComplexity passwordComplexity;
-    passwordComplexity.SetMinLength(initializer.MinLength);
-    passwordComplexity.SetMinLowerCaseCount(initializer.MinLowerCaseCount);
-    passwordComplexity.SetMinUpperCaseCount(initializer.MinUpperCaseCount);
-    passwordComplexity.SetMinNumbersCount(initializer.MinNumbersCount);
-    passwordComplexity.SetMinSpecialCharsCount(initializer.MinSpecialCharsCount);
-    passwordComplexity.SetSpecialChars(initializer.SpecialChars);
-    passwordComplexity.SetCanContainUsername(initializer.CanContainUsername);
-    *request->Record.MutableConfig()->MutableAuthConfig()->MutablePasswordComplexity() = passwordComplexity;
-    SetConfig(runtime, schemeShard, std::move(request));
-}
-
 struct TAccountLockoutInitializer {
     size_t AttemptThreshold = 4;
     TString AttemptResetDuration = "1h";
@@ -91,7 +76,8 @@ Y_UNIT_TEST_SUITE(TSchemeShardLoginTest) {
             CheckSecurityState(describe, {.PublicKeysSize = 0, .SidsSize = 0});
         }
 
-        CreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user1", "password1");
+        const auto user1Hashes = MakeTestPasswordHashes("password1");
+        CreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user1", user1Hashes.HashedPassword);
 
         {
             auto describe = DescribePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot");
@@ -99,7 +85,8 @@ Y_UNIT_TEST_SUITE(TSchemeShardLoginTest) {
         }
 
         // public keys are filled after the first login
-        auto resultLogin = Login(runtime, "user1", "password1");
+        auto resultLogin = Login(runtime, "user1", NLoginProto::ESaslAuthMech::Plain, NLoginProto::EHashType::ScramSha256,
+            user1Hashes.ScramServerKey);
         UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "");
 
         {
@@ -126,13 +113,6 @@ Y_UNIT_TEST_SUITE(TSchemeShardLoginTest) {
         }
 
         {
-            TString hashOldFormat = R"(
-                {
-                    "hash": "ZO37rNB37kP9hzmKRGfwc4aYrboDt4OBDsF1TBn5oLw=",
-                    "salt": "HTkpQjtVJgBoA0CZu+i3zg==",
-                    "type": "argon2id"
-                }
-            )";
             TString hashes = R"(
                 {
                     "version": 1,
@@ -141,17 +121,12 @@ Y_UNIT_TEST_SUITE(TSchemeShardLoginTest) {
                 }
             )";
 
-            CreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user1", Base64Encode(hashes), hashOldFormat);
+            CreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user1", Base64Encode(hashes));
         }
 
         {
             auto describe = DescribePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot");
             CheckSecurityState(describe, {.PublicKeysSize = 0, .SidsSize = 1});
-        }
-
-        {
-            auto resultLogin = Login(runtime, "user1", "password1");
-            UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "");
         }
 
         {
@@ -181,16 +156,20 @@ Y_UNIT_TEST_SUITE(TSchemeShardLoginTest) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime, TTestEnvOptions().EnableStrictAclCheck(StrictAclCheck));
         ui64 txId = 100;
-        CreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user1", "password1");
-        CreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user2", "password2");
-        auto resultLogin = Login(runtime, "user1", "password1");
+        const auto user1Hashes = MakeTestPasswordHashes("password1");
+        const auto user2Hashes = MakeTestPasswordHashes("password2");
+        CreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user1", user1Hashes.HashedPassword);
+        CreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user2", user2Hashes.HashedPassword);
+        auto resultLogin = Login(runtime, "user1", NLoginProto::ESaslAuthMech::Plain, NLoginProto::EHashType::ScramSha256,
+            user1Hashes.ScramServerKey);
         UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "");
 
         CreateAlterLoginRemoveUser(runtime, ++txId, "/MyRoot", "user1");
 
         // check user has been removed:
         {
-            auto resultLogin = Login(runtime, "user1", "password1");
+            auto resultLogin = Login(runtime, "user1", NLoginProto::ESaslAuthMech::Plain, NLoginProto::EHashType::ScramSha256,
+                user1Hashes.ScramServerKey);
             UNIT_ASSERT_VALUES_EQUAL(resultLogin.GetError(), "Cannot find user 'user1'");
         }
     }
@@ -222,9 +201,12 @@ Y_UNIT_TEST_SUITE(TSchemeShardLoginTest) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime, TTestEnvOptions().EnableStrictAclCheck(StrictAclCheck));
         ui64 txId = 100;
-        CreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user1", "password1");
-        CreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user2", "password2");
-        auto resultLogin = Login(runtime, "user1", "password1");
+        const auto user1Hashes = MakeTestPasswordHashes("password1");
+        const auto user2Hashes = MakeTestPasswordHashes("password2");
+        CreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user1", user1Hashes.HashedPassword);
+        CreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user2", user2Hashes.HashedPassword);
+        auto resultLogin = Login(runtime, "user1", NLoginProto::ESaslAuthMech::Plain, NLoginProto::EHashType::ScramSha256,
+            user1Hashes.ScramServerKey);
         UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "");
 
         AsyncMkDir(runtime, ++txId, "/MyRoot", "Dir1/DirSub1");
@@ -258,7 +240,8 @@ Y_UNIT_TEST_SUITE(TSchemeShardLoginTest) {
             TestDescribeResult(DescribePath(runtime, "/MyRoot/Dir1/DirSub1"),{
                 NLs::HasNoRight("+U:user1"), NLs::HasNoEffectiveRight("+U:user1"),
                 NLs::HasNoRight("+U:group"), NLs::HasEffectiveRight("+U:group")});
-            auto resultLogin = Login(runtime, "user1", "password1");
+            auto resultLogin = Login(runtime, "user1", NLoginProto::ESaslAuthMech::Plain, NLoginProto::EHashType::ScramSha256,
+                user1Hashes.ScramServerKey);
             UNIT_ASSERT_VALUES_EQUAL(resultLogin.GetError(), "Cannot find user 'user1'");
         }
     }
@@ -267,9 +250,12 @@ Y_UNIT_TEST_SUITE(TSchemeShardLoginTest) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime, TTestEnvOptions().EnableStrictAclCheck(StrictAclCheck));
         ui64 txId = 100;
-        CreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user1", "password1");
-        CreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user2", "password2");
-        auto resultLogin = Login(runtime, "user1", "password1");
+        const auto user1Hashes = MakeTestPasswordHashes("password1");
+        const auto user2Hashes = MakeTestPasswordHashes("password2");
+        CreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user1", user1Hashes.HashedPassword);
+        CreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user2", user2Hashes.HashedPassword);
+        auto resultLogin = Login(runtime, "user1", NLoginProto::ESaslAuthMech::Plain, NLoginProto::EHashType::ScramSha256,
+            user1Hashes.ScramServerKey);
         UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "");
 
         AsyncMkDir(runtime, ++txId, "/MyRoot", "Dir1/DirSub1");
@@ -291,7 +277,8 @@ Y_UNIT_TEST_SUITE(TSchemeShardLoginTest) {
             {
                 TestDescribeResult(DescribePath(runtime, "/MyRoot/Dir1/DirSub1"),
                     {NLs::HasOwner("user1")});
-                auto resultLogin = Login(runtime, "user1", "password1");
+                auto resultLogin = Login(runtime, "user1", NLoginProto::ESaslAuthMech::Plain, NLoginProto::EHashType::ScramSha256,
+                    user1Hashes.ScramServerKey);
                 UNIT_ASSERT_VALUES_EQUAL(resultLogin.GetError(), "");
             }
         }
@@ -304,7 +291,8 @@ Y_UNIT_TEST_SUITE(TSchemeShardLoginTest) {
         {
             TestDescribeResult(DescribePath(runtime, "/MyRoot/Dir1/DirSub1"),
                 {NLs::HasOwner("user2")});
-            auto resultLogin = Login(runtime, "user1", "password1");
+            auto resultLogin = Login(runtime, "user1", NLoginProto::ESaslAuthMech::Plain, NLoginProto::EHashType::ScramSha256,
+                user1Hashes.ScramServerKey);
             UNIT_ASSERT_VALUES_EQUAL(resultLogin.GetError(), "Cannot find user 'user1'");
         }
     }
@@ -313,9 +301,12 @@ Y_UNIT_TEST_SUITE(TSchemeShardLoginTest) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime, TTestEnvOptions().EnableStrictAclCheck(StrictAclCheck));
         ui64 txId = 100;
-        CreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user1", "password1");
-        CreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user2", "password2");
-        auto resultLogin = Login(runtime, "user1", "password1");
+        const auto user1Hashes = MakeTestPasswordHashes("password1");
+        const auto user2Hashes = MakeTestPasswordHashes("password2");
+        CreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user1", user1Hashes.HashedPassword);
+        CreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user2", user2Hashes.HashedPassword);
+        auto resultLogin = Login(runtime, "user1", NLoginProto::ESaslAuthMech::Plain, NLoginProto::EHashType::ScramSha256,
+            user1Hashes.ScramServerKey);
         UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "");
 
         AsyncMkDir(runtime, ++txId, "/MyRoot", "Dir1/DirSub1");
@@ -344,7 +335,8 @@ Y_UNIT_TEST_SUITE(TSchemeShardLoginTest) {
                     {NLs::HasRight("+U:user1"), NLs::HasEffectiveRight("+U:user1")});
                 TestDescribeResult(DescribePath(runtime, "/MyRoot/Dir1/DirSub1"),
                     {NLs::HasNoRight("+U:user1"), NLs::HasEffectiveRight("+U:user1")});
-                auto resultLogin = Login(runtime, "user1", "password1");
+                auto resultLogin = Login(runtime, "user1", NLoginProto::ESaslAuthMech::Plain, NLoginProto::EHashType::ScramSha256,
+                    user1Hashes.ScramServerKey);
                 UNIT_ASSERT_VALUES_EQUAL(resultLogin.GetError(), "");
             }
         }
@@ -368,7 +360,8 @@ Y_UNIT_TEST_SUITE(TSchemeShardLoginTest) {
                 {NLs::HasNoRight("+U:user1"), NLs::HasNoEffectiveRight("+U:user1")});
             TestDescribeResult(DescribePath(runtime, "/MyRoot/Dir1/DirSub1"),
                 {NLs::HasNoRight("+U:user1"), NLs::HasNoEffectiveRight("+U:user1")});
-            auto resultLogin = Login(runtime, "user1", "password1");
+            auto resultLogin = Login(runtime, "user1", NLoginProto::ESaslAuthMech::Plain, NLoginProto::EHashType::ScramSha256,
+                user1Hashes.ScramServerKey);
             UNIT_ASSERT_VALUES_EQUAL(resultLogin.GetError(), "Cannot find user 'user1'");
         }
     }
@@ -378,7 +371,8 @@ Y_UNIT_TEST_SUITE(TSchemeShardLoginTest) {
         TTestEnv env(runtime, TTestEnvOptions().EnableStrictAclCheck(StrictAclCheck));
         ui64 txId = 100;
 
-        CreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user1", "password1");
+        const auto user1Hashes = MakeTestPasswordHashes("password1");
+        CreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user1", user1Hashes.HashedPassword);
         CreateAlterLoginCreateGroup(runtime, ++txId, "/MyRoot", "group1");
         AlterLoginAddGroupMembership(runtime, ++txId, "/MyRoot", "user1", "group1");
         TestDescribeResult(DescribePath(runtime, "/MyRoot"),
@@ -491,7 +485,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardLoginTest) {
     Y_UNIT_TEST(TestExternalLogin) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
-        auto resultLogin = Login(runtime, "user1@ldap", "password1");
+        auto resultLogin = LoginExternal(runtime, "user1@ldap");
         UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "");
         auto describe = DescribePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot");
         CheckSecurityState(describe, {.PublicKeysSize = 1, .SidsSize = 0});
@@ -501,7 +495,8 @@ Y_UNIT_TEST_SUITE(TSchemeShardLoginTest) {
     Y_UNIT_TEST(TestExternalLoginWithIncorrectLdapDomain) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
-        auto resultLogin = Login(runtime, "ldapuser@ldap.domain", "password1");
+        auto resultLogin = Login(runtime, "ldapuser@ldap.domain", NLoginProto::ESaslAuthMech::Plain,
+            NLoginProto::EHashType::ScramSha256, MakeTestPasswordHashes("password1").ScramServerKey);
         UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "Cannot find user 'ldapuser@ldap.domain'");
         UNIT_ASSERT_VALUES_EQUAL(resultLogin.token(), "");
         auto describe = DescribePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot");
@@ -527,7 +522,8 @@ Y_UNIT_TEST_SUITE(TSchemeShardLoginTest) {
             TestModificationResults(runtime, txId, {{NKikimrScheme::StatusPreconditionFailed, "Owner SID user1 not found in database `/MyRoot`"}});
         }
 
-        CreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user1", "password1");
+        const auto user1Hashes = MakeTestPasswordHashes("password1");
+        CreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user1", user1Hashes.HashedPassword);
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/Dir1"),
             {NLs::HasNoRight("+U:user1"), NLs::HasNoEffectiveRight("+U:user1"), NLs::HasOwner("root@builtin")});
@@ -575,8 +571,10 @@ Y_UNIT_TEST_SUITE(TSchemeShardLoginTest) {
             CheckSecurityState(describe, {.PublicKeysSize = 0, .SidsSize = 0});
         }
 
-        CreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user1", "password1", {{NKikimrScheme::StatusPreconditionFailed}});
-        auto resultLogin = Login(runtime, "user1", "password1");
+        const auto user1Hashes = MakeTestPasswordHashes("password1");
+        CreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user1", user1Hashes.HashedPassword, {{NKikimrScheme::StatusPreconditionFailed}});
+        auto resultLogin = Login(runtime, "user1", NLoginProto::ESaslAuthMech::Plain, NLoginProto::EHashType::ScramSha256,
+            user1Hashes.ScramServerKey);
         UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "Login authentication is disabled");
         UNIT_ASSERT_VALUES_EQUAL(resultLogin.token(), "");
 
@@ -598,7 +596,8 @@ Y_UNIT_TEST_SUITE(TSchemeShardLoginTest) {
         }
 
         CreateAlterLoginCreateGroup(runtime, ++txId, "/MyRoot", "group1");
-        auto resultLogin = Login(runtime, "group1", "password1");
+        auto resultLogin = Login(runtime, "group1", NLoginProto::ESaslAuthMech::Plain, NLoginProto::EHashType::ScramSha256,
+            MakeTestPasswordHashes("password1").ScramServerKey);
         UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "group1 is a group");
         UNIT_ASSERT_VALUES_EQUAL(resultLogin.token(), "");
 
@@ -618,7 +617,8 @@ Y_UNIT_TEST_SUITE(TSchemeShardLoginTest) {
             CheckSecurityState(describe, {.PublicKeysSize = 0, .SidsSize = 0});
         }
 
-        auto resultLogin = Login(runtime, "user1", "password1");
+        auto resultLogin = Login(runtime, "user1", NLoginProto::ESaslAuthMech::Plain, NLoginProto::EHashType::ScramSha256,
+            MakeTestPasswordHashes("password1").ScramServerKey);
         UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "Cannot find user 'user1'");
         UNIT_ASSERT_VALUES_EQUAL(resultLogin.token(), "");
 
@@ -639,14 +639,18 @@ Y_UNIT_TEST_SUITE(TSchemeShardLoginTest) {
             CheckSecurityState(describe, {.PublicKeysSize = 0, .SidsSize = 0});
         }
 
-        CreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user1", "123");
-        auto resultLogin1 = Login(runtime, "user1", "123");
+        const auto user1Hashes = MakeTestPasswordHashes("123");
+        CreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user1", user1Hashes.HashedPassword);
+        auto resultLogin1 = Login(runtime, "user1", NLoginProto::ESaslAuthMech::Plain, NLoginProto::EHashType::ScramSha256,
+            user1Hashes.ScramServerKey);
         UNIT_ASSERT_VALUES_EQUAL(resultLogin1.error(), "");
         ChangeIsEnabledUser(runtime, ++txId, "/MyRoot", "user1", false);
-        auto resultLogin2 = Login(runtime, "user1", "123");
+        auto resultLogin2 = Login(runtime, "user1", NLoginProto::ESaslAuthMech::Plain, NLoginProto::EHashType::ScramSha256,
+            user1Hashes.ScramServerKey);
         UNIT_ASSERT_VALUES_EQUAL(resultLogin2.error(), "User user1 login denied: account is blocked");
         ChangeIsEnabledUser(runtime, ++txId, "/MyRoot", "user1", true);
-        auto resultLogin3 = Login(runtime, "user1", "123");
+        auto resultLogin3 = Login(runtime, "user1", NLoginProto::ESaslAuthMech::Plain, NLoginProto::EHashType::ScramSha256,
+            user1Hashes.ScramServerKey);
         UNIT_ASSERT_VALUES_EQUAL(resultLogin3.error(), "");
     }
 
@@ -667,10 +671,12 @@ Y_UNIT_TEST_SUITE(TSchemeShardLoginTest) {
             CheckSecurityState(describe, {.PublicKeysSize = 0, .SidsSize = 0});
         }
 
-        CreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user1", "123");
+        const auto user1Hashes = MakeTestPasswordHashes("123");
+        CreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user1", user1Hashes.HashedPassword);
 
         for (size_t attempt = 0; attempt < accountLockoutConfig.GetAttemptThreshold(); attempt++) {
-            auto resultLogin = Login(runtime, "user1", "wrongpassword");
+            auto resultLogin = Login(runtime, "user1", NLoginProto::ESaslAuthMech::Plain, NLoginProto::EHashType::ScramSha256,
+                MakeTestPasswordHashes("wrongpassword").ScramServerKey);
             UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "Invalid password");
         }
 
@@ -679,225 +685,9 @@ Y_UNIT_TEST_SUITE(TSchemeShardLoginTest) {
         // User is blocked for 3 seconds
         Sleep(TDuration::Seconds(4));
 
-        auto resultLogin = Login(runtime, "user1", "123");
+        auto resultLogin = Login(runtime, "user1", NLoginProto::ESaslAuthMech::Plain, NLoginProto::EHashType::ScramSha256,
+            user1Hashes.ScramServerKey);
         UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "User user1 login denied: account is blocked");
-    }
-
-    Y_UNIT_TEST(ChangeAcceptablePasswordParameters) {
-        TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
-        ui64 txId = 100;
-
-        {
-            auto describe = DescribePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot");
-            Cerr << describe.DebugString() << Endl;
-            CheckSecurityState(describe, {.PublicKeysSize = 0, .SidsSize = 0});
-        }
-
-        // Password parameters:
-        //  min length 0
-        //  optional: lower case, upper case, numbers, special symbols from list !@#$%^&*()_+{}|<>?=
-        // required: cannot contain username
-
-        {
-            CreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user1", "Pass_word1");
-            auto resultLogin = Login(runtime, "user1", "Pass_word1");
-            UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "");
-            auto describe = DescribePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot");
-            CheckSecurityState(describe, {.PublicKeysSize = 1, .SidsSize = 1});
-            CheckToken(resultLogin.token(), describe, "user1");
-        }
-
-        // Accept password without lower case symbols
-        {
-            CreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user2", "PASSWORDU2");
-            auto resultLogin = Login(runtime, "user2", "PASSWORDU2");
-            UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "");
-            auto describe = DescribePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot");
-            CheckSecurityState(describe, {.PublicKeysSize = 1, .SidsSize = 2});
-            CheckToken(resultLogin.token(), describe, "user2");
-        }
-
-        // Password parameters:
-        //  min length 0
-        //  optional: upper case, numbers, special symbols from list !@#$%^&*()_+{}|<>?=
-        //  required: lower case = 3, cannot contain username
-        {
-            SetPasswordCheckerParameters(runtime, TTestTxConfig::SchemeShard, {.MinLowerCaseCount = 3});
-            CreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user3", "PASSWORDU3", {{NKikimrScheme::StatusPreconditionFailed, "Incorrect password format: should contain at least 3 lower case character"}});
-            auto resultLogin = Login(runtime, "user3", "PASSWORDU3");
-            UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "Cannot find user 'user3'");
-            auto describe = DescribePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot");
-            CheckSecurityState(describe, {.PublicKeysSize = 1, .SidsSize = 2});
-        }
-
-        // Add lower case symbols to password
-        {
-            CreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user3", "PASswORDu3");
-            auto resultLogin = Login(runtime, "user3", "PASswORDu3");
-            UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "");
-            auto describe = DescribePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot");
-            CheckSecurityState(describe, {.PublicKeysSize = 1, .SidsSize = 3});
-            CheckToken(resultLogin.token(), describe, "user3");
-        }
-
-        // Accept password without upper case symbols
-        {
-            CreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user4", "passwordu4");
-            auto resultLogin = Login(runtime, "user4", "passwordu4");
-            UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "");
-            auto describe = DescribePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot");
-            CheckSecurityState(describe, {.PublicKeysSize = 1, .SidsSize = 4});
-            CheckToken(resultLogin.token(), describe, "user4");
-        }
-
-        // Password parameters:
-        //  min length 0
-        //  optional: lower case, numbers, special symbols from list !@#$%^&*()_+{}|<>?=
-        //  required: upper case = 3, cannot contain username
-        {
-            SetPasswordCheckerParameters(runtime, TTestTxConfig::SchemeShard, {.MinLowerCaseCount = 0, .MinUpperCaseCount = 3});
-            CreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user5", "passwordu5", {{NKikimrScheme::StatusPreconditionFailed, "Incorrect password format: should contain at least 3 upper case character"}});
-            auto resultLogin = Login(runtime, "user5", "passwordu5");
-            UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "Cannot find user 'user5'");
-            auto describe = DescribePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot");
-            CheckSecurityState(describe, {.PublicKeysSize = 1, .SidsSize = 4});
-        }
-
-        // Add 3 upper case symbols to password
-        {
-            CreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user5", "PASswORDu5");
-            auto resultLogin = Login(runtime, "user5", "PASswORDu5");
-            UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "");
-            auto describe = DescribePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot");
-            CheckSecurityState(describe, {.PublicKeysSize = 1, .SidsSize = 5});
-            CheckToken(resultLogin.token(), describe, "user5");
-        }
-
-        // Accept short password
-        {
-            SetPasswordCheckerParameters(runtime, TTestTxConfig::SchemeShard, {.MinUpperCaseCount = 0});
-            CreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user6", "passwu6");
-            auto resultLogin = Login(runtime, "user6", "passwu6");
-            UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "");
-            auto describe = DescribePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot");
-            CheckSecurityState(describe, {.PublicKeysSize = 1, .SidsSize = 6});
-            CheckToken(resultLogin.token(), describe, "user6");
-        }
-
-        // Password parameters:
-        //  min length 8
-        //  optional: lower case, upper case, numbers, special symbols from list !@#$%^&*()_+{}|<>?=
-        //  required: cannot contain username
-        // Too short password
-        {
-            SetPasswordCheckerParameters(runtime, TTestTxConfig::SchemeShard, {.MinLength = 8});
-            CreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user7", "passwu7", {{NKikimrScheme::StatusPreconditionFailed, "Password is too short"}});
-            auto resultLogin = Login(runtime, "user7", "passwu7");
-            UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "Cannot find user 'user7'");
-            auto describe = DescribePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot");
-            CheckSecurityState(describe, {.PublicKeysSize = 1, .SidsSize = 6});
-        }
-
-        // Password has correct length
-        {
-            CreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user7", "passwordu7");
-            auto resultLogin = Login(runtime, "user7", "passwordu7");
-            UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "");
-            auto describe = DescribePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot");
-            CheckSecurityState(describe, {.PublicKeysSize = 1, .SidsSize = 7});
-            CheckToken(resultLogin.token(), describe, "user7");
-        }
-
-        // Accept password without numbers
-        {
-            SetPasswordCheckerParameters(runtime, TTestTxConfig::SchemeShard, {.MinLength = 0});
-            CreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user8", "passWorDueitgh");
-            auto resultLogin = Login(runtime, "user8", "passWorDueitgh");
-            UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "");
-            auto describe = DescribePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot");
-            CheckSecurityState(describe, {.PublicKeysSize = 1, .SidsSize = 8});
-            CheckToken(resultLogin.token(), describe, "user8");
-        }
-
-        // Password parameters:
-        //  min length 0
-        //  optional: lower case, upper case,special symbols from list !@#$%^&*()_+{}|<>?=
-        //  required: numbers = 3, cannot contain username
-        {
-            SetPasswordCheckerParameters(runtime, TTestTxConfig::SchemeShard, {.MinNumbersCount = 3});
-            CreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user9", "passwordunine", {{NKikimrScheme::StatusPreconditionFailed, "Incorrect password format: should contain at least 3 number"}});
-            auto resultLogin = Login(runtime, "user9", "passwordunine");
-            UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "Cannot find user 'user9'");
-            auto describe = DescribePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot");
-            CheckSecurityState(describe, {.PublicKeysSize = 1, .SidsSize = 8});
-        }
-
-        // Password with numbers
-        {
-            CreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user9", "pas1swo5rdu9");
-            auto resultLogin = Login(runtime, "user9", "pas1swo5rdu9");
-            UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "");
-            auto describe = DescribePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot");
-            CheckSecurityState(describe, {.PublicKeysSize = 1, .SidsSize = 9});
-            CheckToken(resultLogin.token(), describe, "user9");
-        }
-
-        // Accept password without special symbols
-        {
-            SetPasswordCheckerParameters(runtime, TTestTxConfig::SchemeShard, {.MinNumbersCount = 0});
-            CreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user10", "passWorDu10");
-            auto resultLogin = Login(runtime, "user10", "passWorDu10");
-            UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "");
-            auto describe = DescribePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot");
-            CheckSecurityState(describe, {.PublicKeysSize = 1, .SidsSize = 10});
-            CheckToken(resultLogin.token(), describe, "user10");
-        }
-
-        // Password parameters:
-        //  min length 0
-        //  optional: lower case, upper case, numbers
-        //  required: special symbols from list !@#$%^&*()_+{}|<>?= , cannot contain username
-        {
-            SetPasswordCheckerParameters(runtime, TTestTxConfig::SchemeShard, {.MinSpecialCharsCount = 3});
-            CreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user11", "passwordu11", {{NKikimrScheme::StatusPreconditionFailed, "Incorrect password format: should contain at least 3 special character"}});
-            auto resultLogin = Login(runtime, "user11", "passwordu11");
-            UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "Cannot find user 'user11'");
-            auto describe = DescribePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot");
-            CheckSecurityState(describe, {.PublicKeysSize = 1, .SidsSize = 10});
-        }
-
-        // Password with special symbols
-        {
-            CreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user11", "passwordu11*&%#");
-            auto resultLogin = Login(runtime, "user11", "passwordu11*&%#");
-            UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "");
-            auto describe = DescribePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot");
-            CheckSecurityState(describe, {.PublicKeysSize = 1, .SidsSize = 11});
-            CheckToken(resultLogin.token(), describe, "user11");
-        }
-
-        // Password parameters:
-        //  min length 0
-        //  optional: lower case, upper case, numbers
-        //  required: special symbols from list *# , cannot contain username
-        {
-            SetPasswordCheckerParameters(runtime, TTestTxConfig::SchemeShard, {.SpecialChars = "*#"}); // Only 2 special symbols are valid
-            CreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user12", "passwordu12*&%#", {{NKikimrScheme::StatusPreconditionFailed, "Password contains unacceptable characters"}});
-            auto resultLogin = Login(runtime, "user12", "passwordu12*&%#");
-            UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "Cannot find user 'user12'");
-            auto describe = DescribePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot");
-            CheckSecurityState(describe, {.PublicKeysSize = 1, .SidsSize = 11});
-        }
-
-        {
-            CreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user12", "passwordu12*#");
-            auto resultLogin = Login(runtime, "user12", "passwordu12*#");
-            UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "");
-            auto describe = DescribePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot");
-            CheckSecurityState(describe, {.PublicKeysSize = 1, .SidsSize = 12});
-            CheckToken(resultLogin.token(), describe, "user12");
-        }
     }
 
     Y_UNIT_TEST(AccountLockoutAndAutomaticallyUnlock) {
@@ -917,17 +707,21 @@ Y_UNIT_TEST_SUITE(TSchemeShardLoginTest) {
             CheckSecurityState(describe, {.PublicKeysSize = 0, .SidsSize = 0});
         }
 
-        CreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user1", "password1");
+        const auto user1Hashes = MakeTestPasswordHashes("password1");
+        CreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user1", user1Hashes.HashedPassword);
         NKikimrScheme::TEvLoginResult resultLogin;
         for (size_t attempt = 0; attempt < accountLockoutConfig.GetAttemptThreshold(); attempt++) {
-            resultLogin = Login(runtime, "user1", TStringBuilder() << "wrongpassword" << attempt);
+            resultLogin = Login(runtime, "user1", NLoginProto::ESaslAuthMech::Plain, NLoginProto::EHashType::ScramSha256,
+                MakeTestPasswordHashes(TStringBuilder() << "wrongpassword" << attempt).ScramServerKey);
             UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "Invalid password");
         }
-        resultLogin = Login(runtime, "user1", TStringBuilder() << "wrongpassword" << accountLockoutConfig.GetAttemptThreshold());
+        resultLogin = Login(runtime, "user1", NLoginProto::ESaslAuthMech::Plain, NLoginProto::EHashType::ScramSha256,
+            MakeTestPasswordHashes(TStringBuilder() << "wrongpassword" << accountLockoutConfig.GetAttemptThreshold()).ScramServerKey);
         UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), TStringBuilder() << "User user1 login denied: too many failed password attempts");
 
         // Also do not accept correct password
-        resultLogin = Login(runtime, "user1", "password1");
+        resultLogin = Login(runtime, "user1", NLoginProto::ESaslAuthMech::Plain, NLoginProto::EHashType::ScramSha256,
+            user1Hashes.ScramServerKey);
         UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), TStringBuilder() << "User user1 login denied: too many failed password attempts");
 
         {
@@ -938,9 +732,11 @@ Y_UNIT_TEST_SUITE(TSchemeShardLoginTest) {
         // User is blocked for 3 seconds
         Sleep(TDuration::Seconds(4));
 
-        resultLogin = Login(runtime, "user1", "wrongpassword6");
+        resultLogin = Login(runtime, "user1", NLoginProto::ESaslAuthMech::Plain, NLoginProto::EHashType::ScramSha256,
+            MakeTestPasswordHashes("wrongpassword6").ScramServerKey);
         UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "Invalid password");
-        resultLogin = Login(runtime, "user1", "password1");
+        resultLogin = Login(runtime, "user1", NLoginProto::ESaslAuthMech::Plain, NLoginProto::EHashType::ScramSha256,
+            user1Hashes.ScramServerKey);
         UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "");
 
         {
@@ -967,10 +763,12 @@ Y_UNIT_TEST_SUITE(TSchemeShardLoginTest) {
             CheckSecurityState(describe, {.PublicKeysSize = 0, .SidsSize = 0});
         }
 
-        CreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user1", "password1");
+        const auto user1Hashes = MakeTestPasswordHashes("password1");
+        CreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user1", user1Hashes.HashedPassword);
         NKikimrScheme::TEvLoginResult resultLogin;
         for (size_t attempt = 0; attempt < accountLockoutConfig.GetAttemptThreshold() - 1; attempt++) {
-            resultLogin = Login(runtime, "user1", TStringBuilder() << "wrongpassword" << attempt);
+            resultLogin = Login(runtime, "user1", NLoginProto::ESaslAuthMech::Plain, NLoginProto::EHashType::ScramSha256,
+                MakeTestPasswordHashes(TStringBuilder() << "wrongpassword" << attempt).ScramServerKey);
             UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "Invalid password");
         }
 
@@ -984,10 +782,12 @@ Y_UNIT_TEST_SUITE(TSchemeShardLoginTest) {
 
         // FailedAttemptCount should be reset
         for (size_t attempt = 0; attempt < accountLockoutConfig.GetAttemptThreshold() - 1; attempt++) {
-            resultLogin = Login(runtime, "user1", TStringBuilder() << "wrongpassword" << accountLockoutConfig.GetAttemptThreshold() + attempt);
+            resultLogin = Login(runtime, "user1", NLoginProto::ESaslAuthMech::Plain, NLoginProto::EHashType::ScramSha256,
+                MakeTestPasswordHashes(TStringBuilder() << "wrongpassword" << accountLockoutConfig.GetAttemptThreshold() + attempt).ScramServerKey);
             UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "Invalid password");
         }
-        resultLogin = Login(runtime, "user1", "password1");
+        resultLogin = Login(runtime, "user1", NLoginProto::ESaslAuthMech::Plain, NLoginProto::EHashType::ScramSha256,
+            user1Hashes.ScramServerKey);
         UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "");
 
         {
@@ -1014,13 +814,16 @@ Y_UNIT_TEST_SUITE(TSchemeShardLoginTest) {
             CheckSecurityState(describe, {.PublicKeysSize = 0, .SidsSize = 0});
         }
 
-        CreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user1", "password1");
+        const auto user1Hashes = MakeTestPasswordHashes("password1");
+        CreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user1", user1Hashes.HashedPassword);
         NKikimrScheme::TEvLoginResult resultLogin;
         for (size_t attempt = 0; attempt < accountLockoutConfig.GetAttemptThreshold(); attempt++) {
-            resultLogin = Login(runtime, "user1", TStringBuilder() << "wrongpassword" << attempt);
+            resultLogin = Login(runtime, "user1", NLoginProto::ESaslAuthMech::Plain, NLoginProto::EHashType::ScramSha256,
+                MakeTestPasswordHashes(TStringBuilder() << "wrongpassword" << attempt).ScramServerKey);
             UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "Invalid password");
         }
-        resultLogin = Login(runtime, "user1", TStringBuilder() << "wrongpassword" << accountLockoutConfig.GetAttemptThreshold());
+        resultLogin = Login(runtime, "user1", NLoginProto::ESaslAuthMech::Plain, NLoginProto::EHashType::ScramSha256,
+            MakeTestPasswordHashes(TStringBuilder() << "wrongpassword" << accountLockoutConfig.GetAttemptThreshold()).ScramServerKey);
         UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), TStringBuilder() << "User user1 login denied: too many failed password attempts");
 
         {
@@ -1032,7 +835,8 @@ Y_UNIT_TEST_SUITE(TSchemeShardLoginTest) {
         Sleep(TDuration::Seconds(4));
 
         // Unlock user after 3 seconds
-        resultLogin = Login(runtime, "user1", "password1");
+        resultLogin = Login(runtime, "user1", NLoginProto::ESaslAuthMech::Plain, NLoginProto::EHashType::ScramSha256,
+            user1Hashes.ScramServerKey);
         UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "");
 
         {
@@ -1044,13 +848,16 @@ Y_UNIT_TEST_SUITE(TSchemeShardLoginTest) {
         size_t newAttemptThreshold = 6;
         SetAccountLockoutParameters(runtime, TTestTxConfig::SchemeShard, {.AttemptThreshold = newAttemptThreshold, .AttemptResetDuration = "7s"});
 
-        CreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user2", "password2");
+        const auto user2Hashes = MakeTestPasswordHashes("password2");
+        CreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user2", user2Hashes.HashedPassword);
         // Now user2 have 6 attempts to login
         for (size_t attempt = 0; attempt < newAttemptThreshold; attempt++) {
-            resultLogin = Login(runtime, "user2", TStringBuilder() << "wrongpassword2" << attempt);
+            resultLogin = Login(runtime, "user2", NLoginProto::ESaslAuthMech::Plain, NLoginProto::EHashType::ScramSha256,
+                MakeTestPasswordHashes(TStringBuilder() << "wrongpassword2" << attempt).ScramServerKey);
             UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "Invalid password");
         }
-        resultLogin = Login(runtime, "user2", TStringBuilder() << "wrongpassword2" << newAttemptThreshold);
+        resultLogin = Login(runtime, "user2", NLoginProto::ESaslAuthMech::Plain, NLoginProto::EHashType::ScramSha256,
+            MakeTestPasswordHashes(TStringBuilder() << "wrongpassword2" << newAttemptThreshold).ScramServerKey);
         // User is not permitted to log in after 6 attempts
         UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), TStringBuilder() << "User user2 login denied: too many failed password attempts");
 
@@ -1062,14 +869,16 @@ Y_UNIT_TEST_SUITE(TSchemeShardLoginTest) {
         // user2 is blocked for 7 seconds
         // After 4 seconds user2 must be locked out
         Sleep(TDuration::Seconds(4));
-        resultLogin = Login(runtime, "user2", "wrongpassword28");
+        resultLogin = Login(runtime, "user2", NLoginProto::ESaslAuthMech::Plain, NLoginProto::EHashType::ScramSha256,
+            MakeTestPasswordHashes("wrongpassword28").ScramServerKey);
         UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), TStringBuilder() << "User user2 login denied: too many failed password attempts");
 
         // After 7 seconds user2 must be unlocked
         Sleep(TDuration::Seconds(8));
 
         // Unlock user after 7 sec
-        resultLogin = Login(runtime, "user2", "password2");
+        resultLogin = Login(runtime, "user2", NLoginProto::ESaslAuthMech::Plain, NLoginProto::EHashType::ScramSha256,
+            user2Hashes.ScramServerKey);
         UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "");
         {
             auto describe = DescribePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot");
@@ -1089,17 +898,21 @@ Y_UNIT_TEST_SUITE(TSchemeShardLoginTest) {
             CheckSecurityState(describe, {.PublicKeysSize = 0, .SidsSize = 0});
         }
 
-        CreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user1", "password1");
+        const auto user1Hashes = MakeTestPasswordHashes("password1");
+        CreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user1", user1Hashes.HashedPassword);
         NKikimrScheme::TEvLoginResult resultLogin;
         for (size_t attempt = 0; attempt < accountLockoutConfig.GetAttemptThreshold(); attempt++) {
-            resultLogin = Login(runtime, "user1", TStringBuilder() << "wrongpassword" << attempt);
+            resultLogin = Login(runtime, "user1", NLoginProto::ESaslAuthMech::Plain, NLoginProto::EHashType::ScramSha256,
+                MakeTestPasswordHashes(TStringBuilder() << "wrongpassword" << attempt).ScramServerKey);
             UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "Invalid password");
         }
-        resultLogin = Login(runtime, "user1", TStringBuilder() << "wrongpassword" << accountLockoutConfig.GetAttemptThreshold());
+        resultLogin = Login(runtime, "user1", NLoginProto::ESaslAuthMech::Plain, NLoginProto::EHashType::ScramSha256,
+            MakeTestPasswordHashes(TStringBuilder() << "wrongpassword" << accountLockoutConfig.GetAttemptThreshold()).ScramServerKey);
         UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), TStringBuilder() << "User user1 login denied: too many failed password attempts");
 
         // Also do not accept correct password
-        resultLogin = Login(runtime, "user1", "password1");
+        resultLogin = Login(runtime, "user1", NLoginProto::ESaslAuthMech::Plain, NLoginProto::EHashType::ScramSha256,
+            user1Hashes.ScramServerKey);
         UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), TStringBuilder() << "User user1 login denied: too many failed password attempts");
     }
 
@@ -1120,11 +933,13 @@ Y_UNIT_TEST_SUITE(TSchemeShardLoginTest) {
             CheckSecurityState(describe, {.PublicKeysSize = 0, .SidsSize = 0});
         }
 
-        CreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user1", "password1");
+        const auto user1Hashes = MakeTestPasswordHashes("password1");
+        CreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user1", user1Hashes.HashedPassword);
         // Make 2 failed login attempts
         NKikimrScheme::TEvLoginResult resultLogin;
         for (size_t attempt = 0; attempt < accountLockoutConfig.GetAttemptThreshold() / 2; attempt++) {
-            resultLogin = Login(runtime, "user1", TStringBuilder() << "wrongpassword" << attempt);
+            resultLogin = Login(runtime, "user1", NLoginProto::ESaslAuthMech::Plain, NLoginProto::EHashType::ScramSha256,
+                MakeTestPasswordHashes(TStringBuilder() << "wrongpassword" << attempt).ScramServerKey);
             UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "Invalid password");
         }
 
@@ -1133,10 +948,12 @@ Y_UNIT_TEST_SUITE(TSchemeShardLoginTest) {
 
         // After reboot schemeshard user has only 2 attempts to successful login before lock out
         for (size_t attempt = 0; attempt < accountLockoutConfig.GetAttemptThreshold() / 2; attempt++) {
-            resultLogin = Login(runtime, "user1", TStringBuilder() << "wrongpassword" << attempt);
+            resultLogin = Login(runtime, "user1", NLoginProto::ESaslAuthMech::Plain, NLoginProto::EHashType::ScramSha256,
+                MakeTestPasswordHashes(TStringBuilder() << "wrongpassword" << attempt).ScramServerKey);
             UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "Invalid password");
         }
-        resultLogin = Login(runtime, "user1", TStringBuilder() << "wrongpassword" << accountLockoutConfig.GetAttemptThreshold());
+        resultLogin = Login(runtime, "user1", NLoginProto::ESaslAuthMech::Plain, NLoginProto::EHashType::ScramSha256,
+            MakeTestPasswordHashes(TStringBuilder() << "wrongpassword" << accountLockoutConfig.GetAttemptThreshold()).ScramServerKey);
         UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), TStringBuilder() << "User user1 login denied: too many failed password attempts");
 
         {
@@ -1148,13 +965,15 @@ Y_UNIT_TEST_SUITE(TSchemeShardLoginTest) {
         RebootTablet(runtime, TTestTxConfig::SchemeShard, sender);
 
         // After reboot schemeshard user1 must be locked out
-        resultLogin = Login(runtime, "user1", TStringBuilder() << "wrongpassword" << accountLockoutConfig.GetAttemptThreshold());
+        resultLogin = Login(runtime, "user1", NLoginProto::ESaslAuthMech::Plain, NLoginProto::EHashType::ScramSha256,
+            MakeTestPasswordHashes(TStringBuilder() << "wrongpassword" << accountLockoutConfig.GetAttemptThreshold()).ScramServerKey);
         UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), TStringBuilder() << "User user1 login denied: too many failed password attempts");
 
         // User1 must be unlocked in 1 second after reboot schemeshard
         Sleep(TDuration::Seconds(2));
 
-        resultLogin = Login(runtime, "user1", "password1");
+        resultLogin = Login(runtime, "user1", NLoginProto::ESaslAuthMech::Plain, NLoginProto::EHashType::ScramSha256,
+            user1Hashes.ScramServerKey);
         UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "");
         {
             auto describe = DescribePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot");
@@ -1182,16 +1001,19 @@ Y_UNIT_TEST_SUITE(TSchemeShardLoginTest) {
 
         TString userName = "user1";
         TString userPassword = "password1";
+        const auto userHashes = MakeTestPasswordHashes(userPassword);
 
         auto blockUser = [&]() {
             for (size_t attempt = 0; attempt < accountLockoutConfig.GetAttemptThreshold(); attempt++) {
-                auto resultLogin = Login(runtime, userName, TStringBuilder() << "wrongpassword" << attempt);
+                auto resultLogin = Login(runtime, userName, NLoginProto::ESaslAuthMech::Plain, NLoginProto::EHashType::ScramSha256,
+                    MakeTestPasswordHashes(TStringBuilder() << "wrongpassword" << attempt).ScramServerKey);
                 UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "Invalid password");
             }
         };
 
         auto loginUser = [&](TString error) {
-            auto resultLogin = Login(runtime, userName, userPassword);
+            auto resultLogin = Login(runtime, userName, NLoginProto::ESaslAuthMech::Plain, NLoginProto::EHashType::ScramSha256,
+                userHashes.ScramServerKey);
             UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), error);
         };
 
@@ -1200,7 +1022,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardLoginTest) {
             RebootTablet(runtime, TTestTxConfig::SchemeShard, sender);
         };
 
-        CreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", userName, userPassword);
+        CreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", userName, userHashes.HashedPassword);
 
         blockUser();
         loginUser(TStringBuilder() << "User " << userName << " login denied: too many failed password attempts");
@@ -1230,13 +1052,15 @@ Y_UNIT_TEST_SUITE(TSchemeShardLoginFinalize) {
         TTestEnv env(runtime);
         ui64 txId = 100;
 
-        CreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", testUser, "password1");
+        const auto userHashes = MakeTestPasswordHashes("password1");
+        CreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", testUser, userHashes.HashedPassword);
 
         const auto check = NLogin::TLoginProvider::TPasswordCheckResult{.Status =
             NLogin::TLoginProvider::TPasswordCheckResult::EStatus::SUCCESS};
         const auto request = NLogin::TLoginProvider::TLoginUserRequest({.User = testUser});
         // public keys are filled after the first login
-        UNIT_ASSERT_VALUES_EQUAL(Login(runtime, testUser, "wrong-password1").error(), "Invalid password");
+        UNIT_ASSERT_VALUES_EQUAL(Login(runtime, testUser, NLoginProto::ESaslAuthMech::Plain, NLoginProto::EHashType::ScramSha256,
+            MakeTestPasswordHashes("wrong-password1").ScramServerKey).error(), "Invalid password");
         const auto resultLogin = LoginFinalize(runtime, request, check, "", false);
         UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "");
         auto describe = DescribePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot");
@@ -1249,7 +1073,8 @@ Y_UNIT_TEST_SUITE(TSchemeShardLoginFinalize) {
         TTestEnv env(runtime);
         ui64 txId = 100;
 
-        CreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user1", "password1");
+        const auto user1Hashes = MakeTestPasswordHashes("password1");
+        CreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user1", user1Hashes.HashedPassword);
 
         NLogin::TLoginProvider::TPasswordCheckResult check;
         check.FillInvalidPassword();
@@ -1265,13 +1090,15 @@ Y_UNIT_TEST_SUITE(TSchemeShardLoginFinalize) {
         TTestEnv env(runtime);
         ui64 txId = 100;
 
-        CreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user1", "password1");
+        const auto user1Hashes = MakeTestPasswordHashes("password1");
+        CreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user1", user1Hashes.HashedPassword);
 
         NLogin::TLoginProvider::TPasswordCheckResult check;
         check.FillInvalidPassword();
         const auto request = NLogin::TLoginProvider::TLoginUserRequest({.User = "user1"});
         // public keys are filled after the first login
-        UNIT_ASSERT_VALUES_EQUAL(Login(runtime, "user1", "password1").error(), "");
+        UNIT_ASSERT_VALUES_EQUAL(Login(runtime, "user1", NLoginProto::ESaslAuthMech::Plain, NLoginProto::EHashType::ScramSha256,
+            user1Hashes.ScramServerKey).error(), "");
         const auto resultLogin = LoginFinalize(runtime, request, check, "", false);
         UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "Invalid password");
         UNIT_ASSERT_VALUES_EQUAL(resultLogin.token(), "");

@@ -86,6 +86,43 @@ Y_UNIT_TEST_SUITE(ResourcePoolClassifierTest) {
         UNIT_ASSERT_VALUES_EQUAL(std::visit(extractor, propertiesMap["has_app_name"]), "");
     }
 
+    Y_UNIT_TEST(ActionParsing) {
+        TClassifierSettings settings;
+        auto propertiesMap = settings.GetPropertiesMap();
+
+        std::visit(TClassifierSettings::TParser{"reject"}, propertiesMap["action"]);
+        UNIT_ASSERT(settings.Action.has_value());
+        UNIT_ASSERT_EQUAL(*settings.Action, EClassifierAction::Reject);
+
+        // Case-insensitive
+        std::visit(TClassifierSettings::TParser{"REJECT"}, propertiesMap["action"]);
+        UNIT_ASSERT_EQUAL(*settings.Action, EClassifierAction::Reject);
+        std::visit(TClassifierSettings::TParser{"Reject"}, propertiesMap["action"]);
+        UNIT_ASSERT_EQUAL(*settings.Action, EClassifierAction::Reject);
+
+        // Empty resets to nullopt
+        std::visit(TClassifierSettings::TParser{""}, propertiesMap["action"]);
+        UNIT_ASSERT(!settings.Action.has_value());
+    }
+
+    Y_UNIT_TEST(ActionInvalid) {
+        TClassifierSettings settings;
+        auto propertiesMap = settings.GetPropertiesMap();
+
+        UNIT_ASSERT_EXCEPTION_CONTAINS(std::visit(TClassifierSettings::TParser{"allow"}, propertiesMap["action"]), yexception, "Invalid action 'allow'");
+    }
+
+    Y_UNIT_TEST(ActionExtracting) {
+        TClassifierSettings settings;
+        auto propertiesMap = settings.GetPropertiesMap();
+
+        TClassifierSettings::TExtractor extractor;
+        UNIT_ASSERT_VALUES_EQUAL(std::visit(extractor, propertiesMap["action"]), "");
+
+        settings.Action = EClassifierAction::Reject;
+        UNIT_ASSERT_VALUES_EQUAL(std::visit(extractor, propertiesMap["action"]), "reject");
+    }
+
     Y_UNIT_TEST(SettingsValidation) {
         TClassifierSettings settings;
         settings.MemberName = BUILTIN_ACL_METADATA;

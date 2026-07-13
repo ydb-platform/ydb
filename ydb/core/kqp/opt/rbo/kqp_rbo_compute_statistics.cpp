@@ -682,13 +682,13 @@ void TOpCBOTree::ComputeStatistics(TRBOContext& ctx, TPlanProps& planProps) {
 }
 
 void TOpRoot::ComputePlanMetadata(TRBOContext& ctx) {
-    for (auto it : *this) {
+    for (const auto& it : *this) {
         it.Current->ComputeMetadata(ctx, PlanProps);
     }
 }
 
 void TOpRoot::ComputePlanStatistics(TRBOContext& ctx) {
-    for (auto it : *this) {
+    for (const auto& it : *this) {
         it.Current->ComputeStatistics(ctx, PlanProps);
     }
 }

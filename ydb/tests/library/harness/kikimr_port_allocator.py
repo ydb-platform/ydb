@@ -98,7 +98,6 @@ class KikimrPortManagerNodePortAllocator(KikimrNodePortAllocatorInterface):
         self.__grpc_ssl_port = None
         self.__ext_port = None
         self.__public_http_port = None
-        self.__pgwire_port = None
         self.__kafka_api_port = None
 
     def __allocate_port(self):
@@ -232,7 +231,6 @@ DEFAULT_MBUS_PORT = 2134
 DEFAULT_GRPC_SSL_PORT = 2137
 DEFAULT_SQS_PORT = 8771
 DEFAULT_PUBLIC_HTTP_PORT = 8766
-DEFAULT_PGWIRE_PORT = 5432
 DEFAULT_HTTP_PROXY_PORT = 8433
 DEFAULT_KAFKA_API_PORT = 9092
 
@@ -253,7 +251,6 @@ class KikimrFixedNodePortAllocator(KikimrNodePortAllocatorInterface):
         sqs_port=DEFAULT_SQS_PORT,
         grpc_ssl_port=DEFAULT_GRPC_SSL_PORT,
         public_http_port=DEFAULT_PUBLIC_HTTP_PORT,
-        pgwire_port=DEFAULT_PGWIRE_PORT,
         http_proxy_port=DEFAULT_HTTP_PROXY_PORT,
         kafka_api_port=DEFAULT_KAFKA_API_PORT
     ):
@@ -267,7 +264,6 @@ class KikimrFixedNodePortAllocator(KikimrNodePortAllocatorInterface):
         self.__sqs_port = sqs_port
         self.__grpc_ssl_port = int(os.getenv('GRPC_TLS_PORT', grpc_ssl_port))
         self.__public_http_port = int(os.getenv('PUBLIC_HTTP_PORT', public_http_port))
-        self.__pgwire_port = int(os.getenv('YDB_PGWIRE_PORT', pgwire_port))
         self.__http_proxy_port = int(os.getenv('HTTP_PROXY_PORT', http_proxy_port))
         self.__kafka_api_port = int(os.getenv('YDB_KAFKA_PROXY_PORT', kafka_api_port))
 
@@ -298,10 +294,6 @@ class KikimrFixedNodePortAllocator(KikimrNodePortAllocatorInterface):
     @property
     def public_http_port(self):
         return self.__public_http_port + self.base_port_offset
-
-    @property
-    def pgwire_port(self):
-        return self.__pgwire_port + self.base_port_offset
 
     @property
     def http_proxy_port(self):

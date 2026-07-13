@@ -6,7 +6,7 @@
 
 - [Глоссарий](glossary.md)
 - [Аналитические возможности](./analytics/index.md)
-- [Архитектура](architecture.md)
+- [Архитектура](architecture/index.md)
 - [Соединение с БД](connect.md)
 - [Схемные объекты](datamodel/index.md)
 - [Топология кластера](topology.md)

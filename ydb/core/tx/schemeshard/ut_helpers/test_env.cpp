@@ -701,6 +701,9 @@ NSchemeShardUT_Private::TTestEnv::TTestEnv(TTestActorRuntime& runtime, const TTe
     if (opts.MaxBuildIndexShardsInFlight_) {
         app.SchemeShardConfig.SetMaxBuildIndexShardsInFlight(*opts.MaxBuildIndexShardsInFlight_);
     }
+    if (opts.MaxStoredIndexBuilds_) {
+        app.SchemeShardConfig.SetMaxStoredIndexBuilds(*opts.MaxStoredIndexBuilds_);
+    }
 
     // graph settings
     if (opts.GraphBackendType_) {

@@ -1,6 +1,7 @@
 #include "iscan.h"
 
 #include <ydb/core/formats/arrow/serializer/abstract.h>
+#include <ydb/core/protos/s3_settings.pb.h>
 #include <ydb/core/tx/columnshard/columnshard_private_events.h>
 #include <ydb/core/tx/datashard/backup_restore_traits.h>
 #include <ydb/core/tx/datashard/datashard.h>
@@ -136,6 +137,14 @@ TConclusion<std::unique_ptr<NTable::IScan>> CreateIScanExportUploader(const TAct
             NDataShard::NBackupRestoreTraits::ECompressionCodec codec;
             if (!TryCodecFromTask(backupTask, codec)) {
                 return TConclusionStatus::Fail(TStringBuilder() << "Unsupported compression codec: " << backupTask.GetCompression().GetCodec());
+            }
+            if (NDataShard::NBackupRestoreTraits::DataFormatFromTask(backupTask) == NDataShard::NBackupRestoreTraits::EDataFormat::Parquet) {
+                if (!AppData()->FeatureFlags.GetEnableExportInParquet()) {
+                    return TConclusionStatus::Fail("Parquet export to S3 is disabled by feature flag EnableExportInParquet");
+                }
+                if (backupTask.HasEncryptionSettings()) {
+                    return TConclusionStatus::Fail("Encryption is not supported for parquet files");
+                }
             }
             if (exportFactory) {
                 exp = std::shared_ptr<NDataShard::IExport>(exportFactory->CreateExportToS3(backupTask, tableColumns));

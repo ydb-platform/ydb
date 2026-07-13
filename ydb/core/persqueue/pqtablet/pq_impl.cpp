@@ -3401,6 +3401,28 @@ void TPersQueue::HandleDataTransaction(TAutoPtr<TEvPersQueue::TEvProposeTransact
         return;
     }
 
+    if (txBody.HasWriteId() && GetWriteId(txBody).IsDeferredPublicationApiTransaction()) {
+        PQ_LOG_TX_W("TxId " << event.GetTxId() << " deferred publication is not supported");
+        SendProposeTransactionAbort(ActorIdFromProto(event.GetSourceActor()),
+                                    event.GetTxId(),
+                                    NKikimrPQ::TError::BAD_REQUEST,
+                                    "deferred publication is not supported",
+                                    ctx);
+        return;
+    }
+
+    for (const auto& operation : txBody.GetOperations()) {
+        if (IsDeferredPublicationTxOperation(operation)) {
+            PQ_LOG_TX_W("TxId " << event.GetTxId() << " deferred publication is not supported");
+            SendProposeTransactionAbort(ActorIdFromProto(event.GetSourceActor()),
+                                        event.GetTxId(),
+                                        NKikimrPQ::TError::BAD_REQUEST,
+                                        "deferred publication is not supported",
+                                        ctx);
+            return;
+        }
+    }
+
     if (!CheckTxWriteOperations(txBody)) {
         PQ_LOG_TX_W("TxId " << event.GetTxId() << " invalid WriteId " << txBody.GetWriteId());
         SendProposeTransactionAbort(ActorIdFromProto(event.GetSourceActor()),

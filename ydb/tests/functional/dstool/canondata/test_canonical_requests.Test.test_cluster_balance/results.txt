@@ -10,8 +10,6 @@ success
 
 ===== grpc_calls =====
 
-===== http_calls =====
-
 ===== mock_base_config =====
 
 TBaseConfig {
@@ -56,10 +54,10 @@ VSlot {
   GroupId: 2147483649
   GroupGeneration: 1
   VDiskMetrics {
-    Replicated: true
-    State: OK
     AvailableSize: 0
     AllocatedSize: 0
+    State: OK
+    Replicated: true
   }
   Status: "READY"
 }
@@ -72,10 +70,10 @@ VSlot {
   GroupId: 2147483650
   GroupGeneration: 1
   VDiskMetrics {
-    Replicated: true
-    State: OK
     AvailableSize: 0
     AllocatedSize: 0
+    State: OK
+    Replicated: true
   }
   Status: "READY"
 }

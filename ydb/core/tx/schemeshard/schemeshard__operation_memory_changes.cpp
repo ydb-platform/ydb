@@ -334,6 +334,12 @@ void TMemoryChanges::UnDo(TSchemeShard* ss) {
     while (TxStates) {
         const auto& [id, elem] = TxStates.top();
         if (!elem) {
+            // Path DbRefCount rollback is owned by the Paths snapshots
+            // restored above; disarm the refs so the erase does not
+            // double-release against the restored counters.
+            if (auto* txState = ss->TxInFlight.FindPtr(id)) {
+                txState->DisarmPathRefs();
+            }
             ss->TxInFlight.erase(id);
         } else {
             Y_ABORT("No such cases are exist");

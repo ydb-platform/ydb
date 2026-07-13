@@ -11,6 +11,7 @@
 #include <ydb/core/tx/message_seqno.h>
 
 #include "schemeshard_identificators.h"  // for TStepId, TTxId, TShardIdx
+#include "schemeshard_path_ref.h"  // for TPathRef
 #include "schemeshard_subop_types.h"  // for ETxType
 #include "schemeshard_subop_state_types.h"  // for ETxState
 
@@ -92,6 +93,12 @@ struct TTxState {
     bool NeedUpdateObject = false;
     bool NeedSyncHive = false;
     // not persist:
+    // DbRefCount references on TargetPathId/SourcePathId. Holding the handle
+    // is holding the reference: acquired via AcquirePathRefs by both
+    // TSchemeShard::CreateTx and TTxInit restore, released automatically when
+    // the tx state is erased from TxInFlight, wherever that happens.
+    TPathRef TargetPathRef;
+    TPathRef SourcePathRef;
     THashSet<TShardIdx> ShardsInProgress; // indexes of datashards or pqs that operation waits for
     THashMap<TShardIdx, std::pair<TActorId, ui32>> SchemeChangeNotificationReceived;
     bool ReadyForNotifications = false;
@@ -119,6 +126,19 @@ struct TTxState {
         , State(Waiting)
         , StartTime(::Now())
     {}
+
+    void AcquirePathRefs(TSchemeShard* ss) {
+        Y_ABORT_UNLESS(!TargetPathRef && !SourcePathRef);
+        TargetPathRef.Reset(ss, TargetPathId, "transaction target path");
+        if (SourcePathId) {
+            SourcePathRef.Reset(ss, SourcePathId, "transaction source path");
+        }
+    }
+
+    void DisarmPathRefs() {
+        TargetPathRef.Disarm();
+        SourcePathRef.Disarm();
+    }
 
     void AcceptPendingSchemeNotification() {
         ReadyForNotifications = true;

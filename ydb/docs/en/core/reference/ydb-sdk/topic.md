@@ -3531,7 +3531,7 @@ In case of a *hard interruption*, the client receives a notification that it can
 
 - C++
 
-  Soft interrupt comes in the form of event `TStopPartitionSessionEvent` with method `Confirm`. The client can finish processing messages and send confirmation to the server.
+  Soft interrupt comes in the form of event `TStopPartitionSessionEvent` with method `Confirm`. The client can finish processing messages and send acknowledgment to the server.
 
   A fragment of the event loop might look like this:
 
@@ -3636,7 +3636,7 @@ In case of a *hard interruption*, the client receives a notification that it can
 
 {% endlist %}
 
-#### Hard read abort {#hard-stop}
+#### Hard read interrupt {#hard-stop}
 
 {% list tabs group=lang %}
 

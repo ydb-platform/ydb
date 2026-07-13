@@ -2312,7 +2312,7 @@ private:
     IModuleResolver::TPtr ModuleResolver;
     bool KeepConfigChanges;
     bool IsInternalCall;
-    TIntrusivePtr<TKqpFederatedQuerySetup> FederatedQuerySetup;
+    std::optional<TKqpFederatedQuerySetup> FederatedQuerySetup;
 
     TIntrusivePtr<TKikimrSessionContext> SessionCtx;
     TKikimrConfiguration::TPtr Config;
@@ -2358,7 +2358,7 @@ Ydb::Table::QueryStatsCollection::Mode GetStatsMode(NYql::EKikimrStatsMode stats
 
 TIntrusivePtr<IKqpHost> CreateKqpHost(TIntrusivePtr<IKqpGateway> gateway, const TString& cluster,
     const TString& database, TKikimrConfiguration::TPtr config, IModuleResolver::TPtr moduleResolver,
-    const TIntrusivePtr<TKqpFederatedQuerySetup>& federatedQuerySetup, const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, const TGUCSettings::TPtr& gUCSettings,
+    std::optional<TKqpFederatedQuerySetup> federatedQuerySetup, const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, const TGUCSettings::TPtr& gUCSettings,
     const NKikimrConfig::TQueryServiceConfig& queryServiceConfig, const TMaybe<TString>& applicationName, const NKikimr::NMiniKQL::IFunctionRegistry* funcRegistry, bool keepConfigChanges,
     bool isInternalCall, TKqpTempTablesState::TConstPtr tempTablesState, NActors::TActorSystem* actorSystem, NYql::TExprContext* ctx, const TIntrusivePtr<TUserRequestContext>& userRequestContext,
     bool usePessimisticLocks)

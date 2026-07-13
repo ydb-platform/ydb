@@ -374,10 +374,6 @@ namespace {
         NActors::TActorSystemSetup* setup,
         const NKikimr::TAppData* appData,
         const NKikimrConfig::TAppConfig& appConfig) {
-        // If Query Service is disabled, just do nothing
-        // if (!appData->FeatureFlags.GetEnableScriptExecutionOperations()) {
-        //     return std::make_shared<TKqpFederatedQuerySetupFactoryNoop>();
-        // }
 
         for (const auto& source : appConfig.GetQueryServiceConfig().GetAvailableExternalDataSources()) {
             if (!IsValidExternalDataSourceType(source)) {

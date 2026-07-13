@@ -21,7 +21,7 @@ public:
     TTxType GetTxType() const override { return NHive::TXTYPE_KILL_NODE; }
 
     bool Execute(TTransactionContext &txc, const TActorContext&) override {
-        YDB_LOG_DEBUG("THive::TTxKillNode( )::Execute",
+        YDB_LOG_DEBUG("THive::TTxKillNode::Execute killing node",
             {"logPrefix", GetLogPrefix()},
             {"nodeId", NodeId});
         SideEffects.Reset(Self->SelfId());
@@ -51,7 +51,7 @@ public:
                 Self->RemoveRegisteredDataCentersNode(node->Location.GetDataCenterId(), node->Id);
             }
             for (const TActorId& pipeServer : node->PipeServers) {
-                YDB_LOG_TRACE("THive::TTxKillNode - killing pipe server",
+                YDB_LOG_TRACE("THive::TTxKillNode::Execute killing pipe server",
                     {"logPrefix", GetLogPrefix()},
                     {"pipeServer", pipeServer});
                 SideEffects.Send(pipeServer, new TEvents::TEvPoisonPill());
@@ -68,17 +68,17 @@ public:
     }
 
     void Complete(const TActorContext& ctx) override {
-        YDB_LOG_DEBUG("THive::TTxKillNode( )::Complete",
+        YDB_LOG_DEBUG("THive::TTxKillNode::Complete",
             {"logPrefix", GetLogPrefix()},
             {"nodeId", NodeId});
         SideEffects.Complete(ctx);
         if (Local) {
             TNodeInfo* node = Self->FindNode(Local.NodeId());
             if (node == nullptr || node->IsDisconnected()) {
-                YDB_LOG_DEBUG("THive::TTxKillNode( )::Complete - send Reconnect",
+                YDB_LOG_DEBUG("THive::TTxKillNode::Complete sending reconnect",
                     {"logPrefix", GetLogPrefix()},
                     {"nodeId", NodeId},
-                    {"local", Local});
+                    {"reconnectActor", Local});
                 Self->SendReconnect(Local); // defibrillation
             }
         }

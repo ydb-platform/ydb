@@ -57,20 +57,20 @@ public:
         SideEffects.Reset(Self->SelfId());
         TTabletInfo* tablet = Self->FindTablet(TabletId, FollowerId);
         if (tablet != nullptr) {
-            YDB_LOG_DEBUG("THive::TTxUpdateTabletStatus::Execute for tablet status generation follower from local",
+            YDB_LOG_DEBUG("THive::TTxUpdateTabletStatus::Execute processing tablet status from node",
                 {"logPrefix", GetLogPrefix()},
-                {"tablet", tablet->ToString()},
+                {"tabletInfo", tablet->ToString()},
                 {"status", GetStatus()},
-                {"generation", Generation},
+                {"knownGeneration", Generation},
                 {"followerId", FollowerId},
-                {"local", Local});
+                {"nodeId", Local.NodeId()});
             NIceDb::TNiceDb db(txc.DB);
             const TInstant now = TActivationContext::Now();
             if (Status == TEvLocal::TEvTabletStatus::StatusOk) {
                 if (tablet->BootTime != TInstant()) {
                     TDuration startTime = now - tablet->BootTime;
                     if (startTime > TDuration::Seconds(30)) {
-                        YDB_LOG_WARN("Tablet was starting for seconds",
+                        YDB_LOG_WARN("THive::TTxUpdateTabletStatus::Execute tablet start took too long",
                             {"logPrefix", GetLogPrefix()},
                             {"fullTabletId", tablet->GetFullTabletId()},
                             {"startTimeSeconds", startTime.Seconds()});
@@ -143,9 +143,9 @@ public:
                     if (IsFailStatusForPostponeRestart()) {
                         if (leader.GetRestartsPerPeriod(now - Self->GetTabletRestartsPeriodForPenalties()) >= Self->GetTabletRestartsMaxCount()) {
                             leader.PostponeStart(now + Self->GetPostponeStartPeriod());
-                            YDB_LOG_DEBUG("THive::TTxUpdateTabletStatus::Execute for tablet postponed start until",
+                            YDB_LOG_DEBUG("THive::TTxUpdateTabletStatus::Execute postponed tablet start",
                                 {"logPrefix", GetLogPrefix()},
-                                {"tablet", tablet->ToString()},
+                                {"tabletInfo", tablet->ToString()},
                                 {"postponedStart", leader.PostponedStart});
                         }
                     }
@@ -186,9 +186,9 @@ public:
 
                 case ETabletState::Stopped:
                     Self->ReportStoppedToWhiteboard(tablet->GetLeader());
-                    YDB_LOG_DEBUG("Report tablet as stopped to Whiteboard",
+                    YDB_LOG_DEBUG("THive::TTxUpdateTabletStatus::Execute reported tablet as stopped to whiteboard",
                         {"logPrefix", GetLogPrefix()},
-                        {"tablet", tablet->ToString()});
+                        {"tabletInfo", tablet->ToString()});
                     break;
                 case ETabletState::BlockStorage:
                     // do nothing - let the tablet die

@@ -21,11 +21,11 @@ public:
     TTxType GetTxType() const override { return NHive::TXTYPE_RESPONSE_TABLET_SEQUENCE; }
 
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
-        YDB_LOG_DEBUG("THive::TTxResponseTabletSequence()::Execute",
+        YDB_LOG_DEBUG("THive::TTxResponseTabletSequence::Execute",
             {"logPrefix", GetLogPrefix()});
         const auto& pbRecord(Event->Get()->Record);
         if (!pbRecord.HasOwner()) {
-            YDB_LOG_ERROR("Invalid response received",
+            YDB_LOG_ERROR("THive::TTxResponseTabletSequence::Execute invalid response, missing owner",
                 {"logPrefix", GetLogPrefix()});
             return true;
         }
@@ -33,7 +33,7 @@ public:
             Y_ABORT_UNLESS(pbRecord.GetOwner().GetOwner() == Self->TabletID());
             Owner = {TSequencer::NO_OWNER, pbRecord.GetOwner().GetOwnerIdx()};
             Sequence = {pbRecord.GetBeginId(), pbRecord.GetEndId()};
-            YDB_LOG_DEBUG("Received sequence",
+            YDB_LOG_DEBUG("THive::TTxResponseTabletSequence::Execute received tablet id sequence",
                 {"logPrefix", GetLogPrefix()},
                 {"sequence", Sequence});
             if (Self->Sequencer.AddFreeSequence(Owner, Sequence)) {
@@ -47,13 +47,13 @@ public:
                         .Key(Sequence.Begin, Sequence.End)
                         .Update<Schema::TabletOwners::OwnerId>(Self->TabletID());
             } else {
-                YDB_LOG_DEBUG("This sequence already exists",
+                YDB_LOG_DEBUG("THive::TTxResponseTabletSequence::Execute sequence already exists, ignoring",
                     {"logPrefix", GetLogPrefix()},
                     {"sequence", Sequence});
                 Sequence.Clear();
             }
         } else {
-            YDB_LOG_DEBUG("Received empty sequence",
+            YDB_LOG_DEBUG("THive::TTxResponseTabletSequence::Execute received empty sequence",
                 {"logPrefix", GetLogPrefix()});
         }
         if (pbRecord.GetOwner().GetOwnerIdx() >= Self->RequestingSequenceIndex) {
@@ -63,7 +63,7 @@ public:
     }
 
     void Complete(const TActorContext&) override {
-        YDB_LOG_DEBUG("THive::TTxResponseTabletSequence()::Complete",
+        YDB_LOG_DEBUG("THive::TTxResponseTabletSequence::Complete",
             {"logPrefix", GetLogPrefix()});
         if (!Sequence.Empty()) {
             Self->ProcessPendingOperations();

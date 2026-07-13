@@ -39,8 +39,13 @@ public:
     TTxType GetTxType() const override { return NHive::TXTYPE_ADOPT_TABLET; }
 
     bool Execute(TTransactionContext &txc, const TActorContext&) override {
-        YDB_LOG_DEBUG("THive::TTxAdoptTablet::Execute",
-            {"logPrefix", GetLogPrefix()});
+        YDB_LOG_DEBUG("THive::TTxAdoptTablet::Execute adopting tablet",
+            {"logPrefix", GetLogPrefix()},
+            {"tabletId", TabletId},
+            {"prevOwnerId", PrevOwner},
+            {"prevOwnerIdx", PrevOwnerIdx},
+            {"ownerId", Owner},
+            {"ownerIdx", OwnerIdx});
         NIceDb::TNiceDb db(txc.DB);
 
         const TOwnerIdxType::TValueType prevOwner(PrevOwner, PrevOwnerIdx);

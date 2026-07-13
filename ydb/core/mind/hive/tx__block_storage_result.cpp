@@ -22,7 +22,7 @@ public:
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
         SideEffects.Reset(Self->SelfId());
         TEvTabletBase::TEvBlockBlobStorageResult* msg = Result->Get();
-        YDB_LOG_DEBUG("THive::TTxBlockStorageResult::Execute(",
+        YDB_LOG_DEBUG("THive::TTxBlockStorageResult::Execute processing block storage result",
             {"logPrefix", GetLogPrefix()},
             {"tabletId", TabletId},
             {"replyStatus", NKikimrProto::EReplyStatus_Name(msg->Status)});
@@ -36,7 +36,7 @@ public:
                     || msg->Status == NKikimrProto::NO_GROUP) {
                 if (tablet->IsDeleting()) {
                     if (msg->Status != NKikimrProto::EReplyStatus::OK) {
-                        YDB_LOG_WARN("THive::TTxBlockStorageResult Complete status was for TabletId",
+                        YDB_LOG_WARN("THive::TTxBlockStorageResult::Execute unexpected status for deleting tablet",
                             {"logPrefix", GetLogPrefix()},
                             {"replyStatus", NKikimrProto::EReplyStatus_Name(msg->Status)},
                             {"tabletId", tablet->Id});
@@ -56,7 +56,7 @@ public:
                     }
                 }
             } else {
-                YDB_LOG_WARN("THive::TTxBlockStorageResult retrying for because of",
+                YDB_LOG_WARN("THive::TTxBlockStorageResult::Execute retrying block storage operation",
                     {"logPrefix", GetLogPrefix()},
                     {"tabletId", TabletId},
                     {"replyStatus", NKikimrProto::EReplyStatus_Name(msg->Status)},
@@ -73,7 +73,7 @@ public:
 
     void Complete(const TActorContext& ctx) override {
         TEvTabletBase::TEvBlockBlobStorageResult* msg = Result->Get();
-        YDB_LOG_DEBUG("THive::TTxBlockStorageResult::Complete(",
+        YDB_LOG_DEBUG("THive::TTxBlockStorageResult::Complete",
             {"logPrefix", GetLogPrefix()},
             {"tabletId", TabletId},
             {"replyStatus", NKikimrProto::EReplyStatus_Name(msg->Status)});

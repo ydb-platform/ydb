@@ -94,7 +94,7 @@ protected:
             tablet->ActorsToNotifyOnRestart.emplace_back(SelfId());
             YDB_LOG_DEBUG("StorageBalancer initiating reassign for tablet",
                 {"logPrefix", GetLogPrefix()},
-                {"nextReassignKey", NextReassign->first});
+                {"tabletId", NextReassign->first});
             Send(Hive->SelfId(), NextReassign->second.release());
             ++ReassignInFlight;
         }
@@ -105,7 +105,7 @@ protected:
 
     void Handle(TEvPrivate::TEvRestartComplete::TPtr& ev) {
         auto tabletId = ev->Get()->TabletId;
-        YDB_LOG_DEBUG("StorageBalancer received for tablet",
+        YDB_LOG_DEBUG("StorageBalancer received TEvRestartComplete for tablet",
             {"logPrefix", GetLogPrefix()},
             {"status", ev->Get()->Status},
             {"tabletId", tabletId});
@@ -167,7 +167,7 @@ public:
                 }
             }
         }
-        YDB_LOG_DEBUG("StorageBalancer for pool tablet channels suitable for balancing",
+        YDB_LOG_DEBUG("StorageBalancer found channels suitable for balancing",
             {"logPrefix", GetLogPrefix()},
             {"storagePool", Settings.StoragePool},
             {"channelsCount", channels.size()});

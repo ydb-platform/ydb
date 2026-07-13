@@ -32,7 +32,7 @@ public:
     void Handle(TEvPrivate::TEvRestartComplete::TPtr&) {
         ++TabletsDone;
         if (TabletsDone >= TabletsTotal) {
-            YDB_LOG_DEBUG("THive::TTxReleaseTabletsReply::Complete - continue migration",
+            YDB_LOG_DEBUG("THive::TTxReleaseTabletsReply::Complete continuing migration",
                 {"logPrefix", GetLogPrefix()});
             Hive->SendToRootHivePipe(new TEvHive::TEvSeizeTablets(Hive->MigrationFilter));
             PassAway();
@@ -42,7 +42,7 @@ public:
     void Bootstrap(const TActorContext&) {
         Become(&TThis::StateWork);
         if (TabletsTotal == 0) {
-            YDB_LOG_DEBUG("THive::TTxReleaseTabletsReply::Complete - continue migration",
+            YDB_LOG_DEBUG("THive::TTxReleaseTabletsReply::Complete continuing migration",
                 {"logPrefix", GetLogPrefix()});
             Hive->SendToRootHivePipe(new TEvHive::TEvSeizeTablets(Hive->MigrationFilter));
             PassAway();
@@ -71,7 +71,7 @@ public:
 
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
         const NKikimrHive::TEvReleaseTabletsReply& request(Request->Get()->Record);
-        YDB_LOG_DEBUG("THive::TTxReleaseTabletsReply::Execute",
+        YDB_LOG_DEBUG("THive::TTxReleaseTabletsReply::Execute processing release tablets reply",
             {"logPrefix", GetLogPrefix()},
             {"request", request});
         NIceDb::TNiceDb db(txc.DB);
@@ -118,7 +118,7 @@ public:
         Self->MigrationProgress += request.TabletIDsSize();
         // continue migration
         if (waitActor) {
-            YDB_LOG_DEBUG("THive::TTxReleaseTabletsReply::Complete - waiting for tablets to rise",
+            YDB_LOG_DEBUG("THive::TTxReleaseTabletsReply::Complete waiting for tablets to start",
                 {"logPrefix", GetLogPrefix()});
             return; // waiting for tablets
         } else {

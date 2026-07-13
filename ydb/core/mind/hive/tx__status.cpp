@@ -21,7 +21,7 @@ public:
 
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
         TNodeId nodeId = Local.NodeId();
-        YDB_LOG_DEBUG("THive::TTxStatus( )::Execute",
+        YDB_LOG_DEBUG("THive::TTxStatus::Execute processing node status",
             {"logPrefix", GetLogPrefix()},
             {"nodeId", nodeId});
         TEvLocal::TEvStatus::EStatus status = (TEvLocal::TEvStatus::EStatus)Record.GetStatus();
@@ -52,7 +52,7 @@ public:
             }
             Self->ProcessWaitQueue(); // new node connected
             if (node.Drain && Self->BalancerNodes.count(nodeId) == 0) {
-                YDB_LOG_DEBUG("THive::TTxStatus( - continuing node drain",
+                YDB_LOG_DEBUG("THive::TTxStatus::Execute continuing node drain",
                     {"logPrefix", GetLogPrefix()},
                     {"nodeId", nodeId});
                 Y_DEBUG_ABORT_UNLESS(node.DrainActor == nullptr);
@@ -60,10 +60,10 @@ public:
             }
             Self->ObjectDistributions.AddNode(node);
         } else {
-            YDB_LOG_WARN("- killing node",
+            YDB_LOG_WARN("THive::TTxStatus::Execute killing node due to bad status",
                 {"logPrefix", GetLogPrefix()},
                 {"status", static_cast<int>(status)},
-                {"node", TNodeInfo::EVolatileStateName(node.GetVolatileState())},
+                {"nodeState", TNodeInfo::EVolatileStateName(node.GetVolatileState())},
                 {"nodeId", node.Id});
             Self->KillNode(node.Id, Local);
         }
@@ -72,7 +72,7 @@ public:
 
     void Complete(const TActorContext&) override {
         TNodeId nodeId = Local.NodeId();
-        YDB_LOG_DEBUG("THive::TTxStatus( )::Complete",
+        YDB_LOG_DEBUG("THive::TTxStatus::Complete",
             {"logPrefix", GetLogPrefix()},
             {"nodeId", nodeId});
     }

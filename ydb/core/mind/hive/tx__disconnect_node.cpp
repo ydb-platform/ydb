@@ -19,7 +19,7 @@ public:
     TTxType GetTxType() const override { return NHive::TXTYPE_DISCONNECT_NODE; }
 
     bool Execute(TTransactionContext&, const TActorContext&) override {
-        YDB_LOG_DEBUG("THive::TTxDisconnectNode()::Execute",
+        YDB_LOG_DEBUG("THive::TTxDisconnectNode::Execute disconnecting node",
             {"logPrefix", GetLogPrefix()});
         TNodeInfo* node = Self->FindNode(Event->NodeId);
         if (node != nullptr) {
@@ -38,7 +38,7 @@ public:
                 }
                 Self->ScheduleDisconnectNode(std::move(event));
             } else if (node->IsUnknown()) {
-                YDB_LOG_WARN("THive::TTxDisconnectNode() - killing node",
+                YDB_LOG_WARN("THive::TTxDisconnectNode::Execute killing disconnected node",
                     {"logPrefix", GetLogPrefix()},
                     {"nodeId", node->Id});
                 Self->KillNode(node->Id, node->Local);
@@ -48,7 +48,7 @@ public:
     }
 
     void Complete(const TActorContext&) override {
-        YDB_LOG_DEBUG("THive::TTxDisconnectNode()::Complete",
+        YDB_LOG_DEBUG("THive::TTxDisconnectNode::Complete",
             {"logPrefix", GetLogPrefix()});
     }
 };

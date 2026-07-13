@@ -2810,9 +2810,10 @@ public:
     }
 
     void Complete(const TActorContext& ctx) override {
-        YDB_LOG_DEBUG("THive::TTxMonEvent_SetDown( )::Complete",
+        YDB_LOG_DEBUG("THive::TTxMonEvent_SetDown::Complete",
             {"logPrefix", GetLogPrefix()},
             {"nodeId", NodeId},
+            {"down", Down},
             {"response", Response});
         ctx.Send(Source, MakeRawHttpEvent(Status, Response));
     }
@@ -2862,9 +2863,10 @@ public:
     }
 
     void Complete(const TActorContext& ctx) override {
-        YDB_LOG_DEBUG("THive::TTxMonEvent_SetFreeze( )::Complete",
+        YDB_LOG_DEBUG("THive::TTxMonEvent_SetFreeze::Complete",
             {"logPrefix", GetLogPrefix()},
             {"nodeId", NodeId},
+            {"freeze", Freeze},
             {"response", Response});
         ctx.Send(Source, MakeRawHttpEvent(Status, Response));
     }
@@ -2909,7 +2911,7 @@ public:
     }
 
     void Complete(const TActorContext& ctx) override {
-        YDB_LOG_DEBUG("THive::TTxMonEvent_KickNode( )::Complete",
+        YDB_LOG_DEBUG("THive::TTxMonEvent_KickNode::Complete",
             {"logPrefix", GetLogPrefix()},
             {"nodeId", NodeId},
             {"response", Response});

@@ -73,7 +73,7 @@ std::optional<ui32> TTargetTrackingPolicy::MakeScaleRecommendation(ui32 readyNod
         auto scaleInWindowEnd = UsageHistory.end();
         double usageBottomThreshold = TargetUsage - config.GetTargetTrackingCPUMargin();
 
-        YDB_LOG_TRACE("[MSR] Scale in window: bottom",
+        YDB_LOG_TRACE("[MSR] Scale-in window below threshold",
             {"logPrefix", GetLogPrefix()},
             {"scaleInWindow", JoinRange(", ", scaleInWindowBegin, scaleInWindowEnd)},
             {"threshold", usageBottomThreshold});
@@ -90,12 +90,12 @@ std::optional<ui32> TTargetTrackingPolicy::MakeScaleRecommendation(ui32 readyNod
                 readyNodesCount,
                 TargetUsage
             );
-            YDB_LOG_TRACE("[MSR] Need scale in, rounded recommended",
+            YDB_LOG_TRACE("[MSR] Scale-in recommended",
                 {"logPrefix", GetLogPrefix()},
-                {"nodes", recommendedNodes});
+                {"recommendedNodes", recommendedNodes});
         }
     } else {
-        YDB_LOG_TRACE("[MSR] Not enough history for scale",
+        YDB_LOG_TRACE("[MSR] Not enough history for scale-in",
             {"logPrefix", GetLogPrefix()});
     }
 
@@ -103,7 +103,7 @@ std::optional<ui32> TTargetTrackingPolicy::MakeScaleRecommendation(ui32 readyNod
         auto scaleOutWindowBegin = UsageHistory.end() - config.GetScaleOutWindowSize();
         auto scaleOutWindowEnd = UsageHistory.end();
 
-        YDB_LOG_TRACE("[MSR] Scale out window",
+        YDB_LOG_TRACE("[MSR] Scale-out window above target",
             {"logPrefix", GetLogPrefix()},
             {"scaleOutWindow", JoinRange(", ", scaleOutWindowBegin, scaleOutWindowEnd)},
             {"target", TargetUsage});
@@ -120,12 +120,12 @@ std::optional<ui32> TTargetTrackingPolicy::MakeScaleRecommendation(ui32 readyNod
                 readyNodesCount,
                 TargetUsage
             );
-            YDB_LOG_TRACE("[MSR] Need scale out, rounded recommended",
+            YDB_LOG_TRACE("[MSR] Scale-out recommended",
                 {"logPrefix", GetLogPrefix()},
-                {"nodes", recommendedNodes});
+                {"recommendedNodes", recommendedNodes});
         }
     } else {
-        YDB_LOG_TRACE("[MSR] Not enough history for scale out",
+        YDB_LOG_TRACE("[MSR] Not enough history for scale-out",
             {"logPrefix", GetLogPrefix()});
     }
 

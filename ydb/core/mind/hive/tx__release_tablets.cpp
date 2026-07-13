@@ -25,7 +25,7 @@ public:
         const NKikimrHive::TEvReleaseTablets& request(Request->Get()->Record);
         NKikimrHive::TEvReleaseTabletsReply& response(Response->Record);
         SideEffects.Reset(Self->SelfId());
-        YDB_LOG_DEBUG("THive::TTxReleaseTablets::Execute",
+        YDB_LOG_DEBUG("THive::TTxReleaseTablets::Execute releasing tablets from parent hive",
             {"logPrefix", GetLogPrefix()},
             {"request", request});
         NIceDb::TNiceDb db(txc.DB);
@@ -93,7 +93,7 @@ public:
         }
         ctx.Send(Request->Sender, Response.Release());
         if (NeedToProcessPendingOperations) {
-            YDB_LOG_DEBUG("THive::TTxReleaseTablets::Complete - retrying pending operations",
+            YDB_LOG_DEBUG("THive::TTxReleaseTablets::Complete retrying pending operations",
                 {"logPrefix", GetLogPrefix()});
             Self->ProcessPendingOperations();
         }

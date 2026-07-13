@@ -136,7 +136,7 @@ protected:
     }
 
     void PassAway() override {
-        YDB_LOG_INFO("Balancer finished with movements made",
+        YDB_LOG_INFO("Balancer finished",
             {"logPrefix", GetLogPrefix()},
             {"movements", Movements});
         Stats.TotalRuns++;
@@ -258,7 +258,7 @@ protected:
                     tablets.emplace_back(tablet);
                 }
             }
-            YDB_LOG_TRACE("Balancer on node / tablets are suitable for balancing",
+            YDB_LOG_TRACE("Balancer found tablets suitable for balancing on node",
                 {"logPrefix", GetLogPrefix()},
                 {"nodeId", node->Id},
                 {"tabletsCount", tablets.size()},
@@ -316,7 +316,7 @@ protected:
 
         while (CanKickNextTablet()) {
             if (tabletsProcessed == MAX_TABLETS_PROCESSED) {
-                YDB_LOG_TRACE("Balancer - rescheduling",
+                YDB_LOG_TRACE("Balancer rescheduling after processing max tablets",
                     {"logPrefix", GetLogPrefix()});
                 Send(SelfId(), new TEvents::TEvWakeup);
                 return;
@@ -340,11 +340,11 @@ protected:
                     tablet->ActorsToNotifyOnRestart.emplace_back(SelfId()); // volatile settings, will not persist upon restart
                     ++KickInFlight;
                     ++Movements;
-                    YDB_LOG_DEBUG("Balancer moving tablet from node to node",
+                    YDB_LOG_DEBUG("Balancer moving tablet",
                         {"logPrefix", GetLogPrefix()},
                         {"tablet", tablet->ToString()},
-                        {"nodeId", tablet->Node->Id},
-                        {"nodeId", node->Id});
+                        {"sourceNodeId", tablet->Node->Id},
+                        {"targetNodeId", node->Id});
                     Hive->RecordTabletMove(THive::TTabletMoveInfo(now, *tablet, tablet->Node->Id, node->Id));
                     Hive->Execute(Hive->CreateRestartTablet(tablet->GetFullTabletId(), node->Id));
                     UpdateProgress();
@@ -359,7 +359,7 @@ protected:
     }
 
     void Handle(TEvPrivate::TEvRestartComplete::TPtr& ev) {
-        YDB_LOG_DEBUG("Balancer received for tablet",
+        YDB_LOG_DEBUG("Balancer received TEvRestartComplete for tablet",
             {"logPrefix", GetLogPrefix()},
             {"selfId", SelfId()},
             {"status", ev->Get()->Status},

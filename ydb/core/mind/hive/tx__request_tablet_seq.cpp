@@ -22,7 +22,7 @@ public:
     TTxType GetTxType() const override { return NHive::TXTYPE_REQUEST_TABLET_SEQUENCE; }
 
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
-        YDB_LOG_DEBUG("THive::TTxRequestTabletSequence()::Execute",
+        YDB_LOG_DEBUG("THive::TTxRequestTabletSequence::Execute",
             {"logPrefix", GetLogPrefix()});
         const auto& pbRecord(Event->Get()->Record);
         Size = pbRecord.GetSize();
@@ -56,18 +56,18 @@ public:
     }
 
     void Complete(const TActorContext&) override {
-        YDB_LOG_DEBUG("THive::TTxRequestTabletSequence()::Complete",
+        YDB_LOG_DEBUG("THive::TTxRequestTabletSequence::Complete",
             {"logPrefix", GetLogPrefix()});
         if (Sequence == TSequencer::NO_SEQUENCE) {
-            YDB_LOG_CRIT("Could not allocate sequence of elements",
+            YDB_LOG_CRIT("THive::TTxRequestTabletSequence::Complete could not allocate tablet id sequence",
                 {"logPrefix", GetLogPrefix()},
                 {"size", Size},
-                {"owner", Owner});
+                {"ownerId", Owner.first}, {"ownerIdx", Owner.second});
         } else {
-            YDB_LOG_DEBUG("Respond with sequence",
+            YDB_LOG_DEBUG("THive::TTxRequestTabletSequence::Complete responding with allocated sequence",
                 {"logPrefix", GetLogPrefix()},
                 {"sequence", Sequence},
-                {"owner", Owner});
+                {"ownerId", Owner.first}, {"ownerIdx", Owner.second});
             THolder<TEvHive::TEvResponseTabletIdSequence> response = MakeHolder<TEvHive::TEvResponseTabletIdSequence>();
             const auto& pbRecord(Event->Get()->Record);
             response->Record.MutableOwner()->CopyFrom(pbRecord.GetOwner());

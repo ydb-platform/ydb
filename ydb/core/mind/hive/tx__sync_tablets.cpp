@@ -40,9 +40,9 @@ public:
     }
 
     bool Execute(TTransactionContext &txc, const TActorContext& ctx) override {
-        YDB_LOG_DEBUG("THive::TTxSyncTablets( )::Execute",
+        YDB_LOG_DEBUG("THive::TTxSyncTablets::Execute synchronizing tablets with node",
             {"logPrefix", GetLogPrefix()},
-            {"local", Local});
+            {"nodeId", Local.NodeId()});
         SideEffects.Reset(Self->SelfId());
         NIceDb::TNiceDb db(txc.DB);
         TNodeInfo& node = Self->GetNode(Local.NodeId());
@@ -59,16 +59,16 @@ public:
         auto foundTablet = [&](TTabletInfo* tablet, const TString& state) {
             auto tabletId = tablet->GetFullTabletId();
             if (node.MatchesFilter(tablet->NodeFilter)) {
-                YDB_LOG_TRACE("THive::TTxSyncTablets( confirmed tablet",
+                YDB_LOG_TRACE("THive::TTxSyncTablets::Execute confirmed tablet",
                     {"logPrefix", GetLogPrefix()},
-                    {"local", Local},
+                    {"nodeId", Local.NodeId()},
                     {"state", state},
                     {"tabletId", tabletId});
                 tabletsToStop.erase(tabletId);
             } else {
-                YDB_LOG_TRACE("THive::TTxSyncTablets( confirmed tablet but it's not allowed to run on this node",
+                YDB_LOG_TRACE("THive::TTxSyncTablets::Execute confirmed tablet not allowed on this node",
                     {"logPrefix", GetLogPrefix()},
-                    {"local", Local},
+                    {"nodeId", Local.NodeId()},
                     {"state", state},
                     {"tabletId", tabletId});
             }
@@ -98,9 +98,9 @@ public:
                 }
             } else {
                 SideEffects.Send(Local, new TEvLocal::TEvStopTablet(tabletId));
-                YDB_LOG_TRACE("THive::TTxSyncTablets( rejected unknown starting tablet",
+                YDB_LOG_TRACE("THive::TTxSyncTablets::Execute rejected unknown starting tablet",
                     {"logPrefix", GetLogPrefix()},
-                    {"local", Local},
+                    {"nodeId", Local.NodeId()},
                     {"tabletId", tabletId});
                 tabletsToStop.erase(tabletId);
             }
@@ -128,9 +128,9 @@ public:
                     continue;
                 } else if (ti.GetBootMode() == NKikimrLocal::EBootMode::BOOT_MODE_FOLLOWER) {
                     SideEffects.Send(Local, new TEvLocal::TEvStopTablet(tabletId)); // the tablet is running somewhere else
-                    YDB_LOG_TRACE("THive::TTxSyncTablets( confirmed and stopped running tablet",
+                    YDB_LOG_TRACE("THive::TTxSyncTablets::Execute stopped running tablet on wrong node",
                         {"logPrefix", GetLogPrefix()},
-                        {"local", Local},
+                        {"nodeId", Local.NodeId()},
                         {"tabletId", tabletId});
                     tabletsToBoot.insert(tabletId);
                     tabletsToStop.erase(tabletId);
@@ -138,9 +138,9 @@ public:
                 }
             } else {
                 SideEffects.Send(Local, new TEvLocal::TEvStopTablet(tabletId));
-                YDB_LOG_TRACE("THive::TTxSyncTablets( rejected unknown running tablet",
+                YDB_LOG_TRACE("THive::TTxSyncTablets::Execute rejected unknown running tablet",
                     {"logPrefix", GetLogPrefix()},
-                    {"local", Local},
+                    {"nodeId", Local.NodeId()},
                     {"tabletId", tabletId});
                 tabletsToStop.erase(tabletId);
             }
@@ -159,9 +159,9 @@ public:
     }
 
     void Complete(const TActorContext& ctx) override {
-        YDB_LOG_DEBUG("THive::TTxSyncTablets( )::Complete",
+        YDB_LOG_DEBUG("THive::TTxSyncTablets::Complete",
             {"logPrefix", GetLogPrefix()},
-            {"local", Local});
+            {"nodeId", Local.NodeId()});
         SideEffects.Complete(ctx);
     }
 };

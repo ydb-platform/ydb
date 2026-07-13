@@ -27,9 +27,9 @@ public:
     {}
 
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
-        YDB_LOG_DEBUG("THive::TTxSwitchDrainOn::Execute",
+        YDB_LOG_DEBUG("THive::TTxSwitchDrainOn::Execute enabling node drain",
             {"logPrefix", GetLogPrefix()},
-            {"node", NodeId},
+            {"nodeId", NodeId},
             {"persist", Settings.Persist},
             {"downPolicy", static_cast<int>(Settings.DownPolicy)});
         NIceDb::TNiceDb db(txc.DB);
@@ -122,9 +122,9 @@ public:
     }
 
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
-        YDB_LOG_DEBUG("THive::TTxSwitchDrainOff::Execute",
+        YDB_LOG_DEBUG("THive::TTxSwitchDrainOff::Execute disabling drain",
             {"logPrefix", GetLogPrefix()},
-            {"target", Target});
+            {"drainTarget", Target});
         NIceDb::TNiceDb db(txc.DB);
 
         if (std::holds_alternative<TNodeId>(Target)) {
@@ -142,7 +142,7 @@ public:
     void Complete(const TActorContext&) override {
         YDB_LOG_DEBUG("THive::TTxSwitchDrainOff::Complete",
             {"logPrefix", GetLogPrefix()},
-            {"target", Target},
+            {"drainTarget", Target},
             {"status", NKikimrProto::EReplyStatus_Name(Status)},
             {"movements", Movements});
         for (const TActorId& initiator : Initiators) {

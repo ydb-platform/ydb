@@ -16,7 +16,7 @@ public:
     TTxType GetTxType() const override { return NHive::TXTYPE_UPDATE_PILES; }
 
     bool Execute(TTransactionContext &txc, const TActorContext&) override {
-        YDB_LOG_DEBUG("THive::TTxUpdatePiles()::Execute",
+        YDB_LOG_DEBUG("THive::TTxUpdatePiles::Execute updating bridge piles",
             {"logPrefix", GetLogPrefix()});
         NIceDb::TNiceDb db(txc.DB);
         bool promotion = false;
@@ -75,7 +75,7 @@ public:
     }
 
     void Complete(const TActorContext&) override {
-        YDB_LOG_DEBUG("THive::TTxUpdatePiles()::Complete",
+        YDB_LOG_DEBUG("THive::TTxUpdatePiles::Complete",
             {"logPrefix", GetLogPrefix()});
     }
 

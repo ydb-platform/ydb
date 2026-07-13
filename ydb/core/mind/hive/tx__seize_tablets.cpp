@@ -61,9 +61,9 @@ public:
                 // we also skip current metrics state for followers
 
                 TTabletId id = tabletId;
-                YDB_LOG_DEBUG("THive::TTxSeizeTablets is migrating tablet",
+                YDB_LOG_DEBUG("THive::TTxSeizeTablets::Execute migrating tablet",
                     {"logPrefix", GetLogPrefix()},
-                    {"id", id},
+                    {"tabletId", id},
                     {"newOwnerId", newOwnerId});
 
                 auto tabletRowset = db.Table<Schema::Tablet>().Key(id).Select();
@@ -71,9 +71,9 @@ public:
                     return false;
                 }
                 if (tabletRowset.EndOfSet()) {
-                    YDB_LOG_DEBUG("THive::TTxSeizeTablets couldn't find tablet in database",
+                    YDB_LOG_DEBUG("THive::TTxSeizeTablets::Execute tablet not found in database",
                         {"logPrefix", GetLogPrefix()},
-                        {"id", id});
+                        {"tabletId", id});
                     continue;
                 }
 

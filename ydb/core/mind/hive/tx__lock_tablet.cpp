@@ -36,9 +36,11 @@ public:
     TTxType GetTxType() const override { return NHive::TXTYPE_LOCK_TABLET_EXECUTION; }
 
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
-        YDB_LOG_DEBUG("THive::TTxLockTabletExecution::Execute",
+        YDB_LOG_DEBUG("THive::TTxLockTabletExecution::Execute locking tablet execution",
             {"logPrefix", GetLogPrefix()},
-            {"tabletId", TabletId});
+            {"tabletId", TabletId},
+            {"ownerActor", OwnerActor},
+            {"isReconnect", IsReconnect});
 
         SideEffects.Reset(Self->SelfId());
 
@@ -125,7 +127,7 @@ public:
                 {"tabletId", TabletId},
                 {"sideEffects", SideEffects});
         } else {
-            YDB_LOG_NOTICE("THive::TTxLockTabletExecution::Complete",
+            YDB_LOG_NOTICE("THive::TTxLockTabletExecution::Complete tablet locked successfully",
                 {"logPrefix", GetLogPrefix()},
                 {"tabletId", TabletId},
                 {"sideEffects", SideEffects});

@@ -23,12 +23,12 @@ public:
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
         SideEffects.Reset(Self->SelfId());
 
-        YDB_LOG_DEBUG("THive::TTxUpdateDomain( )::Execute",
+        YDB_LOG_DEBUG("THive::TTxUpdateDomain::Execute updating domain",
             {"logPrefix", GetLogPrefix()},
             {"subdomainKey", SubdomainKey});
         const TDomainInfo* domain = Self->FindDomain(SubdomainKey);
         if (domain == nullptr) {
-            YDB_LOG_WARN("THive::TTxUpdateDomain( )::Execute - unknown subdomain",
+            YDB_LOG_WARN("THive::TTxUpdateDomain::Execute unknown subdomain",
                 {"logPrefix", GetLogPrefix()},
                 {"subdomainKey", SubdomainKey});
             return true;
@@ -59,7 +59,7 @@ public:
     }
 
     void Complete(const TActorContext& ctx) override {
-        YDB_LOG_DEBUG("THive::TTxUpdateDomain( )::Complete",
+        YDB_LOG_DEBUG("THive::TTxUpdateDomain::Complete",
             {"logPrefix", GetLogPrefix()},
             {"subdomainKey", SubdomainKey});
         SideEffects.Complete(ctx);

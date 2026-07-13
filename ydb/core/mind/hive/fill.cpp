@@ -24,7 +24,7 @@ protected:
     }
 
     void PassAway() override {
-        YDB_LOG_INFO("Fill finished with movements made",
+        YDB_LOG_INFO("Fill finished",
             {"logPrefix", GetLogPrefix()},
             {"selfId", SelfId()},
             {"movements", Movements});
@@ -66,12 +66,12 @@ protected:
                         tablet->ActorsToNotifyOnRestart.emplace_back(SelfId()); // volatile settings, will not persist upon restart
                         ++KickInFlight;
                         ++Movements;
-                        YDB_LOG_DEBUG("Fill moving tablet from node to node",
+                        YDB_LOG_DEBUG("Fill moving tablet",
                             {"logPrefix", GetLogPrefix()},
                             {"selfId", SelfId()},
                             {"tablet", tablet->ToString()},
-                            {"nodeId", tablet->Node->Id},
-                            {"nodeId", node->Id});
+                            {"sourceNodeId", tablet->Node->Id},
+                            {"targetNodeId", node->Id});
                         Hive->TabletCounters->Cumulative()[NHive::COUNTER_FILL_EXECUTED].Increment(1);
                         Hive->RecordTabletMove(THive::TTabletMoveInfo(TInstant::Now(), *tablet, tablet->Node->Id, node->Id));
                         Hive->Execute(Hive->CreateRestartTablet(tablet->GetFullTabletId(), node->Id), ctx);
@@ -86,7 +86,7 @@ protected:
     }
 
     void Handle(TEvPrivate::TEvRestartComplete::TPtr& ev, const TActorContext& ctx) {
-        YDB_LOG_DEBUG("Fill received for tablet",
+        YDB_LOG_DEBUG("Fill received TEvRestartComplete for tablet",
             {"logPrefix", GetLogPrefix()},
             {"selfId", SelfId()},
             {"status", ev->Get()->Status},
@@ -157,7 +157,7 @@ void THive::StartHiveFill(TNodeId nodeId, const TActorId& initiator) {
         SubActors.emplace_back(balancer);
         RegisterWithSameMailbox(balancer);
     } else {
-        YDB_LOG_WARN("It's not possible to start fill on node the node is already busy",
+        YDB_LOG_WARN("Cannot start fill: node is already busy",
             {"logPrefix", GetLogPrefix()},
             {"nodeId", nodeId});
         Send(initiator, new TEvHive::TEvFillNodeResult(NKikimrProto::ALREADY));

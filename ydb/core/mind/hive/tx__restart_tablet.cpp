@@ -33,13 +33,13 @@ public:
         TTabletInfo* tablet = Self->FindTablet(TabletId);
         if (tablet != nullptr) {
             if (PreferredNodeId == 0) {
-                YDB_LOG_DEBUG("THive::TTxRestartTablet( )::Execute",
+                YDB_LOG_DEBUG("THive::TTxRestartTablet::Execute restarting tablet",
                     {"logPrefix", GetLogPrefix()},
-                    {"tablet", tablet->ToString()});
+                    {"tabletInfo", tablet->ToString()});
             } else {
-                YDB_LOG_DEBUG("THive::TTxRestartTablet( to node )::Execute",
+                YDB_LOG_DEBUG("THive::TTxRestartTablet::Execute restarting tablet on preferred node",
                     {"logPrefix", GetLogPrefix()},
-                    {"tablet", tablet->ToString()},
+                    {"tabletInfo", tablet->ToString()},
                     {"preferredNodeId", PreferredNodeId});
             }
             if (!tablet->IsStopped()) {
@@ -66,7 +66,7 @@ public:
     }
 
     void Complete(const TActorContext& ctx) override {
-        YDB_LOG_DEBUG("THive::TTxRestartTablet( )::Complete",
+        YDB_LOG_DEBUG("THive::TTxRestartTablet::Complete",
             {"logPrefix", GetLogPrefix()},
             {"tabletId", TabletId},
             {"sideEffects", SideEffects});

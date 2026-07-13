@@ -19,7 +19,7 @@ public:
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
         TEvHive::TEvCutTabletHistory* msg = Event->Get();
         auto tabletId = msg->Record.GetTabletID();
-        YDB_LOG_DEBUG("THive::TTxCutTabletHistory::Execute(",
+        YDB_LOG_DEBUG("THive::TTxCutTabletHistory::Execute cutting tablet channel history",
             {"logPrefix", GetLogPrefix()},
             {"tabletId", tabletId});
         TLeaderTabletInfo* tablet = Self->FindTabletEvenInDeleting(tabletId);

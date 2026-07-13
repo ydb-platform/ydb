@@ -20,12 +20,12 @@ public:
     TTxType GetTxType() const override { return NHive::TXTYPE_REQUEST_TABLET_OWNERS; }
 
     bool Execute(TTransactionContext&, const TActorContext&) override {
-        YDB_LOG_DEBUG("THive::TTxRequestTabletOwners::Execute",
+        YDB_LOG_DEBUG("THive::TTxRequestTabletOwners::Execute requesting tablet owners",
             {"logPrefix", GetLogPrefix()});
         auto ownerId = Request->Get()->Record.GetOwnerID();
         std::vector<TSequencer::TSequence> sequences;
         Self->Keeper.GetOwnedSequences(ownerId, sequences);
-        YDB_LOG_DEBUG("THive::TTxRequestTabletOwners - replying with sequences",
+        YDB_LOG_DEBUG("THive::TTxRequestTabletOwners::Execute replying with owned sequences",
             {"logPrefix", GetLogPrefix()},
             {"sequencesCount", sequences.size()});
         for (const auto& seq : sequences) {

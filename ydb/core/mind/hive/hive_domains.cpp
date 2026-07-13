@@ -14,7 +14,7 @@ void TDomainsView::RegisterNode(const TNodeInfo& node) {
 
 void TDomainsView::DeregisterNode(const TNodeInfo& node) {
     for (auto &domainKey: node.ServicedDomains) {
-         YDB_LOG_TRACE("Node( DeregisterInDomains ->",
+         YDB_LOG_TRACE("TDomainsView::DeregisterNode deregistering node from domain",
              {"logPrefix", GetLogPrefix()},
              {"nodeId", node.Id},
              {"domainKey", domainKey},
@@ -68,10 +68,10 @@ void THive::Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
                 {"path", path});
             Execute(CreateUpdateDomain(key));
         } else {
-            YDB_LOG_WARN("Received NavigateKeySetResult for domain with status",
+            YDB_LOG_WARN("Received NavigateKeySetResult for domain with error status",
                 {"logPrefix", GetLogPrefix()},
                 {"tableId", entry.TableId},
-                {"entryStatus", entry.Status});
+                {"status", entry.Status});
         }
     } else {
         YDB_LOG_WARN("Received empty NavigateKeySetResult",

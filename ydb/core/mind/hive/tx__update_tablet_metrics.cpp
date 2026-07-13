@@ -54,7 +54,7 @@ public:
             node->UpdateResourceTotalUsage(record, db);
             node->Statistics.SetLastAliveTimestamp(now.MilliSeconds());
             node->ActualizeNodeStatistics(now);
-            YDB_LOG_TRACE("THive::TTxUpdateTabletMetrics UpdateResourceTotalUsage node value accumulated",
+            YDB_LOG_TRACE("THive::TTxUpdateTabletMetrics::Execute accumulated node resource usage",
                 {"logPrefix", GetLogPrefix()},
                 {"nodeId", nodeId},
                 {"resourceUsage", ResourceRawValuesFromMetrics(record.GetTotalResourceUsage())},

@@ -20,7 +20,7 @@ public:
 
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
         const NKikimrHive::TEvSeizeTabletsReply& request(Request->Get()->Record);
-        YDB_LOG_DEBUG("THive::TTxSeizeTabletsReply::Execute",
+        YDB_LOG_DEBUG("THive::TTxSeizeTabletsReply::Execute processing seize tablets reply",
             {"logPrefix", GetLogPrefix()});
         NIceDb::TNiceDb db(txc.DB);
         for (const NKikimrHive::TTabletInfo& protoTabletInfo : request.GetTablets()) {
@@ -169,7 +169,7 @@ public:
             }
             ctx.Send(Request->Sender, request.Release());
         } else {
-            YDB_LOG_DEBUG("Migration complete tablets migrated)",
+            YDB_LOG_DEBUG("THive::TTxSeizeTabletsReply::Complete migration complete",
                 {"logPrefix", GetLogPrefix()},
                 {"migrationProgress", Self->MigrationProgress});
             Self->MigrationState = NKikimrHive::EMigrationState::MIGRATION_COMPLETE;

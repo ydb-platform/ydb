@@ -34,10 +34,10 @@ public:
             for (ui32 channel = 0; channel < tablet.GetChannelCount(); ++channel) {
                 auto *entry = channel < channels.size() ? channels[channel].LatestEntry() : nullptr;
                 if (!entry) {
-                    YDB_LOG_WARN("TTxReassignGroupsOnDecommit entry not found",
+                    YDB_LOG_WARN("THive::TTxReassignGroupsOnDecommit::Execute channel history entry not found",
                         {"logPrefix", GetLogPrefix()},
                         {"tabletId", tabletId_},
-                        {"channel", channel},
+                        {"channelId", channel},
                         {"groupId", GroupId});
                     continue;
                 } else if (entry->GroupID != GroupId) {
@@ -51,7 +51,7 @@ public:
                 ++numChannels;
 
                 if (changed || !tablet.IsReadyToReassignTablet()) {
-                    YDB_LOG_DEBUG("TTxReassignGroupsOnDecommit tablet is not ready for reassignment",
+                    YDB_LOG_DEBUG("THive::TTxReassignGroupsOnDecommit::Execute tablet not ready for reassignment",
                         {"logPrefix", GetLogPrefix()},
                         {"tabletId", tabletId_});
                     continue;
@@ -70,7 +70,7 @@ public:
             }
 
             if (changed) {
-                YDB_LOG_DEBUG("TTxReassignGroupsOnDecommit tablet reassigned",
+                YDB_LOG_DEBUG("THive::TTxReassignGroupsOnDecommit::Execute tablet marked for reassignment",
                     {"logPrefix", GetLogPrefix()},
                     {"tabletId", tabletId_},
                     {"numChannels", numChannels});

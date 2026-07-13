@@ -23,7 +23,7 @@ public:
         TEvHive::TEvUpdateTabletsObject* msg = Event->Get();
         auto objectId = msg->Record.GetObjectId();
 
-        YDB_LOG_DEBUG("THive::TTxUpdateTabletsObject::Execute(",
+        YDB_LOG_DEBUG("THive::TTxUpdateTabletsObject::Execute updating tablets object",
             {"logPrefix", GetLogPrefix()},
             {"objectId", objectId});
 
@@ -85,7 +85,7 @@ public:
     }
 
     void Complete(const TActorContext& ctx) override {
-        YDB_LOG_DEBUG("THive::TTxUpdateTabletsObject Complete",
+        YDB_LOG_DEBUG("THive::TTxUpdateTabletsObject::Complete",
             {"logPrefix", GetLogPrefix()});
         SideEffects.Complete(ctx);
     }

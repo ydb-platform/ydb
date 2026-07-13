@@ -18,7 +18,7 @@ public:
     TTxType GetTxType() const override { return NHive::TXTYPE_PROCESS_TABLET_METRICS; }
 
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
-        YDB_LOG_DEBUG("TTxProcessTabletMetrics::Execute()",
+        YDB_LOG_DEBUG("THive::TTxProcessTabletMetrics::Execute processing tablet metrics",
             {"logPrefix", GetLogPrefix()});
         NIceDb::TNiceDb db(txc.DB);
         SideEffects.Reset(Self->SelfId());

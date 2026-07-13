@@ -23,9 +23,9 @@ public:
     TTxType GetTxType() const override { return NHive::TXTYPE_STOP_TABLET; }
 
     bool Execute(TTransactionContext &txc, const TActorContext&) override {
-        YDB_LOG_DEBUG("THive::TTxStopTablet::Execute",
+        YDB_LOG_DEBUG("THive::TTxStopTablet::Execute stopping tablet",
             {"logPrefix", GetLogPrefix()},
-            {"tablet", TabletId});
+            {"tabletId", TabletId});
         SideEffects.Reset(Self->SelfId());
         NKikimrProto::EReplyStatus status = NKikimrProto::UNKNOWN;
         TLeaderTabletInfo* tablet = Self->FindTablet(TabletId);
@@ -36,9 +36,9 @@ public:
                     return true;
                 }
             }
-            YDB_LOG_DEBUG("THive::TTxStopTablet::Execute",
+            YDB_LOG_DEBUG("THive::TTxStopTablet::Execute processing tablet stop",
                 {"logPrefix", GetLogPrefix()},
-                {"tablet", TabletId},
+                {"tabletId", TabletId},
                 {"state", ETabletStateName(tablet->State)},
                 {"volatileState", TTabletInfo::EVolatileStateName(tablet->GetVolatileState())});
             ETabletState state = tablet->State;
@@ -96,9 +96,9 @@ public:
                     SideEffects.Send(ActorToNotify, new TEvHive::TEvStopTabletResult(status, TabletId), 0, 0);
                 }
                 Self->ReportStoppedToWhiteboard(*tablet);
-                YDB_LOG_DEBUG("Report tablet as stopped to Whiteboard",
+                YDB_LOG_DEBUG("THive::TTxStopTablet::Execute reported tablet as stopped to whiteboard",
                     {"logPrefix", GetLogPrefix()},
-                    {"tablet", tablet->ToString()});
+                    {"tabletInfo", tablet->ToString()});
             }
             Self->ProcessBootQueue();
         }

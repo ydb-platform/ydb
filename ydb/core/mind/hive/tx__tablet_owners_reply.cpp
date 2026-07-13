@@ -19,14 +19,14 @@ public:
 
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
         const NKikimrHive::TEvTabletOwnersReply& request(Request->Get()->Record);
-        YDB_LOG_DEBUG("THive::TTxTabletOwnersReply::Execute",
+        YDB_LOG_DEBUG("THive::TTxTabletOwnersReply::Execute processing tablet owners reply",
             {"logPrefix", GetLogPrefix()});
         NIceDb::TNiceDb db(txc.DB);
         for (const NKikimrHive::TTabletOwnerRecord& protoTabletOwner : request.GetTabletOwners()) {
             TOwnershipKeeper::TOwnerType ownerId = protoTabletOwner.GetOwnerID();
             TSequencer::TSequence seq(protoTabletOwner.GetBegin(), protoTabletOwner.GetEnd());
             if (Self->Keeper.AddOwnedSequence(ownerId, seq)) {
-                YDB_LOG_DEBUG("THive::TTxTabletOwnersReply::Execute - add new owned sequence",
+                YDB_LOG_DEBUG("THive::TTxTabletOwnersReply::Execute added new owned sequence",
                     {"logPrefix", GetLogPrefix()},
                     {"seqBegin", seq.Begin},
                     {"seqEnd", seq.End},

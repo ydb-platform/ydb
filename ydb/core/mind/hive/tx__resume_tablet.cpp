@@ -23,9 +23,9 @@ public:
     TTxType GetTxType() const override { return NHive::TXTYPE_RESUME_TABLET; }
 
     bool Execute(TTransactionContext &txc, const TActorContext&) override {
-        YDB_LOG_DEBUG("THive::TTxResumeTablet::Execute",
+        YDB_LOG_DEBUG("THive::TTxResumeTablet::Execute resuming tablet",
             {"logPrefix", GetLogPrefix()},
-            {"tablet", TabletId});
+            {"tabletId", TabletId});
         SideEffects.Reset(Self->SelfId());
         TLeaderTabletInfo* tablet = Self->FindTablet(TabletId);
         if (tablet != nullptr) {

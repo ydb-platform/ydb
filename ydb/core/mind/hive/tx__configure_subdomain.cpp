@@ -19,13 +19,13 @@ public:
     TTxType GetTxType() const override { return NHive::TXTYPE_CONFIGURE_SUBDOMAIN; }
 
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
-        YDB_LOG_DEBUG("THive::TTxConfigureSubdomain::Execute",
+        YDB_LOG_DEBUG("THive::TTxConfigureSubdomain::Execute configuring subdomain",
             {"logPrefix", GetLogPrefix()});
 
         const auto& domain(Event->Get()->Record.GetDomain());
         Self->PrimaryDomainKey = TSubDomainKey(domain);
 
-        YDB_LOG_DEBUG("Switching primary domain",
+        YDB_LOG_DEBUG("THive::TTxConfigureSubdomain::Execute switching primary domain",
             {"logPrefix", GetLogPrefix()},
             {"domain", domain});
 

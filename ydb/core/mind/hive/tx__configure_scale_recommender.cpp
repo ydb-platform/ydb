@@ -18,7 +18,7 @@ public:
     TTxType GetTxType() const override { return NHive::TXTYPE_CONFIGURE_SCALE_RECOMMENDER; }
 
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
-        YDB_LOG_DEBUG("THive::TTxConfigureScaleRecommender::Execute",
+        YDB_LOG_DEBUG("THive::TTxConfigureScaleRecommender::Execute configuring scale recommender",
             {"logPrefix", GetLogPrefix()});
         SideEffects.Reset(Self->SelfId());
 

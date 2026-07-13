@@ -239,7 +239,7 @@ public:
 
             // remove after upgrade vvvv
             if (ownerId != TSequencer::NO_OWNER && Self->Keeper.GetOwner(seq.Begin) == TSequencer::NO_OWNER) {
-                YDB_LOG_WARN("THive::TTxLoadEverything fixing TabletOwners",
+                YDB_LOG_WARN("THive::TTxLoadEverything fixing tablet owners for orphaned sequence",
                     {"logPrefix", GetLogPrefix()},
                     {"seq", seq},
                     {"ownerId", ownerId});
@@ -248,7 +248,7 @@ public:
             }
 
             if (ownerId == TSequencer::NO_OWNER && !isRootHive && Self->Keeper.GetOwner(seq.Begin) == TSequencer::NO_OWNER) {
-                YDB_LOG_WARN("THive::TTxLoadEverything fixing TabletOwners",
+                YDB_LOG_WARN("THive::TTxLoadEverything fixing tablet owners for orphaned sequence",
                     {"logPrefix", GetLogPrefix()},
                     {"seq", seq},
                     {"selfTabletId", Self->TabletID()});
@@ -581,7 +581,7 @@ public:
                 if (!tabletChannelRowset.Next())
                     return false;
             }
-            YDB_LOG_NOTICE("THive::TTxLoadEverything loaded tablet/channel pairs for missing tablets)",
+            YDB_LOG_NOTICE("THive::TTxLoadEverything loaded tablet channel pairs",
                 {"logPrefix", GetLogPrefix()},
                 {"numTabletChannels", numTabletChannels},
                 {"numMissingTablets", numMissingTablets});
@@ -621,7 +621,7 @@ public:
                 if (!tabletChannelGenRowset.Next())
                     return false;
             }
-            YDB_LOG_NOTICE("THive::TTxLoadEverything loaded tablet/channel history items for missing tablets)",
+            YDB_LOG_NOTICE("THive::TTxLoadEverything loaded tablet channel history items",
                 {"logPrefix", GetLogPrefix()},
                 {"numTabletChannelHistories", numTabletChannelHistories},
                 {"numMissingTablets", numMissingTablets});
@@ -669,7 +669,7 @@ public:
                 if (!tabletFollowerGroupRowset.Next())
                     return false;
             }
-            YDB_LOG_NOTICE("THive::TTxLoadEverything loaded tablet follower groups for missing tablets)",
+            YDB_LOG_NOTICE("THive::TTxLoadEverything loaded tablet follower groups",
                 {"logPrefix", GetLogPrefix()},
                 {"numTabletFollowerGroups", numTabletFollowerGroups},
                 {"numMissingTablets", numMissingTablets});
@@ -715,7 +715,7 @@ public:
                 if (!tabletFollowerRowset.Next())
                     return false;
             }
-            YDB_LOG_NOTICE("THive::TTxLoadEverything loaded tablet followers for missing tablets)",
+            YDB_LOG_NOTICE("THive::TTxLoadEverything loaded tablet followers",
                 {"logPrefix", GetLogPrefix()},
                 {"numTabletFollowers", numTabletFollowers},
                 {"numMissingTablets", numMissingTablets});
@@ -804,7 +804,7 @@ public:
                 if (!metricsRowset.Next())
                     return false;
             }
-            YDB_LOG_NOTICE("THive::TTxLoadEverything loaded metrics for missing tablets)",
+            YDB_LOG_NOTICE("THive::TTxLoadEverything loaded tablet metrics",
                 {"logPrefix", GetLogPrefix()},
                 {"numMetrics", numMetrics},
                 {"numMissingTablets", numMissingTablets});
@@ -832,7 +832,7 @@ public:
                     return false;
                 }
             }
-            YDB_LOG_NOTICE("THive::TTxLoadEverything loaded tablet availability restrictions for missing nodes)",
+            YDB_LOG_NOTICE("THive::TTxLoadEverything loaded tablet availability restrictions",
                 {"logPrefix", GetLogPrefix()},
                 {"numRestrictions", numRestrictions},
                 {"numMissingNodes", numMissingNodes});
@@ -879,7 +879,7 @@ public:
                 ++itNode;
             }
         }
-        YDB_LOG_NOTICE("THive::TTxLoadEverything deleted unnecessary nodes << (and restrictions for them)",
+        YDB_LOG_NOTICE("THive::TTxLoadEverything deleted unnecessary nodes and their restrictions",
             {"logPrefix", GetLogPrefix()},
             {"numDeletedNodes", numDeletedNodes},
             {"numDeletedRestrictions", numDeletedRestrictions});
@@ -897,10 +897,10 @@ public:
         if (isRootHive) {
             if (numSequences == 0) {
                 ui64 freeSequenceIdx = 0;
-                YDB_LOG_DEBUG("THive::TTxLoadEverything",
+                YDB_LOG_DEBUG("THive::TTxLoadEverything initializing free tablet id sequences",
                     {"logPrefix", GetLogPrefix()},
-                    {"nextTabletId", Self->NextTabletId},
-                    {"nextTabletId", nextTabletId});
+                    {"storedNextTabletId", Self->NextTabletId},
+                    {"computedNextTabletId", nextTabletId});
                 if (nextTabletId < TABLET_ID_BLACKHOLE_BEGIN) {
                     TSequencer::TOwnerType owner(TSequencer::NO_OWNER, freeSequenceIdx++);
                     TSequencer::TSequence sequence({0x10000, std::max<TTabletId>(nextTabletId, 0x10000), TABLET_ID_BLACKHOLE_BEGIN});
@@ -922,7 +922,7 @@ public:
 
         if (numSequences != 0) {
             std::vector<TSequencer::TOwnerType> modified;
-            YDB_LOG_DEBUG("THive::TTxLoadEverything",
+            YDB_LOG_DEBUG("THive::TTxLoadEverything equalizing next tablet id with sequencer",
                 {"logPrefix", GetLogPrefix()},
                 {"nextElement", Self->Sequencer.GetNextElement()},
                 {"nextTabletId", nextTabletId});
@@ -930,7 +930,7 @@ public:
                 TSequencer::TElementType element = Self->Sequencer.AllocateElement(modified);
                 SortUnique(modified);
                 if (element == TSequencer::NO_ELEMENT) {
-                    YDB_LOG_ERROR("THive::TTxLoadEverything - unable to equalize NextTabletId - could not allocate free element",
+                    YDB_LOG_ERROR("THive::TTxLoadEverything unable to equalize next tablet id, could not allocate free element",
                         {"logPrefix", GetLogPrefix()},
                         {"nextTabletId", nextTabletId});
                     break;
@@ -939,9 +939,9 @@ public:
             if (!modified.empty()) {
                 for (auto owner : modified) {
                     auto sequence = Self->Sequencer.GetSequence(owner);
-                    YDB_LOG_CRIT("THive::TTxLoadEverything - equalizing sequence",
+                    YDB_LOG_CRIT("THive::TTxLoadEverything equalizing sequencer state",
                         {"logPrefix", GetLogPrefix()},
-                        {"owner", owner},
+                        {"ownerId", owner.first}, {"ownerIdx", owner.second},
                         {"sequence", sequence});
                     db.Table<Schema::Sequences>()
                             .Key(owner)

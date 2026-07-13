@@ -51,7 +51,7 @@ public:
     }
 
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
-        YDB_LOG_DEBUG("THive::TTxShrinkPool::Execute",
+        YDB_LOG_DEBUG("THive::TTxShrinkPool::Execute shrinking storage pool",
             {"logPrefix", GetLogPrefix()});
         SideEffects.Reset(Self->SelfId());
         NIceDb::TNiceDb db(txc.DB);
@@ -79,7 +79,7 @@ public:
         std::ranges::sort(storagePool->InactiveGroups, TGroupCmp(), [storagePool](auto groupId) { return &storagePool->GetStorageGroup(groupId); });
         while (groupsToRemove < std::ssize(storagePool->InactiveGroups)) {
             auto groupId = storagePool->InactiveGroups.back();
-            YDB_LOG_DEBUG("THive::TTxShrinkPool::Execute marking group as active",
+            YDB_LOG_DEBUG("THive::TTxShrinkPool::Execute marking storage group as active",
                 {"logPrefix", GetLogPrefix()},
                 {"groupId", groupId});
             auto& groupInfo = storagePool->GetStorageGroup(groupId);
@@ -100,7 +100,7 @@ public:
                 | std::views::take(groupsToRemove - std::ssize(storagePool->InactiveGroups));
             storagePool->InactiveGroups.reserve(static_cast<size_t>(groupsToRemove));
             for (auto* group : newGroupsToRemove) {
-                YDB_LOG_DEBUG("THive::TTxShrinkPool::Execute marking group as inactive",
+                YDB_LOG_DEBUG("THive::TTxShrinkPool::Execute marking storage group as inactive",
                     {"logPrefix", GetLogPrefix()},
                     {"groupId", group->Id});
                 group->Status = EGroupState::Inactive;

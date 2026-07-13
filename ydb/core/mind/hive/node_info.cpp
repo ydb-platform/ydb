@@ -24,12 +24,12 @@ TNodeInfo::TNodeInfo(TNodeId nodeId, THive& hive)
 {}
 
 void TNodeInfo::ChangeVolatileState(EVolatileState state) {
-    YDB_LOG_WARN("Node( ->",
+    YDB_LOG_WARN("TNodeInfo::ChangeVolatileState changing volatile state",
         {"logPrefix", GetLogPrefix()},
-        {"id", Id},
+        {"nodeId", Id},
         {"resourceValues", ResourceValues},
         {"volatileState", EVolatileStateName(VolatileState)},
-        {"volatileStateName", EVolatileStateName(state)});
+        {"newVolatileState", EVolatileStateName(state)});
 
     if (VolatileState != state) {
         if (VolatileState == EVolatileState::Connected) {
@@ -81,9 +81,9 @@ bool TNodeInfo::OnTabletChangeVolatileState(TTabletInfo* tablet, TTabletInfo::EV
             }
         } else {
             if (oldState != newState) {
-                YDB_LOG_WARN("Node( could not delete tablet from state",
+                YDB_LOG_WARN("TNodeInfo::OnTabletChangeVolatileState failed to remove tablet from draining state set",
                     {"logPrefix", GetLogPrefix()},
-                    {"id", Id},
+                    {"nodeId", Id},
                     {"tablet", tablet->ToString()},
                     {"oldVolatileState", TTabletInfo::EVolatileStateName(oldState)});
             }
@@ -105,9 +105,9 @@ bool TNodeInfo::OnTabletChangeVolatileState(TTabletInfo* tablet, TTabletInfo::EV
                 LastScheduledTablet = {.TabletId = tablet->GetFullTabletId(), .UsageBefore = NodeTotalUsage};
             }
         } else {
-            YDB_LOG_WARN("Node( could not insert tablet to state",
+            YDB_LOG_WARN("TNodeInfo::OnTabletChangeVolatileState failed to insert tablet into draining state set",
                 {"logPrefix", GetLogPrefix()},
-                {"id", Id},
+                {"nodeId", Id},
                 {"tablet", tablet->ToString()},
                 {"newVolatileState", TTabletInfo::EVolatileStateName(newState)});
         }
@@ -130,9 +130,9 @@ void TNodeInfo::UpdateResourceValues(const TTabletInfo* tablet, const TMetrics& 
     auto oldNormalizedValues = NormalizeRawValues(ResourceValues, ResourceMaximumValues);
     ResourceValues += delta;
     auto normalizedValues = NormalizeRawValues(ResourceValues, ResourceMaximumValues);
-    YDB_LOG_TRACE("Node( ->",
+    YDB_LOG_TRACE("TNodeInfo::UpdateResourceValues updated resource values",
         {"logPrefix", GetLogPrefix()},
-        {"id", Id},
+        {"nodeId", Id},
         {"oldResourceValues", oldResourceValues},
         {"resourceValues", ResourceValues});
     Hive.UpdateTotalResourceValues(this, tablet, before, after, ResourceValues - oldResourceValues, normalizedValues - oldNormalizedValues);
@@ -387,17 +387,17 @@ void TNodeInfo::DeregisterInDomains() {
 
 void TNodeInfo::Ping() {
     Y_ABORT_UNLESS((bool)Local);
-    YDB_LOG_DEBUG("Node( Ping(",
+    YDB_LOG_DEBUG("TNodeInfo::Ping queueing ping",
         {"logPrefix", GetLogPrefix()},
-        {"id", Id},
+        {"nodeId", Id},
         {"local", Local});
     Hive.QueuePing(Local);
 }
 
 void TNodeInfo::SendReconnect(const TActorId& local) {
-    YDB_LOG_DEBUG("Node( Reconnect(",
+    YDB_LOG_DEBUG("TNodeInfo::SendReconnect sending reconnect",
         {"logPrefix", GetLogPrefix()},
-        {"id", Id},
+        {"nodeId", Id},
         {"local", local});
     Hive.SendReconnect(local);
 }
@@ -541,10 +541,10 @@ void TNodeInfo::UpdateResourceTotalUsage(const NKikimrHive::TEvTabletMetrics& me
                 usageImpact = std::max<double>(usageImpact, 0);
                 auto* tablet = Hive.FindTablet(LastScheduledTablet->TabletId);
                 if (tablet) {
-                    YDB_LOG_DEBUG("Estimate impact of tablet on usage of node as",
+                    YDB_LOG_DEBUG("TNodeInfo::UpdateResourceTotalUsage estimated tablet usage impact on node",
                         {"logPrefix", GetLogPrefix()},
-                        {"lastScheduledTabletId", LastScheduledTablet->TabletId},
-                        {"id", Id},
+                        {"tabletId", LastScheduledTablet->TabletId},
+                        {"nodeId", Id},
                         {"usageImpact", usageImpact});
                     tablet->UsageImpact = usageImpact;
                     db.Table<Schema::Metrics>().Key(LastScheduledTablet->TabletId).Update<Schema::Metrics::UsageImpact>(usageImpact);

@@ -25,7 +25,7 @@ public:
         SideEffects.Reset(Self->SelfId());
         Success = true;
         TEvTabletBase::TEvDeleteTabletResult* msg = Result->Get();
-        YDB_LOG_DEBUG("THive::TTxDeleteTabletResult::Execute(",
+        YDB_LOG_DEBUG("THive::TTxDeleteTabletResult::Execute processing delete tablet result",
             {"logPrefix", GetLogPrefix()},
             {"tabletId", TabletId},
             {"replyStatus", NKikimrProto::EReplyStatus_Name(msg->Status)});
@@ -69,11 +69,11 @@ public:
                 Self->DeleteTablet(tablet->Id);
             } else {
                 Success = false;
-                YDB_LOG_WARN("THive::TTxDeleteTabletResult retrying for because of",
+                YDB_LOG_WARN("THive::TTxDeleteTabletResult::Execute retrying delete storage",
                     {"logPrefix", GetLogPrefix()},
                     {"tabletId", TabletId},
                     {"replyStatus", NKikimrProto::EReplyStatus_Name(msg->Status)});
-                if (!(tablet->IsDeleting())) { YDB_LOG_ERROR("Failed condition tablet->IsDeleting() tablet",
+                if (!(tablet->IsDeleting())) { YDB_LOG_ERROR("THive::TTxDeleteTabletResult::Execute tablet is not in Deleting state",
                                                    {"logPrefix", GetLogPrefix()},
                                                    {"tabletId", tablet->Id}); }
                 SideEffects.Schedule(TDuration::MilliSeconds(1000), new TEvHive::TEvInitiateDeleteStorage(tablet->Id));
@@ -83,7 +83,7 @@ public:
     }
 
     void Complete(const TActorContext& ctx) override {
-        YDB_LOG_DEBUG("THive::TTxDeleteTabletResult( )::Complete SideEffects",
+        YDB_LOG_DEBUG("THive::TTxDeleteTabletResult::Complete",
             {"logPrefix", GetLogPrefix()},
             {"tabletId", TabletId},
             {"sideEffects", SideEffects});

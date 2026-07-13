@@ -116,31 +116,31 @@ TString TTabletInfo::FamilyString() const {
 void TTabletInfo::ChangeVolatileState(EVolatileState state) {
     if (VolatileState == state) {
         if (Node != nullptr) {
-            YDB_LOG_DEBUG("Tablet( (Node",
+            YDB_LOG_DEBUG("TTabletInfo::ChangeVolatileState volatile state unchanged",
                 {"logPrefix", GetLogPrefix()},
-                {"toString", ToString()},
+                {"tablet", ToString()},
                 {"volatileState", EVolatileStateName(VolatileState)},
                 {"nodeId", Node->Id});
         } else {
-            YDB_LOG_DEBUG("Tablet(",
+            YDB_LOG_DEBUG("TTabletInfo::ChangeVolatileState volatile state unchanged",
                 {"logPrefix", GetLogPrefix()},
-                {"toString", ToString()},
+                {"tablet", ToString()},
                 {"volatileState", EVolatileStateName(VolatileState)});
         }
     } else {
         if (Node != nullptr) {
-            YDB_LOG_DEBUG("Tablet( -> (Node",
+            YDB_LOG_DEBUG("TTabletInfo::ChangeVolatileState changing volatile state",
                 {"logPrefix", GetLogPrefix()},
-                {"toString", ToString()},
+                {"tablet", ToString()},
                 {"volatileState", EVolatileStateName(VolatileState)},
-                {"volatileStateName", EVolatileStateName(state)},
+                {"newVolatileState", EVolatileStateName(state)},
                 {"nodeId", Node->Id});
         } else {
-            YDB_LOG_DEBUG("Tablet( ->",
+            YDB_LOG_DEBUG("TTabletInfo::ChangeVolatileState changing volatile state",
                 {"logPrefix", GetLogPrefix()},
-                {"toString", ToString()},
+                {"tablet", ToString()},
                 {"volatileState", EVolatileStateName(VolatileState)},
-                {"volatileStateName", EVolatileStateName(state)});
+                {"newVolatileState", EVolatileStateName(state)});
         }
     }
     if (Node != nullptr) {
@@ -371,7 +371,8 @@ void TTabletInfo::UpdateResourceUsage(const NKikimrTabletBase::TMetrics& metrics
                 YDB_LOG_WARN("Ignoring too high CPU metric for tablet",
                     {"logPrefix", GetLogPrefix()},
                     {"cpu", metrics.GetCPU()},
-                    {"toString", ToString()});
+                    {"maxCpu", std::get<NMetrics::EResource::CPU>(maximum)},
+                    {"tablet", ToString()});
             } else {
                 ResourceMetricsAggregates.MaximumCPU.SetValue(metrics.GetCPU(), now);
             }
@@ -386,7 +387,8 @@ void TTabletInfo::UpdateResourceUsage(const NKikimrTabletBase::TMetrics& metrics
                 YDB_LOG_WARN("Ignoring too high Memory metric for tablet",
                     {"logPrefix", GetLogPrefix()},
                     {"memory", metrics.GetMemory()},
-                    {"toString", ToString()});
+                    {"maxMemory", std::get<NMetrics::EResource::Memory>(maximum)},
+                    {"tablet", ToString()});
             } else {
                 ResourceMetricsAggregates.MaximumMemory.SetValue(metrics.GetMemory(), now);
             }
@@ -401,7 +403,8 @@ void TTabletInfo::UpdateResourceUsage(const NKikimrTabletBase::TMetrics& metrics
                 YDB_LOG_WARN("Ignoring too high Network metric for tablet",
                     {"logPrefix", GetLogPrefix()},
                     {"network", metrics.GetNetwork()},
-                    {"toString", ToString()});
+                    {"maxNetwork", std::get<NMetrics::EResource::Network>(maximum)},
+                    {"tablet", ToString()});
             } else {
                 ResourceMetricsAggregates.MaximumNetwork.SetValue(metrics.GetNetwork(), now);
             }
@@ -542,9 +545,9 @@ void TTabletInfo::SendStopTablet(const TActorId& local, TSideEffects& sideEffect
         if (IsLeader()) {
             gen = AsLeader().KnownGeneration;
         }
-        YDB_LOG_DEBUG("Sending TEvStopTablet( gen to node",
+        YDB_LOG_DEBUG("Sending TEvLocal::TEvStopTablet to node",
             {"logPrefix", GetLogPrefix()},
-            {"toString", ToString()},
+            {"tablet", ToString()},
             {"gen", gen},
             {"localNodeId", local.NodeId()});
         sideEffects.Send(local, new TEvLocal::TEvStopTablet(tabletId, gen));

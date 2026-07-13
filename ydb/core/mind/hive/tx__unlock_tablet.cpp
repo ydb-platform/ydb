@@ -42,7 +42,7 @@ public:
     {}
 
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
-        YDB_LOG_NOTICE("THive::TTxUnlockTabletExecution::Execute",
+        YDB_LOG_NOTICE("THive::TTxUnlockTabletExecution::Execute unlocking tablet execution",
             {"logPrefix", GetLogPrefix()},
             {"tabletId", TabletId});
         SideEffects.Reset(Self->SelfId());
@@ -119,7 +119,7 @@ ITransaction* THive::CreateUnlockTabletExecution(ui64 tabletId, ui64 seqNo, NKik
 
 void THive::ScheduleUnlockTabletExecution(TNodeInfo& node, NKikimrHive::ELockLostReason reason) {
     // Unlock tablets that have been locked by this node
-    YDB_LOG_NOTICE("ScheduleUnlockTabletExecution(",
+    YDB_LOG_NOTICE("THive::ScheduleUnlockTabletExecution scheduling unlock for locked tablets",
         {"logPrefix", GetLogPrefix()},
         {"nodeId", node.Id},
         {"lockLostReason", NKikimrHive::ELockLostReason_Name(reason)});
@@ -142,7 +142,7 @@ void THive::ScheduleUnlockTabletExecution(TNodeInfo& node, NKikimrHive::ELockLos
 void THive::Handle(TEvPrivate::TEvUnlockTabletReconnectTimeout::TPtr& ev) {
     TTabletId tabletId = ev->Get()->TabletId;
     ui64 seqNo = ev->Get()->SeqNo;
-    YDB_LOG_NOTICE("THive::Handle::TEvUnlockTabletReconnectTimeout",
+    YDB_LOG_NOTICE("THive::Handle::TEvUnlockTabletReconnectTimeout unlocking tablet after reconnect timeout",
         {"logPrefix", GetLogPrefix()},
         {"tabletId", tabletId},
         {"reason", NKikimrHive::ELockLostReason_Name(ev->Get()->Reason)});

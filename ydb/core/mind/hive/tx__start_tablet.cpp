@@ -30,7 +30,7 @@ public:
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
         Success = false;
         SideEffects.Reset(Self->SelfId());
-        YDB_LOG_DEBUG("THive::TTxStartTablet::Execute Tablet",
+        YDB_LOG_DEBUG("THive::TTxStartTablet::Execute starting tablet",
             {"logPrefix", GetLogPrefix()},
             {"tabletId", TabletId});
         TTabletInfo* tablet = Self->FindTablet(TabletId);
@@ -68,10 +68,10 @@ public:
                     leader.IncreaseGeneration();
                     db.Table<Schema::Tablet>().Key(leader.Id).Update<Schema::Tablet::KnownGeneration>(leader.KnownGeneration);
                 } else {
-                    YDB_LOG_WARN("THive::TTxStartTablet::Execute Tablet skipped generation increment",
+                    YDB_LOG_WARN("THive::TTxStartTablet::Execute skipped generation increment",
                         {"logPrefix", GetLogPrefix()},
-                        {"leader", leader},
-                        {"leaderStateString", leader.StateString()},
+                        {"tabletId", TabletId},
+                        {"tabletState", leader.StateString()},
                         {"leaderState", (ui64)leader.State});
                 }
 
@@ -87,7 +87,7 @@ public:
                 if (leader.IsStartingOnNode(Local.NodeId()) || BootingSuppressed && External) {
                     if (!leader.DeletedHistory.empty()) {
                         if (!leader.WasAliveSinceCutHistory) {
-                            YDB_LOG_ERROR("THive::TTxStartTablet::Execute Tablet failed to start after cutting history - will restore history",
+                            YDB_LOG_ERROR("THive::TTxStartTablet::Execute tablet failed to start after history cut, restoring history",
                                 {"logPrefix", GetLogPrefix()},
                                 {"tabletId", TabletId});
                             Self->TabletCounters->Cumulative()[NHive::COUNTER_HISTORY_RESTORED].Increment(leader.DeletedHistory.size());
@@ -97,11 +97,11 @@ public:
                             leader.WasAliveSinceCutHistory = false;
                         }
                     }
-                    YDB_LOG_DEBUG("THive::TTxStartTablet::Execute, Sending TEvBootTablet( to node storage",
+                    YDB_LOG_DEBUG("THive::TTxStartTablet::Execute sending boot tablet to node storage",
                         {"logPrefix", GetLogPrefix()},
-                        {"leader", leader},
-                        {"localNodeId", Local.NodeId()},
-                        {"leaderStorageInfo", leader.TabletStorageInfo->ToString()});
+                        {"tabletId", TabletId},
+                        {"nodeId", Local.NodeId()},
+                        {"storageInfo", leader.TabletStorageInfo->ToString()});
                     TFollowerId promotableFollowerId = leader.GetFollowerPromotableOnNode(Local.NodeId());
                     SideEffects.Send(Local,
                                 new TEvLocal::TEvBootTablet(*leader.TabletStorageInfo, promotableFollowerId, leader.KnownGeneration),
@@ -110,18 +110,19 @@ public:
                     Success = true;
                     return true;
                 } else {
-                    YDB_LOG_WARN("THive::TTxStartTablet::Execute, ignoring TEvBootTablet( - wrong state or node",
+                    YDB_LOG_WARN("THive::TTxStartTablet::Execute ignoring boot tablet, wrong state or node",
                         {"logPrefix", GetLogPrefix()},
-                        {"leader", leader});
+                        {"tabletId", TabletId},
+                        {"nodeId", Local.NodeId()});
                 }
             } else {
                 TFollowerTabletInfo& follower = tablet->AsFollower();
                 if (follower.IsStartingOnNode(Local.NodeId())) {
-                    YDB_LOG_DEBUG("THive::TTxStartTablet::Execute, Sending TEvBootTablet( to node storage",
+                    YDB_LOG_DEBUG("THive::TTxStartTablet::Execute sending boot tablet to node storage",
                         {"logPrefix", GetLogPrefix()},
-                        {"follower", follower},
-                        {"localNodeId", Local.NodeId()},
-                        {"followerStorageInfo", follower.LeaderTablet.TabletStorageInfo->ToString()});
+                        {"tabletId", TabletId},
+                        {"nodeId", Local.NodeId()},
+                        {"storageInfo", follower.LeaderTablet.TabletStorageInfo->ToString()});
                     SideEffects.Send(Local,
                              new TEvLocal::TEvBootTablet(*follower.LeaderTablet.TabletStorageInfo, follower.Id),
                              IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession,
@@ -129,31 +130,31 @@ public:
                     Success = true;
                     return true;
                 } else {
-                    YDB_LOG_WARN("THive::TTxStartTablet::Execute, ignoring TEvBootTablet( - wrong state or node",
+                    YDB_LOG_WARN("THive::TTxStartTablet::Execute ignoring boot tablet, wrong state or node",
                         {"logPrefix", GetLogPrefix()},
-                        {"follower", follower});
+                        {"tabletId", TabletId},
+                        {"nodeId", Local.NodeId()});
                 }
             }
             // if anything wrong - attempt to restart the tablet
             if (tablet->InitiateStop(SideEffects)) {
                 if (tablet->IsLeader()) {
-                    YDB_LOG_NOTICE("THive::TTxStartTablet::Execute, jump-starting tablet",
+                    YDB_LOG_NOTICE("THive::TTxStartTablet::Execute jump-starting tablet after failed boot",
                         {"logPrefix", GetLogPrefix()},
-                        {"tablet", tablet->ToString()});
+                        {"tabletInfo", tablet->ToString()});
                     tablet->AsLeader().TryToBoot();
                 }
             }
         } else {
-            YDB_LOG_WARN("THive::TTxStartTablet::Execute Tablet wasn't found",
+            YDB_LOG_WARN("THive::TTxStartTablet::Execute tablet not found",
                 {"logPrefix", GetLogPrefix()},
                 {"tabletId", TabletId});
         }
         if (External) {
             // Always send some reply for external start requests
-            YDB_LOG_WARN("THive::TTxStartTablet::Execute, Aborting external boot of",
+            YDB_LOG_WARN("THive::TTxStartTablet::Execute aborting external boot",
                 {"logPrefix", GetLogPrefix()},
-                {"tabletIdFirst", TabletId.first},
-                {"tabletIdSecond", TabletId.second});
+                {"tabletId", TabletId});
             SideEffects.Send(Local,
                      new TEvHive::TEvBootTabletReply(NKikimrProto::EReplyStatus::ERROR),
                      0,
@@ -163,7 +164,7 @@ public:
     }
 
     void Complete(const TActorContext& ctx) override {
-        YDB_LOG_DEBUG("THive::TTxStartTablet::Complete Tablet",
+        YDB_LOG_DEBUG("THive::TTxStartTablet::Complete",
             {"logPrefix", GetLogPrefix()},
             {"tabletId", TabletId},
             {"sideEffects", SideEffects});

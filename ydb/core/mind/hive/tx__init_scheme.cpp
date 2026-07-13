@@ -16,7 +16,7 @@ public:
     TTxType GetTxType() const override { return NHive::TXTYPE_INIT_SCHEME; }
 
     bool Execute(TTransactionContext &txc, const TActorContext&) override {
-        YDB_LOG_DEBUG("THive::TTxInitScheme::Execute",
+        YDB_LOG_DEBUG("THive::TTxInitScheme::Execute initializing hive scheme",
             {"logPrefix", GetLogPrefix()});
         bool wasEmpty = txc.DB.GetScheme().IsEmpty();
         NIceDb::TNiceDb(txc.DB).Materialize<Schema>();

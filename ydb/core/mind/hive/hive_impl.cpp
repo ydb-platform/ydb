@@ -33,17 +33,16 @@ namespace NHive {
 void THive::Handle(TEvHive::TEvCreateTablet::TPtr& ev) {
     NKikimrHive::TEvCreateTablet& rec = ev->Get()->Record;
     if (rec.HasOwner() && rec.HasOwnerIdx() && rec.HasTabletType() && rec.BindedChannelsSize() != 0) {
-        YDB_LOG_DEBUG("Handle TEvHive::TEvCreateTablet(",
+        YDB_LOG_DEBUG("Handle TEvHive::TEvCreateTablet:",
             {"logPrefix", GetLogPrefix()},
             {"tabletType", rec.GetTabletType()},
             {"owner", rec.GetOwner()},
-            {"ownerIdx", rec.GetOwnerIdx()},
-            {"suffix", "))"});
+            {"ownerIdx", rec.GetOwnerIdx()});
         Execute(CreateCreateTablet(std::move(rec), ev->Sender, ev->Cookie));
     } else {
-        YDB_LOG_ERROR("Invalid arguments specified",
+        YDB_LOG_ERROR("Handle TEvHive::TEvCreateTablet: invalid arguments",
             {"logPrefix", GetLogPrefix()},
-            {"toTEvCreateTablet", rec.DebugString()});
+            {"record", rec.DebugString()});
         THolder<TEvHive::TEvCreateTabletReply> reply = MakeHolder<TEvHive::TEvCreateTabletReply>();
         reply->Record.SetStatus(NKikimrProto::EReplyStatus::ERROR);
         reply->Record.SetErrorReason(NKikimrHive::EErrorReason::ERROR_REASON_INVALID_ARGUMENTS);
@@ -58,7 +57,7 @@ void THive::Handle(TEvHive::TEvCreateTablet::TPtr& ev) {
 }
 
 void THive::Handle(TEvHive::TEvAdoptTablet::TPtr& ev) {
-    YDB_LOG_DEBUG("Handle TEvHive::TEvAdoptTablet",
+    YDB_LOG_DEBUG("Handle TEvHive::TEvAdoptTablet:",
         {"logPrefix", GetLogPrefix()});
     NKikimrHive::TEvAdoptTablet& rec = ev->Get()->Record;
     Y_ABORT_UNLESS(rec.HasOwner() && rec.HasOwnerIdx() && rec.HasTabletType());
@@ -88,16 +87,16 @@ void THive::Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev) {
         }
     }
     if (!PipeClientCache->OnConnect(ev)) {
-        YDB_LOG_ERROR("Failed to connect to tablet from tablet",
+        YDB_LOG_ERROR("Handle TEvTabletPipe::TEvClientConnected: failed to connect to remote tablet",
             {"logPrefix", GetLogPrefix()},
-            {"tabletId", ev->Get()->TabletId},
-            {"tabletId", TabletID()});
+            {"remoteTabletId", ev->Get()->TabletId},
+            {"hiveTabletId", TabletID()});
         RestartPipeTx(ev->Get()->TabletId);
     } else {
-        YDB_LOG_DEBUG("Connected to tablet from tablet",
+        YDB_LOG_DEBUG("Handle TEvTabletPipe::TEvClientConnected: connected to remote tablet",
             {"logPrefix", GetLogPrefix()},
-            {"tabletId", ev->Get()->TabletId},
-            {"tabletId", TabletID()});
+            {"remoteTabletId", ev->Get()->TabletId},
+            {"hiveTabletId", TabletID()});
     }
 }
 
@@ -121,28 +120,28 @@ void THive::Handle(TEvTabletPipe::TEvClientDestroyed::TPtr& ev) {
             return;
         }
     }
-    YDB_LOG_DEBUG("Client pipe to tablet from is reset",
+    YDB_LOG_DEBUG("Handle TEvTabletPipe::TEvClientDestroyed: client pipe to remote tablet reset",
         {"logPrefix", GetLogPrefix()},
-        {"tabletId", ev->Get()->TabletId},
-        {"tabletId", TabletID()});
+        {"remoteTabletId", ev->Get()->TabletId},
+        {"hiveTabletId", TabletID()});
     PipeClientCache->OnDisconnect(ev);
     RestartPipeTx(ev->Get()->TabletId);
 }
 
 void THive::RestartPipeTx(ui64 tabletId) {
     for (auto txid : PipeTracker.FindTx(tabletId)) {
-        YDB_LOG_DEBUG("Pipe reset to tablet caused restart of at tablet",
+        YDB_LOG_DEBUG("RestartPipeTx: pipe reset caused transaction restart",
             {"logPrefix", GetLogPrefix()},
             {"tabletId", tabletId},
-            {"txid", txid},
-            {"selfTabletId", TabletID()});
+            {"txId", txid},
+            {"hiveTabletId", TabletID()});
         // TODO: restart all the dependent transactions
     }
 }
 
 bool THive::TryToDeleteNode(TNodeInfo* node) {
     if (node->CanBeDeleted(TActivationContext::Now())) {
-        YDB_LOG_INFO("TryToDeleteNode( deleting",
+        YDB_LOG_INFO("TryToDeleteNode: deleting node",
             {"logPrefix", GetLogPrefix()},
             {"nodeId", node->Id});
         if (BridgeInfo) {
@@ -156,7 +155,7 @@ bool THive::TryToDeleteNode(TNodeInfo* node) {
         return true;
     }
     if (!node->DeletionScheduled) {
-        YDB_LOG_DEBUG("TryToDeleteNode( waiting",
+        YDB_LOG_DEBUG("TryToDeleteNode: waiting to delete node",
             {"logPrefix", GetLogPrefix()},
             {"nodeId", node->Id},
             {"nodeDeletePeriod", GetNodeDeletePeriod()});
@@ -168,7 +167,7 @@ bool THive::TryToDeleteNode(TNodeInfo* node) {
 
 void THive::Handle(TEvTabletPipe::TEvServerConnected::TPtr& ev) {
     if (ev->Get()->TabletId == TabletID()) {
-        YDB_LOG_TRACE("Handle TEvTabletPipe::TEvServerConnected(",
+        YDB_LOG_TRACE("Handle TEvTabletPipe::TEvServerConnected:",
             {"logPrefix", GetLogPrefix()},
             {"clientId", ev->Get()->ClientId},
             {"serverId", ev->Get()->ServerId});
@@ -179,7 +178,7 @@ void THive::Handle(TEvTabletPipe::TEvServerConnected::TPtr& ev) {
 
 void THive::Handle(TEvTabletPipe::TEvServerDisconnected::TPtr& ev) {
     if (ev->Get()->TabletId == TabletID()) {
-        YDB_LOG_TRACE("Handle TEvTabletPipe::TEvServerDisconnected(",
+        YDB_LOG_TRACE("Handle TEvTabletPipe::TEvServerDisconnected:",
             {"logPrefix", GetLogPrefix()},
             {"clientId", ev->Get()->ClientId},
             {"serverId", ev->Get()->ServerId});
@@ -201,16 +200,16 @@ void THive::Handle(TEvLocal::TEvRegisterNode::TPtr& ev) {
     NKikimrLocal::TEvRegisterNode& record = ev->Get()->Record;
     if (record.GetHiveId() == TabletID()) {
         const TActorId &local = ev->Sender;
-        YDB_LOG_DEBUG("Handle TEvLocal::TEvRegisterNode",
+        YDB_LOG_DEBUG("Handle TEvLocal::TEvRegisterNode:",
             {"logPrefix", GetLogPrefix()},
-            {"sender", ev->Sender},
+            {"senderId", ev->Sender},
             {"record", record.ShortDebugString()});
         Send(GetNameserviceActorId(), new TEvInterconnect::TEvGetNode(ev->Sender.NodeId()));
         Execute(CreateRegisterNode(local, std::move(record)));
     } else {
-        YDB_LOG_WARN("Handle incorrect TEvLocal::TEvRegisterNode",
+        YDB_LOG_WARN("Handle TEvLocal::TEvRegisterNode: incorrect hive id",
             {"logPrefix", GetLogPrefix()},
-            {"sender", ev->Sender},
+            {"senderId", ev->Sender},
             {"record", record.ShortDebugString()});
     }
 }
@@ -227,7 +226,7 @@ bool THive::OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev, const TActorCo
 }
 
 void THive::Handle(TEvHive::TEvStopTablet::TPtr& ev) {
-    YDB_LOG_DEBUG("Handle StopTablet",
+    YDB_LOG_DEBUG("Handle TEvHive::TEvStopTablet:",
         {"logPrefix", GetLogPrefix()});
     NKikimrHive::TEvStopTablet& rec = ev->Get()->Record;
     const TActorId actorToNotify = rec.HasActorToNotify() ? ActorIdFromProto(rec.GetActorToNotify()) : ev->Sender;
@@ -235,9 +234,9 @@ void THive::Handle(TEvHive::TEvStopTablet::TPtr& ev) {
         Execute(CreateStopTablet(rec.GetTabletID(), actorToNotify));
     } else {
         if (!(rec.HasTabletID())) {
-            YDB_LOG_ERROR("Failed condition rec.HasTabletID()",
+            YDB_LOG_ERROR("Handle TEvHive::TEvStopTablet: tablet id not specified",
                 {"logPrefix", GetLogPrefix()},
-                {"rec", rec.ShortDebugString()});
+                {"record", rec.ShortDebugString()});
         }
         Send(actorToNotify, new TEvHive::TEvStopTabletResult(NKikimrProto::ERROR, 0), 0, ev->Cookie);
     }
@@ -252,10 +251,10 @@ void THive::Handle(TEvHive::TEvDeleteOwnerTablets::TPtr& ev) {
 }
 
 void THive::DeleteTabletWithoutStorage(TLeaderTabletInfo* tablet) {
-    if (!(tablet->IsDeleting())) { YDB_LOG_ERROR("Failed condition tablet->IsDeleting() tablet",
+    if (!(tablet->IsDeleting())) { YDB_LOG_ERROR("DeleteTabletWithoutStorage: tablet is not in deleting state",
                                        {"logPrefix", GetLogPrefix()},
                                        {"tabletId", tablet->Id}); }
-    if (!(tablet->TabletStorageInfo->Channels.empty() || tablet->TabletStorageInfo->Channels[0].History.empty())) { YDB_LOG_ERROR("Failed condition tablet->TabletStorageInfo->Channels.empty() || tablet->TabletStorageInfo->Channels[0].History.empty() tablet",
+    if (!(tablet->TabletStorageInfo->Channels.empty() || tablet->TabletStorageInfo->Channels[0].History.empty())) { YDB_LOG_ERROR("DeleteTabletWithoutStorage: tablet still has storage history",
                                                                                                                         {"logPrefix", GetLogPrefix()},
                                                                                                                         {"tabletId", tablet->Id}); }
 
@@ -265,10 +264,10 @@ void THive::DeleteTabletWithoutStorage(TLeaderTabletInfo* tablet) {
 }
 
 void THive::DeleteTabletWithoutStorage(TLeaderTabletInfo* tablet, TSideEffects& sideEffects) {
-    if (!(tablet->IsDeleting())) { YDB_LOG_ERROR("Failed condition tablet->IsDeleting() tablet",
+    if (!(tablet->IsDeleting())) { YDB_LOG_ERROR("DeleteTabletWithoutStorage: tablet is not in deleting state",
                                        {"logPrefix", GetLogPrefix()},
                                        {"tabletId", tablet->Id}); }
-    if (!(tablet->TabletStorageInfo->Channels.empty() || tablet->TabletStorageInfo->Channels[0].History.empty())) { YDB_LOG_ERROR("Failed condition tablet->TabletStorageInfo->Channels.empty() || tablet->TabletStorageInfo->Channels[0].History.empty() tablet",
+    if (!(tablet->TabletStorageInfo->Channels.empty() || tablet->TabletStorageInfo->Channels[0].History.empty())) { YDB_LOG_ERROR("DeleteTabletWithoutStorage: tablet still has storage history",
                                                                                                                         {"logPrefix", GetLogPrefix()},
                                                                                                                         {"tabletId", tablet->Id}); }
 
@@ -278,9 +277,9 @@ void THive::DeleteTabletWithoutStorage(TLeaderTabletInfo* tablet, TSideEffects& 
 }
 
 TInstant THive::GetAllowedBootingTime() {
-    YDB_LOG_DEBUG("Nodes connected out of",
+    YDB_LOG_DEBUG("GetAllowedBootingTime: nodes connected vs expected",
         {"logPrefix", GetLogPrefix()},
-        {"processBootQueue", AliveNodes},
+        {"aliveNodes", AliveNodes},
         {"expectedNodes", ExpectedNodes});
     if (AliveNodes == 0) {
         return TInstant::Max();
@@ -298,21 +297,21 @@ void THive::ExecuteProcessBootQueue(NIceDb::TNiceDb&, TSideEffects& sideEffects)
     if (WarmUp) {
         TInstant allowed = GetAllowedBootingTime();
         if (now < allowed) {
-            YDB_LOG_DEBUG("ProcessBootQueue - waiting until because of warmup,",
+            YDB_LOG_DEBUG("ProcessBootQueue: waiting for warmup period",
                 {"logPrefix", GetLogPrefix()},
-                {"allowed", allowed},
+                {"allowedBootTime", allowed},
                 {"now", now});
             ProcessBootQueueScheduled = false;
             PostponeProcessBootQueue(allowed - now);
             return;
         }
     }
-    YDB_LOG_DEBUG("Handle ProcessBootQueue",
+    YDB_LOG_DEBUG("Handle TEvPrivate::TEvProcessBootQueue:",
         {"logPrefix", GetLogPrefix()},
         {"bootQueueSize", BootQueue.BootQueue.size()});
     THPTimer bootQueueProcessingTimer;
     if (ProcessWaitQueueScheduled) {
-        YDB_LOG_DEBUG("Handle ProcessWaitQueue",
+        YDB_LOG_DEBUG("ProcessBootQueue: processing wait queue",
             {"logPrefix", GetLogPrefix()},
             {"waitQueueSize", BootQueue.WaitQueue.size()});
         BootQueue.IncludeWaitQueue();
@@ -327,7 +326,7 @@ void THive::ExecuteProcessBootQueue(NIceDb::TNiceDb&, TSideEffects& sideEffects)
     waitingTablets.reserve(std::min<size_t>(BootQueue.Size(), GetMaxBootBatchSize()));
     while (!BootQueue.Empty() && processedItems < GetMaxBootBatchSize()) {
         TBootQueue::TBootQueueRecord record = BootQueue.PopFromBootQueue();
-        YDB_LOG_TRACE("Tablet has priority",
+        YDB_LOG_TRACE("ProcessBootQueue: tablet has priority",
             {"logPrefix", GetLogPrefix()},
             {"tabletId", record.TabletId},
             {"followerId", record.FollowerId},
@@ -339,7 +338,7 @@ void THive::ExecuteProcessBootQueue(NIceDb::TNiceDb&, TSideEffects& sideEffects)
         }
         tablet->InWaitQueue = false;
         if (tablet->IsAlive()) {
-            YDB_LOG_DEBUG("Tablet already alive, skipping",
+            YDB_LOG_DEBUG("ProcessBootQueue: tablet already alive, skipping",
                 {"logPrefix", GetLogPrefix()},
                 {"tabletId", record.TabletId});
             continue;
@@ -367,7 +366,7 @@ void THive::ExecuteProcessBootQueue(NIceDb::TNiceDb&, TSideEffects& sideEffects)
             }
         } else {
             TInstant tabletPostponedStart = tablet->PostponedStart;
-            YDB_LOG_DEBUG("Tablet has postponed start",
+            YDB_LOG_DEBUG("ProcessBootQueue: tablet has postponed start",
                 {"logPrefix", GetLogPrefix()},
                 {"tabletId", record.TabletId},
                 {"tabletPostponedStart", tabletPostponedStart});
@@ -400,7 +399,7 @@ void THive::ExecuteProcessBootQueue(NIceDb::TNiceDb&, TSideEffects& sideEffects)
         TabletCounters->Cumulative()[NHive::COUNTER_BOOTQUEUE_TIME].Increment(ui64(1000000. * bootQueueProcessingTimer.PassedReset()));
     }
     if (BootQueue.BootQueue.empty()) {
-        YDB_LOG_DEBUG("ProcessBootQueue - BootQueue empty",
+        YDB_LOG_DEBUG("ProcessBootQueue: boot queue empty",
             {"logPrefix", GetLogPrefix()},
             {"waitQueueSize", BootQueue.WaitQueue.size()});
     }
@@ -409,17 +408,17 @@ void THive::ExecuteProcessBootQueue(NIceDb::TNiceDb&, TSideEffects& sideEffects)
             WarmUp = false;
         }
         if (processedItems == delayedTablets.size() && postponedStart < now) {
-            YDB_LOG_DEBUG("ProcessBootQueue - BootQueue throttling",
+            YDB_LOG_DEBUG("ProcessBootQueue: throttling boot queue",
                 {"logPrefix", GetLogPrefix()},
                 {"bootQueueSize", BootQueue.BootQueue.size()});
             return;
         }
         if (processedItems == GetMaxBootBatchSize() && !BootQueue.Empty()) {
-            YDB_LOG_DEBUG("ProcessBootQueue - rescheduling",
+            YDB_LOG_DEBUG("ProcessBootQueue: rescheduling",
                 {"logPrefix", GetLogPrefix()});
             ProcessBootQueue();
         } else if (postponedStart > now) {
-            YDB_LOG_DEBUG("ProcessBootQueue - postponing",
+            YDB_LOG_DEBUG("ProcessBootQueue: postponing",
                 {"logPrefix", GetLogPrefix()});
             PostponeProcessBootQueue(postponedStart - now);
         }
@@ -427,13 +426,13 @@ void THive::ExecuteProcessBootQueue(NIceDb::TNiceDb&, TSideEffects& sideEffects)
 }
 
 void THive::HandleInit(TEvPrivate::TEvProcessBootQueue::TPtr&) {
-    YDB_LOG_WARN("Received TEvProcessBootQueue while in StateInit",
+    YDB_LOG_WARN("HandleInit TEvPrivate::TEvProcessBootQueue: received while in StateInit",
         {"logPrefix", GetLogPrefix()});
     Schedule(TDuration::Seconds(1), new TEvPrivate::TEvProcessBootQueue());
 }
 
 void THive::Handle(TEvPrivate::TEvProcessBootQueue::TPtr& ev) {
-    YDB_LOG_TRACE("ProcessBootQueue - executing",
+    YDB_LOG_TRACE("Handle TEvPrivate::TEvProcessBootQueue: executing",
         {"logPrefix", GetLogPrefix()});
     if (ev->Get()->ProcessWaitQueue) {
         ProcessWaitQueue();
@@ -442,18 +441,18 @@ void THive::Handle(TEvPrivate::TEvProcessBootQueue::TPtr& ev) {
 }
 
 void THive::Handle(TEvPrivate::TEvPostponeProcessBootQueue::TPtr&) {
-    YDB_LOG_DEBUG("Handle PostponeProcessBootQueue",
+    YDB_LOG_DEBUG("Handle TEvPrivate::TEvPostponeProcessBootQueue:",
         {"logPrefix", GetLogPrefix()});
     ProcessBootQueuePostponed = false;
     ProcessBootQueue();
 }
 
 void THive::ProcessBootQueue() {
-    YDB_LOG_DEBUG("ProcessBootQueue",
+    YDB_LOG_DEBUG("ProcessBootQueue:",
         {"logPrefix", GetLogPrefix()},
         {"bootQueueSize", BootQueue.BootQueue.size()});
     if (!ProcessBootQueueScheduled) {
-        YDB_LOG_TRACE("ProcessBootQueue - sending",
+        YDB_LOG_TRACE("ProcessBootQueue: sending event",
             {"logPrefix", GetLogPrefix()});
         ProcessBootQueueScheduled = true;
         Send(SelfId(), new TEvPrivate::TEvProcessBootQueue());
@@ -463,7 +462,7 @@ void THive::ProcessBootQueue() {
 void THive::PostponeProcessBootQueue(TDuration after) {
     TInstant postponeUntil = TActivationContext::Now() + after;
     if (!ProcessBootQueuePostponed || postponeUntil < ProcessBootQueuePostponedUntil) {
-        YDB_LOG_DEBUG("PostponeProcessBootQueue",
+        YDB_LOG_DEBUG("PostponeProcessBootQueue:",
             {"logPrefix", GetLogPrefix()},
             {"after", after});
         ProcessBootQueuePostponed = true;
@@ -473,7 +472,7 @@ void THive::PostponeProcessBootQueue(TDuration after) {
 }
 
 void THive::ProcessWaitQueue() {
-    YDB_LOG_DEBUG("ProcessWaitQueue",
+    YDB_LOG_DEBUG("ProcessWaitQueue:",
         {"logPrefix", GetLogPrefix()},
         {"waitQueueSize", BootQueue.WaitQueue.size()});
     ProcessWaitQueueScheduled = true;
@@ -488,18 +487,18 @@ void THive::AddToBootQueue(TTabletInfo* tablet, TNodeId node) {
 }
 
 void THive::Handle(TEvPrivate::TEvProcessPendingOperations::TPtr&) {
-    YDB_LOG_DEBUG("Handle ProcessPendingOperations",
+    YDB_LOG_DEBUG("Handle TEvPrivate::TEvProcessPendingOperations:",
         {"logPrefix", GetLogPrefix()});
 }
 
 void THive::Handle(TEvPrivate::TEvBalancerOut::TPtr&) {
-    YDB_LOG_DEBUG("Handle BalancerOut",
+    YDB_LOG_DEBUG("Handle TEvPrivate::TEvBalancerOut:",
         {"logPrefix", GetLogPrefix()});
 }
 
 
 void THive::Handle(TEvPrivate::TEvStartStorageBalancer::TPtr& ev) {
-    YDB_LOG_DEBUG("Handle StartStorageBalancer",
+    YDB_LOG_DEBUG("Handle TEvPrivate::TEvStartStorageBalancer:",
         {"logPrefix", GetLogPrefix()});
     StartHiveStorageBalancer(std::move(ev->Get()->Settings));
 }
@@ -534,7 +533,7 @@ TVector<TTabletId> THive::UpdateStoragePools(const google::protobuf::RepeatedPtr
         if (storagePool.RefreshRequestInFlight > 0) {
             --storagePool.RefreshRequestInFlight;
         } else {
-            YDB_LOG_WARN("THive::Handle TEvControllerSelectGroupsResult: Out of inflight counter response received",
+            YDB_LOG_WARN("THive::Handle TEvControllerSelectGroupsResult: out-of-inflight counter response received",
                 {"logPrefix", GetLogPrefix()});
         }
         storagePool.SetAsFresh();
@@ -573,9 +572,9 @@ void THive::Handle(TEvBlobStorage::TEvControllerSelectGroupsResult::TPtr& ev) {
             for (TTabletId tabletId : tablets) {
                 TLeaderTabletInfo* tablet = FindTablet(tabletId);
                 if (!tablet) {
-                    YDB_LOG_ERROR("THive::Handle TEvControllerSelectGroupsResult: not found",
+                    YDB_LOG_ERROR("THive::Handle TEvControllerSelectGroupsResult: tablet not found",
                         {"logPrefix", GetLogPrefix()},
-                        {"tablet", tabletId});
+                        {"tabletId", tabletId});
                 } else {
                     Execute(CreateUpdateTabletGroups(tabletId));
                 }
@@ -588,9 +587,9 @@ void THive::Handle(TEvBlobStorage::TEvControllerSelectGroupsResult::TPtr& ev) {
                 {"logPrefix", GetLogPrefix()});
         }
     } else {
-        YDB_LOG_ERROR("THive::Handle",
+        YDB_LOG_ERROR("THive::Handle TEvControllerSelectGroupsResult: request failed",
             {"logPrefix", GetLogPrefix()},
-            {"TEvControllerSelectGroupsResult", rec.GetStatus()});
+            {"status", rec.GetStatus()});
     }
 }
 
@@ -599,7 +598,7 @@ void THive::Handle(TEvLocal::TEvTabletStatus::TPtr& ev) {
     TNodeInfo* node = FindNode(nodeId);
     if (node != nullptr) {
         if (node->IsDisconnected()) {
-            YDB_LOG_WARN("Handle TEvLocal::TEvTabletStatus, NodeId disconnected, reconnecting",
+            YDB_LOG_WARN("Handle TEvLocal::TEvTabletStatus: node disconnected, reconnecting",
                 {"logPrefix", GetLogPrefix()},
                 {"nodeId", nodeId});
             node->SendReconnect(ev->Sender);
@@ -608,9 +607,10 @@ void THive::Handle(TEvLocal::TEvTabletStatus::TPtr& ev) {
     }
     TEvLocal::TEvTabletStatus* msg = ev->Get();
     NKikimrLocal::TEvTabletStatus& record = msg->Record;
-    YDB_LOG_DEBUG("Handle TEvLocal::TEvTabletStatus,",
+    YDB_LOG_DEBUG("Handle TEvLocal::TEvTabletStatus:",
         {"logPrefix", GetLogPrefix()},
-        {"tabletId", record.GetTabletID()});
+        {"tabletId", record.GetTabletID()},
+        {"followerId", record.GetFollowerId()});
     if (FindTablet(record.GetTabletID(), record.GetFollowerId()) != nullptr) {
         Execute(CreateUpdateTabletStatus(
                     record.GetTabletID(),
@@ -621,7 +621,7 @@ void THive::Handle(TEvLocal::TEvTabletStatus::TPtr& ev) {
                     static_cast<TEvTablet::TEvTabletDead::EReason>(record.GetReason())
                 ));
     } else {
-        YDB_LOG_WARN("Handle TEvLocal::TEvTabletStatus from node not found",
+        YDB_LOG_WARN("Handle TEvLocal::TEvTabletStatus: tablet not found",
             {"logPrefix", GetLogPrefix()},
             {"nodeId", nodeId},
             {"tabletId", record.GetTabletID()});
@@ -629,7 +629,7 @@ void THive::Handle(TEvLocal::TEvTabletStatus::TPtr& ev) {
 }
 
 void THive::Handle(TEvPrivate::TEvBootTablets::TPtr&) {
-    YDB_LOG_DEBUG("Handle BootTablets",
+    YDB_LOG_DEBUG("Handle TEvPrivate::TEvBootTablets:",
         {"logPrefix", GetLogPrefix()});
     SignalTabletActive(DEPRECATED_CTX);
     ReadyForConnections = true;
@@ -656,9 +656,9 @@ void THive::Handle(TEvPrivate::TEvBootTablets::TPtr&) {
     for (auto& tab : Tablets) {
         TLeaderTabletInfo& tablet = tab.second;
         if (tablet.NeedToReleaseFromParent) {
-            YDB_LOG_DEBUG("Need to release from parent tablet",
+            YDB_LOG_DEBUG("Handle TEvPrivate::TEvBootTablets: need to release tablet from parent",
                 {"logPrefix", GetLogPrefix()},
-                {"tablet", tablet});
+                {"tabletId", tablet.Id});
             tabletsToReleaseFromParent.push_back(tablet.Id);
         } else if (tablet.IsReadyToBoot()) {
             tablet.InitiateBoot();
@@ -674,13 +674,13 @@ void THive::Handle(TEvPrivate::TEvBootTablets::TPtr&) {
             // we are wating for external boot request
         } else if (tablet.IsStopped() && tablet.State == ETabletState::Stopped) {
             ReportStoppedToWhiteboard(tablet);
-            YDB_LOG_DEBUG("Report tablet as stopped to Whiteboard",
+            YDB_LOG_DEBUG("Handle TEvPrivate::TEvBootTablets: report tablet as stopped to Whiteboard",
                 {"logPrefix", GetLogPrefix()},
-                {"tablet", tablet});
+                {"tabletId", tablet.Id});
         } else {
-            YDB_LOG_WARN("The tablet is not ready for anything",
+            YDB_LOG_WARN("Handle TEvPrivate::TEvBootTablets: tablet is not ready for any action",
                 {"logPrefix", GetLogPrefix()},
-                {"tablet", tablet},
+                {"tabletId", tablet.Id},
                 {"state", ETabletStateName(tablet.State)},
                 {"volatileState", TTabletInfo::EVolatileStateName(tablet.GetVolatileState())});
         }
@@ -696,16 +696,16 @@ void THive::Handle(TEvPrivate::TEvBootTablets::TPtr&) {
         StartReassignActor(std::move(reassigns));
     }
     if (AreWeRootHive()) {
-        YDB_LOG_DEBUG("Root Hive is ready",
+        YDB_LOG_DEBUG("Handle TEvPrivate::TEvBootTablets: root Hive is ready",
             {"logPrefix", GetLogPrefix()});
     } else {
-        YDB_LOG_DEBUG("SubDomain Hive is ready",
+        YDB_LOG_DEBUG("Handle TEvPrivate::TEvBootTablets: subdomain Hive is ready",
             {"logPrefix", GetLogPrefix()});
 
         if (!PrimaryDomainKey && Info()->TenantPathId) {
             //NOTE: Primary(Sub)DomainKey isn't set after loading everything from the local db --
             // -- this is first time boot or incomplete configuration.
-            YDB_LOG_INFO("Primary(Sub)DomainKey is not set, setting it from TTabletStorageInfo::TenantPathId",
+            YDB_LOG_INFO("Handle TEvPrivate::TEvBootTablets: PrimaryDomainKey not set, setting from TenantPathId",
                 {"logPrefix", GetLogPrefix()},
                 {"tenantPathId", Info()->TenantPathId});
 
@@ -720,7 +720,7 @@ void THive::Handle(TEvPrivate::TEvBootTablets::TPtr&) {
             // this code should be removed later
             THolder<TEvHive::TEvRequestTabletOwners> request(new TEvHive::TEvRequestTabletOwners());
             request->Record.SetOwnerID(TabletID());
-            YDB_LOG_DEBUG("Requesting TabletOwners from the Root",
+            YDB_LOG_DEBUG("Handle TEvPrivate::TEvBootTablets: requesting TabletOwners from root Hive",
                 {"logPrefix", GetLogPrefix()});
             SendToRootHivePipe(request.Release());
             // this code should be removed later
@@ -741,16 +741,16 @@ void THive::Handle(TEvPrivate::TEvBootTablets::TPtr&) {
 }
 
 void THive::Handle(TEvHive::TEvInitMigration::TPtr& ev) {
-    YDB_LOG_DEBUG("Handle InitMigration",
+    YDB_LOG_DEBUG("Handle TEvHive::TEvInitMigration:",
         {"logPrefix", GetLogPrefix()},
-        {"ev", ev->Get()->Record});
+        {"record", ev->Get()->Record.ShortDebugString()});
     if (AreWeRootHive()) {
         Send(ev->Sender, new TEvHive::TEvInitMigrationReply(NKikimrProto::ERROR));
         return;
     }
     if (MigrationState == NKikimrHive::EMigrationState::MIGRATION_READY || MigrationState == NKikimrHive::EMigrationState::MIGRATION_COMPLETE) {
         if (ev->Get()->Record.GetMigrationFilter().GetFilterDomain().GetSchemeShard() == 0 && GetMySubDomainKey().GetSchemeShard() == 0) {
-            YDB_LOG_ERROR("Migration ignored - unknown domain",
+            YDB_LOG_ERROR("Handle TEvHive::TEvInitMigration: migration ignored, unknown domain",
                 {"logPrefix", GetLogPrefix()});
             Send(ev->Sender, new TEvHive::TEvInitMigrationReply(NKikimrProto::ERROR));
             return;
@@ -766,13 +766,13 @@ void THive::Handle(TEvHive::TEvInitMigration::TPtr& ev) {
             MigrationFilter.SetMaxTabletsToSeize(1);
         }
         MigrationFilter.SetNewOwnerID(TabletID());
-        YDB_LOG_DEBUG("Requesting migration",
+        YDB_LOG_DEBUG("Handle TEvHive::TEvInitMigration: requesting migration",
             {"logPrefix", GetLogPrefix()},
             {"migrationFilter", MigrationFilter.ShortDebugString()});
         SendToRootHivePipe(new TEvHive::TEvSeizeTablets(MigrationFilter));
         Send(ev->Sender, new TEvHive::TEvInitMigrationReply(NKikimrProto::OK));
     } else {
-        YDB_LOG_DEBUG("Migration already in progress",
+        YDB_LOG_DEBUG("Handle TEvHive::TEvInitMigration: migration already in progress",
             {"logPrefix", GetLogPrefix()},
             {"migrationProgress", MigrationProgress});
         Send(ev->Sender, new TEvHive::TEvInitMigrationReply(NKikimrProto::ALREADY));
@@ -780,20 +780,20 @@ void THive::Handle(TEvHive::TEvInitMigration::TPtr& ev) {
 }
 
 void THive::Handle(TEvHive::TEvQueryMigration::TPtr& ev) {
-    YDB_LOG_DEBUG("Handle QueryMigration",
+    YDB_LOG_DEBUG("Handle TEvHive::TEvQueryMigration:",
         {"logPrefix", GetLogPrefix()});
     Send(ev->Sender, new TEvHive::TEvQueryMigrationReply(MigrationState, MigrationProgress));
 }
 
 void THive::OnDetach(const TActorContext&) {
-    YDB_LOG_DEBUG("THive::OnDetach",
+    YDB_LOG_DEBUG("THive::OnDetach:",
         {"logPrefix", GetLogPrefix()});
     Cleanup();
     PassAway();
 }
 
 void THive::OnTabletDead(TEvTablet::TEvTabletDead::TPtr&, const TActorContext&) {
-    YDB_LOG_INFO("OnTabletDead",
+    YDB_LOG_INFO("THive::OnTabletDead:",
         {"logPrefix", GetLogPrefix()},
         {"tabletId", TabletID()});
     Cleanup();
@@ -877,7 +877,7 @@ void THive::BuildCurrentConfig() {
 }
 
 void THive::Cleanup() {
-    YDB_LOG_DEBUG("THive::Cleanup",
+    YDB_LOG_DEBUG("THive::Cleanup:",
         {"logPrefix", GetLogPrefix()});
 
     Send(NConsole::MakeConfigsDispatcherID(SelfId().NodeId()),
@@ -919,16 +919,16 @@ void THive::MaybeLoadEverything() {
 }
 
 void THive::Handle(TEvLocal::TEvStatus::TPtr& ev) {
-    YDB_LOG_DEBUG("Handle TEvLocal::TEvStatus for Node",
+    YDB_LOG_DEBUG("Handle TEvLocal::TEvStatus:",
         {"logPrefix", GetLogPrefix()},
         {"senderNodeId", ev->Sender.NodeId()},
-        {"ev", ev->Get()->Record.ShortDebugString()});
+        {"record", ev->Get()->Record.ShortDebugString()});
     RemoveFromPingInProgress(ev->Sender.NodeId());
     Execute(CreateStatus(ev->Sender, ev->Get()->Record));
 }
 
 void THive::Handle(TEvLocal::TEvSyncTablets::TPtr& ev) {
-    YDB_LOG_DEBUG("THive::Handle::TEvSyncTablets",
+    YDB_LOG_DEBUG("THive::Handle TEvLocal::TEvSyncTablets:",
         {"logPrefix", GetLogPrefix()});
     RemoveFromPingInProgress(ev->Sender.NodeId());
     Execute(CreateSyncTablets(ev->Sender, ev->Get()->Record));
@@ -940,9 +940,9 @@ void THive::Handle(TEvPrivate::TEvProcessDisconnectNode::TPtr& ev) {
     if (!node || node->IsDisconnecting()) {
         auto itCategory = event->Tablets.begin();
         if (itCategory != event->Tablets.end()) {
-            YDB_LOG_DEBUG("THive::Handle::TEvProcessDisconnectNode: Node Category",
+            YDB_LOG_DEBUG("THive::Handle TEvPrivate::TEvProcessDisconnectNode: processing tablet category",
                 {"logPrefix", GetLogPrefix()},
-                {"eventNodeId", event->NodeId},
+                {"nodeId", event->NodeId},
                 {"category", itCategory->first});
             for (std::pair<TTabletId, TFollowerId> tabletId : itCategory->second) {
                 TTabletInfo* tablet = FindTablet(tabletId);
@@ -960,22 +960,24 @@ void THive::Handle(TEvPrivate::TEvProcessDisconnectNode::TPtr& ev) {
 
 void THive::Handle(TEvHive::TEvTabletMetrics::TPtr& ev) {
     TNodeId nodeId = ev->Sender.NodeId();
-    YDB_LOG_TRACE("THive::Handle::TEvTabletMetrics, NodeId",
+    YDB_LOG_TRACE("THive::Handle TEvHive::TEvTabletMetrics:",
         {"logPrefix", GetLogPrefix()},
         {"nodeId", nodeId},
-        {"ev", ev->Get()->Record.ShortDebugString()});
+        {"record", ev->Get()->Record.ShortDebugString()});
     if (UpdateTabletMetricsInProgress < MAX_UPDATE_TABLET_METRICS_IN_PROGRESS) {
         UpdateTabletMetricsInProgress++;
         if (UpdateTabletMetricsInProgress > (MAX_UPDATE_TABLET_METRICS_IN_PROGRESS / 2)) {
-            YDB_LOG_WARN("THive::Handle::TEvTabletMetrics, NodeId transactions in progress is over 50% of MAX_UPDATE_TABLET_METRICS_IN_PROGRESS",
+            YDB_LOG_WARN("THive::Handle TEvHive::TEvTabletMetrics: update metrics in progress over 50% of limit",
                 {"logPrefix", GetLogPrefix()},
-                {"nodeId", nodeId});
+                {"nodeId", nodeId},
+                {"updateTabletMetricsInProgress", UpdateTabletMetricsInProgress});
         }
         Execute(CreateUpdateTabletMetrics(ev));
     } else {
-        YDB_LOG_ERROR("THive::Handle::TEvTabletMetrics, NodeId was skipped due to reaching of MAX_UPDATE_TABLET_METRICS_IN_PROGRESS",
+        YDB_LOG_ERROR("THive::Handle TEvHive::TEvTabletMetrics: skipped due to max in-progress limit",
             {"logPrefix", GetLogPrefix()},
-            {"nodeId", nodeId});
+            {"nodeId", nodeId},
+            {"updateTabletMetricsInProgress", UpdateTabletMetricsInProgress});
         Send(ev->Sender, new TEvLocal::TEvTabletMetricsAck);
     }
 }
@@ -983,14 +985,14 @@ void THive::Handle(TEvHive::TEvTabletMetrics::TPtr& ev) {
 void THive::Handle(TEvInterconnect::TEvNodeConnected::TPtr &ev) {
     TNodeId nodeId = ev->Get()->NodeId;
     if (ConnectedNodes.insert(nodeId).second) {
-        YDB_LOG_WARN("Handle TEvInterconnect::TEvNodeConnected, NodeId Cookie",
+        YDB_LOG_WARN("Handle TEvInterconnect::TEvNodeConnected:",
             {"logPrefix", GetLogPrefix()},
             {"nodeId", nodeId},
             {"cookie", ev->Cookie});
         UpdateCounterNodesConnected(+1);
         Send(GetNameserviceActorId(), new TEvInterconnect::TEvGetNode(nodeId));
     } else {
-        YDB_LOG_TRACE("Handle TEvInterconnect::TEvNodeConnected (duplicate), NodeId Cookie",
+        YDB_LOG_TRACE("Handle TEvInterconnect::TEvNodeConnected: duplicate connection",
             {"logPrefix", GetLogPrefix()},
             {"nodeId", nodeId},
             {"cookie", ev->Cookie});
@@ -999,7 +1001,7 @@ void THive::Handle(TEvInterconnect::TEvNodeConnected::TPtr &ev) {
 
 void THive::Handle(TEvInterconnect::TEvNodeDisconnected::TPtr &ev) {
     TNodeId nodeId = ev->Get()->NodeId;
-    YDB_LOG_WARN("Handle TEvInterconnect::TEvNodeDisconnected, NodeId",
+    YDB_LOG_WARN("Handle TEvInterconnect::TEvNodeDisconnected:",
         {"logPrefix", GetLogPrefix()},
         {"nodeId", nodeId});
     RemoveFromPingInProgress(nodeId);
@@ -1018,7 +1020,7 @@ void THive::Handle(TEvInterconnect::TEvNodeInfo::TPtr &ev) {
         if (hiveNodeInfo != nullptr) {
             hiveNodeInfo->Location = nodeInfo.Location;
             hiveNodeInfo->LocationAcquired = true;
-            YDB_LOG_DEBUG("TEvInterconnect::TEvNodeInfo NodeId Location",
+            YDB_LOG_DEBUG("Handle TEvInterconnect::TEvNodeInfo: updated node location",
                 {"logPrefix", GetLogPrefix()},
                 {"nodeId", nodeInfo.NodeId},
                 {"location", GetLocationString(hiveNodeInfo->Location)});
@@ -1057,20 +1059,20 @@ void THive::Handle(TEvPrivate::TEvKickTablet::TPtr &ev) {
     TFullTabletId tabletId(ev->Get()->TabletId);
     TTabletInfo* tablet = FindTablet(tabletId);
     if (tablet == nullptr) {
-        YDB_LOG_WARN("THive::Handle::TEvKickTablet tablet not found",
+        YDB_LOG_WARN("THive::Handle TEvPrivate::TEvKickTablet: tablet not found",
             {"logPrefix", GetLogPrefix()},
             {"tabletId", tabletId});
         return;
     }
 
     if (!tablet->IsAlive()) {
-        YDB_LOG_DEBUG("THive::Handle::TEvKickTablet tablet isn't alive",
+        YDB_LOG_DEBUG("THive::Handle TEvPrivate::TEvKickTablet: tablet is not alive",
             {"logPrefix", GetLogPrefix()},
             {"tabletId", tabletId});
         return;
     }
 
-    YDB_LOG_DEBUG("THive::Handle::TEvKickTablet",
+    YDB_LOG_DEBUG("THive::Handle TEvPrivate::TEvKickTablet:",
         {"logPrefix", GetLogPrefix()},
         {"tabletId", tabletId});
     TBestNodeResult result = FindBestNode(*tablet);
@@ -1090,7 +1092,7 @@ void THive::Handle(TEvPrivate::TEvKickTablet::TPtr &ev) {
 
 void THive::Handle(TEvHive::TEvInitiateBlockStorage::TPtr& ev) {
     TTabletId tabletId = ev->Get()->TabletId;
-    YDB_LOG_DEBUG("THive::Handle::TEvInitiateBlockStorage",
+    YDB_LOG_DEBUG("THive::Handle TEvHive::TEvInitiateBlockStorage:",
         {"logPrefix", GetLogPrefix()},
         {"tabletId", tabletId});
     TSideEffects sideEffects;
@@ -1109,7 +1111,7 @@ void THive::Handle(TEvHive::TEvInitiateBlockStorage::TPtr& ev) {
 
 void THive::Handle(TEvHive::TEvInitiateDeleteStorage::TPtr &ev) {
     TTabletId tabletId = ev->Get()->TabletId;
-    YDB_LOG_DEBUG("THive::Handle::TEvInitiateDeleteStorage",
+    YDB_LOG_DEBUG("THive::Handle TEvHive::TEvInitiateDeleteStorage:",
         {"logPrefix", GetLogPrefix()},
         {"tabletId", tabletId});
     TSideEffects sideEffects;
@@ -1123,7 +1125,7 @@ void THive::Handle(TEvHive::TEvInitiateDeleteStorage::TPtr &ev) {
 
 void THive::Handle(TEvHive::TEvGetTabletStorageInfo::TPtr& ev) {
     TTabletId tabletId = ev->Get()->Record.GetTabletID();
-    YDB_LOG_DEBUG("THive::Handle::TEvGetTabletStorageInfo",
+    YDB_LOG_DEBUG("THive::Handle TEvHive::TEvGetTabletStorageInfo:",
         {"logPrefix", GetLogPrefix()},
         {"tabletId", tabletId});
 
@@ -1141,8 +1143,9 @@ void THive::Handle(TEvHive::TEvGetTabletStorageInfo::TPtr& ev) {
     case ETabletState::Unknown:
     case ETabletState::StoppingInGroupAssignment:
         // Subscribing in these states doesn't make sense, as it will never complete
-        YDB_LOG_ERROR("Requesting TabletStorageInfo with tablet",
+        YDB_LOG_ERROR("THive::Handle TEvHive::TEvGetTabletStorageInfo: tablet in unexpected state",
             {"logPrefix", GetLogPrefix()},
+            {"tabletId", tabletId},
             {"state", ETabletStateName(tablet->State)});
         Send(
             ev->Sender,
@@ -1166,10 +1169,10 @@ void THive::Handle(TEvHive::TEvGetTabletStorageInfo::TPtr& ev) {
 }
 
 void THive::Handle(TEvents::TEvUndelivered::TPtr &ev) {
-    YDB_LOG_WARN("THive::Handle::TEvUndelivered",
+    YDB_LOG_WARN("THive::Handle TEvents::TEvUndelivered:",
         {"logPrefix", GetLogPrefix()},
-        {"sender", ev->Sender},
-        {"type", ev->Get()->SourceType});
+        {"senderId", ev->Sender},
+        {"sourceType", ev->Get()->SourceType});
     switch (ev->Get()->SourceType) {
     case TEvLocal::EvBootTablet: {
         // restart boot of the tablet (on different node)
@@ -1199,9 +1202,9 @@ void THive::Handle(TEvents::TEvUndelivered::TPtr &ev) {
 }
 
 void THive::Handle(TEvHive::TEvReassignTablet::TPtr &ev) {
-    YDB_LOG_DEBUG("THive::TEvReassignTablet",
+    YDB_LOG_DEBUG("THive::Handle TEvHive::TEvReassignTablet:",
         {"logPrefix", GetLogPrefix()},
-        {"recordDebugString", ev->Get()->Record.ShortUtf8DebugString()});
+        {"record", ev->Get()->Record.ShortUtf8DebugString()});
     TLeaderTabletInfo* tablet = FindTablet(ev->Get()->Record.GetTabletID());
     if (tablet != nullptr) {
         tablet->ChannelProfileReassignReason = ev->Get()->Record.GetReassignReason();
@@ -1243,7 +1246,7 @@ void THive::Handle(TEvHive::TEvReassignTablet::TPtr &ev) {
 }
 
 void THive::OnActivateExecutor(const TActorContext&) {
-    YDB_LOG_DEBUG("THive::OnActivateExecutor",
+    YDB_LOG_DEBUG("THive::OnActivateExecutor:",
         {"logPrefix", GetLogPrefix()});
     TDomainsInfo* domainsInfo = AppData()->DomainsInfo.Get();
     const TDomainsInfo::TDomain& domain = *domainsInfo->GetDomain();
@@ -1306,19 +1309,19 @@ void THive::AssignTabletGroups(TLeaderTabletInfo& tablet) {
             for (auto& request : requests) {
                 record.MutableGroupParameters()->AddAllocated(std::move(request).Release());
             }
-            YDB_LOG_DEBUG("THive::AssignTabletGroups TEvControllerSelectGroups tablet",
+            YDB_LOG_DEBUG("THive::AssignTabletGroups: requesting storage groups from BSC",
                 {"logPrefix", GetLogPrefix()},
                 {"tabletId", tablet.Id},
                 {"record", ev->Record.ShortDebugString()});
             SendToBSControllerPipe(ev.Release());
         } else {
-            YDB_LOG_DEBUG("THive::AssignTabletGroups TEvControllerSelectGroups tablet waiting for response",
+            YDB_LOG_DEBUG("THive::AssignTabletGroups: waiting for BSC response",
                 {"logPrefix", GetLogPrefix()},
                 {"tabletId", tablet.Id});
         }
     } else {
         // we ready to update tablet groups immediately
-        YDB_LOG_DEBUG("THive::AssignTabletGroups CreateUpdateTabletGroups tablet",
+        YDB_LOG_DEBUG("THive::AssignTabletGroups: updating tablet groups",
             {"logPrefix", GetLogPrefix()},
             {"tabletId", tablet.Id});
         Execute(CreateUpdateTabletGroups(tablet.Id));
@@ -1353,7 +1356,7 @@ void THive::SendToConsolePipe(IEventBase* payload) {
 }
 
 void THive::RestartBSControllerPipe() {
-    YDB_LOG_DEBUG("THive::RestartBSControllerPipe",
+    YDB_LOG_DEBUG("THive::RestartBSControllerPipe:",
         {"logPrefix", GetLogPrefix()});
     if (BSControllerPipeClient) {
         NTabletPipe::CloseClient(SelfId(), BSControllerPipeClient);
@@ -1370,7 +1373,7 @@ void THive::RestartBSControllerPipe() {
 }
 
 void THive::RestartRootHivePipe() {
-    YDB_LOG_DEBUG("THive::RestartRootHivePipe",
+    YDB_LOG_DEBUG("THive::RestartRootHivePipe:",
         {"logPrefix", GetLogPrefix()});
     if (RootHivePipeClient) {
         NTabletPipe::CloseClient(SelfId(), RootHivePipeClient);
@@ -1470,10 +1473,10 @@ TVector<THive::TSelectedNode> THive::SelectMaxPriorityNodes(TVector<TSelectedNod
 }
 
 THive::TBestNodeResult THive::FindBestNode(const TTabletInfo& tablet, TNodeId suggestedNodeId) {
-    YDB_LOG_DEBUG("[FBN] Finding best node for tablet",
+    YDB_LOG_DEBUG("[FBN] finding best node for tablet",
         {"logPrefix", GetLogPrefix()},
         {"tablet", tablet});
-    YDB_LOG_TRACE("[FBN] Tablet family",
+    YDB_LOG_TRACE("[FBN] tablet family",
         {"logPrefix", GetLogPrefix()},
         {"tablet", tablet},
         {"familyString", tablet.FamilyString()});
@@ -1487,13 +1490,13 @@ THive::TBestNodeResult THive::FindBestNode(const TTabletInfo& tablet, TNodeId su
         TNodeInfo* node = FindNode(tablet.PreferredNodeId);
         if (node != nullptr) {
             if (node->IsAlive() && node->IsAllowedToRunTablet(tablet) && node->IsAbleToScheduleTablet() && node->IsAbleToRunTablet(tablet)) {
-                YDB_LOG_TRACE("[FBN] Tablet choose node because of preferred node",
+                YDB_LOG_TRACE("[FBN] chose node because of preferred node",
                     {"logPrefix", GetLogPrefix()},
                     {"tablet", tablet},
                     {"nodeId", node->Id});
                 return node;
             } else {
-                YDB_LOG_TRACE("[FBN] Tablet preferred unavailable node",
+                YDB_LOG_TRACE("[FBN] preferred node unavailable",
                     {"logPrefix", GetLogPrefix()},
                     {"tablet", tablet},
                     {"nodeId", node->Id});
@@ -1506,7 +1509,7 @@ THive::TBestNodeResult THive::FindBestNode(const TTabletInfo& tablet, TNodeId su
     if (suggestedNodeId != 0) {
         TNodeInfo* node = FindNode(suggestedNodeId);
         if (node && node->IsAlive() && node->IsAllowedToRunTablet(tablet) && node->IsAbleToScheduleTablet() && node->IsAbleToRunTablet(tablet)) {
-            YDB_LOG_TRACE("[FBN] Tablet choose node because of suggested node",
+            YDB_LOG_TRACE("[FBN] chose node because of suggested node",
                 {"logPrefix", GetLogPrefix()},
                 {"tablet", tablet},
                 {"nodeId", node->Id});
@@ -1570,7 +1573,7 @@ THive::TBestNodeResult THive::FindBestNode(const TTabletInfo& tablet, TNodeId su
             }
         }
         if (!dataCentersGroups.empty()) {
-            YDB_LOG_TRACE("[FBN] Tablet using DC",
+            YDB_LOG_TRACE("[FBN] tablet using data center preference",
                 {"logPrefix", GetLogPrefix()},
                 {"tablet", tablet},
                 {"preference", dataCentersGroups});
@@ -1597,19 +1600,19 @@ THive::TBestNodeResult THive::FindBestNode(const TTabletInfo& tablet, TNodeId su
                     if (nodeInfo.IsAbleToRunTablet(tablet, &debugState)) {
                         double usage = nodeInfo.GetNodeUsageForTablet(tablet);
                         selectedNodes.emplace_back(usage, &nodeInfo);
-                        YDB_LOG_TRACE("[FBN] Tablet selected usage of node",
+                        YDB_LOG_TRACE("[FBN] selected node usage",
                             {"logPrefix", GetLogPrefix()},
                             {"tablet", tablet},
                             {"usage", Sprintf("%.9f", usage)},
                             {"nodeId", nodeInfo.Id});
                     } else {
-                        YDB_LOG_TRACE("[FBN] Tablet node is not able to run the tablet",
+                        YDB_LOG_TRACE("[FBN] node cannot run tablet",
                             {"logPrefix", GetLogPrefix()},
                             {"tablet", tablet},
                             {"nodeId", nodeInfo.Id});
                     }
                 } else {
-                    YDB_LOG_TRACE("[FBN] Tablet node is not able to schedule the tablet",
+                    YDB_LOG_TRACE("[FBN] node cannot schedule tablet",
                         {"logPrefix", GetLogPrefix()},
                         {"tablet", tablet},
                         {"nodeId", nodeInfo.Id});
@@ -1620,7 +1623,7 @@ THive::TBestNodeResult THive::FindBestNode(const TTabletInfo& tablet, TNodeId su
                     }
                 }
             } else {
-                YDB_LOG_TRACE("[FBN] Node is not allowed to run the tablet node domains tablet object domain tablet allowed domains tablet effective allowed domains",
+                YDB_LOG_TRACE("[FBN] node is not allowed to run tablet",
                     {"logPrefix", GetLogPrefix()},
                     {"nodeId", nodeInfo.Id},
                     {"tablet", tablet},
@@ -1630,7 +1633,7 @@ THive::TBestNodeResult THive::FindBestNode(const TTabletInfo& tablet, TNodeId su
                     {"effectiveAllowedDomains", tablet.GetNodeFilter().GetEffectiveAllowedDomains()});
             }
         } else {
-            YDB_LOG_TRACE("[FBN] Tablet node is not alive",
+            YDB_LOG_TRACE("[FBN] node is not alive",
                 {"logPrefix", GetLogPrefix()},
                 {"tablet", tablet},
                 {"nodeId", nodeInfo.Id});
@@ -1638,12 +1641,12 @@ THive::TBestNodeResult THive::FindBestNode(const TTabletInfo& tablet, TNodeId su
         }
     }
 
-    YDB_LOG_TRACE("[FBN] Tablet selected nodes count",
+    YDB_LOG_TRACE("[FBN] selected nodes count",
         {"logPrefix", GetLogPrefix()},
         {"tablet", tablet},
         {"selectedNodesCount", selectedNodes.size()});
     if (selectedNodes.empty() && thereAreNodesWithManyStarts) {
-        YDB_LOG_TRACE("[FBN] Tablet all available nodes are booting too many tablets",
+        YDB_LOG_TRACE("[FBN] all available nodes are booting too many tablets",
             {"logPrefix", GetLogPrefix()},
             {"tablet", tablet});
         return TTooManyTabletsStarting();
@@ -1652,7 +1655,7 @@ THive::TBestNodeResult THive::FindBestNode(const TTabletInfo& tablet, TNodeId su
     TNodeInfo* selectedNode = nullptr;
     if (!selectedNodes.empty()) {
         selectedNodes = SelectMaxPriorityNodes(std::move(selectedNodes), tablet, dcPriority);
-        YDB_LOG_TRACE("[FBN] Tablet selected max priority nodes count",
+        YDB_LOG_TRACE("[FBN] selected max priority nodes count",
             {"logPrefix", GetLogPrefix()},
             {"tablet", tablet},
             {"selectedNodesCount", selectedNodes.size()});
@@ -1674,14 +1677,14 @@ THive::TBestNodeResult THive::FindBestNode(const TTabletInfo& tablet, TNodeId su
         }
     }
     if (selectedNode != nullptr) {
-        YDB_LOG_TRACE("[FBN] Tablet selected node",
+        YDB_LOG_TRACE("[FBN] selected node",
             {"logPrefix", GetLogPrefix()},
             {"tablet", tablet},
             {"selectedNodeId", selectedNode->Id});
         tablet.BootState = BootStateStarting;
         return selectedNode;
     } else {
-        YDB_LOG_TRACE("[FBN] Tablet no node was selected",
+        YDB_LOG_TRACE("[FBN] no node was selected",
             {"logPrefix", GetLogPrefix()},
             {"tablet", tablet});
 
@@ -1902,12 +1905,12 @@ void THive::DeleteTablet(TTabletId tabletId) {
         }
         for (auto nt = Nodes.begin(); nt != Nodes.end(); ++nt) {
             for (auto st = nt->second.Tablets.begin(); st != nt->second.Tablets.end(); ++st) {
-                if (!(st->second.count(&tablet) == 0)) { YDB_LOG_ERROR("Failed condition st->second.count(&tablet) == 0 Deleting tablet found on node in state",
+                if (!(st->second.count(&tablet) == 0)) { YDB_LOG_ERROR("DeleteTablet: tablet still present on node",
                                                              {"logPrefix", GetLogPrefix()},
                                                              {"nodeId", nt->first},
                                                              {"volatileState", TTabletInfo::EVolatileStateName(st->first)}); }
             }
-            if (!(nt->second.LockedTablets.count(&tablet) == 0)) { YDB_LOG_ERROR("Failed condition nt->second.LockedTablets.count(&tablet) == 0 Deleting tablet found on node in locked set",
+            if (!(nt->second.LockedTablets.count(&tablet) == 0)) { YDB_LOG_ERROR("DeleteTablet: tablet still present in node locked set",
                                                                        {"logPrefix", GetLogPrefix()},
                                                                        {"nodeId", nt->first}); }
         }
@@ -2115,14 +2118,14 @@ TResourceNormalizedValues THive::GetStDevResourceValues() const {
 
 bool THive::IsTabletMoveExpedient(const TTabletInfo& tablet, const TNodeInfo& node) const {
     if (!tablet.IsAlive()) {
-        YDB_LOG_TRACE("[TME] Move of tablet to is expedient because the tablet is not alive",
+        YDB_LOG_TRACE("[TME] move to node is expedient because tablet is not alive",
             {"logPrefix", GetLogPrefix()},
             {"tablet", tablet},
             {"nodeId", node.Id});
         return true;
     }
     if (tablet.Node->Freeze) {
-        YDB_LOG_TRACE("[TME] Move of tablet from to is not expedient because the source node is freezed",
+        YDB_LOG_TRACE("[TME] move is not expedient because source node is frozen",
             {"logPrefix", GetLogPrefix()},
             {"tablet", tablet},
             {"tabletNodeId", tablet.NodeId},
@@ -2130,7 +2133,7 @@ bool THive::IsTabletMoveExpedient(const TTabletInfo& tablet, const TNodeInfo& no
         return false;
     }
     if (node.Freeze) {
-        YDB_LOG_TRACE("[TME] Move of tablet from to is not expedient because the target node is freezed",
+        YDB_LOG_TRACE("[TME] move is not expedient because target node is frozen",
             {"logPrefix", GetLogPrefix()},
             {"tablet", tablet},
             {"tabletNodeId", tablet.NodeId},
@@ -2138,7 +2141,7 @@ bool THive::IsTabletMoveExpedient(const TTabletInfo& tablet, const TNodeInfo& no
         return false;
     }
     if (tablet.Node->Down) {
-        YDB_LOG_TRACE("[TME] Move of tablet from to is expedient because the node is down",
+        YDB_LOG_TRACE("[TME] move is expedient because source node is down",
             {"logPrefix", GetLogPrefix()},
             {"tablet", tablet},
             {"tabletNodeId", tablet.NodeId},
@@ -2146,7 +2149,7 @@ bool THive::IsTabletMoveExpedient(const TTabletInfo& tablet, const TNodeInfo& no
         return true;
     }
     if (!tablet.Node->IsAllowedToRunTablet(tablet)) {
-        YDB_LOG_TRACE("[TME] Move of tablet from to is expedient because the current node is unappropriate target for the tablet",
+        YDB_LOG_TRACE("[TME] move is expedient because current node cannot run tablet",
             {"logPrefix", GetLogPrefix()},
             {"tablet", tablet},
             {"tabletNodeId", tablet.NodeId},
@@ -2154,7 +2157,7 @@ bool THive::IsTabletMoveExpedient(const TTabletInfo& tablet, const TNodeInfo& no
         return true;
     }
     if (tablet.Node->Id == node.Id) {
-        YDB_LOG_TRACE("[TME] Move of tablet from to is not expedient because node is the same",
+        YDB_LOG_TRACE("[TME] move is not expedient because target node is the same",
             {"logPrefix", GetLogPrefix()},
             {"tablet", tablet},
             {"tabletNodeId", tablet.NodeId},
@@ -2162,7 +2165,7 @@ bool THive::IsTabletMoveExpedient(const TTabletInfo& tablet, const TNodeInfo& no
         return false;
     }
     if (tablet.Node->IsOverloaded() && !node.IsOverloaded()) {
-        YDB_LOG_TRACE("[TME] Move of tablet from to is forcefully expedient because source node is overloaded",
+        YDB_LOG_TRACE("[TME] move is forcefully expedient because source node is overloaded",
             {"logPrefix", GetLogPrefix()},
             {"tablet", tablet},
             {"tabletNodeId", tablet.NodeId},
@@ -2170,7 +2173,7 @@ bool THive::IsTabletMoveExpedient(const TTabletInfo& tablet, const TNodeInfo& no
         return true;
     }
     if (GetSpreadNeighbours() && tablet.Node->GetTabletNeighboursCount(tablet) > node.GetTabletNeighboursCount(tablet)) {
-        YDB_LOG_TRACE("[TME] Move of tablet from to is expedient because it spreads neighbours",
+        YDB_LOG_TRACE("[TME] move is expedient because it spreads neighbours",
             {"logPrefix", GetLogPrefix()},
             {"tablet", tablet},
             {"tabletNodeId", tablet.NodeId},
@@ -2179,7 +2182,7 @@ bool THive::IsTabletMoveExpedient(const TTabletInfo& tablet, const TNodeInfo& no
     }
 
     if (!GetCheckMoveExpediency()) {
-        YDB_LOG_TRACE("[TME] Move of tablet from to is forcefully expedient because of the setting",
+        YDB_LOG_TRACE("[TME] move is forcefully expedient because CheckMoveExpediency is disabled",
             {"logPrefix", GetLogPrefix()},
             {"tablet", tablet},
             {"tabletNodeId", tablet.NodeId},
@@ -2221,7 +2224,7 @@ bool THive::IsTabletMoveExpedient(const TTabletInfo& tablet, const TNodeInfo& no
     double after = max(afterStDev);
     bool result = after < before;
     if (result) {
-        YDB_LOG_TRACE("[TME] Move of tablet from to is expedient, beforeStDev afterStDev",
+        YDB_LOG_TRACE("[TME] move is expedient based on resource stdev",
             {"logPrefix", GetLogPrefix()},
             {"tablet", tablet},
             {"tabletNodeId", tablet.NodeId},
@@ -2229,7 +2232,7 @@ bool THive::IsTabletMoveExpedient(const TTabletInfo& tablet, const TNodeInfo& no
             {"beforeStDev", beforeStDev},
             {"afterStDev", afterStDev});
     } else {
-        YDB_LOG_TRACE("[TME] Move of tablet from to is not expedient, beforeStDev afterStDev",
+        YDB_LOG_TRACE("[TME] move is not expedient based on resource stdev",
             {"logPrefix", GetLogPrefix()},
             {"tablet", tablet},
             {"tabletNodeId", tablet.NodeId},
@@ -2309,7 +2312,7 @@ void THive::FillTabletInfo(NKikimrHive::TEvResponseHiveInfo& response, ui64 tabl
 }
 
 void THive::Handle(TEvHive::TEvRequestHiveInfo::TPtr& ev) {
-    YDB_LOG_TRACE("Handle TEvRequestHiveInfo",
+    YDB_LOG_TRACE("Handle TEvHive::TEvRequestHiveInfo:",
         {"logPrefix", GetLogPrefix()});
     const auto& record = ev->Get()->Record;
     TAutoPtr<TEvHive::TEvResponseHiveInfo> response = new TEvHive::TEvResponseHiveInfo();
@@ -2323,7 +2326,7 @@ void THive::Handle(TEvHive::TEvRequestHiveInfo::TPtr& ev) {
         if (tablet) {
             FillTabletInfo(response->Record, record.GetTabletID(), tablet, record);
         } else {
-            YDB_LOG_WARN("Can't find the tablet",
+            YDB_LOG_WARN("Handle TEvHive::TEvRequestHiveInfo: tablet not found",
                 {"logPrefix", GetLogPrefix()},
                 {"tabletId", tabletId});
         }
@@ -2601,7 +2604,7 @@ void THive::Handle(TEvHive::TEvCutTabletHistory::TPtr& ev) {
 }
 
 void THive::Handle(TEvHive::TEvDrainNode::TPtr& ev) {
-    YDB_LOG_DEBUG("Handle TEvDrainNode",
+    YDB_LOG_DEBUG("Handle TEvHive::TEvDrainNode:",
         {"logPrefix", GetLogPrefix()});
     NKikimrHive::EDrainDownPolicy policy;
     if (!ev->Get()->Record.HasDownPolicy() && ev->Get()->Record.HasKeepDown()) {
@@ -2631,7 +2634,7 @@ void THive::Handle(TEvHive::TEvInitiateTabletExternalBoot::TPtr& ev) {
 
     if (!tablet) {
         Send(ev->Sender, new TEvHive::TEvBootTabletReply(NKikimrProto::EReplyStatus::ERROR), 0, ev->Cookie);
-        YDB_LOG_ERROR("Tablet not found",
+        YDB_LOG_ERROR("Handle TEvHive::TEvInitiateTabletExternalBoot: tablet not found",
             {"logPrefix", GetLogPrefix()},
             {"tabletId", tabletId});
         return;
@@ -2641,7 +2644,7 @@ void THive::Handle(TEvHive::TEvInitiateTabletExternalBoot::TPtr& ev) {
         tablet->State == ETabletState::BlockStorage)
     {
         Send(ev->Sender, new TEvHive::TEvBootTabletReply(NKikimrProto::EReplyStatus::TRYLATER), 0, ev->Cookie);
-        YDB_LOG_WARN("Tablet waiting for group assignment",
+        YDB_LOG_WARN("Handle TEvHive::TEvInitiateTabletExternalBoot: tablet waiting for group assignment",
             {"logPrefix", GetLogPrefix()},
             {"tabletId", tabletId});
         return;
@@ -2649,7 +2652,7 @@ void THive::Handle(TEvHive::TEvInitiateTabletExternalBoot::TPtr& ev) {
 
     if (!tablet->IsBootingSuppressed()) {
         Send(ev->Sender, new TEvHive::TEvBootTabletReply(NKikimrProto::EReplyStatus::ERROR), 0, ev->Cookie);
-        YDB_LOG_ERROR("Tablet is not expected to boot externally",
+        YDB_LOG_ERROR("Handle TEvHive::TEvInitiateTabletExternalBoot: tablet is not expected to boot externally",
             {"logPrefix", GetLogPrefix()},
             {"tabletId", tabletId});
         return;
@@ -2663,7 +2666,7 @@ void THive::Handle(NConsole::TEvConsole::TEvConfigNotificationRequest::TPtr& ev)
     ClusterConfig = record.GetConfig().GetHiveConfig();
     NodeBrokerEpoch = TDuration::MicroSeconds(record.GetConfig().GetNodeBrokerConfig().GetEpochDuration());
     BuildCurrentConfig();
-    YDB_LOG_DEBUG("Merged",
+    YDB_LOG_DEBUG("Handle TEvConsole::TEvConfigNotificationRequest: merged config",
         {"logPrefix", GetLogPrefix()},
         {"config", CurrentConfig});
     Send(ev->Sender, new NConsole::TEvConsole::TEvConfigNotificationResponse(record), 0, ev->Cookie);
@@ -2809,7 +2812,7 @@ void THive::EnqueueUpdateMetrics(TTabletInfo* tablet) {
 }
 
 void THive::HandleInit(TEvPrivate::TEvProcessTabletBalancer::TPtr&) {
-    YDB_LOG_WARN("Received TEvProcessTabletBalancer while in StateInit",
+    YDB_LOG_WARN("HandleInit TEvPrivate::TEvProcessTabletBalancer: received while in StateInit",
         {"logPrefix", GetLogPrefix()});
     Schedule(TDuration::Seconds(1), new TEvPrivate::TEvProcessTabletBalancer());
 }
@@ -2817,7 +2820,7 @@ void THive::HandleInit(TEvPrivate::TEvProcessTabletBalancer::TPtr&) {
 void THive::Handle(TEvPrivate::TEvProcessTabletBalancer::TPtr&) {
     ProcessTabletBalancerScheduled = false;
     if (!SubActors.empty()) {
-        YDB_LOG_DEBUG("Balancer has been postponed because of sub activity",
+        YDB_LOG_DEBUG("Handle TEvPrivate::TEvProcessTabletBalancer: postponed because of sub-actor activity",
             {"logPrefix", GetLogPrefix()});
         ProcessTabletBalancerPostponed = true;
         return;
@@ -2846,7 +2849,7 @@ void THive::Handle(TEvPrivate::TEvProcessTabletBalancer::TPtr&) {
 
     if (ObjectDistributions.GetMaxImbalance() > GetObjectImbalanceToBalance()) {
         auto objectToBalance = ObjectDistributions.GetObjectToBalance();
-        YDB_LOG_DEBUG("Max imbalance - triggered balancer for object",
+        YDB_LOG_DEBUG("ProcessTabletBalancer: max object imbalance triggered balancer",
             {"logPrefix", GetLogPrefix()},
             {"maxImbalance", ObjectDistributions.GetMaxImbalance()},
             {"objectId", objectToBalance.ObjectId});
@@ -2867,11 +2870,11 @@ void THive::Handle(TEvPrivate::TEvProcessTabletBalancer::TPtr&) {
         }
 
         THiveStats stats = GetStats(nodes.begin(), nodes.end());
-        YDB_LOG_DEBUG("ProcessTabletBalancer",
+        YDB_LOG_DEBUG("ProcessTabletBalancer: segment stats",
             {"logPrefix", GetLogPrefix()},
             {"segmentId", segmentId},
             {"maxUsage", Sprintf("%.9f", stats.MaxUsage)},
-            {"on", stats.MaxUsageNodeId},
+            {"maxUsageNodeId", stats.MaxUsageNodeId},
             {"minUsage", Sprintf("%.9f", stats.MinUsage)},
             {"minUsageNodeId", stats.MinUsageNodeId},
             {"scatter", Sprintf("%.9f", stats.Scatter)});
@@ -2886,7 +2889,7 @@ void THive::Handle(TEvPrivate::TEvProcessTabletBalancer::TPtr&) {
             }
 
             if (!overloadedNodes.empty()) {
-                YDB_LOG_DEBUG("Nodes with usage over limit - triggered balancer",
+                YDB_LOG_DEBUG("ProcessTabletBalancer: nodes over usage limit triggered emergency balancer",
                     {"logPrefix", GetLogPrefix()},
                     {"overloadedNodes", overloadedNodes},
                     {"maxNodeUsageToKick", GetMaxNodeUsageToKick()});
@@ -2930,7 +2933,7 @@ void THive::Handle(TEvPrivate::TEvProcessTabletBalancer::TPtr&) {
             std::vector<TNodeId> nodeIds;
             nodeIds.reserve(stats.Values.size());
             std::transform(nodes.begin(), nodes.end(), std::back_inserter(nodeIds), [](const TNodeInfo& node) { return node.Id; });
-            YDB_LOG_TRACE("Scatter over limit - triggered balancer",
+            YDB_LOG_TRACE("ProcessTabletBalancer: scatter over limit triggered balancer",
                 {"logPrefix", GetLogPrefix()},
                 {"scatterByResource", stats.ScatterByResource},
                 {"minScatterToBalance", GetMinScatterToBalance()},
@@ -2974,7 +2977,7 @@ void THive::Handle(TEvPrivate::TEvProcessStorageBalancer::TPtr&) {
     });
     StorageScatter = stats.Scatter;
     TabletCounters->Simple()[NHive::COUNTER_STORAGE_SCATTER].Set(StorageScatter * 100);
-    YDB_LOG_DEBUG("At vs",
+    YDB_LOG_DEBUG("ProcessStorageBalancer: storage scatter vs threshold",
         {"logPrefix", GetLogPrefix()},
         {"storageScatter", StorageScatter},
         {"maxUsage", stats.MaxUsage},
@@ -2982,7 +2985,7 @@ void THive::Handle(TEvPrivate::TEvProcessStorageBalancer::TPtr&) {
         {"minUsage", stats.MinUsage},
         {"minUsageGroupId", stats.MinUsageGroupId});
     if (StorageScatter > GetMinStorageScatterToBalance()) {
-        YDB_LOG_DEBUG("Starting StorageBalancer",
+        YDB_LOG_DEBUG("ProcessStorageBalancer: starting storage balancer",
             {"logPrefix", GetLogPrefix()});
         ui64 numReassigns = 1;
         auto it = pool.Groups.find(stats.MaxUsageGroupId);
@@ -3098,10 +3101,10 @@ static void AggregateDiff(TMetrics& aggregate, const TMetrics& before, const TMe
     i64 oldValue = aggregate.*field;
     i64 delta = after.*field - before.*field;
     i64 newValue = oldValue + delta;
-    if (!(newValue >= 0)) { YDB_LOG_ERROR("Failed condition newValue >= 0 tablet",
+    if (!(newValue >= 0)) { YDB_LOG_ERROR("AggregateMetricsDiff: aggregated metric value became negative",
                                 {"logPrefix", GetLogPrefix()},
                                 {"tabletId", tabletId},
-                                {"name", name},
+                                {"metricName", name},
                                 {"oldValue", oldValue},
                                 {"delta", delta},
                                 {"newValue", newValue}); }
@@ -3255,7 +3258,7 @@ ui32 THive::GetDataCenters() {
 }
 
 void THive::AddRegisteredDataCentersNode(TDataCenterId dataCenterId, TNodeId nodeId) {
-    YDB_LOG_DEBUG("AddRegisteredDataCentersNode(",
+    YDB_LOG_DEBUG("AddRegisteredDataCentersNode:",
         {"logPrefix", GetLogPrefix()},
         {"dataCenterId", dataCenterId},
         {"nodeId", nodeId});
@@ -3271,7 +3274,7 @@ void THive::AddRegisteredDataCentersNode(TDataCenterId dataCenterId, TNodeId nod
 }
 
 void THive::RemoveRegisteredDataCentersNode(TDataCenterId dataCenterId, TNodeId nodeId) {
-    YDB_LOG_DEBUG("RemoveRegisteredDataCentersNode(",
+    YDB_LOG_DEBUG("RemoveRegisteredDataCentersNode:",
         {"logPrefix", GetLogPrefix()},
         {"dataCenterId", dataCenterId},
         {"nodeId", nodeId});
@@ -3287,7 +3290,7 @@ void THive::RemoveRegisteredDataCentersNode(TDataCenterId dataCenterId, TNodeId 
 }
 
 void THive::CreateTabletFollowers(TLeaderTabletInfo& tablet, NIceDb::TNiceDb& db, TSideEffects& sideEffects) {
-    YDB_LOG_DEBUG("CreateTabletFollowers Tablet",
+    YDB_LOG_DEBUG("CreateTabletFollowers:",
         {"logPrefix", GetLogPrefix()},
         {"tablet", tablet});
 
@@ -3319,7 +3322,7 @@ void THive::CreateTabletFollowers(TLeaderTabletInfo& tablet, NIceDb::TNiceDb& db
                     follower.InitTabletMetrics();
                     follower.BecomeStopped();
                     dataCenter.Followers[{tablet.Id, group.Id}].push_back(std::prev(tablet.Followers.end()));
-                    YDB_LOG_DEBUG("Created follower for dc",
+                    YDB_LOG_DEBUG("CreateTabletFollowers: created follower for data center",
                         {"logPrefix", GetLogPrefix()},
                         {"followerTabletId", follower.GetFullTabletId()},
                         {"dataCenterId", dataCenterId});
@@ -3335,7 +3338,7 @@ void THive::CreateTabletFollowers(TLeaderTabletInfo& tablet, NIceDb::TNiceDb& db
                             NIceDb::TUpdate<Schema::TabletFollowerTablet::Statistics>(follower.Statistics));
                 follower.InitTabletMetrics();
                 follower.BecomeStopped();
-                YDB_LOG_DEBUG("Created follower",
+                YDB_LOG_DEBUG("CreateTabletFollowers: created follower",
                     {"logPrefix", GetLogPrefix()},
                     {"followerTabletId", follower.GetFullTabletId()});
             }
@@ -3349,7 +3352,7 @@ void THive::CreateTabletFollowers(TLeaderTabletInfo& tablet, NIceDb::TNiceDb& db
     auto endIt = std::next(oldFollowersIt);
     for (auto followerIt = tablet.Followers.begin(); followerIt != endIt; ++followerIt) {
         TFollowerTabletInfo& follower = *followerIt;
-        YDB_LOG_DEBUG("Deleting follower",
+        YDB_LOG_DEBUG("CreateTabletFollowers: deleting old follower",
             {"logPrefix", GetLogPrefix()},
             {"followerTabletId", follower.GetFullTabletId()});
         db.Table<Schema::TabletFollowerTablet>().Key(tablet.Id, follower.Id).Delete();
@@ -3384,12 +3387,12 @@ void THive::UpdateObjectCount(const TLeaderTabletInfo& tablet, const TNodeInfo& 
     ObjectDistributions.UpdateCountForTablet(tablet, node, diff);
     TabletCounters->Simple()[NHive::COUNTER_IMBALANCED_OBJECTS].Set(ObjectDistributions.GetImbalancedObjectsCount());
     TabletCounters->Simple()[NHive::COUNTER_WORST_OBJECT_VARIANCE].Set(ObjectDistributions.GetWorstObjectVariance());
-    YDB_LOG_TRACE("UpdateObjectCount for on ~>",
+    YDB_LOG_TRACE("UpdateObjectCount: updated object distribution on node",
         {"logPrefix", GetLogPrefix()},
         {"objectId", tablet.ObjectId},
         {"nodeId", node.Id},
         {"diff", diff},
-        {"imbalance", ObjectDistributions.GetMaxImbalance()});
+        {"maxImbalance", ObjectDistributions.GetMaxImbalance()});
 }
 
 ui64 THive::GetObjectImbalance(TFullObjectId object) {
@@ -3517,7 +3520,7 @@ void THive::Handle(TEvHive::TEvInvalidateStoragePools::TPtr& ev) {
 
 void THive::Handle(TEvHive::TEvReassignOnDecommitGroup::TPtr& ev) {
     const ui32 groupId = ev->Get()->Record.GetGroupId();
-    YDB_LOG_DEBUG("THive::Handle(TEvReassignOnDecommitGroup)",
+    YDB_LOG_DEBUG("THive::Handle TEvHive::TEvReassignOnDecommitGroup:",
         {"logPrefix", GetLogPrefix()},
         {"groupId", groupId});
     auto reply = std::make_unique<IEventHandle>(TEvHive::EvReassignOnDecommitGroupReply, 0, ev->Sender, SelfId(), nullptr, ev->Cookie);
@@ -3545,7 +3548,7 @@ void THive::InitDefaultChannelBind(TChannelBind& bind) {
 }
 
 void THive::RequestPoolsInformation() {
-    YDB_LOG_DEBUG("THive::RequestPoolsInformation()",
+    YDB_LOG_DEBUG("THive::RequestPoolsInformation:",
         {"logPrefix", GetLogPrefix()});
     TVector<THolder<NKikimrBlobStorage::TEvControllerSelectGroups::TGroupParameters>> requests;
 
@@ -3806,9 +3809,9 @@ STFUNC(THive::StateWork) {
         hFunc(TEvPrivate::TEvProcessIncomingEvent, Handle);
     default:
         if (!HandleDefaultEvents(ev, SelfId())) {
-            YDB_LOG_WARN("THive::StateWork unhandled event",
+            YDB_LOG_WARN("THive::StateWork: unhandled event",
                 {"logPrefix", GetLogPrefix()},
-                {"type", ev->GetTypeRewrite()},
+                {"eventType", ev->GetTypeRewrite()},
                 {"event", ev->ToString()});
         }
         break;
@@ -3835,7 +3838,7 @@ void THive::RequestFreeSequence() {
 
         if (PendingCreateTablets.size() > sequenceSize) {
             size_t newSequenceSize = ((PendingCreateTablets.size() / sequenceSize) + 1) * sequenceSize;
-            YDB_LOG_WARN("Increasing sequence size from to due",
+            YDB_LOG_WARN("RequestFreeSequence: increasing sequence size due to pending creates",
                 {"logPrefix", GetLogPrefix()},
                 {"sequenceSize", sequenceSize},
                 {"newSequenceSize", newSequenceSize},
@@ -3843,7 +3846,7 @@ void THive::RequestFreeSequence() {
             sequenceSize = newSequenceSize;
         }
 
-        YDB_LOG_DEBUG("Requesting free of from root hive",
+        YDB_LOG_DEBUG("RequestFreeSequence: requesting free tablet id sequence from root hive",
             {"logPrefix", GetLogPrefix()},
             {"sequence", sequenceIndex},
             {"sequenceSize", sequenceSize});
@@ -3851,7 +3854,7 @@ void THive::RequestFreeSequence() {
         RequestingSequenceNow = true;
         RequestingSequenceIndex = sequenceIndex;
     } else {
-        YDB_LOG_ERROR("We ran out of tablet ids",
+        YDB_LOG_ERROR("RequestFreeSequence: ran out of tablet ids",
             {"logPrefix", GetLogPrefix()});
     }
 }
@@ -3861,16 +3864,16 @@ void THive::ProcessPendingOperations() {
 }
 
 void THive::Handle(TEvSubDomain::TEvConfigure::TPtr& ev) {
-    YDB_LOG_DEBUG("Handle TEvSubDomain::TEvConfigure(",
+    YDB_LOG_DEBUG("Handle TEvSubDomain::TEvConfigure:",
         {"logPrefix", GetLogPrefix()},
-        {"ev", ev->Get()->Record.ShortDebugString()});
+        {"record", ev->Get()->Record.ShortDebugString()});
     Send(ev->Sender, new TEvSubDomain::TEvConfigureStatus(NKikimrTx::TEvSubDomainConfigurationAck::SUCCESS, TabletID()));
 }
 
 void THive::Handle(TEvHive::TEvConfigureHive::TPtr& ev) {
-    YDB_LOG_DEBUG("Handle TEvHive::TEvConfigureHive(",
+    YDB_LOG_DEBUG("Handle TEvHive::TEvConfigureHive:",
         {"logPrefix", GetLogPrefix()},
-        {"ev", ev->Get()->Record.ShortDebugString()});
+        {"record", ev->Get()->Record.ShortDebugString()});
     Execute(CreateConfigureSubdomain(std::move(ev)));
 }
 
@@ -3970,10 +3973,10 @@ bool THive::CheckForForwardTabletRequest(TTabletId tabletId, NKikimrHive::TForwa
             owner = RootHiveId;
         }
         if (owner != TSequencer::NO_OWNER && owner != TabletID()) {
-            YDB_LOG_NOTICE("Forwarding TabletRequest(TabletID to Hive",
+            YDB_LOG_NOTICE("CheckForForwardTabletRequest: forwarding tablet request to owner hive",
                 {"logPrefix", GetLogPrefix()},
                 {"tabletId", tabletId},
-                {"owner", owner});
+                {"ownerHiveId", owner});
             forwardRequest.SetHiveTabletId(owner);
             return true;
         }
@@ -4002,62 +4005,62 @@ TSubDomainKey THive::GetMySubDomainKey() const {
             objectDomains.insert(tablet.ObjectDomain);
         }
         if (objectDomains.size() == 1) {
-            YDB_LOG_WARN("GetMySubDomainKey() - guessed PrimaryDomainKey",
+            YDB_LOG_WARN("GetMySubDomainKey: guessed PrimaryDomainKey from single object domain",
                 {"logPrefix", GetLogPrefix()},
                 {"objectDomain", *objectDomains.begin()});
             return *objectDomains.begin();
         } else {
-            YDB_LOG_WARN("GetMySubDomainKey() - couldn't guess object domains found",
+            YDB_LOG_WARN("GetMySubDomainKey: could not guess PrimaryDomainKey, multiple object domains found",
                 {"logPrefix", GetLogPrefix()},
-                {"primaryDomainKey", objectDomains.size()});
+                {"objectDomainCount", objectDomains.size()});
         }
     }
     return {};
 }
 
 void THive::Handle(TEvHive::TEvSeizeTablets::TPtr& ev) {
-    YDB_LOG_DEBUG("Handle TEvHive::TEvSeizeTablets(",
+    YDB_LOG_DEBUG("Handle TEvHive::TEvSeizeTablets:",
         {"logPrefix", GetLogPrefix()},
-        {"ev", ev->Get()->Record.ShortDebugString()});
+        {"record", ev->Get()->Record.ShortDebugString()});
     Execute(CreateSeizeTablets(ev));
 }
 
 void THive::Handle(TEvHive::TEvSeizeTabletsReply::TPtr& ev) {
-    YDB_LOG_DEBUG("Handle TEvHive::TEvSeizeTabletsReply(",
+    YDB_LOG_DEBUG("Handle TEvHive::TEvSeizeTabletsReply:",
         {"logPrefix", GetLogPrefix()},
-        {"ev", ev->Get()->Record.ShortDebugString()});
+        {"record", ev->Get()->Record.ShortDebugString()});
     Execute(CreateSeizeTabletsReply(ev));
 }
 
 void THive::Handle(TEvHive::TEvReleaseTablets::TPtr& ev) {
-    YDB_LOG_DEBUG("Handle TEvHive::TEvReleaseTablets(",
+    YDB_LOG_DEBUG("Handle TEvHive::TEvReleaseTablets:",
         {"logPrefix", GetLogPrefix()},
-        {"ev", ev->Get()->Record.ShortDebugString()});
+        {"record", ev->Get()->Record.ShortDebugString()});
     Execute(CreateReleaseTablets(ev));
 }
 
 void THive::Handle(TEvHive::TEvReleaseTabletsReply::TPtr& ev) {
-    YDB_LOG_DEBUG("Handle TEvHive::TEvReleaseTabletsReply(",
+    YDB_LOG_DEBUG("Handle TEvHive::TEvReleaseTabletsReply:",
         {"logPrefix", GetLogPrefix()},
-        {"ev", ev->Get()->Record.ShortDebugString()});
+        {"record", ev->Get()->Record.ShortDebugString()});
     Execute(CreateReleaseTabletsReply(ev));
 }
 
 void THive::Handle(TEvHive::TEvRequestTabletOwners::TPtr& ev) {
-    YDB_LOG_DEBUG("Handle TEvHive::TEvRequestTabletOwners(",
+    YDB_LOG_DEBUG("Handle TEvHive::TEvRequestTabletOwners:",
         {"logPrefix", GetLogPrefix()},
-        {"ev", ev->Get()->Record.ShortDebugString()});
+        {"record", ev->Get()->Record.ShortDebugString()});
     Execute(CreateRequestTabletOwners(std::move(ev)));
 }
 
 void THive::Handle(TEvHive::TEvTabletOwnersReply::TPtr& ev) {
-    YDB_LOG_DEBUG("Handle TEvHive::TEvTabletOwnersReply()",
+    YDB_LOG_DEBUG("Handle TEvHive::TEvTabletOwnersReply:",
         {"logPrefix", GetLogPrefix()});
     Execute(CreateTabletOwnersReply(std::move(ev)));
 }
 
 void THive::Handle(TEvHive::TEvUpdateTabletsObject::TPtr& ev) {
-    YDB_LOG_DEBUG("Handle TEvHive::TEvUpdateTabletsObject",
+    YDB_LOG_DEBUG("Handle TEvHive::TEvUpdateTabletsObject:",
         {"logPrefix", GetLogPrefix()});
     Execute(CreateUpdateTabletsObject(std::move(ev)));
 }
@@ -4083,14 +4086,14 @@ void THive::Handle(TEvPrivate::TEvLogTabletMoves::TPtr&) {
         movesByTypeString << cnt << "x " << TTabletTypes::TypeToStr(type);
         movesCount += cnt;
     }
-    YDB_LOG_INFO("Made tablet moves since including",
+    YDB_LOG_INFO("LogTabletMoves: made tablet moves since last log",
         {"logPrefix", GetLogPrefix()},
         {"movesCount", movesCount},
         {"movesByTypeString", movesByTypeString},
         {"logTabletMovesSchedulingTime", LogTabletMovesSchedulingTime});
     for (const auto& moveInfo : TabletMoveSamplesForLog) {
         auto tablet = FindTablet(moveInfo.Tablet);
-        YDB_LOG_INFO("Tablet from node to node",
+        YDB_LOG_INFO("LogTabletMoves: tablet moved from node to node",
             {"logPrefix", GetLogPrefix()},
             {"tabletString", (tablet ? tablet->ToString() : ToString(moveInfo.Tablet))},
             {"moveFrom", moveInfo.From},
@@ -4153,7 +4156,7 @@ void THive::Handle(TEvPrivate::TEvUpdateDataCenterFollowers::TPtr& ev) {
                 i64 neededCount = group.GetFollowerCountForDataCenter(dataCenterId);
                 i64 delta = neededCount - std::ssize(followers);
                 for (i64 i = 0; i < delta; ++i) {
-                    YDB_LOG_TRACE("UpdateDataCenterFollowers: Pending create follower",
+                    YDB_LOG_TRACE("UpdateDataCenterFollowers: pending create follower",
                         {"logPrefix", GetLogPrefix()},
                         {"tabletId", tabletId});
                     PendingFollowerUpdates.Create(tablet.GetFullTabletId(), group.Id, dataCenterId);
@@ -4163,7 +4166,7 @@ void THive::Handle(TEvPrivate::TEvUpdateDataCenterFollowers::TPtr& ev) {
     } else {
         for (auto& [group, followers] : dataCenter.Followers) {
             for (auto follower : followers) {
-                YDB_LOG_TRACE("UpdateDataCenterFollowers: Pending delete follower",
+                YDB_LOG_TRACE("UpdateDataCenterFollowers: pending delete follower",
                     {"logPrefix", GetLogPrefix()},
                     {"followerTabletId", follower->GetFullTabletId()});
                 PendingFollowerUpdates.Delete(follower->GetFullTabletId(), group.second, dataCenterId);
@@ -4177,7 +4180,7 @@ void THive::Handle(TEvPrivate::TEvUpdateDataCenterFollowers::TPtr& ev) {
 }
 
 void THive::HandleInit(TEvPrivate::TEvUpdateDataCenterFollowers::TPtr& ev) {
-    YDB_LOG_WARN("Received TEvUpdateDataCenterFollowers while in StateInit",
+    YDB_LOG_WARN("HandleInit TEvPrivate::TEvUpdateDataCenterFollowers: received while in StateInit",
         {"logPrefix", GetLogPrefix()});
     Schedule(TDuration::Seconds(1), ev->Release().Release());
 }
@@ -4187,14 +4190,14 @@ void THive::Handle(TEvPrivate::TEvUpdateFollowers::TPtr&) {
 }
 
 void THive::HandleInit(TEvNodeWardenStorageConfig::TPtr& ev) {
-    YDB_LOG_DEBUG("HandleInit TEvNodeWardenStorageConfig",
+    YDB_LOG_DEBUG("HandleInit TEvNodeWardenStorageConfig:",
         {"logPrefix", GetLogPrefix()});
     BridgeInfo = ev->Get()->BridgeInfo;
     MaybeLoadEverything();
 }
 
 void THive::Handle(TEvNodeWardenStorageConfig::TPtr& ev) {
-    YDB_LOG_DEBUG("Handle TEvNodeWardenStorageConfig",
+    YDB_LOG_DEBUG("Handle TEvNodeWardenStorageConfig:",
         {"logPrefix", GetLogPrefix()});
     BridgeInfo = ev->Get()->BridgeInfo;
     if (BridgeInfo) {
@@ -4230,14 +4233,14 @@ void THive::Handle(TEvPrivate::TEvProcessTabletMetrics::TPtr&) {
 }
 
 void THive::Handle(TEvHive::TEvShrinkStoragePool::TPtr& ev) {
-    YDB_LOG_DEBUG("Handle TEvShrinkStoragePool",
+    YDB_LOG_DEBUG("Handle TEvHive::TEvShrinkStoragePool:",
         {"logPrefix", GetLogPrefix()});
     const auto& record = ev->Get()->Record;
     auto& pool = GetStoragePool(record.GetStoragePool());
     if (pool.ConsoleVersion <= record.GetVersion()) {
         pool.ConsoleVersion = record.GetVersion();
     } else {
-        YDB_LOG_WARN("Got outdated TEvShrinkStoragePool request",
+        YDB_LOG_WARN("Handle TEvHive::TEvShrinkStoragePool: outdated request",
             {"logPrefix", GetLogPrefix()});
         return;
     }
@@ -4282,7 +4285,7 @@ void THive::Handle(TEvHive::TEvShrinkStoragePoolDone::TPtr& ev) {
 }
 
 void THive::MakeScaleRecommendation() {
-    YDB_LOG_DEBUG("[MSR] Started",
+    YDB_LOG_DEBUG("[MSR] started",
         {"logPrefix", GetLogPrefix()});
 
     if (AreWeRootHive()) {
@@ -4292,7 +4295,7 @@ void THive::MakeScaleRecommendation() {
     auto subdomainKey = GetMySubDomainKey();
     auto it = Domains.find(subdomainKey);
     if (it == Domains.end()) {
-        YDB_LOG_ERROR("[MSR] Can't find domain",
+        YDB_LOG_ERROR("[MSR] domain not found",
             {"logPrefix", GetLogPrefix()},
             {"subdomainKey", subdomainKey});
         Schedule(GetScaleRecommendationRefreshFrequency(), new TEvPrivate::TEvRefreshScaleRecommendation());
@@ -4301,7 +4304,7 @@ void THive::MakeScaleRecommendation() {
     auto& domain = it->second;
 
     if (domain.ScaleRecommenderPolicies.empty() && CurrentConfig.GetDryRunTargetTrackingCPU() == 0) {
-        YDB_LOG_TRACE("[MSR] No scaling policies configured, rescheduled",
+        YDB_LOG_TRACE("[MSR] no scaling policies configured, rescheduled",
             {"logPrefix", GetLogPrefix()});
         Schedule(GetScaleRecommendationRefreshFrequency(), new TEvPrivate::TEvRefreshScaleRecommendation());
         return;
@@ -4311,31 +4314,31 @@ void THive::MakeScaleRecommendation() {
     ui32 readyNodesCount = 0;
     for (auto& [id, node] : Nodes) {
         if (!node.IsAlive()) {
-            YDB_LOG_TRACE("[MSR] Skip node not alive",
+            YDB_LOG_TRACE("[MSR] skip node, not alive",
                 {"logPrefix", GetLogPrefix()},
-                {"id", id});
+                {"nodeId", id});
             continue;
         }
 
         if (!node.AveragedNodeTotalCpuUsage.IsValueReady()) {
-            YDB_LOG_TRACE("[MSR] Skip node no CPU usage value",
+            YDB_LOG_TRACE("[MSR] skip node, no CPU usage value",
                 {"logPrefix", GetLogPrefix()},
-                {"id", id});
+                {"nodeId", id});
             continue;
         }
 
         if (node.GetServicedDomain() != subdomainKey) {
-            YDB_LOG_TRACE("[MSR] Skip node serviced domain doesn't match",
+            YDB_LOG_TRACE("[MSR] skip node, serviced domain does not match",
                 {"logPrefix", GetLogPrefix()},
-                {"id", id});
+                {"nodeId", id});
             continue;
         }
 
         double avgCpuUsage = node.AveragedNodeTotalCpuUsage.GetValue();
-        YDB_LOG_TRACE("[MSR] Node is ready, avg CPU",
+        YDB_LOG_TRACE("[MSR] node is ready, avg CPU usage",
             {"logPrefix", GetLogPrefix()},
-            {"id", id},
-            {"usage", avgCpuUsage});
+            {"nodeId", id},
+            {"avgCpuUsage", avgCpuUsage});
         ++readyNodesCount;
 
         cpuUsageSum += avgCpuUsage;
@@ -4343,10 +4346,10 @@ void THive::MakeScaleRecommendation() {
     }
 
     double avgCpuUsage = readyNodesCount != 0 ? cpuUsageSum / readyNodesCount : 0;
-    YDB_LOG_TRACE("[MSR] Total avg CPU ready",
+    YDB_LOG_TRACE("[MSR] total avg CPU for ready nodes",
         {"logPrefix", GetLogPrefix()},
-        {"usage", avgCpuUsage},
-        {"nodes", readyNodesCount});
+        {"avgCpuUsage", avgCpuUsage},
+        {"readyNodesCount", readyNodesCount});
     TabletCounters->Simple()[NHive::COUNTER_AVG_CPU_UTILIZATION].Set(avgCpuUsage * 100);
 
     auto& avgCpuUsageHistory = domain.AvgCpuUsageHistory;
@@ -4355,7 +4358,7 @@ void THive::MakeScaleRecommendation() {
     while (avgCpuUsageHistory.size() > maxHistorySize) {
         avgCpuUsageHistory.pop_front();
     }
-    YDB_LOG_TRACE("[MSR] Avg CPU usage history",
+    YDB_LOG_TRACE("[MSR] avg CPU usage history",
         {"logPrefix", GetLogPrefix()},
         {"avgCpuUsageHistory", JoinSeq(", ", avgCpuUsageHistory)});
 
@@ -4371,12 +4374,12 @@ void THive::MakeScaleRecommendation() {
                 .Timestamp = TActivationContext::Now()
             };
             TabletCounters->Simple()[NHive::COUNTER_NODES_RECOMMENDED].Set(*recommendedNodes);
-            YDB_LOG_TRACE("[MSR] Recommended",
+            YDB_LOG_TRACE("[MSR] recommended node count",
                 {"logPrefix", GetLogPrefix()},
-                {"nodes", recommendedNodes},
-                {"currentNodes", readyNodesCount});
+                {"recommendedNodes", *recommendedNodes},
+                {"readyNodesCount", readyNodesCount});
         } else {
-            YDB_LOG_TRACE("[MSR] No scaling action recommended",
+            YDB_LOG_TRACE("[MSR] no scaling action recommended",
                 {"logPrefix", GetLogPrefix()});
         }
     }
@@ -4387,12 +4390,12 @@ void THive::MakeScaleRecommendation() {
 
         if (dryRunRecommendedNodes) {
             TabletCounters->Simple()[NHive::COUNTER_NODES_RECOMMENDED_DRY_RUN].Set(*dryRunRecommendedNodes);
-            YDB_LOG_TRACE("[MSR] Dry run recommended",
+            YDB_LOG_TRACE("[MSR] dry run recommended node count",
                 {"logPrefix", GetLogPrefix()},
-                {"nodes", *dryRunRecommendedNodes},
-                {"currentNodes", readyNodesCount});
+                {"recommendedNodes", *dryRunRecommendedNodes},
+                {"readyNodesCount", readyNodesCount});
         } else {
-            YDB_LOG_TRACE("[MSR] No dry run scaling action recommended",
+            YDB_LOG_TRACE("[MSR] no dry run scaling action recommended",
                 {"logPrefix", GetLogPrefix()});
         }
     }
@@ -4405,9 +4408,9 @@ void THive::Handle(TEvPrivate::TEvRefreshScaleRecommendation::TPtr&) {
 }
 
 void THive::Handle(TEvHive::TEvRequestScaleRecommendation::TPtr& ev) {
-    YDB_LOG_DEBUG("Handle TEvHive::TEvRequestScaleRecommendation(",
+    YDB_LOG_DEBUG("Handle TEvHive::TEvRequestScaleRecommendation:",
         {"logPrefix", GetLogPrefix()},
-        {"ev", ev->Get()->Record.ShortDebugString()});
+        {"record", ev->Get()->Record.ShortDebugString()});
     auto response = std::make_unique<TEvHive::TEvResponseScaleRecommendation>();
 
     const auto& record = ev->Get()->Record;
@@ -4475,7 +4478,7 @@ bool THive::ReassignInactiveGroups(TStoragePoolInfo& pool) {
     if (operations.empty()) {
         return false;
     } else {
-        YDB_LOG_INFO("ShrinkPool - starting reassign for tablets",
+        YDB_LOG_INFO("ShrinkPool: starting reassign for tablets",
             {"logPrefix", GetLogPrefix()},
             {"operationsCount", operations.size()});
         StartReassignActor(std::move(operations), SelfId(), 1, TStringBuilder() << "shrink pool " << pool.Name, std::make_unique<TShrinkPoolReassignCallback>(pool.Name));
@@ -4512,7 +4515,7 @@ bool THive::CompactInactiveGroups(TStoragePoolInfo& pool) {
     if (tabletsToCompact.empty()) {
         return false;
     } else {
-        YDB_LOG_INFO("ShrinkPool - starting compact for tablets",
+        YDB_LOG_INFO("ShrinkPool: starting compact for tablets",
             {"logPrefix", GetLogPrefix()},
             {"tabletsToCompactCount", tabletsToCompact.size()});
         StartCompactActor(std::move(tabletsToCompact), pool.InactiveGroups, pool.Name);
@@ -4522,12 +4525,12 @@ bool THive::CompactInactiveGroups(TStoragePoolInfo& pool) {
 
 void THive::CheckRemainingHistory(TStoragePoolInfo& pool) {
     if (!pool.RemainingHistory.empty() || pool.NeedShrinkFromTenant) {
-        YDB_LOG_DEBUG("ShrinkPool - history entries remaining",
+        YDB_LOG_DEBUG("ShrinkPool: history entries remaining",
             {"logPrefix", GetLogPrefix()},
             {"remainingHistoryCount", pool.RemainingHistory.size()});
         return;
     }
-    YDB_LOG_DEBUG("ShrinkPool - done",
+    YDB_LOG_DEBUG("ShrinkPool: done",
         {"logPrefix", GetLogPrefix()});
     auto ev = std::make_unique<TEvHive::TEvShrinkStoragePoolDone>();
     ev->Record.SetStoragePool(pool.Name);
@@ -4546,9 +4549,9 @@ void THive::Handle(TEvPrivate::TEvGenerateTestData::TPtr&) {
 }
 
 void THive::Handle(TEvHive::TEvConfigureScaleRecommender::TPtr& ev) {
-    YDB_LOG_DEBUG("Handle TEvHive::TEvConfigureScaleRecommender(",
+    YDB_LOG_DEBUG("Handle TEvHive::TEvConfigureScaleRecommender:",
         {"logPrefix", GetLogPrefix()},
-        {"ev", ev->Get()->Record.ShortDebugString()});
+        {"record", ev->Get()->Record.ShortDebugString()});
     Execute(CreateConfigureScaleRecommender(ev));
 }
 
@@ -4644,10 +4647,10 @@ bool THive::IsItPossibleToStartBalancer(EBalancerType balancerType) {
         const auto& stats(BalancerStats[balancer]);
         if (stats.IsRunningNow) {
             EBalancerType type = static_cast<EBalancerType>(balancer);
-            YDB_LOG_DEBUG("It's not possible to start balancer because balancer is already running",
+            YDB_LOG_DEBUG("IsItPossibleToStartBalancer: balancer already running",
                 {"logPrefix", GetLogPrefix()},
-                {"balancerTypeName", EBalancerTypeName(balancerType)},
-                {"typeName", EBalancerTypeName(type)});
+                {"requestedBalancerType", EBalancerTypeName(balancerType)},
+                {"runningBalancerType", EBalancerTypeName(type)});
             return false;
         }
     }

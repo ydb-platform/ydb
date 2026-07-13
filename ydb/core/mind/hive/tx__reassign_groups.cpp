@@ -34,7 +34,7 @@ public:
         SideEffects.Reset(Self->SelfId());
         TLeaderTabletInfo* tablet = Self->FindTablet(TabletId);
         if (tablet != nullptr) {
-            YDB_LOG_DEBUG("THive::TTxReassignGroups( )::Execute",
+            YDB_LOG_DEBUG("THive::TTxReassignGroups::Execute reassigning tablet groups",
                 {"logPrefix", GetLogPrefix()},
                 {"tabletId", tablet->Id},
                 {"channelProfileNewGroup", ChannelProfileNewGroup});
@@ -63,7 +63,7 @@ public:
                     tablet->InitiateAssignTabletGroups();
                 }
             } else {
-                YDB_LOG_WARN("THive::TTxReassignGroups( )::Execute - tablet is not ready for group reassignment",
+                YDB_LOG_WARN("THive::TTxReassignGroups::Execute tablet not ready for group reassignment",
                     {"logPrefix", GetLogPrefix()},
                     {"tabletId", tablet->Id});
             }
@@ -72,7 +72,7 @@ public:
     }
 
     void Complete(const TActorContext& ctx) override {
-        YDB_LOG_DEBUG("THive::TTxReassignGroups( )::Complete",
+        YDB_LOG_DEBUG("THive::TTxReassignGroups::Complete",
             {"logPrefix", GetLogPrefix()},
             {"tabletId", TabletId});
         SideEffects.Complete(ctx);

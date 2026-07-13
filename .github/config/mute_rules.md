@@ -33,17 +33,7 @@
 
 ### New stable branch bootstrap grace
 
-When a branch is **first added** to [stable_tests_branches.json](./stable_tests_branches.json), mute automation applies a **7-day bootstrap grace** (`branch_bootstrap_grace_days` in [mute_config.json](./mute_config.json)).
-
-- **Start date** is detected from **git history**: the author date of the first commit where the branch name appears in `stable_tests_branches.json`. No manual date entry is required.
-- **`main` is excluded** — it always uses normal rules.
-- **During grace:**
-  - Lines from the branch's current `muted_ya*.txt` are **kept** even if `tests_monitor` has no history yet for that branch.
-  - Inherited lines are **not removed** via the “no runs in 7 days” (`to_delete`) rule.
-  - **Unmute** and **mute** rules still apply when monitor data exists (stable tests can unmute; new flaky tests can mute).
-- **After grace** (7 calendar days from the config add date): only normal mute/unmute/delete rules apply.
-
-**Workflow when cutting a new stable:** add the branch to `stable_tests_branches.json` in the same PR (or before) enabling regression/mute jobs. Inherited mutes from `main` are preserved until CI history accumulates or grace ends.
+For **7 days** after a branch first appears in [stable_tests_branches.json](./stable_tests_branches.json) (date from git history; `main` excluded), inherited `muted_ya` lines are kept and not dropped via zero-run delete. Unmute/mute rules still apply when monitor data exists. Grace length matches `unmute_window_days`.
 
 ---
 

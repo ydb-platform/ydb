@@ -86,19 +86,3 @@ def get_manual_unmute_min_runs():
 
 def get_manual_unmute_ttl_calendar_days():
     return _positive_int('manual_unmute_ttl_calendar_days')
-
-
-def get_branch_bootstrap_grace_days():
-    """Calendar days to preserve inherited mute after branch is added to stable_tests_branches.json."""
-    raw = _payload().get('branch_bootstrap_grace_days', 7)
-    try:
-        n = int(raw)
-    except (ValueError, TypeError) as exc:
-        raise RuntimeError(
-            f'{_MUTE_CONFIG_PATH}: key "branch_bootstrap_grace_days" must be a positive integer, got {raw!r}'
-        ) from exc
-    if n <= 0:
-        raise RuntimeError(
-            f'{_MUTE_CONFIG_PATH}: key "branch_bootstrap_grace_days" must be positive, got {n}'
-        )
-    return n

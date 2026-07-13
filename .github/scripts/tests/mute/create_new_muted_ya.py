@@ -4,6 +4,7 @@ import datetime
 import json
 import os
 import re
+import subprocess
 import ydb
 import logging
 import sys
@@ -17,7 +18,6 @@ for _p in (_tests_dir, _scripts_dir, os.path.join(_scripts_dir, 'analytics')):
     if _p not in sys.path:
         sys.path.insert(0, _p)
 
-from mute.branch_bootstrap import apply_branch_bootstrap_grace, load_inherited_muted_lines
 from mute.mute_check import YaMuteCheck
 from mute.update_mute_issues import (
     ORG_NAME,
@@ -54,6 +54,88 @@ repo_path = os.path.normpath(os.path.join(dir, '..', '..', '..', '..')) + os.sep
 _DIGEST_NOTIFICATION_CONFIG = os.path.normpath(
     os.path.join(dir, '..', '..', '..', 'config', 'mute_issue_and_digest_config.json')
 )
+
+_STABLE_BRANCHES_CONFIG = '.github/config/stable_tests_branches.json'
+
+
+def _git_branch_added_to_stable_config(branch, repo_root):
+    if not branch or branch == 'main':
+        return None
+    try:
+        proc = subprocess.run(
+            ['git', 'log', '--format=%H', '--reverse', '--', _STABLE_BRANCHES_CONFIG],
+            cwd=repo_root,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    except OSError:
+        return None
+    if proc.returncode != 0:
+        return None
+    for commit in proc.stdout.splitlines():
+        commit = commit.strip()
+        if not commit:
+            continue
+        show = subprocess.run(
+            ['git', 'show', f'{commit}:{_STABLE_BRANCHES_CONFIG}'],
+            cwd=repo_root,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if show.returncode != 0:
+            continue
+        try:
+            branches = json.loads(show.stdout)
+            names = {str(b).strip() for b in branches if str(b).strip()}
+        except (json.JSONDecodeError, TypeError):
+            continue
+        if branch not in names:
+            continue
+        dproc = subprocess.run(
+            ['git', 'log', '-1', '--format=%aI', commit],
+            cwd=repo_root,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if dproc.returncode != 0:
+            continue
+        raw = dproc.stdout.strip()
+        if raw.endswith('Z'):
+            raw = raw[:-1] + '+00:00'
+        try:
+            return datetime.datetime.fromisoformat(raw).astimezone(datetime.timezone.utc).date()
+        except ValueError:
+            continue
+    return None
+
+
+def _apply_stable_branch_bootstrap_grace(branch, inherited_muted_ya_path, all_muted_ya, to_delete, repo_root):
+    added = _git_branch_added_to_stable_config(branch, repo_root)
+    if added is None:
+        return all_muted_ya, to_delete
+    today = datetime.datetime.now(datetime.timezone.utc).date()
+    grace_days = get_unmute_window_days()
+    if today > added + datetime.timedelta(days=grace_days - 1):
+        return all_muted_ya, to_delete
+    try:
+        with open(inherited_muted_ya_path, encoding='utf-8') as fp:
+            inherited = {line.strip() for line in fp if line.strip()}
+    except OSError:
+        return all_muted_ya, to_delete
+    if not inherited:
+        return all_muted_ya, to_delete
+    logging.info(
+        'stable branch bootstrap grace for %s (config since %s, %s days): keep %d inherited mute(s)',
+        branch,
+        added,
+        grace_days,
+        len(inherited),
+    )
+    return sorted(set(all_muted_ya) | inherited), sorted(set(to_delete) - inherited)
+
 
 def load_manual_unmute_config():
     """Manual fast-unmute window — required keys in ``mute_config.json`` via ``mute.constants``."""
@@ -879,33 +961,14 @@ def apply_and_add_mutes(
         all_muted_ya, all_muted_ya_debug = create_file_set(
             all_data, lambda test: mute_check(test.get('suite_folder'), test.get('test_name')) if mute_check else True, use_wildcards=True, resolution='muted_ya'
         )
-        all_muted_ya_before_bootstrap = list(all_muted_ya)
-
-        if branch and inherited_muted_ya_path:
-            all_muted_ya, to_delete, grace_active, grace_added = apply_branch_bootstrap_grace(
-                branch=branch,
-                inherited_muted_ya_path=inherited_muted_ya_path,
-                all_muted_ya=all_muted_ya,
-                to_delete=to_delete,
-                repo_root=repo_root,
+        if branch and inherited_muted_ya_path and repo_root:
+            all_muted_ya, to_delete = _apply_stable_branch_bootstrap_grace(
+                branch,
+                inherited_muted_ya_path,
+                all_muted_ya,
+                to_delete,
+                repo_root,
             )
-            if grace_active:
-                inherited = load_inherited_muted_lines(inherited_muted_ya_path)
-                if inherited:
-                    kept_delete = set(to_delete)
-                    to_delete_debug = [
-                        debug
-                        for debug in to_delete_debug
-                        if debug.split(' #', 1)[0] in kept_delete
-                        or debug.split(':', 1)[0] in kept_delete
-                    ]
-                    before_set = set(all_muted_ya_before_bootstrap)
-                    for line in all_muted_ya:
-                        if line in before_set:
-                            continue
-                        all_muted_ya_debug.append(
-                            f'{line} # [bootstrap-grace since {grace_added}] inherited from muted_ya'
-                        )
 
         write_file_set(os.path.join(output_path, 'to_delete.txt'), to_delete, to_delete_debug)
         write_file_set(os.path.join(output_path, 'muted_ya.txt'), all_muted_ya, all_muted_ya_debug)

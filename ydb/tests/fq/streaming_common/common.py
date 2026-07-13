@@ -37,24 +37,34 @@ def get_ydb_config(request):
     enable_streaming_queries = param.get("enable_streaming_queries", True)
     enable_streaming_partition_balancing = param.get("use_partition_balancing", True)
     enable_user_attributes_in_topic_query = param.get("enable_user_attributes_in_topic_query", True)
+    enable_external_data_sources = param.get("enable_external_data_sources", True)
 
     extra_feature_flags = {
-        "enable_external_data_sources",
         "enable_streaming_queries_counters",
         "enable_topics_sql_io_operations",
         "enable_streaming_queries_pq_sink_deduplication",
         "enable_external_data_source_auth_method_iam",
     }
+    disabled_feature_flags = []
     if enable_shared_reading_in_streaming_queries:
         extra_feature_flags.add("enable_shared_reading_in_streaming_queries")
+    else:
+        disabled_feature_flags.append("enable_shared_reading_in_streaming_queries")
+    
     if enable_streaming_queries:
         extra_feature_flags.add("enable_streaming_queries")
+    else:
+        disabled_feature_flags.append("enable_streaming_queries")
 
-    disabled_feature_flags = []
     if enable_user_attributes_in_topic_query:
         extra_feature_flags.add("enable_user_attributes_in_topic_query")
     else:
         disabled_feature_flags.append("enable_user_attributes_in_topic_query")
+
+    if enable_external_data_sources:
+        extra_feature_flags.add("enable_external_data_sources")
+    else:
+        disabled_feature_flags.append("enable_external_data_sources")
 
     config = KikimrConfigGenerator(
         erasure=Erasure.MIRROR_3_DC,
@@ -257,7 +267,8 @@ class StreamingTestBase(TestYdsBase):
         endpoint = self.get_endpoint(kikimr, local_topics)
         source_name = entity_name(name)
         self.init_topics(source_name, create_output=False, partitions_count=partitions_count, endpoint=endpoint)
-        self.create_source(kikimr, source_name, shared=shared)
+        if not local_topics:
+            self.create_source(kikimr, source_name, shared=shared)
 
         if local_topics:
             return f"`{self.input_topic}`", endpoint

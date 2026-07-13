@@ -2099,16 +2099,19 @@ private:
 
         TypesCtx->IgnoreExpandPg = SessionCtx->ConfigPtr()->GetEnableNewRBO();
 
-        bool addExternalDataSources = (queryType == EKikimrQueryType::Script || queryType == EKikimrQueryType::Query
-            || queryType == EKikimrQueryType::YqlScript || queryType == EKikimrQueryType::YqlScriptStreaming) && AppData()->FeatureFlags.GetEnableExternalDataSources();
-        if (addExternalDataSources && FederatedQuerySetup) {
-            InitS3Provider(queryType);
-            InitGenericProvider();
-            InitSolomonProvider();
-
+        bool isSupportedQueryType = queryType == EKikimrQueryType::Script || queryType == EKikimrQueryType::Query
+            || queryType == EKikimrQueryType::YqlScript || queryType == EKikimrQueryType::YqlScriptStreaming;
+        if (isSupportedQueryType && FederatedQuerySetup) {
             TVector<std::function<TFuture<void>()>> finalizers;
-            if (FederatedQuerySetup->YtGateway) {
-                InitYtProvider(finalizers);
+            if (AppData()->FeatureFlags.GetEnableExternalDataSources()) {
+                InitS3Provider(queryType);
+                InitGenericProvider();
+                InitSolomonProvider();
+
+                if (FederatedQuerySetup->YtGateway) {
+                    InitYtProvider(finalizers);
+                }
+                TypesCtx->StreamLookupJoin = Config->GetEnableDqSourceStreamLookupJoin();
             }
             if (FederatedQuerySetup->PqGatewayFactory) {
                 InitPqProvider(finalizers);
@@ -2123,7 +2126,6 @@ private:
                     return WaitAll(futures);
                 };
             }
-            TypesCtx->StreamLookupJoin = Config->GetEnableDqSourceStreamLookupJoin();
         }
 
         InitPgProvider();
@@ -2310,7 +2312,7 @@ private:
     IModuleResolver::TPtr ModuleResolver;
     bool KeepConfigChanges;
     bool IsInternalCall;
-    std::optional<TKqpFederatedQuerySetup> FederatedQuerySetup;
+    TIntrusivePtr<TKqpFederatedQuerySetup> FederatedQuerySetup;
 
     TIntrusivePtr<TKikimrSessionContext> SessionCtx;
     TKikimrConfiguration::TPtr Config;
@@ -2356,7 +2358,7 @@ Ydb::Table::QueryStatsCollection::Mode GetStatsMode(NYql::EKikimrStatsMode stats
 
 TIntrusivePtr<IKqpHost> CreateKqpHost(TIntrusivePtr<IKqpGateway> gateway, const TString& cluster,
     const TString& database, TKikimrConfiguration::TPtr config, IModuleResolver::TPtr moduleResolver,
-    std::optional<TKqpFederatedQuerySetup> federatedQuerySetup, const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, const TGUCSettings::TPtr& gUCSettings,
+    const TIntrusivePtr<TKqpFederatedQuerySetup>& federatedQuerySetup, const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, const TGUCSettings::TPtr& gUCSettings,
     const NKikimrConfig::TQueryServiceConfig& queryServiceConfig, const TMaybe<TString>& applicationName, const NKikimr::NMiniKQL::IFunctionRegistry* funcRegistry, bool keepConfigChanges,
     bool isInternalCall, TKqpTempTablesState::TConstPtr tempTablesState, NActors::TActorSystem* actorSystem, NYql::TExprContext* ctx, const TIntrusivePtr<TUserRequestContext>& userRequestContext,
     bool usePessimisticLocks)

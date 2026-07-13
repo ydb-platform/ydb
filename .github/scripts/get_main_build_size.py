@@ -54,7 +54,10 @@ def get_build_size(time_of_current_commit):
                 }
             else:
                 print(
-                    f"Error: Cant get binary size in db with params: github_event_name='push', github_ref_name='{branch}', build_preset='{build_preset}, git_commit_time <= DateTime::FromSeconds({time_of_current_commit})'",
+                    f"Error: Can't get binary size in db with params: "
+                    f"github_event_name='push', github_ref_name='{branch}', "
+                    f"build_preset='{build_preset}', "
+                    f"git_commit_time <= DateTime::FromSeconds({time_of_current_commit})",
                     file=sys.stderr
                 )
                 return 0

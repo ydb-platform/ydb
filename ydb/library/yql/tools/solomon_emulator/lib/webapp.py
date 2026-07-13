@@ -357,11 +357,11 @@ def create_web_app(emulator):
         web.post("/api/v2/projects/{project}/sensors/labels", emulator.sensor_labels),
         web.post("/api/v2/projects/{project}/sensors", emulator.sensors),
         web.get("/api/calls", emulator.get_api_calls),
-        web.get("/metrics/get", emulator.metrics_get),
+        web.get("/metrics", emulator.metrics_get),
         web.get("/ping", emulator.get_ping),
         web.post("/api/v2/push", emulator.api_v2_push),
         web.post("/monitoring/v2/data/write", emulator.data_write),
-        web.post("/metrics/post", emulator.metrics_post),
+        web.post("/metrics", emulator.metrics_post),
         web.post("/cleanup", emulator.cleanup),
         web.post("/cleanup/api/calls", emulator.cleanup_api_calls),
         web.post("/fail/push", emulator.fail_push)

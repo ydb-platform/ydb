@@ -218,14 +218,6 @@ static std::shared_ptr<arrow::Array> InplaceConvertColumn(const std::shared_ptr<
             newData->type = arrow::int32();
             return std::make_shared<arrow::NumericArray<arrow::Int32Type>>(newData);
         }
-        case NScheme::NTypeIds::Interval: {
-            Y_ABORT_UNLESS(arrow::is_primitive(column->type()->id()));
-            Y_ABORT_UNLESS(arrow::bit_width(column->type()->id()) == 64);
-
-            auto newData = column->data()->Copy();
-            newData->type = arrow::duration(arrow::TimeUnit::MICRO);
-            return std::make_shared<arrow::DurationArray>(newData);
-        }
         case NScheme::NTypeIds::Timestamp64:
         case NScheme::NTypeIds::Interval64:
         case NScheme::NTypeIds::Datetime64: {

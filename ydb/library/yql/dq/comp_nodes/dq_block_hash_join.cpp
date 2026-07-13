@@ -136,6 +136,7 @@ struct TRenamesPackedTupleOutput : NNonCopyable::TMoveOnly {
         : Renames_(&meta->Renames)
         , Converters_(converters)
         , LeftIsBuild_(meta->Settings.LeftIsBuild())
+        , OutputSide_(LeftSemiOrOnly(Kind) && LeftIsBuild_ ? ESide::Build : ESide::Probe)
     {
         if constexpr (!std::is_same_v<decltype(Nulls_), Empty>) {
             TVector<arrow::Datum> nulls;
@@ -161,7 +162,11 @@ struct TRenamesPackedTupleOutput : NNonCopyable::TMoveOnly {
 
     i64 SizeTuples() const {
         AssertSizeIsSane();
-        return Output_.Probe.NTuples;
+        if constexpr (LeftSemiOrOnly(Kind)) {
+            return Output_.SelectSide(OutputSide_).NTuples;
+        } else {
+            return Output_.Probe.NTuples;
+        }
     }
 
 
@@ -187,7 +192,8 @@ struct TRenamesPackedTupleOutput : NNonCopyable::TMoveOnly {
                         this->operator()(TSides<TSingleTuple>{.Build = null, .Probe = tuple});
                     }
                 } else if constexpr(SemiOrOnlyJoin(Kind)) {
-                    self.Output_.Probe.AppendTuple(tuple, self.Converters_.Probe->GetTupleLayout());
+                    self.Output_.SelectSide(self.OutputSide_)
+                        .AppendTuple(tuple, self.Converters_.SelectSide(self.OutputSide_)->GetTupleLayout());
                 }
             }
         };
@@ -197,11 +203,11 @@ struct TRenamesPackedTupleOutput : NNonCopyable::TMoveOnly {
     TVector<arrow::Datum> FlushAndApplyRenames() {
         if constexpr(LeftSemiOrOnly(Kind)) {
             TVector<arrow::Datum> out;
-            Converters_.Probe->Unpack(Output_.Probe, out);
-            Output_.Probe.Clear();
+            Converters_.SelectSide(OutputSide_)->Unpack(Output_.SelectSide(OutputSide_), out);
+            Output_.SelectSide(OutputSide_).Clear();
             TVector<arrow::Datum> renamed;
             for(auto rename: *Renames_){
-                MKQL_ENSURE(rename.Side == ESide::Probe, "renames in Semi or Only Left Join shouldn't contain columns from right side");
+                MKQL_ENSURE(rename.Side == OutputSide_, "renames in Semi or Only Left Join shouldn't contain columns from right side");
                 renamed.push_back(out[rename.Index]);
             }
             return renamed;
@@ -233,7 +239,8 @@ struct TRenamesPackedTupleOutput : NNonCopyable::TMoveOnly {
     }
     void AssertSizeIsSane() const{
         if constexpr (Kind == EJoinKind::LeftOnly || Kind==EJoinKind::LeftSemi) {
-            MKQL_ENSURE(Output_.Build.NTuples == 0, "Left Only and Left Semi join types shouldn't collect any Build(right) tuples");
+            const ESide nonOutputSide = (OutputSide_ == ESide::Build) ? ESide::Probe : ESide::Build;
+            MKQL_ENSURE(Output_.SelectSide(nonOutputSide).NTuples == 0, "Left Only and Left Semi join types shouldn't collect any tuples on the non-output side");
         } else if constexpr (Kind == EJoinKind::Left || Kind == EJoinKind::Inner) {
             MKQL_ENSURE(Output_.Build.NTuples == Output_.Probe.NTuples, "Inner and Left join types must collect same amount of tuples from build and probe");
         }
@@ -244,6 +251,7 @@ struct TRenamesPackedTupleOutput : NNonCopyable::TMoveOnly {
     TSides<IBlockLayoutConverter*> Converters_;
     BuildNullIfNeeded Nulls_;
     bool LeftIsBuild_;
+    ESide OutputSide_;
 };
 
 template <EJoinKind Kind> class TBlockHashJoinWrapper : public TMutableComputationNode<TBlockHashJoinWrapper<Kind>> {

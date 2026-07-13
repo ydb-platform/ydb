@@ -13,6 +13,7 @@ namespace NBsController {
 
 class TBlobStorageController::TTxLoadEverything : public TTransactionBase<TBlobStorageController> {
 public:
+    // Load all BSC state on startup (see also decommission race fix in #46029).
     TTxLoadEverything(TBlobStorageController *controller)
         : TBase(controller)
     {}

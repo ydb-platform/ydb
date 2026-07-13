@@ -1790,6 +1790,181 @@ Y_UNIT_TEST_SUITE(TBackupCollectionTests) {
             "CDC stream name should have X.509 timestamp format (YYYYMMDDHHMMSSZ_continuousBackupImpl)");
     }
 
+    // Multi-partition (P=4) full backup of an indexed table. A full backup decomposes into
+    // TCopyTable sub-ops with CDC streams armed on the source; TConfigureParts::ProgressState
+    // iterates over every source partition, and the incremental-backup block that previously
+    // deep-copied the source TTableInfo once per partition (O(P^2)) is now hoisted out of that
+    // loop. This exercises the hoisted path with P>1 -- SingleTableWithGlobalSyncIndex only
+    // covers a single-partition source.
+    Y_UNIT_TEST(FullBackupMultiShardTableWithIndex) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));
+        ui64 txId = 100;
+
+        SetupLogging(runtime);
+        PrepareDirs(runtime, env, txId);
+
+        TString collectionSettings = R"(
+            Name: ")" DEFAULT_NAME_1 R"("
+            ExplicitEntryList {
+                Entries {
+                    Type: ETypeTable
+                    Path: "/MyRoot/TableWithIndex"
+                }
+            }
+            Cluster: {}
+            IncrementalBackupConfig: {}
+        )";
+        TestCreateBackupCollection(runtime, ++txId, "/MyRoot/.backups/collections/", collectionSettings);
+        env.TestWaitNotification(runtime, txId);
+
+        // Indexed table whose main table has 4 uniform partitions.
+        TestCreateIndexedTable(runtime, ++txId, "/MyRoot", R"(
+            TableDescription {
+                Name: "TableWithIndex"
+                Columns { Name: "key" Type: "Uint32" }
+                Columns { Name: "value" Type: "Utf8" }
+                KeyColumnNames: ["key"]
+                UniformPartitionsCount: 4
+            }
+            IndexDescription {
+                Name: "ValueIndex"
+                KeyColumnNames: ["value"]
+                Type: EIndexTypeGlobal
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/TableWithIndex", true), {
+            NLs::PathExist,
+            NLs::PartitionCount(4),
+        });
+
+        // Full backup: drives the multi-partition TCopyTable-with-CDC path (TConfigureParts loop).
+        TestBackupBackupCollection(runtime, ++txId, "/MyRoot",
+            R"(Name: ".backups/collections/)" DEFAULT_NAME_1 R"(")");
+        env.TestWaitNotification(runtime, txId);
+
+        // Main table keeps its 4 partitions and gains a continuous-backup CDC stream.
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/TableWithIndex", true), {
+            NLs::PathExist,
+            NLs::PartitionCount(4),
+        });
+
+        auto mainTableDesc = DescribePrivatePath(runtime, "/MyRoot/TableWithIndex", true, true);
+        UNIT_ASSERT(mainTableDesc.GetPathDescription().HasTable());
+        const auto& tableDesc = mainTableDesc.GetPathDescription().GetTable();
+        bool foundMainTableCdc = false;
+        for (size_t i = 0; i < tableDesc.CdcStreamsSize(); ++i) {
+            if (tableDesc.GetCdcStreams(i).GetName().EndsWith("_continuousBackupImpl")) {
+                foundMainTableCdc = true;
+                break;
+            }
+        }
+        UNIT_ASSERT_C(foundMainTableCdc, "Main table should have a _continuousBackupImpl CDC stream after full backup");
+
+        // Index impl table also gets its continuous-backup stream (exercises the index copy sub-op).
+        auto indexDesc = DescribePrivatePath(runtime, "/MyRoot/TableWithIndex/ValueIndex", true, true);
+        UNIT_ASSERT(indexDesc.GetPathDescription().HasTableIndex());
+        UNIT_ASSERT_VALUES_EQUAL(indexDesc.GetPathDescription().ChildrenSize(), 1);
+        TString indexImplTableName = indexDesc.GetPathDescription().GetChildren(0).GetName();
+
+        auto indexImplTableDesc = DescribePrivatePath(runtime,
+            "/MyRoot/TableWithIndex/ValueIndex/" + indexImplTableName, true, true);
+        UNIT_ASSERT(indexImplTableDesc.GetPathDescription().HasTable());
+        const auto& indexTableDesc = indexImplTableDesc.GetPathDescription().GetTable();
+        bool foundIndexCdc = false;
+        for (size_t i = 0; i < indexTableDesc.CdcStreamsSize(); ++i) {
+            if (indexTableDesc.GetCdcStreams(i).GetName().EndsWith("_continuousBackupImpl")) {
+                foundIndexCdc = true;
+                break;
+            }
+        }
+        UNIT_ASSERT_C(foundIndexCdc, "Index impl table should have a _continuousBackupImpl CDC stream after full backup");
+    }
+
+    // Second full backup over a table that already carries a continuous-backup CDC stream. The
+    // backup op finds the prior "*_continuousBackupImpl" stream and arms DropSrcCdcStream for it,
+    // which drives the hasDrop branch of TCopyTable::TConfigureParts::ProgressState (and the
+    // stream-drop handling in TPropose::HandleReply) -- the branch the single-backup tests never
+    // reach. Confirms that path still works after the GrabTable/GrabIndex removals.
+    Y_UNIT_TEST(SecondFullBackupDropsPriorCdcStream) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));
+        ui64 txId = 100;
+
+        SetupLogging(runtime);
+        PrepareDirs(runtime, env, txId);
+
+        TString collectionSettings = R"(
+            Name: ")" DEFAULT_NAME_1 R"("
+            ExplicitEntryList {
+                Entries {
+                    Type: ETypeTable
+                    Path: "/MyRoot/Table"
+                }
+            }
+            Cluster: {}
+            IncrementalBackupConfig: {}
+        )";
+        TestCreateBackupCollection(runtime, ++txId, "/MyRoot/.backups/collections/", collectionSettings);
+        env.TestWaitNotification(runtime, txId);
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "key" Type: "Uint32" }
+            Columns { Name: "value" Type: "Utf8" }
+            KeyColumnNames: ["key"]
+            UniformPartitionsCount: 2
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        auto cbStreamNames = [&]() -> TVector<TString> {
+            TVector<TString> out;
+            auto desc = DescribePrivatePath(runtime, "/MyRoot/Table", true, true);
+            const auto& t = desc.GetPathDescription().GetTable();
+            for (size_t i = 0; i < t.CdcStreamsSize(); ++i) {
+                const auto& s = t.GetCdcStreams(i);
+                if (s.GetName().EndsWith("_continuousBackupImpl")) {
+                    out.push_back(s.GetName());
+                }
+            }
+            return out;
+        };
+
+        // First full backup: creates continuous-backup stream S1.
+        TestBackupBackupCollection(runtime, ++txId, "/MyRoot",
+            R"(Name: ".backups/collections/)" DEFAULT_NAME_1 R"(")");
+        env.TestWaitNotification(runtime, txId);
+
+        auto names1 = cbStreamNames();
+        Cerr << "streams after backup 1: " << JoinSeq(",", names1) << Endl;
+        UNIT_ASSERT_VALUES_EQUAL_C(names1.size(), 1u, "first backup should create exactly one continuous-backup stream");
+        const TString s1 = names1[0];
+
+        // Advance the clock so the second backup's timestamp-based stream name differs from S1;
+        // that makes S1 the "old" stream the op drops (arming hasDrop in the copy sub-op).
+        env.SimulateSleep(runtime, TDuration::Seconds(2));
+
+        // Second full backup: drops S1, creates S2.
+        TestBackupBackupCollection(runtime, ++txId, "/MyRoot",
+            R"(Name: ".backups/collections/)" DEFAULT_NAME_1 R"(")");
+        env.TestWaitNotification(runtime, txId);
+
+        auto names2 = cbStreamNames();
+        Cerr << "streams after backup 2: " << JoinSeq(",", names2) << Endl;
+        // A new stream (name != S1) must exist -> the rotate/create ran; and S1 must be gone
+        // (or being dropped) -> the drop branch (hasDrop) ran.
+        bool hasNew = false;
+        bool s1Survives = false;
+        for (const auto& n : names2) {
+            if (n != s1) hasNew = true;
+            if (n == s1) s1Survives = true;
+        }
+        UNIT_ASSERT_C(hasNew, "second backup must create a new continuous-backup stream (rotation)");
+        UNIT_ASSERT_C(!s1Survives, "second backup must drop the prior continuous-backup stream S1");
+    }
+
     Y_UNIT_TEST(SingleTableWithMultipleGlobalSyncIndexes) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));

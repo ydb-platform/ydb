@@ -149,4 +149,71 @@ Y_UNIT_TEST_SUITE(TContinuousBackupTests) {
             NLs::CheckColumns("IncrBackupImpl", {"key", "value", "__ydb_incrBackupImpl_changeMetadata"}, {}, {"key"}),
         });
     }
-} // TCdcStreamWithInitialScanTests
+
+    // Multi-partition (P=4) characterization of the TakeIncrementalBackup action, which rotates the
+    // continuous-backup CDC stream and creates the increment table. NB: this action does NOT go
+    // through TCopyTable, so it does not exercise the copy-table grab/hoist fix -- that path is
+    // driven by full backup of a backup collection and is covered in ut_backup_collection. This
+    // test just guards the take-incremental flow at multi-partition scale.
+    Y_UNIT_TEST(TakeIncrementalBackupMultiShard) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableProtoSourceIdInfo(true));
+        ui64 txId = 100;
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "key" Type: "Uint64" }
+            Columns { Name: "value" Type: "Uint64" }
+            KeyColumnNames: ["key"]
+            UniformPartitionsCount: 4
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Table", true), {
+            NLs::PathExist,
+            NLs::IsTable,
+            NLs::PartitionCount(4),
+        });
+
+        TestCreateContinuousBackup(runtime, ++txId, "/MyRoot", R"(
+            TableName: "Table"
+            ContinuousBackupDescription {
+                StreamName: "0_continuousBackupImpl"
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/0_continuousBackupImpl"), {
+            NLs::PathExist,
+            NLs::StreamState(NKikimrSchemeOp::ECdcStreamStateReady),
+        });
+
+        TestAlterContinuousBackup(runtime, ++txId, "/MyRoot", R"(
+            TableName: "Table"
+            TakeIncrementalBackup {
+                DstPath: "IncrBackupImpl"
+                DstStreamPath: "1_continuousBackupImpl"
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        // The new incremental-backup stream must be ready across all shards...
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/1_continuousBackupImpl"), {
+            NLs::PathExist,
+            NLs::StreamState(NKikimrSchemeOp::ECdcStreamStateReady),
+        });
+
+        // ...and the destination incremental-backup table must be created correctly.
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/IncrBackupImpl"), {
+            NLs::PathExist,
+            NLs::IsTable,
+            NLs::CheckColumns("IncrBackupImpl", {"key", "value", "__ydb_incrBackupImpl_changeMetadata"}, {}, {"key"}),
+        });
+
+        // The source table still has its original partitions after the copy.
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Table", true), {
+            NLs::PathExist,
+            NLs::PartitionCount(4),
+        });
+    }
+} // TContinuousBackupTests

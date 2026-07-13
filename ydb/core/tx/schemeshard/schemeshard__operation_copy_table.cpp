@@ -83,6 +83,32 @@ public:
                  "CopyTable partition counts don't match");
         const ui64 dstSchemaVersion = NEW_TABLE_ALTER_VERSION;
 
+        TVector<TPathId> streamsToDrop;
+        TPath srcPath = TPath::Init(txState->SourcePathId, context.SS);
+        for (const auto& [name, id] : srcPath.Base()->GetChildren()) {
+            if (context.SS->PathsById.contains(id)) {
+                auto childPath = context.SS->PathsById.at(id);
+                if (childPath->IsCdcStream() &&
+                    childPath->PathState == TPathElement::EPathState::EPathStateDrop &&
+                    childPath->DropTxId == OperationId.GetTxId()) {
+                    streamsToDrop.push_back(id);
+                }
+            }
+        }
+
+        const bool hasDrop = !streamsToDrop.empty();
+        const bool hasCreate = (txState->CdcPathId != InvalidPathId);
+
+        ui64 coordVersion = 0;
+        if (hasDrop || hasCreate) {
+            auto srcTable = context.SS->Tables.at(txState->SourcePathId);
+            srcTable->InitAlterData(OperationId);
+            coordVersion = srcTable->AlterData->CoordinatedSchemaVersion.GetOrElse(srcTable->AlterVersion + 1);
+
+            NIceDb::TNiceDb db(context.GetDB());
+            context.SS->PersistAddAlterTable(db, txState->SourcePathId, srcTable->AlterData);
+        }
+
         for (ui32 i = 0; i < dstTableInfo->GetPartitions().size(); ++i) {
             TShardIdx srcShardIdx = srcTableInfo->GetPartitions()[i]->ShardIdx;
             TTabletId srcDatashardId = context.SS->ShardInfos[srcShardIdx].TabletID;
@@ -120,35 +146,9 @@ public:
             NKikimrTxDataShard::TFlatSchemeTransaction oldShardTx;
             context.SS->FillSeqNo(oldShardTx, seqNo);
 
-            TVector<TPathId> streamsToDrop;
-            TPath srcPath = TPath::Init(txState->SourcePathId, context.SS);
-            for (const auto& [name, id] : srcPath.Base()->GetChildren()) {
-                if (context.SS->PathsById.contains(id)) {
-                    auto childPath = context.SS->PathsById.at(id);
-                    if (childPath->IsCdcStream() &&
-                        childPath->PathState == TPathElement::EPathState::EPathStateDrop &&
-                        childPath->DropTxId == OperationId.GetTxId()) {
-                        streamsToDrop.push_back(id);
-                    }
-                }
-            }
-
-            bool hasDrop = !streamsToDrop.empty();
-            bool hasCreate = (txState->CdcPathId != InvalidPathId);
-
             if (hasDrop || hasCreate) {
                 auto& combined = *oldShardTx.MutableCreateIncrementalBackupSrc();
                 FillSrcSnapshot(txState, ui64(dstDatashardId), *combined.MutableSendSnapshot());
-
-                // Get coordinated version from source table's AlterData (shared across both drop and create)
-                // GrabTable is needed for proper rollback if operation fails
-                context.MemChanges.GrabTable(context.SS, txState->SourcePathId);
-                auto srcTable = context.SS->Tables.at(txState->SourcePathId);
-                srcTable->InitAlterData(OperationId);
-                ui64 coordVersion = srcTable->AlterData->CoordinatedSchemaVersion.GetOrElse(srcTable->AlterVersion + 1);
-
-                NIceDb::TNiceDb db(context.GetDB());
-                context.SS->PersistAddAlterTable(db, txState->SourcePathId, srcTable->AlterData);
 
                 if (hasDrop) {
                     auto& dropNotice = *combined.MutableDropCdcStreamNotice();
@@ -306,7 +306,6 @@ public:
             }
 
             if (hasCdcChanges && context.SS->Tables.contains(srcPathId)) {
-                context.MemChanges.GrabTable(context.SS, srcPathId);
                 auto srcTable = context.SS->Tables.at(srcPathId);
 
                 // Don't call InitAlterData() here - it was already called in ConfigureParts,
@@ -328,7 +327,6 @@ public:
                 if (parentPathId && context.SS->PathsById.contains(parentPathId)) {
                     auto parentPath = context.SS->PathsById.at(parentPathId);
                     if (parentPath->IsTableIndex() && context.SS->Indexes.contains(parentPathId)) {
-                        context.MemChanges.GrabIndex(context.SS, parentPathId);
                         auto index = context.SS->Indexes.at(parentPathId);
                         if (index->AlterVersion < srcTable->AlterVersion) {
                             index->AlterVersion = srcTable->AlterVersion;
@@ -352,7 +350,6 @@ public:
                         continue;
                     }
                     if (context.SS->Indexes.contains(childPathId)) {
-                        context.MemChanges.GrabIndex(context.SS, childPathId);
                         auto index = context.SS->Indexes.at(childPathId);
                         if (index->AlterVersion < srcTable->AlterVersion) {
                             index->AlterVersion = srcTable->AlterVersion;
@@ -371,7 +368,6 @@ public:
             context.OnComplete.PublishToSchemeBoard(OperationId, srcPathId);
 
             if (txState->CdcPathId != InvalidPathId && context.SS->CdcStreams.contains(txState->CdcPathId)) {
-                context.MemChanges.GrabCdcStream(context.SS, txState->CdcPathId);
                 auto stream = context.SS->CdcStreams.at(txState->CdcPathId);
                 if (stream->AlterData) {
                     stream->FinishAlter();
@@ -388,8 +384,6 @@ public:
                     if (streamPath->IsCdcStream() &&
                         streamPath->PathState == TPathElement::EPathState::EPathStateDrop &&
                         streamPath->DropTxId == OperationId.GetTxId()) {
-
-                        context.MemChanges.GrabCdcStream(context.SS, id);
 
                         context.SS->PersistRemoveCdcStream(db, id);
                         context.SS->CdcStreams.erase(id);

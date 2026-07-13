@@ -690,5 +690,12 @@ public:
 };
 #endif
 
+class TUdfStoreInitializer: public IKikimrServicesInitializer {
+    TIntrusivePtr<NMiniKQL::IMutableFunctionRegistry> FunctionRegistry;
+public:
+    TUdfStoreInitializer(const TKikimrRunConfig& runConfig, TIntrusivePtr<NMiniKQL::IMutableFunctionRegistry> functionRegistry);
+    void InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) override;
+};
+
 } // namespace NKikimrServicesInitializers
 } // namespace NKikimr

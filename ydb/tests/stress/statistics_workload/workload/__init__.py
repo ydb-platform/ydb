@@ -75,7 +75,8 @@ class Workload(object):
                 CREATE TABLE `{table_name}` (
                 id    Int64 NOT NULL,
                 value Int64,
-                PRIMARY KEY(id)
+                PRIMARY KEY(id),
+                STATISTICS cms_multi ON (id, value) WITH (COUNT_MIN_SKETCH)
                 )
                 PARTITION BY HASH(id)
                 WITH (
@@ -124,6 +125,10 @@ class Workload(object):
         query = f"SELECT count(*) FROM `{table_statistics}` WHERE local_path_id = {path_id}"
         return self.driver.table_client.scan_query(query).next().result_set.rows[0][0]
 
+    def statistics_multi_count(self, table_statistics_multi, path_id):
+        query = f"SELECT count(*) FROM `{table_statistics_multi}` WHERE local_path_id = {path_id}"
+        return self.driver.table_client.scan_query(query).next().result_set.rows[0][0]
+
     def analyze(self, table_path):
         def callee(session):
             session.execute_scheme(f"ANALYZE `{table_path}`")
@@ -154,17 +159,29 @@ class Workload(object):
         # Check if any analyze operations are present - they should be in the list
         analyze_operations_found = False
         for op in operations:
-            if hasattr(op, 'metadata') and hasattr(op.metadata, 'state'):
-                logger.info(f"[{table_path}] Operation {op.id}: state={op.metadata.state}, progress={op.metadata.progress}")
-                # Check if this is an analyze operation by looking at metadata structure
-                if hasattr(op.metadata, 'paths') or hasattr(op.metadata, 'done_paths'):
+            if hasattr(op, 'metadata') and op.metadata.type_url:
+                metadata = ydb._apis.ydb_table.AnalyzeMetadata()
+                op.metadata.Unpack(metadata)
+                state = ydb._apis.ydb_table.AnalyzeState.State.Name(metadata.state) if metadata.HasField('state') else "UNKNOWN"
+                logger.info(f"[{table_path}] Operation {op.id}: state={state}, progress={metadata.progress}")
+                if metadata.paths or metadata.done_paths:
                     analyze_operations_found = True
-                    logger.info(f"[{table_path}] Found ANALYZE operation {op.id} with state={op.metadata.state}")
+                    logger.info(f"[{table_path}] Found ANALYZE operation {op.id} with state={state}")
 
         # Assert that ANALYZE operations are present in the background operations list
         assert analyze_operations_found, \
             f"[{table_path}] ANALYZE operation must be present in background operations list after ANALYZE command"
         logger.info(f"[{table_path}] ✓ ANALYZE operation successfully found in background operations list")
+
+    def wait_for_planner_row_count_estimate(self, table_name, expected_count, trace_id, timeout=120, poll_interval=5):
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            planner_rc = self.get_planner_row_count_estimate(table_name)
+            if planner_rc == expected_count:
+                return planner_rc
+            logger.info(f"[{trace_id}] planner row count estimate is not ready yet: {planner_rc}, expected={expected_count}")
+            time.sleep(poll_interval)
+        raise Exception(f"[{trace_id}] planner row count estimate for '{table_name}' did not become {expected_count} within {timeout} seconds")
 
     def get_planner_row_count_estimate(self, table_name):
         with InstrumentedQuerySessionPool(self.driver) as session_pool:
@@ -189,6 +206,7 @@ class Workload(object):
         table_name = table_name_with_prefix(self.table_prefix)
         table_path = self.database + "/" + table_name
         table_statistics = ".metadata/_statistics"
+        table_statistics_multi = ".metadata/_statistics_multi"
         trace_id = random_string(5)
 
         try:
@@ -212,9 +230,6 @@ class Workload(object):
             if count != self.batch_count * self.batch_size:
                 raise Exception(f"[{trace_id}] the number of rows in the '{table_name}' does not match the expected")
 
-            logger.info(f"[{trace_id}] waiting to receive information about the table '{table_name}' from scheme shard")
-            time.sleep(300)
-
             logger.info(f"[{trace_id}] analyze '{table_name}'")
             self.analyze(table_path)
 
@@ -223,16 +238,20 @@ class Workload(object):
             if count == 0:
                 raise Exception(f"[{trace_id}] statistics table '{table_statistics}' is empty")
 
-            planner_rc = self.get_planner_row_count_estimate(table_name)
-            if planner_rc != self.batch_count * self.batch_size:
-                raise Exception(
-                    f"[{trace_id}] row count planner estimate for '{table_name}': {planner_rc}"
-                    f" does not match the expected value: {self.batch_count * self.batch_size}")
+            multi_count = self.statistics_multi_count(table_statistics_multi, path_id)
+            logger.info(f"[{trace_id}] number of rows in statistics table '{table_statistics_multi}' {multi_count}")
+            if multi_count == 0:
+                raise Exception(f"[{trace_id}] statistics table '{table_statistics_multi}' is empty")
+
+            expected_count = self.batch_count * self.batch_size
+            self.wait_for_planner_row_count_estimate(table_name, expected_count, trace_id)
         except Exception as e:
             logger.error(f"[{trace_id}] {type(e)}, {e}")
+            raise
 
-        logger.info(f"[{trace_id}] drop table '{table_name}'")
-        self.drop_table(table_path)
+        finally:
+            logger.info(f"[{trace_id}] drop table '{table_name}'")
+            self.drop_table(table_path)
 
     def run(self):
         started_at = time.time()

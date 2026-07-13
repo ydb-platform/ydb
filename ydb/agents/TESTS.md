@@ -50,4 +50,4 @@ Upgrade/downgrade tests live under `ydb/tests/compatibility/`.
 
 CLI tests (`ya make -tA`) run only on Linux.
 
-Build rules: [`AGENTS.md`](AGENTS.md).
+Build rules: [`GUIDE.md`](GUIDE.md).

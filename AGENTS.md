@@ -1,5 +1,7 @@
 # Project
 
+Before editing, read the nearest `AGENTS.md` to the code you change.
+
 ## Build & Test
 
 ```bash

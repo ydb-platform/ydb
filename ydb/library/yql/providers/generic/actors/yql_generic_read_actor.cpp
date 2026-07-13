@@ -71,6 +71,20 @@ namespace NYql::NDq {
 
         void Bootstrap() {
             Become(&TGenericReadActor::StateFunc);
+            if (!TokenProvider_->IsReady()) {
+                TokenProvider_->Subscribe([
+                    actorSystem = TActivationContext::ActorSystem(),
+                    selfId = SelfId()
+                ]() {
+                    actorSystem->Send(selfId, new NActors::TEvents::TEvWakeup());
+                });
+                return;
+            }
+            Startup();
+        }
+
+        void Startup() {
+            Y_ENSURE(TokenProvider_->IsReady());
             auto issue = InitSplitsReading();
             if (issue) {
                 return NotifyComputeActorWithIssue(
@@ -89,6 +103,7 @@ namespace NYql::NDq {
                       hFunc(TEvReadSplitsIterator, Handle);
                       hFunc(TEvReadSplitsPart, Handle);
                       hFunc(TEvReadSplitsFinished, Handle);
+                      sFunc(NActors::TEvents::TEvWakeup, Startup);
                       , ExceptionFunc(std::exception, HandleException)
         )
         // clang-format on

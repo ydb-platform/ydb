@@ -205,6 +205,7 @@ message TFeatureFlags {
     optional bool EnableLoginCache = 178 [default = false];
     optional bool SwitchToConfigV2 = 179 [default = false];
     optional bool SwitchToConfigV1 = 180 [default = false];
+    // Implies EnableExportFiltering.
     optional bool EnableEncryptedExport = 181 [default = false];
     optional bool EnableAlterDatabase = 182 [default = false];
     optional bool EnableExportAutoDropping = 183 [default = true];
@@ -301,4 +302,5 @@ message TFeatureFlags {
     optional bool EnableTablePartitionsConsistencyCheck = 276 [default = true];
     optional bool EnableKqpConstraintsTransformer = 277 [default = false];
     optional bool EnableSmallBlobsQuotaEnforcement = 288 [default = false];
+    optional bool EnableExportFiltering = 291 [default = false];
 }

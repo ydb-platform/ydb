@@ -1,0 +1,277 @@
+--- a/Lib/IR/Validate.cpp
++++ b/Lib/IR/Validate.cpp
+@@ -475,6 +475,22 @@ struct FunctionValidationContext
+ 		VALIDATE_FEATURE("catch_all", exceptionHandling);
+ 		validateCatch();
+ 	}
++	void delegate(DelegateImm imm)
++	{
++		VALIDATE_FEATURE("delegate", exceptionHandling);
++		WAVM_ASSERT(controlStack.size());
++
++		if(controlStack.back().type != ControlContext::Type::try_)
++		{ throw ValidationException("delegate may occur only in try context"); }
++
++		TypeTuple results = controlStack.back().results;
++
++		popAndValidateTypeTuple("end result", controlStack.back().results);
++		validateStackEmptyAtEndOfControlStructure();
++
++		controlStack.pop_back();
++		if(controlStack.size()) { pushOperandTuple(results); }
++	}
+ 
+ 	void return_(NoImm)
+ 	{
+--- a/Lib/LLVMJIT/EmitCore.cpp
++++ b/Lib/LLVMJIT/EmitCore.cpp
+@@ -197,6 +197,12 @@ void EmitFunctionContext::end(NoImm)
+ 	WAVM_ASSERT(currentContext.outerBranchTargetStackSize <= branchTargetStack.size());
+ 	branchTargetStack.resize(currentContext.outerBranchTargetStackSize);
+ 
++	if (controlStack.back().type != ControlContext::Type::catch_) {
++		WAVM_ASSERT(!catchStack.empty());
++		WAVM_ASSERT(!catchStack.back().has_value());
++		catchStack.pop_back();
++	}
++
+ 	// Pop this control context.
+ 	controlStack.pop_back();
+ }
+--- a/Lib/LLVMJIT/EmitExceptions.cpp
++++ b/Lib/LLVMJIT/EmitExceptions.cpp
+@@ -74,7 +74,7 @@ void EmitFunctionContext::endTryWithoutCatch()
+ void EmitFunctionContext::endTryCatch()
+ {
+ 	WAVM_ASSERT(catchStack.size());
+-	CatchContext& catchContext = catchStack.back();
++	CatchContext& catchContext = catchStack.back().value();
+ 
+ 	exitCatch();
+ 
+@@ -100,7 +100,7 @@ void EmitFunctionContext::exitCatch()
+ 	WAVM_ASSERT(currentContext.type == ControlContext::Type::catch_);
+ 
+ 	WAVM_ASSERT(catchStack.size());
+-	CatchContext& catchContext = catchStack.back();
++	CatchContext& catchContext = catchStack.back().value();
+ 
+ 	if(currentContext.isReachable)
+ 	{
+@@ -228,7 +228,7 @@ void EmitFunctionContext::catch_(ExceptionTypeImm imm)
+ 	WAVM_ASSERT(controlStack.size());
+ 	WAVM_ASSERT(catchStack.size());
+ 	ControlContext& controlContext = controlStack.back();
+-	CatchContext& catchContext = catchStack.back();
++	CatchContext& catchContext = catchStack.back().value();
+ 	WAVM_ASSERT(controlContext.type == ControlContext::Type::try_
+ 				|| controlContext.type == ControlContext::Type::catch_);
+ 	if(controlContext.type == ControlContext::Type::try_)
+@@ -283,7 +283,7 @@ void EmitFunctionContext::catch_all(NoImm)
+ 	WAVM_ASSERT(controlStack.size());
+ 	WAVM_ASSERT(catchStack.size());
+ 	ControlContext& controlContext = controlStack.back();
+-	CatchContext& catchContext = catchStack.back();
++	CatchContext& catchContext = catchStack.back().value();
+ 	WAVM_ASSERT(controlContext.type == ControlContext::Type::try_
+ 				|| controlContext.type == ControlContext::Type::catch_);
+ 	if(controlContext.type == ControlContext::Type::try_)
+@@ -318,6 +318,13 @@ void EmitFunctionContext::catch_all(NoImm)
+ 	controlContext.type = ControlContext::Type::catch_;
+ 	controlContext.isReachable = true;
+ }
++void EmitFunctionContext::delegate(DelegateImm imm)
++{
++	// NB: We temporally rewrite `delegate` as `catch_all` + `rethrow`.
++	catch_all(NoImm{});
++	rethrow(RethrowImm{0});
++	end(NoImm{});
++}
+ 
+ void EmitFunctionContext::throw_(ExceptionTypeImm imm)
+ {
+@@ -368,7 +375,7 @@ void EmitFunctionContext::throw_(ExceptionTypeImm imm)
+ void EmitFunctionContext::rethrow(RethrowImm imm)
+ {
+ 	WAVM_ASSERT(imm.catchDepth < catchStack.size());
+-	CatchContext& catchContext = catchStack[catchStack.size() - imm.catchDepth - 1];
++	CatchContext& catchContext = catchStack[catchStack.size() - imm.catchDepth - 1].value();
+ 	emitRuntimeIntrinsic(
+ 		"throwException",
+ 		FunctionType(
+--- a/Lib/LLVMJIT/EmitFunction.cpp
++++ b/Lib/LLVMJIT/EmitFunction.cpp
+@@ -198,6 +198,10 @@ void EmitFunctionContext::pushControlStack(ControlContext::Type type,
+ 							stack.size(),
+ 							branchTargetStack.size(),
+ 							true});
++
++	if (type != ControlContext::Type::try_) {
++		catchStack.push_back(std::nullopt);
++	}
+ }
+ 
+ void EmitFunctionContext::pushBranchTarget(TypeTuple branchArgumentType,
+@@ -286,6 +290,10 @@ struct UnreachableOpVisitor
+ 	{
+ 		if(!unreachableControlDepth) { context.catch_all(imm); }
+ 	}
++	void delegate(DelegateImm imm)
++	{
++		if(!unreachableControlDepth) { context.delegate(imm); }
++	}
+ 
+ private:
+ 	EmitFunctionContext& context;
+--- a/Lib/LLVMJIT/EmitFunctionContext.h
++++ b/Lib/LLVMJIT/EmitFunctionContext.h
+@@ -283,7 +283,7 @@ namespace WAVM { namespace LLVMJIT {
+ 			llvm::Value* exceptionTypeId;
+ 		};
+ 
+-		std::vector<CatchContext> catchStack;
++		std::vector<std::optional<CatchContext>> catchStack;
+ 
+ 		void endTryWithoutCatch();
+ 		void endTryCatch();
+--- a/Lib/WASM/WASMSerialization.cpp
++++ b/Lib/WASM/WASMSerialization.cpp
+@@ -221,7 +221,14 @@ namespace WAVM { namespace IR {
+ 
+ 	template<typename Stream> void serialize(Stream& stream, ExceptionType& exceptionType)
+ 	{
+-		serialize(stream, exceptionType.params);
++		U8 attribute = 0;
++		serializeVarUInt7(stream, attribute);
++		if (attribute != 0) {
++			throw FatalSerializationException("tag attribute must be 0");
++		}
++
++		U32 index = 0;
++		serializeVarUInt7(stream, index);
+ 	}
+ 
+ 	static void serialize(InputStream& stream, ExternKind& kind)
+@@ -234,7 +241,7 @@ namespace WAVM { namespace IR {
+ 		case 1: kind = ExternKind::table; break;
+ 		case 2: kind = ExternKind::memory; break;
+ 		case 3: kind = ExternKind::global; break;
+-		case 127: kind = ExternKind::exceptionType; break;
++		case 4: kind = ExternKind::exceptionType; break;
+ 		default: throw FatalSerializationException("invalid reference type encoding");
+ 		};
+ 	}
+@@ -247,7 +254,7 @@ namespace WAVM { namespace IR {
+ 		case ExternKind::table: encodedKind = 1; break;
+ 		case ExternKind::memory: encodedKind = 2; break;
+ 		case ExternKind::global: encodedKind = 3; break;
+-		case ExternKind::exceptionType: encodedKind = 127; break;
++		case ExternKind::exceptionType: encodedKind = 4; break;
+ 		case ExternKind::invalid:
+ 		default: WAVM_UNREACHABLE();
+ 		};
+@@ -794,6 +801,12 @@ void serialize(Stream& stream,
+ }
+ 
+ template<typename Stream>
++void serialize(Stream& stream, DelegateImm& imm, const FunctionDef&, const ModuleSerializationState&)
++{
++	serializeVarUInt32(stream, imm.catchDepth);
++}
++
++template<typename Stream>
+ void serialize(Stream& stream, RethrowImm& imm, const FunctionDef&, const ModuleSerializationState&)
+ {
+ 	serializeVarUInt32(stream, imm.catchDepth);
+@@ -1226,6 +1239,7 @@ template<typename Stream> void serializeImportSection(Stream& moduleStream, Modu
+ 					ExceptionType exceptionType;
+ 					serialize(sectionStream, exceptionType);
+ 					kindIndex = module.exceptionTypes.imports.size();
++					exceptionType.params = TypeTuple({ValueType::i64});
+ 					module.exceptionTypes.imports.push_back(
+ 						{exceptionType, std::move(moduleName), std::move(exportName)});
+ 					break;
+--- a/Lib/WASTParse/ParseFunction.cpp
++++ b/Lib/WASTParse/ParseFunction.cpp
+@@ -580,6 +580,14 @@ static void parseImm(CursorState* cursor, ExceptionTypeImm& outImm)
+ 										cursor->moduleState->module.exceptionTypes.size(),
+ 										"exception type");
+ }
++static void parseImm(CursorState* cursor, DelegateImm& outImm)
++{
++	if(!tryParseAndResolveBranchTargetRef(cursor, outImm.catchDepth))
++	{
++		parseErrorf(cursor->parseState, cursor->nextToken, "expected try label or index");
++		throw RecoverParseException();
++	}
++}
+ static void parseImm(CursorState* cursor, RethrowImm& outImm)
+ {
+ 	if(!tryParseAndResolveBranchTargetRef(cursor, outImm.catchDepth))
+--- a/Lib/WASTPrint/Print.cpp
++++ b/Lib/WASTPrint/Print.cpp
+@@ -567,6 +567,14 @@ struct FunctionPrintContext
+ 		string += "\nthrow " + moduleContext.names.exceptionTypes[imm.exceptionTypeIndex];
+ 	}
+ 
++	void delegate(DelegateImm imm)
++	{
++		WAVM_ASSERT(controlStack[controlStack.size() - 1 - imm.catchDepth].type == ControlContext::Type::try_ ||
++					controlStack[controlStack.size() - 1 - imm.catchDepth].type == ControlContext::Type::block);
++
++		string += "\ndelegate " + getBranchTargetId(imm.catchDepth);
++	}
++
+ 	void rethrow(RethrowImm imm)
+ 	{
+ 		WAVM_ASSERT(controlStack[controlStack.size() - 1 - imm.catchDepth].type
+--- a/Include/WAVM/IR/OperatorPrinter.h
++++ b/Include/WAVM/IR/OperatorPrinter.h
+@@ -122,6 +122,7 @@ namespace WAVM { namespace IR {
+ 			};
+ 		}
+ 		std::string describeImm(ExceptionTypeImm) { return ""; }
++		std::string describeImm(DelegateImm) { return ""; }
+ 		std::string describeImm(RethrowImm) { return ""; }
+ 
+ 		std::string describeImm(DataSegmentAndMemImm imm)
+--- a/Include/WAVM/IR/OperatorTable.h
++++ b/Include/WAVM/IR/OperatorTable.h
+@@ -11,9 +11,10 @@
+ 	visitOp(0x0004, if_                , "if"                               , ControlStructureImm       , POLYMORPHIC               , mvp                    )   \
+ 	visitOp(0x0005, else_              , "else"                             , NoImm                     , POLYMORPHIC               , mvp                    )   \
+ 	visitOp(0x000b, end                , "end"                              , NoImm                     , POLYMORPHIC               , mvp                    )   \
+-	visitOp(0xfb02, try_               , "try"                              , ControlStructureImm       , POLYMORPHIC               , exceptionHandling      )   \
+-	visitOp(0xfb03, catch_             , "catch"                            , ExceptionTypeImm          , POLYMORPHIC               , exceptionHandling      )   \
+-	visitOp(0xfb04, catch_all          , "catch_all"                        , NoImm                     , POLYMORPHIC               , exceptionHandling      )
++	visitOp(0x0006, try_               , "try"                              , ControlStructureImm       , POLYMORPHIC               , exceptionHandling      )   \
++	visitOp(0x0007, catch_             , "catch"                            , ExceptionTypeImm          , POLYMORPHIC               , exceptionHandling      )   \
++	visitOp(0x0018, delegate           , "delegate"                         , DelegateImm               , POLYMORPHIC               , exceptionHandling      )   \
++	visitOp(0x0019, catch_all          , "catch_all"                        , NoImm                     , POLYMORPHIC               , exceptionHandling      )
+ 
+ #define WAVM_ENUM_PARAMETRIC_OPERATORS(visitOp)                                                                                                                  \
+ /* Control flow                                                                                                                                               */ \
+@@ -38,8 +39,8 @@
+ 	visitOp(0xfc0f, table_grow         , "table.grow"                       , TableImm                  , POLYMORPHIC               , referenceTypes         )   \
+ 	visitOp(0xfc11, table_fill         , "table.fill"                       , TableImm                  , POLYMORPHIC               , referenceTypes         )   \
+ /* Exceptions                                                                                                                                                 */ \
+-	visitOp(0xfb00, throw_             , "throw"                            , ExceptionTypeImm          , POLYMORPHIC               , exceptionHandling      )   \
+-	visitOp(0xfb01, rethrow            , "rethrow"                          , RethrowImm                , POLYMORPHIC               , exceptionHandling      )   \
++	visitOp(0x0008, throw_             , "throw"                            , ExceptionTypeImm          , POLYMORPHIC               , exceptionHandling      )   \
++	visitOp(0x0009, rethrow            , "rethrow"                          , RethrowImm                , POLYMORPHIC               , exceptionHandling      )   \
+ /* References                                                                                                                                                 */ \
+ 	visitOp(0x00d0, ref_null           , "ref.null"                         , ReferenceTypeImm          , POLYMORPHIC               , referenceTypes         )   \
+ 	visitOp(0x00d1, ref_is_null        , "ref.is_null"                      , NoImm                     , POLYMORPHIC               , referenceTypes         )
+--- a/Include/WAVM/IR/Operators.h
++++ b/Include/WAVM/IR/Operators.h
+@@ -140,6 +140,10 @@ namespace WAVM { namespace IR {
+ 	{
+ 		Uptr exceptionTypeIndex;
+ 	};
++	struct DelegateImm
++	{
++		Uptr catchDepth;
++	};
+ 	struct RethrowImm
+ 	{
+ 		Uptr catchDepth;

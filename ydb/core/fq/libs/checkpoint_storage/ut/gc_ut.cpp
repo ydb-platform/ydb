@@ -85,6 +85,7 @@ class TGcTestBase: public NUnitTest::TTestBase {
             InitTestServer();
         }
         Connection = MakeConnection();
+        Counters = MakeIntrusive<::NMonitoring::TDynamicCounters>();
         Init();
     }
 
@@ -131,7 +132,8 @@ class TGcTestBase: public NUnitTest::TTestBase {
         Fill();
 
         TCheckpointStorageSettings::TGcSettings gcConfig;
-        auto gc = NewGC(gcConfig, CheckpointStorage, StateStorage);
+
+        auto gc = NewGC(gcConfig, CheckpointStorage, StateStorage, Counters);
         ActorGC = GetRuntime()->Register(gc.release());
         Runtime->DispatchEvents({}, TDuration::Zero());
     }
@@ -190,9 +192,11 @@ class TGcTestBase: public NUnitTest::TTestBase {
         TCoordinatorId coordinator("graph", 11);
 
         auto request = std::make_unique<TEvCheckpointStorage::TEvNewCheckpointSucceeded>(
+            sender,
             coordinator,
             checkpointUpperBound,
-            type);
+            type,
+            0);
 
         auto handle = MakeHolder<IEventHandle>(ActorGC, sender, request.release());
         GetRuntime()->Send(handle.Release());
@@ -251,6 +255,7 @@ private:
     TString YdbDatabase;
     NKikimr::TActorSystemStub ActorSystemStub;
     std::unique_ptr<TTestActorRuntime> Runtime;
+    ::NMonitoring::TDynamicCounterPtr Counters;
 
     UNIT_TEST_SUITE_DEMANGLE(TSelf);
     UNIT_TEST(ShouldRemovePreviousCheckpoints);

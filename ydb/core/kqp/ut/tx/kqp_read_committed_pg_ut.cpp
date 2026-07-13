@@ -46,7 +46,7 @@ Y_UNIT_TEST_SUITE(KqpReadCommittedPg) {
     }
 
     // =========================================================================
-    // Test 1: Update locks an existing row
+    // Update locks an existing row
     // =========================================================================
     class TUpdateLocksExistingRow : public TTableDataModificationTester {
     protected:
@@ -125,7 +125,7 @@ Y_UNIT_TEST_SUITE(KqpReadCommittedPg) {
     }
 
     // =========================================================================
-    // Test 2: Delete locks an existing row
+    // Delete locks an existing row
     // =========================================================================
     class TDeleteLocksExistingRow : public TTableDataModificationTester {
     protected:
@@ -203,7 +203,7 @@ Y_UNIT_TEST_SUITE(KqpReadCommittedPg) {
     }
 
     // =========================================================================
-    // Test 3: Update of non-existing row locks nothing
+    // Update of non-existing row locks nothing
     // =========================================================================
     class TUpdateNonExistingLocksNothing : public TTableDataModificationTester {
     protected:
@@ -275,7 +275,7 @@ Y_UNIT_TEST_SUITE(KqpReadCommittedPg) {
     }
 
     // =========================================================================
-    // Test 4: Delete of non-existing row locks nothing
+    // Delete of non-existing row locks nothing
     // =========================================================================
     class TDeleteNonExistingLocksNothing : public TTableDataModificationTester {
     protected:
@@ -347,7 +347,7 @@ Y_UNIT_TEST_SUITE(KqpReadCommittedPg) {
     }
 
     // =========================================================================
-    // Test 5: Range update locks only existing matching rows
+    // Range update locks only existing matching rows
     // =========================================================================
     class TRangeUpdateLocksExistingRows : public TTableDataModificationTester {
     protected:
@@ -420,7 +420,7 @@ Y_UNIT_TEST_SUITE(KqpReadCommittedPg) {
     }
 
     // =========================================================================
-    // Test 6: Range update does not lock gaps
+    // Range update does not lock gaps
     // =========================================================================
     class TRangeUpdateDoesNotLockGaps : public TTableDataModificationTester {
     protected:
@@ -474,7 +474,7 @@ Y_UNIT_TEST_SUITE(KqpReadCommittedPg) {
     }
 
     // =========================================================================
-    // Test 7: Range delete locks only existing matching rows
+    // Range delete locks only existing matching rows
     // =========================================================================
     class TRangeDeleteLocksExistingRows : public TTableDataModificationTester {
     protected:
@@ -547,7 +547,7 @@ Y_UNIT_TEST_SUITE(KqpReadCommittedPg) {
     }
 
     // =========================================================================
-    // Test 8: Range delete does not lock gaps
+    // Range delete does not lock gaps
     // =========================================================================
     class TRangeDeleteDoesNotLockGaps : public TTableDataModificationTester {
     protected:
@@ -601,7 +601,7 @@ Y_UNIT_TEST_SUITE(KqpReadCommittedPg) {
     }
 
     // =========================================================================
-    // Test 9: Inserted but uncommitted row conflicts with same unique key
+    // Inserted but uncommitted row conflicts with same unique key
     // =========================================================================
     class TInsertUncommittedConflictsSameKey : public TTableDataModificationTester {
     protected:
@@ -665,7 +665,7 @@ Y_UNIT_TEST_SUITE(KqpReadCommittedPg) {
     }
 
     // =========================================================================
-    // Test 10: Update waits for uncommitted inserted row with same key
+    // Update waits for uncommitted inserted row with same key
     // =========================================================================
     class TUpdateWaitsForUncommittedInsert : public TTableDataModificationTester {
     protected:
@@ -734,7 +734,7 @@ Y_UNIT_TEST_SUITE(KqpReadCommittedPg) {
     }
 
     // =========================================================================
-    // Test 11: Delete waits for uncommitted inserted row with same key
+    // Delete waits for uncommitted inserted row with same key
     // =========================================================================
     class TDeleteWaitsForUncommittedInsert : public TTableDataModificationTester {
     protected:
@@ -803,7 +803,7 @@ Y_UNIT_TEST_SUITE(KqpReadCommittedPg) {
     }
 
     // =========================================================================
-    // Test 12: New statement sees newly committed row
+    // New statement sees newly committed row
     // In READ COMMITTED, each statement gets a fresh snapshot.
     // =========================================================================
     class TNewStatementSeesNewlyCommittedRow : public TTableDataModificationTester {
@@ -870,7 +870,7 @@ Y_UNIT_TEST_SUITE(KqpReadCommittedPg) {
     }
 
     // =========================================================================
-    // Test 13: A single statement does not chase future inserted rows
+    // A single statement does not chase future inserted rows
     // =========================================================================
     class TSingleStatementDoesNotChaseFutureRows : public TTableDataModificationTester {
     protected:
@@ -960,7 +960,7 @@ Y_UNIT_TEST_SUITE(KqpReadCommittedPg) {
     }
 
     // =========================================================================
-    // Test 14: Concurrent update of same row uses latest committed version
+    // Concurrent update of same row uses latest committed version
     // =========================================================================
     class TConcurrentUpdateUsesLatestCommitted : public TTableDataModificationTester {
     protected:
@@ -1041,7 +1041,7 @@ Y_UNIT_TEST_SUITE(KqpReadCommittedPg) {
     }
 
     // =========================================================================
-    // Test 15: Waiting update may update zero rows after recheck
+    // Waiting update may update zero rows after recheck
     // =========================================================================
     class TWaitingUpdateMayUpdateZeroRows : public TTableDataModificationTester {
     protected:
@@ -1121,7 +1121,7 @@ Y_UNIT_TEST_SUITE(KqpReadCommittedPg) {
     }
 
     // =========================================================================
-    // Test 16: Waiting delete may delete zero rows after recheck
+    // Waiting delete may delete zero rows after recheck
     // =========================================================================
     class TWaitingDeleteMayDeleteZeroRows : public TTableDataModificationTester {
     protected:
@@ -1201,7 +1201,7 @@ Y_UNIT_TEST_SUITE(KqpReadCommittedPg) {
     }
 
     // =========================================================================
-    // Test 19: UPDATE ON locks a missing key (unlike UPDATE WHERE)
+    // UPDATE ON locks a missing key (unlike UPDATE WHERE)
     // =========================================================================
     class TUpdateOnLocksMissingKey : public TTableDataModificationTester {
     protected:
@@ -1273,7 +1273,7 @@ Y_UNIT_TEST_SUITE(KqpReadCommittedPg) {
     }
 
     // =========================================================================
-    // Test 20: DELETE ON locks a missing key (unlike DELETE WHERE)
+    // DELETE ON locks a missing key (unlike DELETE WHERE)
     // =========================================================================
     class TDeleteOnLocksMissingKey : public TTableDataModificationTester {
     protected:

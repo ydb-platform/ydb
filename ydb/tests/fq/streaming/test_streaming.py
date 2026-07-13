@@ -1543,3 +1543,58 @@ FROM `{table_name}`"""
 
         result_sets = kikimr.ydb_client.query(sql)
         assert result_sets[0].rows[0]['Data'] == message
+
+    @pytest.mark.parametrize("local_topics", [True, False])
+    @pytest.mark.parametrize("kikimr", [{"enable_shared_reading_structured_json_parsing": True}], indirect=["kikimr"])
+    def test_read_topic_shared_reading_structured_parsing(self: StreamingTestBase, kikimr: Kikimr, entity_name: Callable[[str], str], local_topics: bool) -> None:
+        inp, out, endpoint = self.get_io_names(
+            kikimr,
+            f"structured_json{local_topics!s:.1}",
+            local_topics,
+            entity_name,
+            partitions_count=1,
+            shared=True,
+        )
+
+        sql = R'''
+            CREATE STREAMING QUERY `{query_name}` AS
+            DO BEGIN
+                $in = SELECT * FROM {inp}
+                WITH (
+                    FORMAT="json_each_row",
+                    SCHEMA=(
+                        foo Struct<
+                            bar: String?,
+                            baz: List<Int>?,
+                            bat: Tuple<Int, String?>?,
+                            bet: Dict<String, Int>?>?,
+                        test String
+                    )
+                )
+                WHERE foo.bar regexp "lunch" and foo.bat.`0` > 0;
+                $in = SELECT foo.bar AS bar, foo.baz AS baz, foo.bat AS bat, foo.bet AS bet, test FROM $in;
+                $in = SELECT * FROM $in FLATTEN LIST BY baz;
+                INSERT INTO {out} SELECT UNWRAP(Yson::SerializeJson(Yson::From(TableRow()))) FROM $in;
+            END DO;'''
+
+        query_name1 = f"test_structured_json_{local_topics!s:.1}"
+        kikimr.ydb_client.query(sql.format(query_name=query_name1, inp=inp, out=out))
+        path1 = f"/Root/{query_name1}"
+        self.wait_completed_checkpoints(kikimr, path1)
+
+        # Check that streaming.query.tasks.count metric exists for both queries
+        self.wait_streaming_query_metric(kikimr, path1, "streaming.query.tasks.count", expected_value=1)
+
+        data = [
+            '{"foo":{"bar":"before lunch", "bat":[0]}}',
+            '{"foo":{"bar":"lunch time", "baz":[1,2], "bat":[1,"23456789876543212345678987654321"],"bet":{"a":1,"b23456789876543212345678987654321":2}},"test":"xyz23456789876543212345678987654321"}',
+        ]
+        expected_data = [
+            '{"bar":"lunch time","bat":[1,"23456789876543212345678987654321"],"baz":1,"bet":{"a":1,"b23456789876543212345678987654321":2},"test":"xyz23456789876543212345678987654321"}',
+            '{"bar":"lunch time","bat":[1,"23456789876543212345678987654321"],"baz":2,"bet":{"a":1,"b23456789876543212345678987654321":2},"test":"xyz23456789876543212345678987654321"}',
+        ]
+        self.write_stream(data, endpoint=endpoint)
+        assert self.read_stream(len(expected_data), topic_path=self.output_topic, endpoint=endpoint) == expected_data
+
+        sql = R'''DROP STREAMING QUERY `{query_name}`;'''
+        kikimr.ydb_client.query(sql.format(query_name=query_name1))

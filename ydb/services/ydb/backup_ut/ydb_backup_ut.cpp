@@ -3453,10 +3453,9 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
             case EIndexTypeLocalBloomFilter:
             case EIndexTypeLocalBloomNgramFilter:
             case EIndexTypeLocalMinMax:
+            case EIndexTypeLocalCountMinSketch:
             case EIndexTypeInvalid:
                 break; // not applicable
-            default:
-                UNIT_FAIL("Client backup/restore were not implemented for this index type");
         }
     }
 
@@ -4818,10 +4817,9 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
             case EIndexTypeLocalBloomFilter:
             case EIndexTypeLocalBloomNgramFilter:
             case EIndexTypeLocalMinMax:
+            case EIndexTypeLocalCountMinSketch:
             case EIndexTypeInvalid:
                 break; // not applicable
-            default:
-                UNIT_FAIL("S3 backup/restore were not implemented for this index type");
         }
     }
 

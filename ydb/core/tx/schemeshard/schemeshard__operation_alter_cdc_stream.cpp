@@ -60,7 +60,7 @@ public:
         NIceDb::TNiceDb db(context.GetDB());
 
         context.SS->PersistCdcStream(db, pathId);
-        context.SS->CdcStreams[pathId]->FinishAlter();
+        context.SS->CdcStreams.at(pathId)->FinishAlter();
 
         context.SS->ClearDescribePathCaches(path);
         context.OnComplete.PublishToSchemeBoard(OperationId, pathId);
@@ -195,7 +195,6 @@ public:
 
         auto guard = context.DbGuard();
         context.MemChanges.GrabPath(context.SS, streamPath.Base()->PathId);
-        context.MemChanges.GrabCdcStream(context.SS, streamPath.Base()->PathId);
         context.MemChanges.GrabNewTxState(context.SS, OperationId);
 
         context.DbChanges.PersistPath(streamPath.Base()->PathId);

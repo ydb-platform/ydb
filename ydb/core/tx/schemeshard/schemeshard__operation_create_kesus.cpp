@@ -56,9 +56,8 @@ TTxState& PrepareChanges(TOperationId operationId, TPathElement::TPtr parentDir,
         item->ApplyACL(acl);
     }
     context.SS->PersistPath(db, item->PathId);
-    context.SS->KesusInfos[pathId] = kesus;
+    context.SS->KesusInfos.Set(pathId, kesus, context.MemChanges);
     context.SS->PersistKesusInfo(db, pathId, kesus);
-    context.SS->IncrementPathDbRefCount(pathId);
 
     context.SS->PersistTxState(db, operationId);
     context.SS->PersistUpdateNextPathId(db);
@@ -140,7 +139,7 @@ public:
 
         txState->ClearShardsInProgress();
 
-        TKesusInfo::TPtr kesus = context.SS->KesusInfos[txState->TargetPathId];
+        TKesusInfo::TPtr kesus = context.SS->KesusInfos.at(txState->TargetPathId);
         Y_VERIFY_S(kesus, "kesus is null. PathId: " << txState->TargetPathId);
 
 

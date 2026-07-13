@@ -31,6 +31,19 @@ public:
         Acquire();
     }
 
+    // Tag for adopting an already-counted reference: arm the handle (so
+    // destruction releases) without acquiring. For TMemoryChanges undo restore,
+    // where the DbRefCount is rolled back by the path snapshot, not this handle.
+    struct TAdopt {};
+    static constexpr TAdopt Adopt{};
+
+    TPathRef(TAdopt, TSchemeShard* ss, const TPathId& pathId, const char* reason)
+        : SS(ss)
+        , PathId(pathId)
+        , Reason(reason)
+    {
+    }
+
     TPathRef(const TPathRef& other)
         : SS(other.SS)
         , PathId(other.PathId)

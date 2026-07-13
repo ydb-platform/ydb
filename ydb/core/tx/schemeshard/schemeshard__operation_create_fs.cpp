@@ -96,7 +96,7 @@ public:
 
         txState->ClearShardsInProgress();
 
-        auto fs = context.SS->FileStoreInfos[txState->TargetPathId];
+        auto fs = context.SS->FileStoreInfos.at(txState->TargetPathId);
         Y_VERIFY_S(fs, "FileStore info is null. PathId: " << txState->TargetPathId);
 
         Y_ABORT_UNLESS(txState->Shards.size() == 1);
@@ -514,9 +514,8 @@ TTxState& TCreateFileStore::PrepareChanges(
     }
     context.SS->PersistPath(db, fsPath->PathId);
 
-    context.SS->FileStoreInfos[pathId] = fs;
+    context.SS->FileStoreInfos.Set(pathId, fs, context.MemChanges);
     context.SS->PersistFileStoreInfo(db, pathId, fs);
-    context.SS->IncrementPathDbRefCount(pathId);
 
     context.SS->PersistTxState(db, operationId);
     context.SS->PersistUpdateNextPathId(db);

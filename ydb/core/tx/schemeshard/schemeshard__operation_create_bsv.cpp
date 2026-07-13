@@ -139,9 +139,8 @@ TTxState& PrepareChanges(TOperationId operationId, TPathElement::TPtr parentDir,
 
     TBlockStoreVolumeInfo::TPtr emptyVolume = new TBlockStoreVolumeInfo();
     emptyVolume->Shards.swap(volume->Shards);
-    context.SS->BlockStoreVolumes[pathId] = emptyVolume;
-    context.SS->BlockStoreVolumes[pathId]->AlterData = volume;
-    context.SS->IncrementPathDbRefCount(pathId);
+    context.SS->BlockStoreVolumes.Set(pathId, emptyVolume, context.MemChanges);
+    context.SS->BlockStoreVolumes.at(pathId)->AlterData = volume;
 
     context.SS->PersistBlockStoreVolume(db, pathId, emptyVolume);
     context.SS->PersistAddBlockStoreVolumeAlter(db, pathId, volume);

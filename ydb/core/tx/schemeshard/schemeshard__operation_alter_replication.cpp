@@ -240,7 +240,7 @@ public:
         Y_ABORT_UNLESS(alterData);
 
         NIceDb::TNiceDb db(context.GetDB());
-        context.SS->Replications[pathId] = alterData;
+        context.SS->Replications.Set(pathId, alterData, context.MemChanges);
         context.SS->PersistReplicationAlterRemove(db, pathId);
         context.SS->PersistReplication(db, pathId, *alterData);
 

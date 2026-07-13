@@ -50,7 +50,7 @@ public:
             return result;
         }
 
-        TBlockStoreVolumeInfo::TPtr volume = context.SS->BlockStoreVolumes[path.Base()->PathId];
+        TBlockStoreVolumeInfo::TPtr volume = context.SS->BlockStoreVolumes.at(path.Base()->PathId);
         if (volume->AlterVersion == 0) {
             result->SetError(NKikimrScheme::StatusMultipleModifications, "Block store volume is not created yet");
             return result;

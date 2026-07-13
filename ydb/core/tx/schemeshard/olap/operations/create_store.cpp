@@ -67,7 +67,7 @@ public:
                    << " at tabletId# " << ssId);
 
         TTxState* txState = context.SS->FindTxSafe(OperationId, TTxState::TxCreateOlapStore);
-        TOlapStoreInfo::TPtr pendingInfo = context.SS->OlapStores[txState->TargetPathId];
+        TOlapStoreInfo::TPtr pendingInfo = context.SS->OlapStores.at(txState->TargetPathId);
         Y_ABORT_UNLESS(pendingInfo);
         Y_ABORT_UNLESS(pendingInfo->AlterData);
         TOlapStoreInfo::TPtr storeInfo = pendingInfo->AlterData;
@@ -160,11 +160,11 @@ public:
         path->StepCreated = step;
         context.SS->PersistCreateStep(db, pathId, step);
 
-        TOlapStoreInfo::TPtr pending = context.SS->OlapStores[pathId];
+        TOlapStoreInfo::TPtr pending = context.SS->OlapStores.at(pathId);
         Y_ABORT_UNLESS(pending);
         TOlapStoreInfo::TPtr store = pending->AlterData;
         Y_ABORT_UNLESS(store);
-        context.SS->OlapStores[pathId] = store;
+        context.SS->OlapStores.Set(pathId, store, context.MemChanges);
 
         context.SS->PersistOlapStoreAlterRemove(db, pathId);
         context.SS->PersistOlapStore(db, pathId, *store);
@@ -462,10 +462,9 @@ public:
 
         TOlapStoreInfo::TPtr pending = std::make_shared<TOlapStoreInfo>();
         pending->AlterData = storeInfo;
-        context.SS->OlapStores[pathId] = pending;
+        context.SS->OlapStores.Set(pathId, pending, context.MemChanges);
         context.SS->PersistOlapStore(db, pathId, *pending);
         context.SS->PersistOlapStoreAlter(db, pathId, *storeInfo);
-        context.SS->IncrementPathDbRefCount(pathId);
 
         for (auto shard : txState.Shards) {
             Y_ABORT_UNLESS(shard.Operation == TTxState::CreateParts);

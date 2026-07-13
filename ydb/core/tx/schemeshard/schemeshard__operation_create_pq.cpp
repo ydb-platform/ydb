@@ -482,9 +482,8 @@ public:
         TTopicInfo::TPtr emptyGroup = new TTopicInfo;
         emptyGroup->Shards.swap(pqGroup->Shards);
 
-        context.SS->Topics[pathId] = emptyGroup;
-        context.SS->Topics[pathId]->AlterData = pqGroup;
-        context.SS->IncrementPathDbRefCount(pathId);
+        context.SS->Topics.Set(pathId, emptyGroup, context.MemChanges);
+        context.SS->Topics.at(pathId)->AlterData = pqGroup;
 
         context.DbChanges.PersistPersQueueGroup(pathId, emptyGroup);
         context.DbChanges.PersistAddPersQueueGroupAlter(pathId, pqGroup);

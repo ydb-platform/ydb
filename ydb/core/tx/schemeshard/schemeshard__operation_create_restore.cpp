@@ -81,7 +81,7 @@ struct TRestore {
         const TPath sourcePath = TPath::Init(pathId, context.SS);
         if (sourcePath->IsTable()) {
             Y_ABORT_UNLESS(context.SS->Tables.contains(txState.TargetPathId));
-            TTableInfo::TPtr table = context.SS->Tables[txState.TargetPathId];
+            TTableInfo::TPtr table = context.SS->Tables.at(txState.TargetPathId);
             return TableFinish(table, opId, txState, context);
         } else {
             Y_ABORT_UNLESS(context.SS->ColumnTables.contains(txState.TargetPathId));

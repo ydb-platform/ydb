@@ -96,7 +96,7 @@ public:
             TTableIndexInfo::TPtr indexData = context.SS->Indexes.at(dstPathId);
             Y_ABORT_UNLESS(indexData->AlterData, "AlterData must be valid after TTableIndexInfo::Create");
             context.SS->PersistTableIndex(db, dstPathId);
-            context.SS->Indexes[dstPathId] = indexData->AlterData;
+            context.SS->Indexes.Set(dstPathId, indexData->AlterData, context.MemChanges);
         }
 
         // Drop the source index path (stored in SourcePathId)
@@ -329,7 +329,6 @@ public:
         context.MemChanges.GrabPath(context.SS, mainTablePath.Base()->PathId);
         context.MemChanges.GrabPath(context.SS, srcPath.Base()->PathId);
         context.MemChanges.GrabNewTxState(context.SS, OperationId);
-        context.MemChanges.GrabNewIndex(context.SS, allocatedPathId);
 
         context.DbChanges.PersistPath(allocatedPathId);
         context.DbChanges.PersistPath(mainTablePath.Base()->PathId);
@@ -355,8 +354,7 @@ public:
         srcPath.Base()->DropTxId = OperationId.GetTxId();
         srcPath.Base()->LastTxId = OperationId.GetTxId();
 
-        context.SS->Indexes[newIndexPath->PathId] = newIndexData;
-        context.SS->IncrementPathDbRefCount(newIndexPath->PathId);
+        context.SS->Indexes.Set(newIndexPath->PathId, newIndexData, context.MemChanges);
 
         context.OnComplete.ActivateTx(OperationId);
 

@@ -196,7 +196,7 @@ public:
         txState->PlanStep = step;
         context.SS->PersistTxPlanStep(db, OperationId, step);
 
-        context.SS->Sequences[pathId] = alterData;
+        context.SS->Sequences.Set(pathId, alterData, context.MemChanges);
         context.SS->PersistSequenceAlterRemove(db, pathId);
         context.SS->PersistSequence(db, pathId, *alterData);
 
@@ -944,7 +944,6 @@ public:
         context.MemChanges.GrabPath(context.SS, srcPath.Base()->PathId);
         context.MemChanges.GrabPath(context.SS, srcPath.Base()->ParentPathId);
         context.MemChanges.GrabNewTxState(context.SS, OperationId);
-        context.MemChanges.GrabNewSequence(context.SS, allocatedPathId);
 
         context.DbChanges.PersistPath(allocatedPathId);
         context.DbChanges.PersistPath(dstParentPath.Base()->PathId);
@@ -1000,9 +999,8 @@ public:
             p->SetLocalId(ui64(sequenceShard.GetLocalId()));
         }
 
-        context.SS->Sequences[dstPath.Base()->PathId] = sequenceInfo;
+        context.SS->Sequences.Set(dstPath.Base()->PathId, sequenceInfo, context.MemChanges);
 
-        context.SS->IncrementPathDbRefCount(dstPath.Base()->PathId);
 
         IncParentDirAlterVersionWithRepublishSafeWithUndo(OperationId, dstPath, context.SS, context.OnComplete);
         IncParentDirAlterVersionWithRepublishSafeWithUndo(OperationId, srcPath, context.SS, context.OnComplete);

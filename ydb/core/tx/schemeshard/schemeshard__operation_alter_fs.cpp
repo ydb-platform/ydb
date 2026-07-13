@@ -95,7 +95,7 @@ public:
 
         txState->ClearShardsInProgress();
 
-        auto fs = context.SS->FileStoreInfos[txState->TargetPathId];
+        auto fs = context.SS->FileStoreInfos.at(txState->TargetPathId);
         Y_VERIFY_S(fs, "FileStore info is null. PathId: " << txState->TargetPathId);
 
         Y_ABORT_UNLESS(txState->Shards.size() == 1);

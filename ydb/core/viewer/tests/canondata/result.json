@@ -128,7 +128,7 @@
                         "PathId": "not-zero-number-text",
                         "SchemeShard": "not-zero-number-text"
                     },
-                    "Type": "PersQueue"
+                    "Type": "PersQueueReadBalancer"
                 },
                 {
                     "ChangeTime": "not-zero-number-text",
@@ -144,7 +144,7 @@
                         "PathId": "not-zero-number-text",
                         "SchemeShard": "not-zero-number-text"
                     },
-                    "Type": "PersQueueReadBalancer"
+                    "Type": "PersQueue"
                 }
             ]
         }
@@ -1114,7 +1114,7 @@
                 ]
             },
             {
-                "AllocationUnits": "34",
+                "AllocationUnits": "36",
                 "Available": "not-zero-number-text",
                 "CapacityAlert": "GREEN",
                 "DiskSpace": "Green",
@@ -1218,7 +1218,7 @@
                 ]
             },
             {
-                "AllocationUnits": "54",
+                "AllocationUnits": "56",
                 "Available": "not-zero-number-text",
                 "CapacityAlert": "GREEN",
                 "DiskSpace": "Green",
@@ -3987,7 +3987,7 @@
                     "PQPartitionsInside": "0",
                     "PQPartitionsLimit": "1000000",
                     "PathId_Depricated": "1",
-                    "PathsInside": "43",
+                    "PathsInside": "40",
                     "PathsLimit": "10000",
                     "ProcessingParams": {
                         "Coordinators": [
@@ -4206,8 +4206,8 @@
                     "PQGroupsInside": "0",
                     "PQPartitionsInside": "0",
                     "PQPartitionsLimit": "1000000",
-                    "PathId_Depricated": "38",
-                    "PathsInside": "36",
+                    "PathId_Depricated": "35",
+                    "PathsInside": "34",
                     "PathsLimit": "10000",
                     "ProcessingParams": {
                         "Coordinators": [
@@ -4255,7 +4255,7 @@
                     "SecurityState": {
                         "Audience": "/Root/dedicated_db"
                     },
-                    "ShardsInside": "12",
+                    "ShardsInside": "13",
                     "ShardsLimit": "200000",
                     "StoragePools": [
                         {
@@ -4303,7 +4303,7 @@
                         "PathId": "not-zero-number-text",
                         "PathState": 2,
                         "PathType": 1,
-                        "SchemeshardId": "72075186224038900"
+                        "SchemeshardId": "72075186224038901"
                     },
                     {
                         "ACL": "",
@@ -4317,7 +4317,7 @@
                         "PathId": "not-zero-number-text",
                         "PathState": 3,
                         "PathType": 2,
-                        "SchemeshardId": "72075186224038900"
+                        "SchemeshardId": "72075186224038901"
                     }
                 ],
                 "DomainDescription": {
@@ -4329,21 +4329,21 @@
                     "PQGroupsInside": "0",
                     "PQPartitionsInside": "0",
                     "PQPartitionsLimit": "1000000",
-                    "PathId_Depricated": "40",
-                    "PathsInside": "31",
+                    "PathId_Depricated": "37",
+                    "PathsInside": "28",
                     "PathsLimit": "10000",
                     "ProcessingParams": {
                         "Coordinators": [
-                            "72075186224038901"
+                            "72075186224038902"
                         ],
                         "Mediators": [
-                            "72075186224038902",
                             "72075186224038903",
-                            "72075186224038904"
+                            "72075186224038904",
+                            "72075186224038905"
                         ],
                         "PlanResolution": "10",
-                        "SchemeShard": "72075186224038900",
-                        "SysViewProcessor": "72075186224038905",
+                        "SchemeShard": "72075186224038901",
+                        "SysViewProcessor": "72075186224038906",
                         "TimeCastBucketsPerMediator": "2"
                     },
                     "ResourcesDomainKey": {
@@ -4399,11 +4399,11 @@
                     "PathSubType": 0,
                     "PathType": 4,
                     "PathVersion": "9",
-                    "SchemeshardId": "72075186224038900"
+                    "SchemeshardId": "72075186224038901"
                 }
             },
             "PathId": "not-zero-number-text",
-            "PathOwnerId": "72075186224038900",
+            "PathOwnerId": "72075186224038901",
             "Source": 1,
             "Status": "StatusSuccess"
         },
@@ -4464,8 +4464,8 @@
                     "PQGroupsInside": "0",
                     "PQPartitionsInside": "0",
                     "PQPartitionsLimit": "1000000",
-                    "PathId_Depricated": "39",
-                    "PathsInside": "36",
+                    "PathId_Depricated": "36",
+                    "PathsInside": "34",
                     "PathsLimit": "10000",
                     "ProcessingParams": {
                         "Coordinators": [
@@ -4513,7 +4513,7 @@
                     "SecurityState": {
                         "Audience": "/Root/shared_db"
                     },
-                    "ShardsInside": "12",
+                    "ShardsInside": "13",
                     "ShardsLimit": "200000",
                     "StoragePools": [
                         {
@@ -7904,11 +7904,11 @@
                 "GroupId": "2181038081"
             },
             {
-                "AllocationUnits": "34",
+                "AllocationUnits": "36",
                 "GroupId": "2181038082"
             },
             {
-                "AllocationUnits": "54",
+                "AllocationUnits": "56",
                 "GroupId": "2181038083"
             }
         ],
@@ -8784,7 +8784,7 @@
                             "PingTimeUs": "text",
                             "ScopeId": {
                                 "X1": "72057594046678944",
-                                "X2": "38"
+                                "X2": "35"
                             },
                             "Utilization": "number"
                         },
@@ -8801,7 +8801,7 @@
                             "PingTimeUs": "text",
                             "ScopeId": {
                                 "X1": "72057594046678944",
-                                "X2": "39"
+                                "X2": "36"
                             },
                             "Utilization": "number"
                         }
@@ -9175,7 +9175,7 @@
                             "PingTimeUs": "text",
                             "ScopeId": {
                                 "X1": "72057594046678944",
-                                "X2": "39"
+                                "X2": "36"
                             },
                             "Utilization": "number"
                         }
@@ -9199,7 +9199,7 @@
                             "PingTimeUs": "text",
                             "ScopeId": {
                                 "X1": "72057594046678944",
-                                "X2": "38"
+                                "X2": "35"
                             },
                             "Utilization": "number"
                         },
@@ -9216,7 +9216,7 @@
                             "PingTimeUs": "text",
                             "ScopeId": {
                                 "X1": "72057594046678944",
-                                "X2": "38"
+                                "X2": "35"
                             },
                             "Utilization": "number"
                         }
@@ -9297,7 +9297,7 @@
                             "Type": "Coordinator"
                         },
                         {
-                            "Count": 2,
+                            "Count": 3,
                             "State": "Green",
                             "Type": "DataShard"
                         },
@@ -9387,7 +9387,7 @@
                             "PingTimeUs": "text",
                             "ScopeId": {
                                 "X1": "72057594046678944",
-                                "X2": "38"
+                                "X2": "35"
                             },
                             "Utilization": "number"
                         }
@@ -9411,7 +9411,7 @@
                             "PingTimeUs": "text",
                             "ScopeId": {
                                 "X1": "72057594046678944",
-                                "X2": "39"
+                                "X2": "36"
                             },
                             "Utilization": "number"
                         },
@@ -9428,7 +9428,7 @@
                             "PingTimeUs": "text",
                             "ScopeId": {
                                 "X1": "72057594046678944",
-                                "X2": "39"
+                                "X2": "36"
                             },
                             "Utilization": "number"
                         }
@@ -9589,7 +9589,7 @@
                             "PingTimeUs": "text",
                             "ScopeId": {
                                 "X1": "72057594046678944",
-                                "X2": "38"
+                                "X2": "35"
                             },
                             "Utilization": "number"
                         }
@@ -9613,7 +9613,7 @@
                             "PingTimeUs": "text",
                             "ScopeId": {
                                 "X1": "72057594046678944",
-                                "X2": "39"
+                                "X2": "36"
                             },
                             "Utilization": "number"
                         },
@@ -9630,7 +9630,7 @@
                             "PingTimeUs": "text",
                             "ScopeId": {
                                 "X1": "72057594046678944",
-                                "X2": "39"
+                                "X2": "36"
                             },
                             "Utilization": "number"
                         }
@@ -9711,7 +9711,7 @@
                             "Type": "Coordinator"
                         },
                         {
-                            "Count": 2,
+                            "Count": 3,
                             "State": "Green",
                             "Type": "DataShard"
                         },
@@ -9806,7 +9806,7 @@
                             "PingTimeUs": "text",
                             "ScopeId": {
                                 "X1": "72057594046678944",
-                                "X2": "38"
+                                "X2": "35"
                             },
                             "Utilization": "number"
                         },
@@ -9823,7 +9823,7 @@
                             "PingTimeUs": "text",
                             "ScopeId": {
                                 "X1": "72057594046678944",
-                                "X2": "39"
+                                "X2": "36"
                             },
                             "Utilization": "number"
                         }
@@ -10239,7 +10239,7 @@
                             "PingTimeUs": "text",
                             "ScopeId": {
                                 "X1": "72057594046678944",
-                                "X2": "38"
+                                "X2": "35"
                             },
                             "Utilization": "number"
                         }
@@ -10263,7 +10263,7 @@
                             "PingTimeUs": "text",
                             "ScopeId": {
                                 "X1": "72057594046678944",
-                                "X2": "39"
+                                "X2": "36"
                             },
                             "Utilization": "number"
                         },
@@ -10280,7 +10280,7 @@
                             "PingTimeUs": "text",
                             "ScopeId": {
                                 "X1": "72057594046678944",
-                                "X2": "39"
+                                "X2": "36"
                             },
                             "Utilization": "number"
                         }
@@ -10361,7 +10361,7 @@
                             "Type": "Coordinator"
                         },
                         {
-                            "Count": 3,
+                            "Count": 4,
                             "State": "Green",
                             "Type": "DataShard"
                         },
@@ -10441,7 +10441,7 @@
                             "PingTimeUs": "text",
                             "ScopeId": {
                                 "X1": "72057594046678944",
-                                "X2": "39"
+                                "X2": "36"
                             },
                             "Utilization": "number"
                         }
@@ -10465,7 +10465,7 @@
                             "PingTimeUs": "text",
                             "ScopeId": {
                                 "X1": "72057594046678944",
-                                "X2": "38"
+                                "X2": "35"
                             },
                             "Utilization": "number"
                         },
@@ -10482,7 +10482,7 @@
                             "PingTimeUs": "text",
                             "ScopeId": {
                                 "X1": "72057594046678944",
-                                "X2": "38"
+                                "X2": "35"
                             },
                             "Utilization": "number"
                         }
@@ -10563,7 +10563,7 @@
                             "Type": "Coordinator"
                         },
                         {
-                            "Count": 2,
+                            "Count": 3,
                             "State": "Green",
                             "Type": "DataShard"
                         },
@@ -13101,7 +13101,7 @@
                             "PingTimeUs": "text",
                             "ScopeId": {
                                 "X1": "72057594046678944",
-                                "X2": "38"
+                                "X2": "35"
                             },
                             "Utilization": "number"
                         },
@@ -13118,7 +13118,7 @@
                             "PingTimeUs": "text",
                             "ScopeId": {
                                 "X1": "72057594046678944",
-                                "X2": "39"
+                                "X2": "36"
                             },
                             "Utilization": "number"
                         }
@@ -13497,7 +13497,7 @@
                             "PingTimeUs": "text",
                             "ScopeId": {
                                 "X1": "72057594046678944",
-                                "X2": "38"
+                                "X2": "35"
                             },
                             "Utilization": "number"
                         },
@@ -13514,7 +13514,7 @@
                             "PingTimeUs": "text",
                             "ScopeId": {
                                 "X1": "72057594046678944",
-                                "X2": "39"
+                                "X2": "36"
                             },
                             "Utilization": "number"
                         }
@@ -13893,7 +13893,7 @@
                             "PingTimeUs": "text",
                             "ScopeId": {
                                 "X1": "72057594046678944",
-                                "X2": "38"
+                                "X2": "35"
                             },
                             "Utilization": "number"
                         },
@@ -13910,7 +13910,7 @@
                             "PingTimeUs": "text",
                             "ScopeId": {
                                 "X1": "72057594046678944",
-                                "X2": "39"
+                                "X2": "36"
                             },
                             "Utilization": "number"
                         }
@@ -14289,7 +14289,7 @@
                             "PingTimeUs": "text",
                             "ScopeId": {
                                 "X1": "72057594046678944",
-                                "X2": "38"
+                                "X2": "35"
                             },
                             "Utilization": "number"
                         },
@@ -14306,7 +14306,7 @@
                             "PingTimeUs": "text",
                             "ScopeId": {
                                 "X1": "72057594046678944",
-                                "X2": "39"
+                                "X2": "36"
                             },
                             "Utilization": "number"
                         }
@@ -14685,7 +14685,7 @@
                             "PingTimeUs": "text",
                             "ScopeId": {
                                 "X1": "72057594046678944",
-                                "X2": "38"
+                                "X2": "35"
                             },
                             "Utilization": "number"
                         },
@@ -14702,7 +14702,7 @@
                             "PingTimeUs": "text",
                             "ScopeId": {
                                 "X1": "72057594046678944",
-                                "X2": "39"
+                                "X2": "36"
                             },
                             "Utilization": "number"
                         }
@@ -15749,6 +15749,22 @@
                             "SchemeShard": "72057594046678944"
                         },
                         "Type": 18
+                    },
+                    {
+                        "ChangeTime": "not-zero-number-text",
+                        "FollowerId": 0,
+                        "Generation": 1,
+                        "HiveId": "72075186224037888",
+                        "Leader": true,
+                        "NodeId": 50000,
+                        "Overall": 1,
+                        "State": 10,
+                        "TabletId": "72075186224037900",
+                        "TenantId": {
+                            "PathId": "not-zero-number-text",
+                            "SchemeShard": "72057594046678944"
+                        },
+                        "Type": 18
                     }
                 ]
             },
@@ -15766,7 +15782,7 @@
                         "NodeId": 50001,
                         "Overall": 1,
                         "State": 10,
-                        "TabletId": "72075186224038900",
+                        "TabletId": "72075186224038901",
                         "TenantId": {
                             "PathId": "not-zero-number-text",
                             "SchemeShard": "72057594046678944"
@@ -15782,28 +15798,12 @@
                         "NodeId": 50001,
                         "Overall": 1,
                         "State": 10,
-                        "TabletId": "72075186224038901",
-                        "TenantId": {
-                            "PathId": "not-zero-number-text",
-                            "SchemeShard": "72057594046678944"
-                        },
-                        "Type": 13
-                    },
-                    {
-                        "ChangeTime": "not-zero-number-text",
-                        "FollowerId": 0,
-                        "Generation": 1,
-                        "HiveId": "72075186224038889",
-                        "Leader": true,
-                        "NodeId": 50001,
-                        "Overall": 1,
-                        "State": 10,
                         "TabletId": "72075186224038902",
                         "TenantId": {
                             "PathId": "not-zero-number-text",
                             "SchemeShard": "72057594046678944"
                         },
-                        "Type": 5
+                        "Type": 13
                     },
                     {
                         "ChangeTime": "not-zero-number-text",
@@ -15851,6 +15851,22 @@
                             "PathId": "not-zero-number-text",
                             "SchemeShard": "72057594046678944"
                         },
+                        "Type": 5
+                    },
+                    {
+                        "ChangeTime": "not-zero-number-text",
+                        "FollowerId": 0,
+                        "Generation": 1,
+                        "HiveId": "72075186224038889",
+                        "Leader": true,
+                        "NodeId": 50001,
+                        "Overall": 1,
+                        "State": 10,
+                        "TabletId": "72075186224038906",
+                        "TenantId": {
+                            "PathId": "not-zero-number-text",
+                            "SchemeShard": "72057594046678944"
+                        },
                         "Type": 32
                     },
                     {
@@ -15862,7 +15878,7 @@
                         "NodeId": 50001,
                         "Overall": 1,
                         "State": 10,
-                        "TabletId": "72075186224038907",
+                        "TabletId": "72075186224038908",
                         "TenantId": {
                             "PathId": "not-zero-number-text",
                             "SchemeShard": "72057594046678944"
@@ -16061,7 +16077,23 @@
                         "NodeId": 50001,
                         "Overall": 1,
                         "State": 10,
-                        "TabletId": "72075186224038906",
+                        "TabletId": "72075186224038900",
+                        "TenantId": {
+                            "PathId": "not-zero-number-text",
+                            "SchemeShard": "72057594046678944"
+                        },
+                        "Type": 18
+                    },
+                    {
+                        "ChangeTime": "not-zero-number-text",
+                        "FollowerId": 0,
+                        "Generation": 1,
+                        "HiveId": "72075186224038889",
+                        "Leader": true,
+                        "NodeId": 50001,
+                        "Overall": 1,
+                        "State": 10,
+                        "TabletId": "72075186224038907",
                         "TenantId": {
                             "PathId": "not-zero-number-text",
                             "SchemeShard": "72057594046678944"
@@ -16381,6 +16413,22 @@
                         "ChangeTime": "not-zero-number-text",
                         "FollowerId": 0,
                         "Generation": 1,
+                        "HiveId": "72075186224037888",
+                        "Leader": true,
+                        "NodeId": 50000,
+                        "Overall": 1,
+                        "State": 10,
+                        "TabletId": "72075186224037900",
+                        "TenantId": {
+                            "PathId": "not-zero-number-text",
+                            "SchemeShard": "72057594046678944"
+                        },
+                        "Type": 18
+                    },
+                    {
+                        "ChangeTime": "not-zero-number-text",
+                        "FollowerId": 0,
+                        "Generation": 1,
                         "HiveId": "72057594037968897",
                         "Leader": true,
                         "NodeId": 50001,
@@ -16567,7 +16615,7 @@
                             "PathId": "not-zero-number-text",
                             "SchemeShard": "72057594046678944"
                         },
-                        "Type": 16
+                        "Type": 18
                     },
                     {
                         "ChangeTime": "not-zero-number-text",
@@ -16583,7 +16631,7 @@
                             "PathId": "not-zero-number-text",
                             "SchemeShard": "72057594046678944"
                         },
-                        "Type": 13
+                        "Type": 16
                     },
                     {
                         "ChangeTime": "not-zero-number-text",
@@ -16599,7 +16647,7 @@
                             "PathId": "not-zero-number-text",
                             "SchemeShard": "72057594046678944"
                         },
-                        "Type": 5
+                        "Type": 13
                     },
                     {
                         "ChangeTime": "not-zero-number-text",
@@ -16647,7 +16695,7 @@
                             "PathId": "not-zero-number-text",
                             "SchemeShard": "72057594046678944"
                         },
-                        "Type": 32
+                        "Type": 5
                     },
                     {
                         "ChangeTime": "not-zero-number-text",
@@ -16663,7 +16711,7 @@
                             "PathId": "not-zero-number-text",
                             "SchemeShard": "72057594046678944"
                         },
-                        "Type": 18
+                        "Type": 32
                     },
                     {
                         "ChangeTime": "not-zero-number-text",
@@ -16675,6 +16723,22 @@
                         "Overall": 1,
                         "State": 10,
                         "TabletId": "72075186224038907",
+                        "TenantId": {
+                            "PathId": "not-zero-number-text",
+                            "SchemeShard": "72057594046678944"
+                        },
+                        "Type": 18
+                    },
+                    {
+                        "ChangeTime": "not-zero-number-text",
+                        "FollowerId": 0,
+                        "Generation": 1,
+                        "HiveId": "72075186224038889",
+                        "Leader": true,
+                        "NodeId": 50001,
+                        "Overall": 1,
+                        "State": 10,
+                        "TabletId": "72075186224038908",
                         "TenantId": {
                             "PathId": "not-zero-number-text",
                             "SchemeShard": "72057594046678944"
@@ -16738,7 +16802,7 @@
                         "Type": "Coordinator"
                     },
                     {
-                        "Count": 2,
+                        "Count": 3,
                         "Type": "DataShard"
                     },
                     {
@@ -16796,7 +16860,7 @@
                         "Type": "Coordinator"
                     },
                     {
-                        "Count": 2,
+                        "Count": 3,
                         "Type": "DataShard"
                     },
                     {
@@ -16841,7 +16905,7 @@
                         "Type": "Coordinator"
                     },
                     {
-                        "Count": 5,
+                        "Count": 7,
                         "Type": "DataShard"
                     },
                     {
@@ -16939,7 +17003,7 @@
                     "CoresTotal": "not-zero-number",
                     "CoresUsed": "not-zero-number",
                     "DatabaseQuotas": {},
-                    "Id": "38",
+                    "Id": "35",
                     "MemoryLimit": "not-zero-number-text",
                     "MemoryStats": {},
                     "Metrics": "not-empty-object",
@@ -16997,7 +17061,7 @@
                     "State": "RUNNING",
                     "StateStats": [
                         {
-                            "Count": 11,
+                            "Count": 12,
                             "VolatileState": "TABLET_VOLATILE_STATE_RUNNING"
                         }
                     ],
@@ -17010,11 +17074,11 @@
                 {
                     "CoresUsed": "not-zero-number",
                     "DatabaseQuotas": {},
-                    "Id": "40",
+                    "Id": "37",
                     "Metrics": "not-empty-object",
                     "Name": "/Root/serverless_db",
                     "Owner": "root",
-                    "ResourceId": "39",
+                    "ResourceId": "36",
                     "State": "RUNNING",
                     "StateStats": [
                         {
@@ -17033,7 +17097,7 @@
                     "CoresTotal": "not-zero-number",
                     "CoresUsed": "not-zero-number",
                     "DatabaseQuotas": {},
-                    "Id": "39",
+                    "Id": "36",
                     "MemoryLimit": "not-zero-number-text",
                     "MemoryStats": {},
                     "Metrics": "not-empty-object",
@@ -17084,7 +17148,7 @@
                     "State": "RUNNING",
                     "StateStats": [
                         {
-                            "Count": 11,
+                            "Count": 12,
                             "VolatileState": "TABLET_VOLATILE_STATE_RUNNING"
                         }
                     ],
@@ -17146,7 +17210,7 @@
                     "CoresTotal": "not-zero-number",
                     "CoresUsed": "not-zero-number",
                     "DatabaseQuotas": {},
-                    "Id": "38",
+                    "Id": "35",
                     "MemoryLimit": "not-zero-number-text",
                     "MemoryStats": {},
                     "Metrics": "not-empty-object",
@@ -17204,7 +17268,7 @@
                     "State": "RUNNING",
                     "StateStats": [
                         {
-                            "Count": 11,
+                            "Count": 12,
                             "VolatileState": "TABLET_VOLATILE_STATE_RUNNING"
                         }
                     ],
@@ -17213,12 +17277,12 @@
                 {
                     "CoresUsed": "not-zero-number",
                     "DatabaseQuotas": {},
-                    "Id": "40",
+                    "Id": "37",
                     "Metrics": "not-empty-object",
                     "Name": "/Root/serverless_db",
                     "Overall": "Green",
                     "Owner": "root",
-                    "ResourceId": "39",
+                    "ResourceId": "36",
                     "State": "RUNNING",
                     "StateStats": [
                         {
@@ -17233,7 +17297,7 @@
                     "CoresTotal": "not-zero-number",
                     "CoresUsed": "not-zero-number",
                     "DatabaseQuotas": {},
-                    "Id": "39",
+                    "Id": "36",
                     "MemoryLimit": "not-zero-number-text",
                     "MemoryStats": {},
                     "Metrics": "not-empty-object",
@@ -17284,7 +17348,7 @@
                     "State": "RUNNING",
                     "StateStats": [
                         {
-                            "Count": 11,
+                            "Count": 12,
                             "VolatileState": "TABLET_VOLATILE_STATE_RUNNING"
                         }
                     ],

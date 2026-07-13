@@ -262,7 +262,7 @@ void THttpRequest::DoProbeDoCountMinSketch(const TNavigate::TEntry& entry) {
             request->StatType = EStatType::COUNT_MIN_SKETCH;
             TRequest req;
             req.PathId = entry.TableId.PathId;
-            req.ColumnTag = tableInfo.Id;
+            req.ColumnTags = static_cast<ui32>(tableInfo.Id);
             request->StatRequests.emplace_back(std::move(req));
 
             const auto typeId = tableInfo.PType.GetTypeId();

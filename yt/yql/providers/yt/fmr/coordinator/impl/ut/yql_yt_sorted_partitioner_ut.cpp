@@ -94,7 +94,10 @@ Y_UNIT_TEST_SUITE(SortedPartitionerTests) {
             "at least one partition");
     }
 
-    Y_UNIT_TEST(FailsOnEmptyChunksForInputTable) {
+    Y_UNIT_TEST(HandlesEmptyChunksForInputTable) {
+        // An input table can legitimately have zero chunks (e.g. a MapReduce map task whose rows
+        // were all routed to a direct/map-bypass output — see NULL join keys in a FULL JOIN).
+        // Partitioning it must succeed and simply produce no tasks reading from it, not fail.
         TFmrTableId t1("c", "t1");
         TFmrTableRef r1{.FmrTableId = t1};
 
@@ -110,10 +113,9 @@ Y_UNIT_TEST_SUITE(SortedPartitionerTests) {
         TSortingColumns keyColumns{.Columns = {"k"}, .SortOrders = {ESortOrder::Ascending}};
 
         TSortedPartitioner partitioner(partIdsForTables, partIdStats, keyColumns, settings);
-        UNIT_ASSERT_EXCEPTION_CONTAINS(
-            partitioner.PartitionTablesIntoTasks({r1}),
-            yexception,
-            "at least one chunk");
+        auto result = partitioner.PartitionTablesIntoTasks({r1});
+        UNIT_ASSERT_C(!result.Error, "expected no error, got: " << (result.Error ? result.Error->ErrorMessage : ""));
+        UNIT_ASSERT_VALUES_EQUAL(result.TaskInputs.size(), 0u);
     }
 
     Y_UNIT_TEST(MergeMatchesSourceMultipleChunks) {

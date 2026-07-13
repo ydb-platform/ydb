@@ -659,7 +659,7 @@ TRuntimeNode TProgramBuilder::Condense(TRuntimeNode stream, TRuntimeNode state,
 
     if (streamType->IsList()) {
         // TODO: Native implementation for list.
-        return Collect(Condense(ToFlow(stream), state, switcher, handler));
+        return Collect(Condense(ToFlow(stream, {}), state, switcher, handler));
     }
 
     MKQL_ENSURE(streamType->IsFlow() || streamType->IsStream(), "Expected flow or stream.");
@@ -699,7 +699,7 @@ TRuntimeNode TProgramBuilder::Condense1(TRuntimeNode stream, const TUnaryLambda&
 
     if (streamType->IsList()) {
         // TODO: Native implementation for list.
-        return Collect(Condense1(ToFlow(stream), init, switcher, handler));
+        return Collect(Condense1(ToFlow(stream, {}), init, switcher, handler));
     }
 
     MKQL_ENSURE(streamType->IsFlow() || streamType->IsStream(), "Expected flow or stream.");

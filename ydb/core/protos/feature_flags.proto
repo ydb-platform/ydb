@@ -162,7 +162,8 @@ message TFeatureFlags {
     optional bool EnableOptionalColumnsInColumnShard = 136 [default = false];
     optional bool EnableGranularTimecast = 137 [default = true];
     optional bool EnableAlterShardingInColumnShard = 138 [default = false];
-    optional bool EnablePgSyntax = 139 [default = false];
+    reserved 139; // EnablePgSyntax
+    reserved "EnablePgSyntax";
     optional bool EnableTieringInColumnShard = 140 [default = false];
     optional bool EnableMetadataObjectsOnServerless = 141 [default = true];
     optional bool EnableOlapCompression = 142 [default = true];
@@ -337,4 +338,6 @@ message TFeatureFlags {
     optional bool EnableExportFiltering = 291 [default = false];
     optional bool EnableNodeBrokerLongLease = 292 [default = false];
     optional bool EnableExportInParquet = 293 [default = false];
+    optional bool EnableCutHistory = 294 [default = false];
+    optional bool DisableOldSecretCreation = 295 [default = false];
 }

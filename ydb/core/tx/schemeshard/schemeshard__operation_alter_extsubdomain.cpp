@@ -395,7 +395,7 @@ public:
     void SendCreateTabletEvent(const TPathId& pathId, TShardIdx shardIdx, TOperationContext& context) {
         auto path = context.SS->PathsById.at(pathId);
 
-        auto ev = CreateEvCreateTablet(path, shardIdx, context);
+        auto ev = CreateEvCreateTablet(path, shardIdx, context.SS);
         auto rootHiveId = context.SS->GetGlobalHive();
 
         YDB_LOG_DEBUG_CTX(context.Ctx, "Send CreateTablet event",

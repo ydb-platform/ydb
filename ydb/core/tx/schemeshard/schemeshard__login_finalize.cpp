@@ -53,7 +53,7 @@ public:
 
     void DoComplete(const TActorContext &ctx) override {
         YDB_LOG_DEBUG_CTX(ctx, "TTxLoginFinalize Completed with",
-            {"#_num_0", (ErrMessage ? "error: " + ErrMessage : "no errors")},
+            {"error", (ErrMessage ? ErrMessage : TStringBuf("no errors"))},
             {"schemeshard", Self->TabletID()});
     }
 

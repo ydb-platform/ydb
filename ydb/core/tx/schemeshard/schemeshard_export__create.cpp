@@ -7,6 +7,8 @@
 #include "schemeshard_xxport__helpers.h"
 #include "schemeshard_xxport__tx_base.h"
 
+#include <ydb/core/tx/datashard/export_data_format.h>
+
 #include <ydb/public/api/protos/ydb_export.pb.h>
 #include <ydb/public/api/protos/ydb_issue_message.pb.h>
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
@@ -196,6 +198,24 @@ struct TSchemeShard::TExport::TTxCreate: public TSchemeShard::TXxport::TTxBase {
                         Ydb::StatusIds::PRECONDITION_FAILED,
                         "Index materialization is not enabled"
                     );
+                }
+            }
+            if constexpr (std::is_same_v<TSettings, Ydb::Export::ExportToS3Settings>) {
+                if (settings.format_case() == Ydb::Export::ExportToS3Settings::kParquet) {
+                    if (!AppData()->FeatureFlags.GetEnableExportInParquet()) {
+                        return Reply(
+                            std::move(response),
+                            Ydb::StatusIds::UNSUPPORTED,
+                            "Parquet export to S3 is disabled by feature flag EnableExportInParquet"
+                        );
+                    }
+                    if (settings.has_encryption_settings()) {
+                        return Reply(
+                            std::move(response),
+                            Ydb::StatusIds::BAD_REQUEST,
+                            "Encryption is not supported for Parquet export"
+                        );
+                    }
                 }
             }
             exportInfo = new TExportInfo(id, uid, kind, settings, domainPath.Base()->PathId, request.GetPeerName());

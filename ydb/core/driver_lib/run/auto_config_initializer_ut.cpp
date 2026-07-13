@@ -120,4 +120,47 @@ Y_UNIT_TEST(GetServicePoolsWith4AndMoreCPUs) {
     }
 }
 
+Y_UNIT_TEST(GetManualPoolsWithNumaExecutorBeforeNamedPools) {
+    NKikimrConfig::TActorSystemConfig config;
+
+    auto* storage = config.AddExecutor();
+    storage->SetType(NKikimrConfig::TActorSystemConfig::TExecutor::NUMA);
+    storage->SetPlacementGroups(2);
+
+    auto* system = config.AddExecutor();
+    system->SetType(NKikimrConfig::TActorSystemConfig::TExecutor::BASIC);
+    system->SetName("System");
+
+    auto* user = config.AddExecutor();
+    user->SetType(NKikimrConfig::TActorSystemConfig::TExecutor::BASIC);
+    user->SetName("User");
+
+    auto* io = config.AddExecutor();
+    io->SetType(NKikimrConfig::TActorSystemConfig::TExecutor::IO);
+    io->SetName("IO");
+
+    auto* batch = config.AddExecutor();
+    batch->SetType(NKikimrConfig::TActorSystemConfig::TExecutor::BASIC);
+    batch->SetName("Batch");
+
+    config.SetSysExecutor(1);
+    config.SetUserExecutor(2);
+    config.SetIoExecutor(3);
+    config.SetBatchExecutor(4);
+
+    auto* interconnect = config.AddServiceExecutor();
+    interconnect->SetServiceName("Interconnect");
+    interconnect->SetExecutorId(3);
+
+    auto* background = config.AddServiceExecutor();
+    background->SetServiceName("Background");
+    background->SetExecutorId(4);
+
+    const TASPools pools = GetASPools(config, false);
+    ASSERT_POOLS(pools, 2, 3, 5, 4, 4);
+
+    TMap<TString, ui32> services = GetServicePools(config, false);
+    UNIT_ASSERT_VALUES_EQUAL(services, (TMap<TString, ui32>{{"Background", 5}, {"Interconnect", 4}}));
+}
+
 } // Y_UNIT_TEST_SUITE(AutoConfig)

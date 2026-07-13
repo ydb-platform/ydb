@@ -5,13 +5,17 @@
 #include <ydb/core/protos/resource_broker.pb.h>
 
 #include <ydb/library/actors/util/affinity.h>
+#include <ydb/library/actors/util/cpu_topology.h>
 
+#include <util/string/builder.h>
 
 namespace NKikimr {
 
 namespace NActorSystemConfigHelpers {
 
 namespace {
+
+using TExecutorConfig = NKikimrConfig::TActorSystemConfig::TExecutor;
 
 template <class TConfig>
 static TCpuMask ParseAffinity(const TConfig& cfg) {
@@ -31,6 +35,23 @@ static TCpuMask ParseAffinity(const TConfig& cfg) {
     return result;
 }
 
+TString GetStoragePoolName(const TExecutorConfig& poolConfig, ui32 groupIndex, ui32 placementGroups) {
+    const TString baseName = poolConfig.HasName() ? poolConfig.GetName() : "Storage";
+    return placementGroups == 1 ? baseName : TStringBuilder() << baseName << groupIndex;
+}
+
+ui32 GetExecutorPoolCount(const NKikimrConfig::TActorSystemConfig& systemConfig) {
+    ui32 poolCount = 0;
+    for (const auto& poolConfig : systemConfig.GetExecutor()) {
+        if (poolConfig.GetType() != TExecutorConfig::NUMA) {
+            ++poolCount;
+        } else {
+            poolCount += poolConfig.GetPlacementGroups();
+        }
+    }
+    return poolCount;
+}
+
 TDuration GetSelfPingInterval(const NKikimrConfig::TActorSystemConfig& systemConfig) {
     return systemConfig.HasSelfPingInterval()
         ? TDuration::MicroSeconds(systemConfig.GetSelfPingInterval())
@@ -48,26 +69,48 @@ NActors::EASProfile ConvertActorSystemProfile(NKikimrConfig::TActorSystemConfig:
     }
 }
 
-}  // anonymous namespace
-
-void AddExecutorPool(NActors::TCpuManagerConfig& cpuManager, const NKikimrConfig::TActorSystemConfig::TExecutor& poolConfig, const NKikimrConfig::TActorSystemConfig& systemConfig, ui32 poolId, NMonitoring::TDynamicCounterPtr counters) {
+void AddExecutorPool(
+    NActors::TCpuManagerConfig& cpuManager,
+    const TExecutorConfig& poolConfig,
+    const NKikimrConfig::TActorSystemConfig& systemConfig,
+    ui32 poolId,
+    const TString& poolName,
+    NMonitoring::TDynamicCounterPtr counters,
+    const TCpuTopologyGroup* placementGroup = nullptr)
+{
     switch (poolConfig.GetType()) {
-        case NKikimrConfig::TActorSystemConfig::TExecutor::BASIC: {
+        case TExecutorConfig::BASIC:
+        case TExecutorConfig::NUMA: {
             NActors::TBasicExecutorPoolConfig basic;
             basic.PoolId = poolId;
-            basic.PoolName = poolConfig.GetName();
+            basic.PoolName = poolName;
             basic.UseRingQueue = systemConfig.HasUseRingQueue() && systemConfig.GetUseRingQueue();
+            if (poolConfig.GetType() == TExecutorConfig::NUMA) {
+                Y_ABORT_UNLESS(placementGroup);
+                Y_ABORT_UNLESS(!poolConfig.HasAffinity(), "NUMA executor must not define Affinity");
+                basic.Threads = placementGroup->Cpus.CpuCount();
+                Y_ABORT_UNLESS(basic.Threads, "NUMA executor placement group %" PRIu32 " has no CPUs", placementGroup->Id);
+                basic.Affinity = placementGroup->Cpus;
+                basic.MinThreadCount = basic.Threads;
+                basic.MaxThreadCount = basic.Threads;
+                basic.DefaultThreadCount = basic.Threads;
+            } else {
+                Y_ABORT_UNLESS(!placementGroup);
+                basic.Threads = Max(poolConfig.GetThreads(), poolConfig.GetMaxThreads());
+                basic.Affinity = ParseAffinity(poolConfig.GetAffinity());
+                basic.MinThreadCount = poolConfig.GetMinThreads();
+                basic.MaxThreadCount = poolConfig.GetMaxThreads();
+                basic.DefaultThreadCount = poolConfig.GetThreads();
+            }
             if (poolConfig.HasMaxAvgPingDeviation() && counters) {
                 auto poolGroup = counters->GetSubgroup("execpool", basic.PoolName);
-                auto &poolInfo = cpuManager.PingInfoByPool[poolId];
+                auto& poolInfo = cpuManager.PingInfoByPool[poolId];
                 poolInfo.AvgPingCounter = poolGroup->GetCounter("SelfPingAvgUs", false);
                 poolInfo.AvgPingCounterWithSmallWindow = poolGroup->GetCounter("SelfPingAvgUsIn1s", false);
-                TDuration maxAvgPing = GetSelfPingInterval(systemConfig) + TDuration::MicroSeconds(poolConfig.GetMaxAvgPingDeviation());
+                const TDuration maxAvgPing = GetSelfPingInterval(systemConfig) + TDuration::MicroSeconds(poolConfig.GetMaxAvgPingDeviation());
                 poolInfo.MaxAvgPingUs = maxAvgPing.MicroSeconds();
             }
-            basic.Threads = Max(poolConfig.GetThreads(), poolConfig.GetMaxThreads());
             basic.SpinThreshold = poolConfig.GetSpinThreshold();
-            basic.Affinity = ParseAffinity(poolConfig.GetAffinity());
             basic.RealtimePriority = poolConfig.GetRealtimePriority();
             basic.HasSharedThread = poolConfig.GetHasSharedThread();
             if (poolConfig.HasTimePerMailboxMicroSecs()) {
@@ -82,9 +125,6 @@ void AddExecutorPool(NActors::TCpuManagerConfig& cpuManager, const NKikimrConfig
             }
             basic.ActorSystemProfile = ConvertActorSystemProfile(systemConfig.GetActorSystemProfile());
             Y_ABORT_UNLESS(basic.EventsPerMailbox != 0);
-            basic.MinThreadCount = poolConfig.GetMinThreads();
-            basic.MaxThreadCount = poolConfig.GetMaxThreads();
-            basic.DefaultThreadCount = poolConfig.GetThreads();
             basic.Priority = poolConfig.GetPriority();
             if (poolConfig.HasMinLocalQueueSize()) {
                 basic.MinLocalQueueSize = poolConfig.GetMinLocalQueueSize();
@@ -103,10 +143,11 @@ void AddExecutorPool(NActors::TCpuManagerConfig& cpuManager, const NKikimrConfig
             break;
         }
 
-        case NKikimrConfig::TActorSystemConfig::TExecutor::IO: {
+        case TExecutorConfig::IO: {
+            Y_ABORT_UNLESS(!placementGroup);
             NActors::TIOExecutorPoolConfig io;
             io.PoolId = poolId;
-            io.PoolName = poolConfig.GetName();
+            io.PoolName = poolName;
             io.Threads = poolConfig.GetThreads();
             io.Affinity = ParseAffinity(poolConfig.GetAffinity());
             cpuManager.IO.emplace_back(std::move(io));
@@ -116,6 +157,57 @@ void AddExecutorPool(NActors::TCpuManagerConfig& cpuManager, const NKikimrConfig
 
         default:
             Y_ABORT();
+    }
+}
+
+}  // anonymous namespace
+
+TVector<ui32> GetStoragePoolIds(const NKikimrConfig::TActorSystemConfig& systemConfig) {
+    TVector<ui32> storagePoolIds;
+    ui32 poolId = 0;
+    for (const auto& poolConfig : systemConfig.GetExecutor()) {
+        if (poolConfig.GetType() != TExecutorConfig::NUMA) {
+            ++poolId;
+            continue;
+        }
+
+        const ui32 placementGroups = poolConfig.GetPlacementGroups();
+        Y_ABORT_UNLESS(placementGroups, "NUMA executor must have non-zero placement group count");
+        for (ui32 group = 0; group < placementGroups; ++group) {
+            storagePoolIds.push_back(poolId + group);
+            ++poolId;
+        }
+    }
+    return storagePoolIds;
+}
+
+void AddExecutorPools(NActors::TCpuManagerConfig& cpuManager, const NKikimrConfig::TActorSystemConfig& systemConfig, NMonitoring::TDynamicCounterPtr counters) {
+    cpuManager.PingInfoByPool.resize(GetExecutorPoolCount(systemConfig));
+
+    auto parsedCpuTopology = ParseCpuTopology();
+    Y_ABORT_UNLESS(parsedCpuTopology, "Failed to parse CPU topology for NUMA placement groups: %s", parsedCpuTopology.error().c_str());
+    const TCpuTopology& cpuTopology = *parsedCpuTopology;
+
+    ui32 poolId = 0;
+    for (const auto& poolConfig : systemConfig.GetExecutor()) {
+        if (poolConfig.GetType() != TExecutorConfig::NUMA) {
+            const TString poolName = poolConfig.GetName();
+            AddExecutorPool(cpuManager, poolConfig, systemConfig, poolId, poolName, counters);
+            ++poolId;
+            continue;
+        }
+
+        const ui32 placementGroups = poolConfig.GetPlacementGroups();
+        Y_ABORT_UNLESS(placementGroups, "NUMA executor must have non-zero placement group count");
+        Y_ABORT_UNLESS(placementGroups <= cpuTopology.PlacementGroups.size(),
+            "NUMA executor requested %" PRIu32 " placement groups, but CPU topology has only %zu placement groups",
+            placementGroups, cpuTopology.PlacementGroups.size());
+
+        for (ui32 group = 0; group < placementGroups; ++group) {
+            const TString poolName = GetStoragePoolName(poolConfig, group, placementGroups);
+            AddExecutorPool(cpuManager, poolConfig, systemConfig, poolId, poolName, counters, &cpuTopology.PlacementGroups[group]);
+            ++poolId;
+        }
     }
 }
 

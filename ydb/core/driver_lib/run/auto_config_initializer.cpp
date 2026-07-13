@@ -8,6 +8,8 @@
 
 namespace {
 
+    using TExecutorConfig = NKikimrConfig::TActorSystemConfig::TExecutor;
+
     i16 GetCpuCount() {
         TAffinity affinity;
         affinity.Current();
@@ -16,6 +18,27 @@ namespace {
             return cpuMask.CpuCount();
         }
         return NSystemInfo::CachedNumberOfCpus();
+    }
+
+    ui32 GetExpandedPoolId(const NKikimrConfig::TActorSystemConfig& config, ui32 executorId) {
+        ui32 poolId = 0;
+        for (ui32 i = 0; i < static_cast<ui32>(config.ExecutorSize()); ++i) {
+            const auto& executor = config.GetExecutor(i);
+            if (i == executorId) {
+                return poolId;
+            }
+
+            if (executor.GetType() == TExecutorConfig::NUMA) {
+                const ui32 placementGroups = executor.GetPlacementGroups();
+                Y_ABORT_UNLESS(placementGroups, "NUMA executor must have non-zero placement group count");
+                poolId += placementGroups;
+            } else {
+                ++poolId;
+            }
+        }
+
+        Y_ABORT("ExecutorId# %u is out of range; executor count# %d",
+            static_cast<unsigned>(executorId), config.ExecutorSize());
     }
 
     enum class EPoolKind : i8 {
@@ -188,21 +211,25 @@ namespace NKikimr::NAutoConfigInitializer {
             i16 cpuCount = (config.HasCpuCount() ? config.GetCpuCount() : 0);
             return GetASPools(cpuCount);
         } else {
+            auto expandedPoolId = [&](ui32 executorId) {
+                return static_cast<ui8>(GetExpandedPoolId(config, executorId));
+            };
+
             ui8 icPoolId = 0;
             for (ui32 i = 0; i < config.ServiceExecutorSize(); ++i) {
                 auto item = config.GetServiceExecutor(i);
                 const TString service = item.GetServiceName();
                 if (service == "Interconnect") {
-                    icPoolId = static_cast<ui8>(item.GetExecutorId());
+                    icPoolId = expandedPoolId(item.GetExecutorId());
                     break;
                 }
             }
 
             return TASPools {
-                .SystemPoolId = static_cast<ui8>(config.HasSysExecutor() ? config.GetSysExecutor() : 0),
-                .UserPoolId = static_cast<ui8>(config.HasUserExecutor() ? config.GetUserExecutor() : 0),
-                .BatchPoolId = static_cast<ui8>(config.HasBatchExecutor() ? config.GetBatchExecutor() : 0),
-                .IOPoolId = static_cast<ui8>(config.HasIoExecutor() ? config.GetIoExecutor() : 0),
+                .SystemPoolId = expandedPoolId(config.HasSysExecutor() ? config.GetSysExecutor() : 0),
+                .UserPoolId = expandedPoolId(config.HasUserExecutor() ? config.GetUserExecutor() : 0),
+                .BatchPoolId = expandedPoolId(config.HasBatchExecutor() ? config.GetBatchExecutor() : 0),
+                .IOPoolId = expandedPoolId(config.HasIoExecutor() ? config.GetIoExecutor() : 0),
                 .ICPoolId = icPoolId,
             };
         }
@@ -221,7 +248,7 @@ namespace NKikimr::NAutoConfigInitializer {
             if (servicePools.count(service)) {
                 continue;
             }
-            const ui32 pool = item.GetExecutorId();
+            const ui32 pool = useAutoConfig ? item.GetExecutorId() : GetExpandedPoolId(config, item.GetExecutorId());
             servicePools.insert(std::pair<TString, ui32>(service, pool));
         }
         return servicePools;

@@ -4,10 +4,6 @@ items:
   include:
     mode: link
     path: ../yql/toc_p.yaml
-- name: Совместимость с PostgreSQL
-  include:
-    mode: link
-    path: ../postgresql/toc_p.yaml
 - name: Встроенный UI
   include:
     mode: link
@@ -32,6 +28,10 @@ items:
   include:
     mode: link
     path: languages-and-apis/toc_p.yaml
+- name: AI-инструменты
+  include:
+    mode: link
+    path: ai/toc_p.yaml
 - name: Kafka API
   href: kafka-api/index.md
   include:
@@ -67,3 +67,9 @@ items:
   include:
     mode: link
     path: docker/toc_p.yaml
+- name: Совместимость с PostgreSQL (удалена)
+  href: ../postgresql/intro.md
+  hidden: true
+  include:
+    mode: link
+    path: ../postgresql/toc_p.yaml

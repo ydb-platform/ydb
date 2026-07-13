@@ -28,6 +28,47 @@ namespace NKikimr::NDDisk {
                 {"persistentBufferSpaceAllocator", PersistentBufferSpaceAllocator});
         }
     }
+    void TDDiskActor::ProcessDeallocatePersistentBufferChunk(bool forceToNextChunk) {
+        Y_ABORT_UNLESS(IsPersistentBufferActor);
+        ui64 freeSpace = PersistentBufferSpaceAllocator.GetFreeSpace();
+        ui64 ownedChunks = PersistentBufferSpaceAllocator.OwnedChunks.size();
+        bool canDeallocate = freeSpace * 100 > ownedChunks * SectorInChunk * PersistentBufferFormat.DeallocateFreeSpaceThresholdPercent
+            && ownedChunks > PersistentBufferFormat.InitChunks;
+
+        if (PersistentBufferSpaceAllocator.IsChunkLocked() && !canDeallocate) {
+            PersistentBufferSpaceAllocator.UnlockChunk();
+            return;
+        }
+
+        if (canDeallocate) {
+            if (forceToNextChunk) {
+                PersistentBufferSpaceAllocator.UnlockChunk();
+            }
+            if (!PersistentBufferSpaceAllocator.IsChunkLocked()) {
+                PersistentBufferSpaceAllocator.LockNextChunk();
+                Schedule(TDuration::Seconds(PersistentBufferFormat.DeallocateThresholdSeconds), new TEvents::TEvWakeup(EWakeupTag::WakeupProcessDeallocatePersistentBufferChunk));
+            }
+        }
+
+        if (auto deallocateChunkIdx = PersistentBufferSpaceAllocator.LockedChunkIdx; PersistentBufferSpaceAllocator.DeallocateChunk()) {
+            auto ddiskActorId = MakeBlobStorageDDiskId(SelfId().NodeId(), BaseInfo.PDiskId, BaseInfo.VDiskSlotId);
+            Send(ddiskActorId, new TEvPrivate::TEvDeallocatePersistentBufferChunk(deallocateChunkIdx));
+            YDB_LOG_DEBUG_COMP(NKikimrServices::BS_PERSISTENT_BUFFER, "TDDiskActor::ProcessDeallocatePersistentBufferChunk deallocate chunk",
+                {"marker", "BSPB"},
+                {"PBufferId", SelfId()},
+                {"freeSpace", PersistentBufferSpaceAllocator.GetFreeSpace()},
+                {"deallocateChunkIdx", deallocateChunkIdx});
+        }
+    }
+
+    void TDDiskActor::Handle(TEvPrivate::TEvDeallocatePersistentBufferChunkResult::TPtr ev) {
+        auto& msg = *ev->Get();
+        YDB_LOG_DEBUG_COMP(NKikimrServices::BS_PERSISTENT_BUFFER, "TDDiskActor::TEvDeallocatePersistentBufferChunkResult",
+            {"marker", "BSPB"},
+            {"PBufferId", SelfId()},
+            {"msg", msg});
+
+    }
 
     void TDDiskActor::InitPersistentBuffer() {
         Y_ABORT_UNLESS(IsPersistentBufferActor);
@@ -429,6 +470,43 @@ namespace NKikimr::NDDisk {
             });
             it->second.emplace_back(opCookie, 0u);
             return false;
+        }
+
+        // Reject new writes early when the persistent buffer has reached its
+        // maximum chunk count AND the free sector count has dropped below
+        // MinFreeSectorsReserve. Barrier movement (BarrierErasePersistentBuffer)
+        // and fast erases (FastErasePersistentBuffer) first allocate a new sector
+        // for their write record and only afterwards release the old sector, so
+        // they need headroom in the free pool. Refusing plain writes here ensures
+        // that headroom is always preserved for those higher-priority operations.
+        // This guard only fires when no new chunks can be allocated; when growth
+        // is still possible the normal pending-queue / chunk-allocation path
+        // handles writes instead.
+        // Duplicate requests (both committed and in-flight) are exempt because
+        // they reuse already-allocated sectors and do not consume additional space.
+        if (PersistentBufferSpaceAllocator.OwnedChunks.size() >= PersistentBufferFormat.MaxChunks
+                && PersistentBufferSpaceAllocator.GetFreeSpace() < PersistentBufferFormat.MinFreeSectorsReserve) {
+            YDB_LOG_DEBUG_COMP(NKikimrServices::BS_PERSISTENT_BUFFER, "TDDiskActor::PreprocessPersistentBufferWrite not enough reserved free sectors",
+                {"marker", "BSPB"},
+                {"PBufferId", SelfId()},
+                {"tabletId", creds.TabletId},
+                {"generation", creds.Generation},
+                {"lsn", lsn},
+                {"freeSpace", PersistentBufferSpaceAllocator.GetFreeSpace()},
+                {"minFreeSectorsReserve", PersistentBufferFormat.MinFreeSectorsReserve});
+            SendReply(ev, std::make_unique<TEvWritePersistentBufferResult>(
+                NKikimrBlobStorage::NDDisk::TReplyStatus::OVERFILL,
+                TStringBuilder() << "persistent buffer low free space: "
+                    << PersistentBufferSpaceAllocator.GetFreeSpace() << " free sectors, "
+                    << PersistentBufferFormat.MinFreeSectorsReserve << " required as reserve"));
+            return false;
+        }
+        ui64 freeSpace = PersistentBufferSpaceAllocator.GetFreeSpace();
+        ui64 ownedChunks = PersistentBufferSpaceAllocator.OwnedChunks.size();
+
+        if (freeSpace * 100 < ownedChunks * SectorInChunk * PersistentBufferFormat.PreallocateFreeSpaceThresholdPercent
+            && ownedChunks < PersistentBufferFormat.MaxChunks) {
+            IssuePersistentBufferChunkAllocation();
         }
         return true;
     }
@@ -1618,6 +1696,7 @@ namespace NKikimr::NDDisk {
             } else {
                 PersistentBufferSpaceAllocator.Free({pr.Sectors.begin() + 1, pr.Sectors.end()});
             }
+            ProcessDeallocatePersistentBufferChunk();
 
             buffer.Size -= pr.Size;
             for (auto readCookie : pr.ReadInflight) {

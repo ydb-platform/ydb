@@ -16,10 +16,13 @@ This module implements endpoint resolution, including resolving endpoints for a
 given service and region and resolving the available endpoints for a service
 in a specific AWS partition.
 """
+
 import copy
 import logging
 import re
 from enum import Enum
+
+import jmespath
 
 from botocore import UNSIGNED, xform_name
 from botocore.auth import AUTH_TYPE_MAPS, HAS_CRT
@@ -261,7 +264,7 @@ class EndpointResolver(BaseEndpointResolver):
         ):
             error_msg = (
                 "Dualstack endpoints are currently not supported"
-                " for %s partition" % partition_name
+                f" for {partition_name} partition"
             )
             raise EndpointVariantError(tags=['dualstack'], error_msg=error_msg)
 
@@ -357,8 +360,7 @@ class EndpointResolver(BaseEndpointResolver):
 
         if endpoint_data.get('deprecated'):
             LOG.warning(
-                'Client is configured with the deprecated endpoint: %s'
-                % (endpoint_name)
+                f'Client is configured with the deprecated endpoint: {endpoint_name}'
             )
 
         service_defaults = service_data.get('defaults', {})
@@ -450,6 +452,9 @@ class EndpointResolverBuiltins(str, Enum):
     AWS_S3_DISABLE_MRAP = "AWS::S3::DisableMultiRegionAccessPoints"
     # Whether a custom endpoint has been configured (str)
     SDK_ENDPOINT = "SDK::Endpoint"
+    # Currently not implemented:
+    ACCOUNT_ID = "AWS::Auth::AccountId"
+    ACCOUNT_ID_ENDPOINT_MODE = "AWS::Auth::AccountIdEndpointMode"
 
 
 class EndpointRulesetResolver:
@@ -496,7 +501,7 @@ class EndpointRulesetResolver:
             operation_model, call_args, request_context
         )
         LOG.debug(
-            'Calling endpoint provider with parameters: %s' % provider_params
+            f'Calling endpoint provider with parameters: {provider_params}'
         )
         try:
             provider_result = self._provider.resolve_endpoint(
@@ -510,7 +515,7 @@ class EndpointRulesetResolver:
                 raise
             else:
                 raise botocore_exception from ex
-        LOG.debug('Endpoint provider result: %s' % provider_result.url)
+        LOG.debug(f'Endpoint provider result: {provider_result.url}')
 
         # The endpoint provider does not support non-secure transport.
         if not self._use_ssl and provider_result.url.startswith('https://'):
@@ -575,6 +580,13 @@ class EndpointRulesetResolver:
         )
         if dynamic is not None:
             return dynamic
+        operation_context_params = (
+            self._resolve_param_as_operation_context_param(
+                param_name, operation_model, call_args
+            )
+        )
+        if operation_context_params is not None:
+            return operation_context_params
         return self._resolve_param_as_client_context_param(param_name)
 
     def _resolve_param_as_static_context_param(
@@ -596,6 +608,14 @@ class EndpointRulesetResolver:
         if param_name in client_ctx_params:
             client_ctx_varname = client_ctx_params[param_name]
             return self._client_context.get(client_ctx_varname)
+
+    def _resolve_param_as_operation_context_param(
+        self, param_name, operation_model, call_args
+    ):
+        operation_ctx_params = operation_model.operation_context_parameters
+        if param_name in operation_ctx_params:
+            path = operation_ctx_params[param_name]['path']
+            return jmespath.search(path, call_args)
 
     def _resolve_param_as_builtin(self, builtin_name, builtins):
         if builtin_name not in EndpointResolverBuiltins.__members__.values():
@@ -633,7 +653,7 @@ class EndpointRulesetResolver:
         customized_builtins = copy.copy(self._builtins)
         # Handlers are expected to modify the builtins dict in place.
         self._event_emitter.emit(
-            'before-endpoint-resolution.%s' % service_id,
+            f'before-endpoint-resolution.{service_id}',
             builtins=customized_builtins,
             model=operation_model,
             params=call_args,
@@ -722,7 +742,9 @@ class EndpointRulesetResolver:
             signing_context['region'] = scheme['signingRegion']
         elif 'signingRegionSet' in scheme:
             if len(scheme['signingRegionSet']) > 0:
-                signing_context['region'] = scheme['signingRegionSet'][0]
+                signing_context['region'] = ','.join(
+                    scheme['signingRegionSet']
+                )
         if 'signingName' in scheme:
             signing_context.update(signing_name=scheme['signingName'])
         if 'disableDoubleEncoding' in scheme:

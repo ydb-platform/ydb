@@ -74,10 +74,10 @@ PEERDIR(
     ydb/core/keyvalue
     ydb/core/kqp
     ydb/core/kqp/federated_query/actors
+    ydb/services/scheme_secret
     ydb/core/kqp/finalize_script_service
     ydb/core/kqp/rm_service
     ydb/core/load_test
-    ydb/core/local_pgwire
     ydb/core/log_backend
     ydb/core/memory_controller
     ydb/core/metering
@@ -89,6 +89,7 @@ PEERDIR(
     ydb/core/mon_alloc
     ydb/core/node_whiteboard
     ydb/core/persqueue
+    ydb/core/persqueue/deferred_publish
     ydb/core/protos
     ydb/core/public_http
     ydb/core/quoter
@@ -173,6 +174,7 @@ PEERDIR(
     ydb/services/maintenance
     ydb/services/metadata
     ydb/services/metadata/ds_table
+    ydb/services/udf_store
     ydb/services/monitoring
     ydb/services/persqueue_cluster_discovery
     ydb/services/persqueue_v1

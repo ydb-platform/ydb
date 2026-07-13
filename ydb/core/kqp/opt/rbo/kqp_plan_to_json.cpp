@@ -211,12 +211,22 @@ double ComputeCpuTimes(NJson::TJsonValue& plan) {
     return currCpuTime;
 }
 
+bool IsTableReadOperator(const TString& opName) {
+    return opName == "TableFullScan" || opName == "TableRangeScan";
+}
+
+TString GetLastPathComponent(const TString& path) {
+    auto slash = path.rfind('/');
+    return (slash == TString::npos) ? path : path.substr(slash + 1);
+}
+
 void AddStatsToSimplifiedPlan(NJson::TJsonValue& txPlan) {
     auto& simplifiedPlan = txPlan.GetMapSafe().at("SimplifiedPlan");
     auto& execPlan = txPlan.GetMapSafe().at("Plans")[0];
 
     // Extract all operator ids from SimplifiedPlan and look up stages and operators
     // in the execution plan
+    // FIXME: This tries to look up by connections, let's not find the connections as operators in the first place
     std::vector<NJson::TJsonValue> opIds;
     FindPlanNodes(simplifiedPlan, "OperatorId", opIds);
 
@@ -228,8 +238,14 @@ void AddStatsToSimplifiedPlan(NJson::TJsonValue& txPlan) {
         NJson::TJsonValue* explainPlanStage;
         NJson::TJsonValue* explainPlanOp;
 
-        Y_ENSURE(FindStageAndOpByOpId(execPlan, idNode.GetIntegerSafe(), execPlanStage, execPlanOp, execOperatorIdx));
-        Y_ENSURE(FindStageAndOpByOpId(simplifiedPlan, idNode.GetIntegerSafe(), explainPlanStage, explainPlanOp, explainOperatorIdx));
+        if (!FindStageAndOpByOpId(execPlan, idNode.GetIntegerSafe(), execPlanStage, execPlanOp, execOperatorIdx)) {
+            YQL_CLOG(TRACE, CoreDq) << "Did not find operator: " << idNode.GetIntegerSafe() << " in exec plan";
+            continue;
+        }
+        if (!FindStageAndOpByOpId(simplifiedPlan, idNode.GetIntegerSafe(), explainPlanStage, explainPlanOp, explainOperatorIdx)) {
+            YQL_CLOG(TRACE, CoreDq) << "Did not find operator: " << idNode.GetIntegerSafe() << " in simplified plan";
+
+        }
 
         if(!execPlanStage->GetMapSafe().contains("Stats")) {
             continue;
@@ -250,10 +266,24 @@ void AddStatsToSimplifiedPlan(NJson::TJsonValue& txPlan) {
         bool operatorRows = false;
         bool operatorSize = false;
 
-        if (opName == "TableFullScan" && stats.contains("Table")) {
+        if (IsTableReadOperator(opName) && stats.contains("Table")) {
+            TString tableName;
+            if (explainPlanOp->GetMapSafe().contains("Path")) {
+                tableName = explainPlanOp->GetMapSafe().at("Path").GetStringSafe();
+            } else if (explainPlanOp->GetMapSafe().contains("Table")) {
+                tableName = explainPlanOp->GetMapSafe().at("Table").GetStringSafe();
+            }
+
             for (auto& opStat : stats.at("Table").GetArraySafe()) {
                 if (opStat.IsMap()) {
                     auto& opMap = opStat.GetMapSafe();
+                    if (tableName && opMap.contains("Path")) {
+                        const auto statPath = opMap.at("Path").GetStringSafe();
+                        if (statPath != tableName && GetLastPathComponent(statPath) != tableName) {
+                            continue;
+                        }
+                    }
+
                     if (opMap.contains("ReadRows")) {
                         explainPlanOp->InsertValue("A-Rows", opMap.at("ReadRows").GetMapSafe().at("Sum").GetDouble());
                         operatorRows = true;
@@ -262,6 +292,7 @@ void AddStatsToSimplifiedPlan(NJson::TJsonValue& txPlan) {
                         explainPlanOp->InsertValue("A-Size", opMap.at("ReadBytes").GetMapSafe().at("Sum").GetDouble());
                         operatorSize = true;
                     }
+                    break;
                 }
             }
         } else if(stats.contains("Operator")) {
@@ -354,7 +385,7 @@ NJson::TJsonValue TOpRoot::GetExecutionJson(ui64& nodeCounter, THashMap<IOperato
     std::set<int> stages;
     ui32 operatorId = 0;
 
-    for (auto it : *this) {
+    for (const auto& it : *this) {
         auto & currOp = it.Current;
         operatorIds.insert({currOp.Get(), operatorId++});
         int stageId = *currOp->Props.StageId;

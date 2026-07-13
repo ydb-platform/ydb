@@ -108,7 +108,8 @@ public:
         return 0;
     }
 
-    bool GetPartitions(const TExprNode& node, std::unordered_set<ui64>& partitions) {
+    template<typename TContainer>
+    bool GetPartitions(const TExprNode& node, TContainer& partitions) {
         partitions.clear();
         if (!node.IsCallable("AsList")) {
             return false;
@@ -271,6 +272,15 @@ public:
                 }
                 const TCoNameValueTupleList watermarkSettings = watermarkSettingsBuilder.Done();
 
+                // The partition id metadata column is exposed at the expr level under the user-facing
+                // __ydb_ name when system columns are forbidden, and under the legacy _yql_sys_ name otherwise.
+                const TString partitionIdColumn = State_->ForbidYqlSysColumnsAndSystemMetadata
+                    ? "__ydb_partition_id"
+                    : "_yql_sys_partition_id";
+                const TString clusterColumn = State_->ForbidYqlSysColumnsAndSystemMetadata
+                    ? "__ydb_cluster"
+                    : "_yql_sys_cluster";
+
                 result = Build<TDqPhyWatermarkGenerator>(ctx, pos)
                     .Input(result)
                     .WatermarkExtractor(watermark)
@@ -281,14 +291,14 @@ public:
                                 .Name<TCoAtom>().Build("cluster")
                                 .Value<TCoMember>()
                                     .Struct("arg")
-                                    .Name().Build("_yql_sys_cluster")
+                                    .Name().Build(clusterColumn)
                                     .Build()
                                 .Build()
                             .Add<TCoNameValueTuple>()
                                 .Name<TCoAtom>().Build("partition_id")
                                 .Value<TCoMember>()
                                     .Struct("arg")
-                                    .Name().Build("_yql_sys_partition_id")
+                                    .Name().Build(partitionIdColumn)
                                     .Build()
                                 .Build()
                             .Build()
@@ -500,7 +510,27 @@ public:
                 }
 
                 for (const auto metadata : topic.Metadata()) {
-                    srcDesc.AddMetadataFields(metadata.Value().Maybe<TCoAtom>().Cast().StringValue());
+                    const auto sysColumnName = metadata.Value().Maybe<TCoAtom>().Cast().StringValue();
+                    if (State_->ForbidYqlSysColumnsAndSystemMetadata && SkipPqSystemPrefix(sysColumnName)) {
+                        continue;
+                    }
+                    // For __ydb_-prefixed columns, map to the corresponding _yql_sys_ name
+                    // so the read actor can find the right extractor
+                    if (auto oldName = YdbSysColumnToOldSysColumn(sysColumnName, State_->AddTransparentPrefixToTransparentSystemColumns)) {
+                        // Only add the _yql_sys_ version if it's not already present
+                        bool alreadyPresent = false;
+                        for (size_t i = 0; i < static_cast<size_t>(srcDesc.MetadataFieldsSize()); ++i) {
+                            if (srcDesc.GetMetadataFields(i) == *oldName) {
+                                alreadyPresent = true;
+                                break;
+                            }
+                        }
+                        if (!alreadyPresent) {
+                            srcDesc.AddMetadataFields(*oldName);
+                        }
+                    } else {
+                        srcDesc.AddMetadataFields(sysColumnName);
+                    }
                 }
 
                 const auto rowSchema = topic.RowSpec().Ref().GetTypeAnn()->Cast<TTypeExprType>()->GetType()->Cast<TStructExprType>();
@@ -566,6 +596,9 @@ public:
                 }
 
                 if (sharedReading && !filterPredicateSql.empty()) {
+                    if (filterPredicateSql.size() > 4000) {
+                        filterPredicateSql = filterPredicateSql.substr(0, 4000) + "...";
+                    }
                     ctx.AddWarning(TIssue(ctx.GetPosition(node.Pos()), "Row dispatcher will use the predicate: " + filterPredicateSql));
                 }
                 if (sharedReading && !watermarkExprSql.empty()) {
@@ -684,7 +717,7 @@ private:
                     return Nothing();
                 }
             }
-            if (!IsIn({"_yql_sys_tsp_write_time", "_yql_sys_write_time"}, member.Name())) {
+            if (!IsIn({"_yql_sys_tsp_write_time", "_yql_sys_write_time", "__ydb_write_time"}, member.Name())) {
                 ctx.AddError(TIssue(pos, defaultMessage));
                 return Nothing();
             }
@@ -955,11 +988,18 @@ public:
             .Done());
 
         TExprNode::TListType metadataFieldsList;
-        for (const auto& sysColumn : GetAllowedPqMetaSysColumns(
-                 State_->AddTransparentPrefixToTransparentSystemColumns,
-                 State_->EnableUserAttributesInTopicQuery))
-        {
-            metadataFieldsList.push_back(ctx.NewAtom(pos, sysColumn));
+        if (!State_->ForbidYqlSysColumnsAndSystemMetadata) {
+            for (const auto& sysColumn : GetAllowedPqMetaSysColumns(
+                     State_->AddTransparentPrefixToTransparentSystemColumns,
+                     State_->EnableUserAttributesInTopicQuery))
+            {
+                metadataFieldsList.push_back(ctx.NewAtom(pos, sysColumn));
+            }
+        }
+
+        // Also add __ydb_-prefixed system columns
+        for (const auto& ydbColumn : GetAllowedYdbSysColumns(State_->EnableUserAttributesInTopicQuery)) {
+            metadataFieldsList.push_back(ctx.NewAtom(pos, ydbColumn));
         }
 
         settings.push_back(Build<TCoNameValueTuple>(ctx, pos)
@@ -1042,6 +1082,63 @@ public:
             useSharedReading = false;
         }
         return useSharedReading;
+    }
+
+    bool FillSourcePlanProperties(const NNodes::TExprBase& node, TMap<TString, NJson::TJsonValue>& properties) override {
+        if (!node.Maybe<TDqSource>()) {
+            return false;
+        }
+        auto source = node.Cast<TDqSource>();
+        auto settings = source.Settings();
+        auto maybeTopicSource = TMaybeNode<TDqPqTopicSource>(settings.Raw());
+
+        if (!maybeTopicSource) {
+            return false;
+        }
+        TDqPqTopicSource topicSource = maybeTopicSource.Cast();
+
+        NYql::NConnector::NApi::TPredicate predicateProto;
+        auto serializedProto = topicSource.FilterPredicate().Ref().Content();
+        YQL_ENSURE(predicateProto.ParseFromString(serializedProto));
+        TString filterPredicateSql = NYql::FormatPredicate(predicateProto);
+
+        NPq::NProto::TOffsetPredicate offsetPredicates;
+        auto offsetSerialized = topicSource.OffsetPredicate().Ref().Content();
+        YQL_ENSURE(offsetPredicates.ParseFromString(offsetSerialized));
+
+        NPq::NProto::TWriteTimePredicate writeTimePredicate;
+        auto writeTimeSerialized = topicSource.WriteTimePredicate().Ref().Content();
+        YQL_ENSURE(writeTimePredicate.ParseFromString(writeTimeSerialized));
+
+        std::set<ui64> predicatePartitions;
+        bool hasPredicatePartitions = GetPartitions(*topicSource.Partitions().Ptr(), predicatePartitions);
+
+        if (!filterPredicateSql.empty()) {
+            properties["Filter (shared reading)"] = filterPredicateSql;
+        }
+        if (offsetPredicates.ItemSize() > 0) {
+            const auto& item = offsetPredicates.GetItem(0);
+            properties["Offsets"] = TStringBuilder() << "[" 
+                << (item.HasBegin() ? ToString(item.GetBegin()) : "_") << ", " 
+                << (item.HasEnd() ? ToString(item.GetEnd()) : "_") << ")";
+        }
+        if (writeTimePredicate.ItemSize() > 0) {
+            const auto& item = writeTimePredicate.GetItem(0);
+            properties["WriteTime"] = TStringBuilder() << "[" 
+                << (item.HasBegin() ? ToString(TInstant::MicroSeconds(item.GetBegin())) : "_") << ", "
+                << (item.HasEnd() ? ToString(TInstant::MicroSeconds(item.GetEnd())) : "_") << ")";
+        }
+        if (hasPredicatePartitions && !predicatePartitions.empty()) {
+            if (predicatePartitions.size() == 1) {
+                properties["Partitions"] = TStringBuilder() << "[" << ToString(*predicatePartitions.begin()) << "]";
+            } else {
+                properties["Partitions"] = TStringBuilder() << "["
+                    << ToString(*predicatePartitions.begin())
+                    << ((predicatePartitions.size() > 2) ? ", ..., " : ", ")
+                    << ToString(*predicatePartitions.rbegin()) << "]";
+            }
+        }
+        return true;
     }
 
 private:

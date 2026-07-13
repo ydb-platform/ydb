@@ -40,6 +40,9 @@ public:
                 {"channelProfileNewGroup", ChannelProfileNewGroup});
             if (tablet->IsReadyToReassignTablet()) {
                 NIceDb::TNiceDb db(txc.DB);
+                if (!std::exchange(tablet->IsMarkedForReassign, true)) {
+                    Self->UpdateCounterTabletsReassigning(+1);
+                }
                 tablet->ChannelProfileNewGroup |= ChannelProfileNewGroup;
                 tablet->ActorsToNotify.push_back(Sender);
                 db.Table<Schema::Tablet>().Key(tablet->Id).Update(

@@ -1787,6 +1787,41 @@ Y_UNIT_TEST_SUITE(IndexBuildTest) {
             env.TestWaitNotification(runtime, txId);
         }
     }
+
+    // Check that oldest builds are erased when MaxStoredIndexBuilds limit is exceeded
+    Y_UNIT_TEST(MaxStoredIndexBuilds) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().MaxStoredIndexBuilds(2));
+        ui64 txId = 100;
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+              Name: "Table"
+              Columns { Name: "key"   Type: "Uint32" }
+              Columns { Name: "index" Type: "Uint32" }
+              KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestBuildIndex(runtime, ++txId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/Table",
+            TBuildIndexConfig{"index1", NKikimrSchemeOp::EIndexTypeGlobal, {"index"}, {}, {}});
+        env.TestWaitNotification(runtime, txId);
+
+        TestBuildIndex(runtime, ++txId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/Table",
+            TBuildIndexConfig{"index2", NKikimrSchemeOp::EIndexTypeGlobal, {"index"}, {}, {}});
+        env.TestWaitNotification(runtime, txId);
+
+        auto listing = TestListBuildIndex(runtime, TTestTxConfig::SchemeShard, "/MyRoot");
+        UNIT_ASSERT_VALUES_EQUAL(listing.EntriesSize(), 2);
+
+        // Normal request
+        TestBuildIndex(runtime, ++txId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/Table",
+            TBuildIndexConfig{"index3", NKikimrSchemeOp::EIndexTypeGlobal, {"index"}, {}, {}});
+        env.TestWaitNotification(runtime, txId);
+
+        // Check that the oldest request is forgotten
+        listing = TestListBuildIndex(runtime, TTestTxConfig::SchemeShard, "/MyRoot");
+        UNIT_ASSERT_VALUES_EQUAL(listing.EntriesSize(), 2);
+    }
 }
 
 

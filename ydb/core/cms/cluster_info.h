@@ -31,6 +31,10 @@
 #include <util/generic/set.h>
 #include <util/generic/vector.h>
 
+namespace Ydb::Maintenance {
+    class Node;
+}
+
 namespace NKikimr::NCms {
 
 // Forward declarations.
@@ -722,7 +726,7 @@ public:
     void GenerateSysTabletsNodesCheckers();
     void GenerateClusterNodesCheckers();
 
-    bool IsStateStorageReplicaNode(ui32 nodeId) {
+    bool IsStateStorageReplicaNode(ui32 nodeId) const {
         return StateStorageReplicas.contains(nodeId);
     }
 
@@ -994,6 +998,10 @@ public:
 
     static bool IsStaticGroupVDisk(const TVDiskID &vdId) { return EGroupConfigurationType::Static == VDiskConfigurationType(vdId); }
     static bool IsDynamicGroupVDisk(const TVDiskID &vdId) { return EGroupConfigurationType::Dynamic == VDiskConfigurationType(vdId); }
+
+    // Computes cluster roles for the given node and appends them to the
+    // repeated `roles` field of the maintenance Node message.
+    void FillNodeRoles(const TNodeInfo &node, Ydb::Maintenance::Node &out) const;
 
 private:
     TNodeInfo &NodeRef(ui32 nodeId) const {

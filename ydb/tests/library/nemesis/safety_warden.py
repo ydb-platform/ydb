@@ -525,8 +525,6 @@ class UnifiedAgentSanitizerSafetyWarden(SafetyWarden):
 
         except subprocess.TimeoutExpired:
             logger.warning("Timeout while checking unified_agent for sanitizer errors")
-        except FileNotFoundError:
-            logger.warning("unified_agent not found")
         except Exception as e:
             logger.warning("Error checking unified_agent for sanitizer errors: {}".format(e))
 

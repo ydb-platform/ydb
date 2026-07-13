@@ -190,7 +190,7 @@ struct TAstNode {
     }
 
     static inline TAstNode* NewList(TPosition position, TMemoryPool& pool) {
-        return NewList(position, nullptr, 0, pool);
+        return NewList(position, /*children=*/nullptr, 0, pool);
     }
 
     static TAstNode QuoteAtom;

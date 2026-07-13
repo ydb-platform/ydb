@@ -248,7 +248,7 @@ RESOURCE(
 
 PEERDIR(
     contrib/libs/zstd
-    library/cpp/containers/absl_flat_hash
+    library/cpp/containers/absl
     library/cpp/containers/stack_vector
     library/cpp/digest/md5
     library/cpp/html/pcdata
@@ -307,8 +307,10 @@ IF (OS_WINDOWS)
     )
 ELSE()
     SRCS(
+        export_parquet.cpp
         export_s3_buffer.cpp
         export_s3_uploader.cpp
+        export_ydb_dump.cpp
         import_s3.cpp
     )
 ENDIF()
@@ -328,7 +330,6 @@ RECURSE_FOR_TESTS(
     ut_export
     ut_external_blobs
     ut_followers
-    ut_fulltext
     ut_incremental_backup
     ut_incremental_restore_scan
     ut_init

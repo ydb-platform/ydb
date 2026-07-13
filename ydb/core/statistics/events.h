@@ -8,6 +8,8 @@
 #include <ydb/library/actors/core/events.h>
 #include <yql/essentials/public/issue/yql_issue.h>
 
+#include <variant>
+
 
 namespace NKikimr {
 
@@ -52,9 +54,35 @@ enum class EStatType {
     TABLE_SUMMARY = 4,
 };
 
+// Absent for SIMPLE/TABLE_SUMMARY stats;
+// a single column tag (most stat types)
+// an ordered column-tag tuple (multi-column stats).
+class TColumnTags {
+public:
+    TColumnTags() = default;
+    TColumnTags(ui32 tag) : Tags(tag) {}
+    TColumnTags(std::vector<ui32> tags) : Tags(std::move(tags)) {}
+
+    // The single column tag, or nullopt if unset or multi-column.
+    std::optional<ui32> AsSingle() const {
+        if (const auto* tag = std::get_if<ui32>(&Tags)) {
+            return *tag;
+        }
+        return std::nullopt;
+    }
+
+    // The multi-column tuple, or nullptr if unset or single-column.
+    const std::vector<ui32>* AsMulti() const {
+        return std::get_if<std::vector<ui32>>(&Tags);
+    }
+
+private:
+    std::variant<std::monostate, ui32, std::vector<ui32>> Tags;
+};
+
 struct TRequest {
     TPathId PathId;
-    std::optional<ui32> ColumnTag; // not used for SIMPLE or TABLE_SUMMARY stats
+    TColumnTags ColumnTags;
 };
 
 struct TResponse {
@@ -73,12 +101,21 @@ struct TStatisticsItem {
             std::optional<ui32> columnTag,
             EStatType type,
             TString data)
-        : ColumnTag(columnTag)
+        : ColumnTags(columnTag ? TColumnTags(*columnTag) : TColumnTags())
         , Type(type)
         , Data(std::move(data))
     {}
 
-    std::optional<ui32> ColumnTag;
+    TStatisticsItem(
+            std::vector<ui32> columnTags,
+            EStatType type,
+            TString data)
+        : ColumnTags(std::move(columnTags))
+        , Type(type)
+        , Data(std::move(data))
+    {}
+
+    TColumnTags ColumnTags;
     EStatType Type;
     TString Data;
 };

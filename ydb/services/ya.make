@@ -17,11 +17,13 @@ RECURSE(
     local_discovery
     maintenance
     metadata
+    udf_store
     monitoring
     persqueue_cluster_discovery
     persqueue_v1
     rate_limiter
     replication
+    scheme_secret
     sqs_topic
     tablet
     test_shard

@@ -89,6 +89,18 @@ struct TActorSystemPtrMixin {
     NKikimr::TDeferredActorLogBackend::TSharedAtomicActorSystemPtr ActorSystemPtr = std::make_shared<NKikimr::TDeferredActorLogBackend::TAtomicActorSystemPtr>(nullptr);
 };
 
+template <class TEvent>
+void SendToActorSystem(
+    const NKikimr::TDeferredActorLogBackend::TSharedAtomicActorSystemPtr& actorSystemPtr,
+    const TActorId& actorId,
+    TEvent* event)
+{
+    std::unique_ptr<TEvent> eventHolder(event);
+    if (auto* actorSystem = actorSystemPtr->load(std::memory_order_acquire)) {
+        actorSystem->Send(actorId, eventHolder.release());
+    }
+}
+
 class TLeaderElection: public TActorBootstrapped<TLeaderElection>, public TActorSystemPtrMixin {
 
     enum class EState {
@@ -133,6 +145,7 @@ public:
         NYdb::TDriver driver,
         const TString& tenant,
         const ::NMonitoring::TDynamicCounterPtr& counters);
+    ~TLeaderElection() override;
 
     void Bootstrap();
     void PassAway() override;
@@ -171,6 +184,7 @@ private:
     void ProcessState();
     void ResetState();
     void SetTimeout();
+    void StopYdb();
     NYdb::TDriverConfig GetYdbDriverConfig() const;
 };
 
@@ -190,6 +204,10 @@ TLeaderElection::TLeaderElection(
     , ParentId(parentId)
     , CoordinatorId(coordinatorId)
     , Metrics(counters) {
+}
+
+TLeaderElection::~TLeaderElection() {
+    StopYdb();
 }
 
 ERetryErrorClass RetryFunc(const NYdb::TStatus& status) {
@@ -224,7 +242,7 @@ TYdbSdkRetryPolicy::TPtr MakeSchemaRetryPolicy() {
 void TLeaderElection::Bootstrap() {
     Become(&TLeaderElection::StateFunc);
     Y_ABORT_UNLESS(!ActorSystemPtr->load(std::memory_order_relaxed), "Double ActorSystemPtr init");
-    ActorSystemPtr->store(TActivationContext::ActorSystem(), std::memory_order_relaxed);
+    ActorSystemPtr->store(TActivationContext::ActorSystem(), std::memory_order_release);
 
     LogPrefix = "TLeaderElection " + SelfId().ToString() + " ";
     LOG_ROW_DISPATCHER_DEBUG("Successfully bootstrapped, local coordinator id " << CoordinatorId.ToString()
@@ -292,8 +310,8 @@ void TLeaderElection::ResetState() {
 void TLeaderElection::CreateSemaphore() {
     Session->CreateSemaphore(SemaphoreName, 1 /* limit */)
         .Subscribe(
-        [actorId = this->SelfId(), actorSystem = TActivationContext::ActorSystem()](const NYdb::NCoordination::TAsyncResult<void>& future) {
-            actorSystem->Send(actorId, new TEvPrivate::TEvCreateSemaphoreResult(future));
+        [actorId = this->SelfId(), actorSystemPtr = ActorSystemPtr](const NYdb::NCoordination::TAsyncResult<void>& future) {
+            SendToActorSystem(actorSystemPtr, actorId, new TEvPrivate::TEvCreateSemaphoreResult(future));
         }); 
 }
 
@@ -314,8 +332,8 @@ void TLeaderElection::AcquireSemaphore() {
         SemaphoreName,
         NYdb::NCoordination::TAcquireSemaphoreSettings().Count(1).Data(strActorId))
         .Subscribe(
-            [actorId = this->SelfId(), actorSystem = TActivationContext::ActorSystem()](const NYdb::NCoordination::TAsyncResult<bool>& future) {
-                actorSystem->Send(actorId, new TEvPrivate::TEvAcquireSemaphoreResult(future));
+            [actorId = this->SelfId(), actorSystemPtr = ActorSystemPtr](const NYdb::NCoordination::TAsyncResult<bool>& future) {
+                SendToActorSystem(actorSystemPtr, actorId, new TEvPrivate::TEvAcquireSemaphoreResult(future));
             });
 }
 
@@ -327,11 +345,11 @@ void TLeaderElection::StartSession() {
             CoordinationNodePath, 
             NYdb::NCoordination::TSessionSettings()
                 .Timeout(CoordinationSessionTimeout)
-                .OnStopped([actorId = this->SelfId(), actorSystem = TActivationContext::ActorSystem()]() {
-                    actorSystem->Send(actorId, new TEvPrivate::TEvSessionStopped());
+                .OnStopped([actorId = this->SelfId(), actorSystemPtr = ActorSystemPtr]() {
+                    SendToActorSystem(actorSystemPtr, actorId, new TEvPrivate::TEvSessionStopped());
                 }))
-        .Subscribe([actorId = this->SelfId(), actorSystem = TActivationContext::ActorSystem()](const NYdb::NCoordination::TAsyncSessionResult& future) {
-                actorSystem->Send(actorId, new TEvPrivate::TEvCreateSessionResult(future));
+        .Subscribe([actorId = this->SelfId(), actorSystemPtr = ActorSystemPtr](const NYdb::NCoordination::TAsyncSessionResult& future) {
+                SendToActorSystem(actorSystemPtr, actorId, new TEvPrivate::TEvCreateSessionResult(future));
             });
 }
 
@@ -388,7 +406,20 @@ void TLeaderElection::Handle(TEvPrivate::TEvAcquireSemaphoreResult::TPtr& ev) {
 
 void TLeaderElection::PassAway() {
     LOG_ROW_DISPATCHER_DEBUG("PassAway");
+    StopYdb();
     TActorBootstrapped::PassAway();
+}
+
+void TLeaderElection::StopYdb() {
+    ActorSystemPtr->store(nullptr, std::memory_order_release);
+    // Close coordination session while the driver can still cancel/finish its
+    // requests; callbacks are drained by Driver->Stop(true) and dropped above.
+    Session.Clear();
+    YdbConnection.Reset();
+    if (Driver) {
+        Driver->Stop(true);
+        Driver.reset();
+    }
 }
 
 void TLeaderElection::Handle(TEvPrivate::TEvSessionStopped::TPtr&) {
@@ -425,12 +456,12 @@ void TLeaderElection::DescribeSemaphore() {
             .WatchData()
             .WatchOwners()
             .IncludeOwners()
-            .OnChanged([actorId = this->SelfId(), actorSystem = TActivationContext::ActorSystem()](bool /* isChanged */) {
-                actorSystem->Send(actorId, new TEvPrivate::TEvOnChangedResult());
+            .OnChanged([actorId = this->SelfId(), actorSystemPtr = ActorSystemPtr](bool /* isChanged */) {
+                SendToActorSystem(actorSystemPtr, actorId, new TEvPrivate::TEvOnChangedResult());
             }))
         .Subscribe(
-            [actorId = this->SelfId(), actorSystem = TActivationContext::ActorSystem()](const NYdb::NCoordination::TAsyncDescribeSemaphoreResult& future) {
-                actorSystem->Send(actorId, new TEvPrivate::TEvDescribeSemaphoreResult(future));
+            [actorId = this->SelfId(), actorSystemPtr = ActorSystemPtr](const NYdb::NCoordination::TAsyncDescribeSemaphoreResult& future) {
+                SendToActorSystem(actorSystemPtr, actorId, new TEvPrivate::TEvDescribeSemaphoreResult(future));
             });
 }
 

@@ -51,6 +51,7 @@ class TPathDescriber {
     void DescribeSysView(const TActorContext&, TPathId pathId, TPathElement::TPtr pathEl);
     void DescribeSecret(const TActorContext&, TPathId pathId, TPathElement::TPtr pathEl);
     void DescribeStreamingQuery(TPathId pathId, TPathElement::TPtr pathEl);
+    void DescribeTestShardSet(TPathId pathId, TPathElement::TPtr pathEl);
 
 public:
     explicit TPathDescriber(TSchemeShard* self, NKikimrSchemeOp::TDescribePath&& params)

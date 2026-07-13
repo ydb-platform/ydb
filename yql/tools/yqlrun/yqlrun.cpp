@@ -186,6 +186,11 @@ int RunUI(int argc, const char* argv[])
 
     NPg::GetSqlLanguageParser()->Freeze();
 
+    NSQLTranslation::TExtendedSqlFlags extendedSqlFlags;
+    for (const auto& flag : sqlFlags) {
+        extendedSqlFlags[flag] = {};
+    }
+
     THolder<TGatewaysConfig> gatewaysConfig;
     if (!gatewaysCfgFile.empty()) {
         gatewaysConfig = ParseProtoConfig<TGatewaysConfig>(gatewaysCfgFile);
@@ -193,7 +198,8 @@ int RunUI(int argc, const char* argv[])
             return -1;
         }
 
-        TGatewaySQLFlags::FromTesting(*gatewaysConfig).CollectAllTo(sqlFlags);
+        extendedSqlFlags = TGatewaySQLFlags::FromTesting(*gatewaysConfig)
+                               .ToMap(std::move(extendedSqlFlags));
     }
 
     THolder<TFileStorageConfig> fsConfig;
@@ -242,7 +248,12 @@ int RunUI(int argc, const char* argv[])
             return -1;
         }
 
-        moduleResolver = std::make_shared<TModuleResolver>(translators, std::move(modules), ctx.NextUniqueId, clusterMapping, sqlFlags);
+        moduleResolver = std::make_shared<TModuleResolver>(
+            translators,
+            std::move(modules),
+            ctx.NextUniqueId,
+            clusterMapping,
+            extendedSqlFlags);
     } else {
         if (!GetYqlDefaultModuleResolver(ctx, moduleResolver, clusterMapping)) {
             Cerr << "Errors loading default YQL libraries:" << Endl;

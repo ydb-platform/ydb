@@ -74,7 +74,11 @@
 
 ## Взаимодействие с контроллером памяти
 
-При выполнении запросов {{ ydb-short-name }} старается умещаться в заданный лимит памяти, который устанавливается [контроллером памяти](../../reference/configuration/memory_controller_config.md). Чтобы продолжать помещаться в этот лимит даже при росте промежуточных вычислений, используется спиллинг. Подробнее см. раздел [Управление памятью](../../reference/configuration/table_service_config.md#memory-management).
+При выполнении запросов {{ ydb-short-name }} старается умещаться в заданный лимит памяти, который устанавливается [контроллером памяти](../../reference/configuration/memory_controller_config.md). Чтобы продолжать помещаться в этот лимит даже при росте промежуточных вычислений, используется спиллинг.
+
+На уровне Resource Manager порог перехода к спиллингу задаётся параметром [`resource_manager.spilling_percent`](../../reference/configuration/table_service_config.md#spilling-percent): когда пул памяти Query Processor на узле заполнен на указанный процент, вычислительные операции начинают предпочитать выгрузку данных на диск дальнейшему росту потребления RAM. Размер пула задаётся параметрами [`query_execution_limit_percent` / `query_execution_limit_bytes`](../../reference/configuration/memory_controller_config.md#query-execution-limit).
+
+Подробнее о настройках спиллинга и связанных лимитах памяти см. разделы [Управление памятью](../../reference/configuration/table_service_config.md#memory-management) и [Лимиты памяти выполнения запросов](../../reference/configuration/table_service_config.md#query-execution-memory-limits).
 
 ## См. также
 

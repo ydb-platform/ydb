@@ -1306,7 +1306,7 @@ public:
         }) {
             const TVector<i64>& allowedMetrics = Self->GetTabletTypeAllowedMetricIds(tabletType);
             out << "<tr>"
-                   "<td>" << GetTabletTypeShortName(tabletType) << "</td>";
+                   "<td title='" << TTabletTypes::EType_Name(tabletType) << "'>" << GetTabletTypeShortName(tabletType) << "</td>";
             out << "<td><input id='cpu' class='form-control' type='checkbox' checked='' disabled='' style='width:20px;height:20px;margin:2px auto'</input></td>";
             out << "<td><input id='cpu' class='form-control' type='checkbox'";
             if (Find(allowedMetrics, NKikimrTabletBase::TMetrics::kCPUFieldNumber) != allowedMetrics.end()) {
@@ -2156,13 +2156,10 @@ function reassignGroups() {
             type: 'POST',
             url: url,
             success: function() {
-
+                $('#status_text').text("Started reassign actor");
             },
             error: function(jqXHR, status) {
                 $('#status_text').text(status);
-            },
-            complete: function() {
-                $('#status_text').text("Started reassign actor");
             },
         });
     }
@@ -2597,10 +2594,11 @@ public:
         TString ToHTML() const {
             auto totalCount = LeaderCount + FollowerCount;
             TStringBuilder str;
+            str << "<span title='" << TTabletTypes::EType_Name(TabletType) << "' ";
             if (MaxCount > 0) {
-                str << "<span class='box' ";
+                str << " class='box' ";
             } else {
-                str << "<span class='box box-disabled' ";
+                str << " class='box box-disabled' ";
             }
             if (totalCount > MaxCount) {
                 str << " style='color: red' ";
@@ -3122,7 +3120,7 @@ public:
             return true;
         }
         for (const auto& tablet : Self->Tablets) {
-            Self->Execute(Self->CreateRestartTablet(tablet.second.GetFullTabletId()));
+            Self->Execute(Self->CreateForceRestartTablet(tablet.second.GetFullTabletId()));
         }
         return true;
     }

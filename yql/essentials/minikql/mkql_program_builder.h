@@ -161,14 +161,14 @@ public:
 
     template <typename T, typename = std::enable_if_t<NUdf::TKnownDataType<T>::Result>>
     TRuntimeNode NewDataLiteral(T data) const {
-        return TRuntimeNode(BuildDataLiteral(NUdf::TUnboxedValuePod(data), NUdf::TDataType<T>::Id, Env_), true);
+        return TRuntimeNode(BuildDataLiteral(NUdf::TUnboxedValuePod(data), NUdf::TDataType<T>::Id, Env_), /*isImmediate=*/true);
     }
 
     template <typename T, typename = std::enable_if_t<NUdf::TTzDataType<T>::Result>>
     TRuntimeNode NewTzDataLiteral(typename NUdf::TDataType<T>::TLayout value, ui16 tzId) const {
         auto data = NUdf::TUnboxedValuePod(value);
         data.SetTimezoneId(tzId);
-        return TRuntimeNode(BuildDataLiteral(data, NUdf::TDataType<T>::Id, Env_), true);
+        return TRuntimeNode(BuildDataLiteral(data, NUdf::TDataType<T>::Id, Env_), /*isImmediate=*/true);
     }
 
     template <NUdf::EDataSlot Type>
@@ -260,8 +260,7 @@ public:
     TRuntimeNode Ascending(TRuntimeNode data);
     TRuntimeNode Descending(TRuntimeNode data);
 
-    // FIXME: Drop the default argument value, when all the callers are adjusted.
-    TRuntimeNode ToFlow(TRuntimeNode stream, const TArrayRef<const TRuntimeNode>& dependentNodes = {});
+    TRuntimeNode ToFlow(TRuntimeNode stream, const TArrayRef<const TRuntimeNode>& dependentNodes);
     TRuntimeNode FromFlow(TRuntimeNode flow);
     TRuntimeNode Steal(TRuntimeNode input);
 
@@ -302,6 +301,9 @@ public:
     TRuntimeNode BlockOr(TRuntimeNode first, TRuntimeNode second);
     TRuntimeNode BlockXor(TRuntimeNode first, TRuntimeNode second);
 
+    TRuntimeNode BlockGuess(TRuntimeNode variant, ui32 tupleIndex);
+    TRuntimeNode BlockGuess(TRuntimeNode variant, const std::string_view& memberName);
+    TRuntimeNode BlockWay(TRuntimeNode variant);
     TRuntimeNode BlockIf(TRuntimeNode condition, TRuntimeNode thenBranch, TRuntimeNode elseBranch);
     TRuntimeNode BlockJust(TRuntimeNode data);
 

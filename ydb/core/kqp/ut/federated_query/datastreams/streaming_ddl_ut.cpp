@@ -2,6 +2,7 @@
 
 #include <ydb/core/kqp/common/events/events.h>
 #include <ydb/core/kqp/common/simple/services.h>
+#include <ydb/core/kqp/ut/federated_query/common/common.h>
 #include <ydb/core/sys_view/common/registry.h>
 #include <ydb/library/testlib/s3_recipe_helper/s3_recipe_helper.h>
 #include <ydb/library/testlib/solomon_helpers/solomon_emulator_helpers.h>
@@ -17,6 +18,7 @@ using namespace NYdb::NQuery;
 using namespace fmt::literals;
 using namespace NYql::NConnector::NTest;
 using namespace NTestUtils;
+using namespace NFederatedQueryTest;
 
 Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
     Y_UNIT_TEST_F(CreateAndAlterStreamingQuery, TStreamingWithSchemaSecretsTestFixture) {
@@ -2771,6 +2773,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         ReadTopicMessage(outputTopic1, "test-A");
         ReadTopicMessage(outputTopic2, "test-B");
 
+        Sleep(TDuration::Seconds(1));
         const auto& results = ExecQuery(fmt::format(R"(
             SELECT * FROM `{row_table}`;
             SELECT * FROM `{column_table}`;)",
@@ -2871,7 +2874,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
             const auto& result = ExecQuery("SELECT Status FROM `.sys/streaming_queries`");
             UNIT_ASSERT_VALUES_EQUAL(result.size(), 1);
             CheckScriptResult(result[0], 1, 1, [&](TResultSetParser& resultSet) {
-                UNIT_ASSERT_VALUES_EQUAL(*resultSet.ColumnParser("Status").GetOptionalUtf8(), "FAILED");
+                UNIT_ASSERT_VALUES_EQUAL(*resultSet.ColumnParser("Status").GetOptionalUtf8(), "STOPPED");
             });
         }
 
@@ -3539,6 +3542,30 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         )sql", "t"_a = tableName));
 
         ReadTopicMessage(outputTopic, R"({"id":"X","val":42})", TInstant::Now() - TDuration::Seconds(100), UseLocalTopics);
+    }
+
+    Y_UNIT_TEST_F(ReadTopicSchemaWithYdbPrefixIsProhibited, TStreamingTestFixture) {
+        const std::string sourceName = "schema_with_ydb_prefix_source";
+        CreatePqSource(sourceName);
+
+        const std::string topicName = "schema_with_ydb_prefix_topic";
+        CreateTopic(topicName);
+
+        // Schema column name starting with __ydb_ should be rejected
+        ExecQuery(fmt::format(R"(
+            SELECT * FROM `{source}`.`{topic}` WITH (
+                FORMAT = "json_each_row",
+                SCHEMA (
+                    __ydb_my_field String NOT NULL,
+                    value String NOT NULL
+                )
+            )
+            LIMIT 1;)",
+            "source"_a = sourceName,
+            "topic"_a = topicName
+        ),
+        EStatus::GENERIC_ERROR,
+        "names starting with '__ydb_' are reserved for system columns");
     }
 }
 

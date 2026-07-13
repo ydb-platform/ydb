@@ -134,16 +134,26 @@ std::function<TString(const TString&, const TString&)> BuildCompositeTokenResolv
 }
 
 TGatewaySQLFlags SQLFlagsFromYson(const NYT::TNode& node) {
-    const auto& list = node["SqlFlags"].AsList();
+    TGatewaySQLFlags flags;
 
-    THashSet<TString> flags(list.size());
-    for (const auto& f : list) {
-        flags.insert(f.AsString());
+    for (const auto& f : node["SqlFlags"].AsList()) {
+        if (f.IsString()) {
+            flags.Set(f.AsString());
+            continue;
+        }
+
+        const auto& name = f["name"].AsString();
+
+        const auto& argList = f["args"].AsList();
+        TVector<TString> args(Reserve(argList.size()));
+        for (const auto& arg : argList) {
+            args.emplace_back(arg.AsString());
+        }
+
+        flags.Set(name, std::move(args));
     }
 
-    return {
-        .Unconditional = std::move(flags),
-    };
+    return flags;
 }
 
 } // namespace
@@ -303,10 +313,6 @@ TProgramPtr TProgramFactory::Create(
         udfResolver = NCommon::CreateUdfResolverDecoratorWithLogger(FunctionRegistry_, udfResolver, *UdfResolverLogfile_, sessionId);
     }
 
-    if (udfIndex) {
-        udfResolver = NCommon::CreateUdfResolverWithIndex(udfIndex, udfResolver, FileStorage_);
-    }
-
     // make UserDataTable_ copy here
     return new TProgram(IssueReportTarget_, FunctionRegistry_, randomProvider, timeProvider, NextUniqueId_, DataProvidersInit_,
                         LangVer_, MaxLangVer_, VolatileResults_, UserDataTable_, Credentials_, moduleResolver, urlListerManager,
@@ -364,6 +370,7 @@ TProgram::TProgram(
     , UdfIndex_(udfIndex)
     , UdfIndexPackageSet_(std::move(udfIndexPackageSet))
     , FileStorage_(fileStorage)
+    , UrlPreprocessing_(urlPreprocessing)
     , SavedUserDataTable_(std::move(userDataTable))
     , GatewaysConfig_(gatewaysConfig)
     , Filename_(std::move(filename))
@@ -456,7 +463,6 @@ TProgram::TProgram(
         if (UrlListerManager_) {
             UrlListerManager_ = NCommon::WrapUrlListerManagerWithQContext(UrlListerManager_, qContext);
         }
-        UdfResolver_ = NCommon::WrapUdfResolverWithQContext(UdfResolver_, QContext_);
         if (QContext_.CanWrite() && GatewaysConfig_) {
             auto data = GatewaysConfig_->SerializeAsString();
             QContext_.GetWriter()->Put({.Component = FacadeComponent, .Label = GatewaysLabel}, data).GetValueSync();
@@ -891,7 +897,7 @@ TProgram::TStatus TProgram::TestPartialTypecheck() {
 
     TIssues issues;
     auto ret = PartialAnnonateTypes(AstRoot_, /*isLibrary=*/false, LangVer_, /*udfMeta=*/nullptr, issues, [&](TTypeAnnotationContext& newTypeCtx) {
-        return CreateConfigProvider(newTypeCtx, nullptr, "", {}, /*forPartialTypeCheck=*/true);
+        return CreateConfigProvider(newTypeCtx, /*config=*/nullptr, "", {}, /*forPartialTypeCheck=*/true);
     },
                                     /*typeParser=*/{}, /*typeWriter=*/{})
                    ? TProgram::TStatus::Ok
@@ -1026,7 +1032,7 @@ TProgram::TFutureStatus TProgram::DiscoverAsync(const TString& username) {
             ExprCtx_->IssueManager.RaiseIssue(ExceptionToIssue(e));
             return NThreading::MakeFuture<TStatus>(IGraphTransformer::TStatus::Error);
         }
-        return AsyncTransform(*Transformer_, ExprRoot_, *ExprCtx_, false);
+        return AsyncTransform(*Transformer_, ExprRoot_, *ExprCtx_, /*applyAsyncChanges=*/false);
     });
 }
 
@@ -1051,7 +1057,7 @@ TProgram::TFutureStatus TProgram::LineageAsync(const TString& username, IOutputS
                        .AddPreTypeAnnotation()
                        .AddExpressionEvaluation(*FunctionRegistry_)
                        .AddIOAnnotation()
-                       .AddTypeAnnotation(TIssuesIds::CORE_TYPE_ANN, true)
+                       .AddTypeAnnotation(TIssuesIds::CORE_TYPE_ANN, /*twoStages=*/true)
                        .AddPostTypeAnnotation()
                        .Add(TExprOutputTransformer::Sync(ExprRoot_, traceOut), "ExprOutput")
                        .AddLineageOptimization(LineageStr_)
@@ -1114,7 +1120,7 @@ TProgram::TFutureStatus TProgram::ValidateAsync(const TString& username, IOutput
                        .AddPreTypeAnnotation()
                        .AddExpressionEvaluation(*FunctionRegistry_)
                        .AddIOAnnotation()
-                       .AddTypeAnnotation(TIssuesIds::CORE_TYPE_ANN, true)
+                       .AddTypeAnnotation(TIssuesIds::CORE_TYPE_ANN, /*twoStages=*/true)
                        .Add(TExprOutputTransformer::Sync(ExprRoot_, exprOut, withTypes), "AstOutput")
                        .Build();
 
@@ -1189,7 +1195,7 @@ TProgram::TFutureStatus TProgram::OptimizeAsync(
                        .AddPreTypeAnnotation()
                        .AddExpressionEvaluation(*FunctionRegistry_)
                        .AddIOAnnotation()
-                       .AddTypeAnnotation(TIssuesIds::CORE_TYPE_ANN, true)
+                       .AddTypeAnnotation(TIssuesIds::CORE_TYPE_ANN, /*twoStages=*/true)
                        .AddPostTypeAnnotation()
                        .Add(TExprOutputTransformer::Sync(ExprRoot_, traceOut), "ExprOutput")
                        .AddOptimizationWithLineage(EnableLineage_)
@@ -1258,7 +1264,7 @@ TProgram::TFutureStatus TProgram::OptimizeAsyncWithConfig(
     pipeline.AddPreTypeAnnotation();
     pipeline.AddExpressionEvaluation(*FunctionRegistry_);
     pipeline.AddIOAnnotation();
-    pipeline.AddTypeAnnotation(TIssuesIds::CORE_TYPE_ANN, true);
+    pipeline.AddTypeAnnotation(TIssuesIds::CORE_TYPE_ANN, /*twoStages=*/true);
     pipeline.AddPostTypeAnnotation();
     pipelineConf.AfterTypeAnnotation(&pipeline);
 
@@ -1318,7 +1324,7 @@ TProgram::TFutureStatus TProgram::LineageAsyncWithConfig(
     pipeline.AddPreTypeAnnotation();
     pipeline.AddExpressionEvaluation(*FunctionRegistry_);
     pipeline.AddIOAnnotation();
-    pipeline.AddTypeAnnotation(TIssuesIds::CORE_TYPE_ANN, true);
+    pipeline.AddTypeAnnotation(TIssuesIds::CORE_TYPE_ANN, /*twoStages=*/true);
     pipeline.AddPostTypeAnnotation();
     pipelineConf.AfterTypeAnnotation(&pipeline);
 
@@ -1399,7 +1405,7 @@ TProgram::TFutureStatus TProgram::RunAsync(
     pipeline.AddPreTypeAnnotation();
     pipeline.AddExpressionEvaluation(*FunctionRegistry_);
     pipeline.AddIOAnnotation();
-    pipeline.AddTypeAnnotation(TIssuesIds::CORE_TYPE_ANN, true);
+    pipeline.AddTypeAnnotation(TIssuesIds::CORE_TYPE_ANN, /*twoStages=*/true);
     pipeline.AddPostTypeAnnotation();
     pipeline.Add(TExprOutputTransformer::Sync(ExprRoot_, traceOut), "ExprOutput");
     pipeline.AddOptimizationWithLineage(EnableLineage_);
@@ -1476,7 +1482,7 @@ TProgram::TFutureStatus TProgram::RunAsyncWithConfig(
     pipeline.AddPreTypeAnnotation();
     pipeline.AddExpressionEvaluation(*FunctionRegistry_);
     pipeline.AddIOAnnotation();
-    pipeline.AddTypeAnnotation(TIssuesIds::CORE_TYPE_ANN, true);
+    pipeline.AddTypeAnnotation(TIssuesIds::CORE_TYPE_ANN, /*twoStages=*/true);
     pipeline.AddPostTypeAnnotation();
     pipelineConf.AfterTypeAnnotation(&pipeline);
 
@@ -1966,11 +1972,11 @@ void TProgram::FinalizeIssues() {
         constexpr size_t TopCount = 10;
         auto noBlockTypes = TypeCtx_->GetTopNoBlocksTypes(TopCount);
         if (!noBlockTypes.empty()) {
-            FinalIssues_.AddIssue(MakeNoBlocksInfoIssue(noBlockTypes, true));
+            FinalIssues_.AddIssue(MakeNoBlocksInfoIssue(noBlockTypes, /*isTypes=*/true));
         }
         auto noBlockCallables = TypeCtx_->GetTopNoBlocksCallables(TopCount);
         if (!noBlockCallables.empty()) {
-            FinalIssues_.AddIssue(MakeNoBlocksInfoIssue(noBlockCallables, false));
+            FinalIssues_.AddIssue(MakeNoBlocksInfoIssue(noBlockCallables, /*isTypes=*/false));
         }
     }
 }
@@ -2197,6 +2203,19 @@ TTypeAnnotationContextPtr TProgram::BuildTypeAnnotationContext(const TString& us
 
     typeAnnotationContext->UserDataStorage->SetTokenResolver(tokenResolver);
 
+    if (UdfIndex_) {
+        typeAnnotationContext->UdfResolver = NCommon::CreateUdfResolverWithIndex(
+            UdfIndex_,
+            typeAnnotationContext->UdfResolver,
+            FileStorage_,
+            UrlPreprocessing_,
+            tokenResolver);
+    }
+
+    if (QContext_) {
+        typeAnnotationContext->UdfResolver = NCommon::WrapUdfResolverWithQContext(typeAnnotationContext->UdfResolver, QContext_);
+    }
+
     if (auto* urlListerManager = typeAnnotationContext->UrlListerManager.Get()) {
         urlListerManager->SetTokenResolver(std::move(tokenResolver));
     }
@@ -2239,7 +2258,7 @@ void TProgram::Print(IOutputStream* exprOut, IOutputStream* planOut, bool cleanP
             issueCode));
     }
 
-    auto compositeTransformer = CreateCompositeGraphTransformer(printTransformers, false);
+    auto compositeTransformer = CreateCompositeGraphTransformer(printTransformers, /*useIssueScopes=*/false);
     InstantTransform(*compositeTransformer, ExprRoot_, *ExprCtx_);
 }
 

@@ -82,10 +82,13 @@ public:
 
     void Handle(TEvRefreshScriptExecutionLeasesResponse::TPtr& ev) {
         WaitRefreshScriptExecutions = false;
+
+        const auto expiredLeasesCount = ev->Get()->ExpiredLeasesCount;
+
         if (!ev->Get()->Success) {
-            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, LogPrefix() << "Refresh failed with issues: " << ev->Get()->Issues.ToOneLineString());
+            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, LogPrefix() << "Refresh " << ev->Sender << " failed, found expired leases: " << expiredLeasesCount << ", issues: " << ev->Get()->Issues.ToOneLineString());
         } else {
-            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, LogPrefix() << "Refresh successfully completed");
+            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, LogPrefix() << "Refresh " << ev->Sender << " successfully completed, found expired leases: " << expiredLeasesCount);
         }
     }
 

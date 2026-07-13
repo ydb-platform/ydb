@@ -52,7 +52,7 @@ public:
                         // Use best effort to kill currently running tablet
                         SideEffects.Register(CreateTabletKiller(TabletId, /* nodeId */ 0, tablet->KnownGeneration));
                     } else {
-                        Self->Execute(Self->CreateRestartTablet(tablet->GetFullTabletId()));
+                        Self->Execute(Self->CreateForceRestartTablet(tablet->GetFullTabletId()));
                     }
                 }
             } else {

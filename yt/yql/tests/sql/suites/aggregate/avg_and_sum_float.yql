@@ -1,4 +1,3 @@
-/* syntax version 1 */
 select
     key,
     avg(cast(subkey as Float)) as avg,

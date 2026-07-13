@@ -90,6 +90,9 @@ message SnapshotRWModeSettings {
 message ReadCommittedRWModeSettings {
 }
 
+message StrictSerializableRWModeSettings {
+}
+
 message TransactionSettings {
     oneof tx_mode {
         SerializableModeSettings serializable_read_write = 1;
@@ -98,6 +101,7 @@ message TransactionSettings {
         SnapshotModeSettings snapshot_read_only = 4;
         SnapshotRWModeSettings snapshot_read_write = 5;
         ReadCommittedRWModeSettings read_committed_read_write = 6;
+        StrictSerializableRWModeSettings strict_serializable_read_write = 7;
     }
 }
 
@@ -155,7 +159,7 @@ message RollbackTransactionResponse {
 enum Syntax {
     SYNTAX_UNSPECIFIED = 0;
     SYNTAX_YQL_V1 = 1; // YQL
-    SYNTAX_PG = 2; // PostgresQL
+    SYNTAX_PG = 2 [deprecated = true]; // Removed: PostgreSQL syntax is no longer supported
 }
 
 message QueryContent {

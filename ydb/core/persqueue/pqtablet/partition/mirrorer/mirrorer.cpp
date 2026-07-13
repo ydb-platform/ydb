@@ -5,7 +5,7 @@
 #include <ydb/core/persqueue/public/write_meta/write_meta.h>
 #include <ydb/core/persqueue/writer/source_id_encoding.h>
 #include <ydb/core/protos/grpc_pq_old.pb.h>
-#include <ydb/library/kafka/kafka_records.h>
+#include <ydb/public/sdk/cpp/src/library/kafka/kafka_records.h>
 #include <ydb/library/persqueue/topic_parser/counters.h>
 #include <ydb/public/lib/base/msgbus.h>
 
@@ -576,17 +576,58 @@ void TMirrorer::RequestSourcePartitionStatus() {
     }
 }
 
-void TMirrorer::TryUpdateWriteTimetsamp(const TActorContext &ctx) {
-    if (Config.GetSyncWriteTime() && !WriteRequestInFlight && StreamStatus && EndOffset == StreamStatus->GetEndOffset()) {
-        LOG_I("update write timestamp from original topic: " << StreamStatus->DebugString());
-        THolder<TEvPersQueue::TEvRequest> request = MakeHolder<TEvPersQueue::TEvRequest>();
-        auto req = request->Record.MutablePartitionRequest();
-        req->SetTopic(TopicConverter->GetClientsideName());
-        req->SetPartition(Partition);
-        req->SetCookie(UPDATE_WRITE_TIMESTAMP);
-        req->MutableCmdUpdateWriteTimestamp()->SetWriteTimeMS(StreamStatus->GetWriteTimeHighWatermark().MilliSeconds());
-        ctx.Send(TabletActorId, request.Release());
+static TDuration GetRewindCommitDelay(const TActorContext& ctx) {
+    const auto& mirrorConfig = AppData(ctx)->PQConfig.GetMirrorConfig();
+    if (!mirrorConfig.HasRewindCommitDelaySeconds()) {
+        return DEFAULT_REWIND_COMMIT_OFFSET_DELAY;
     }
+    return TDuration::Seconds(mirrorConfig.GetRewindCommitDelaySeconds());
+}
+
+enum class EStaleReadStatus {
+    Unknown,
+    ForceDelay,    // postpone decision
+    NonStale,      // the reading session has some data
+    HasUnreadData, // the reading session hasn't reached the end of the topic yet.
+    CommitLag,     // all data has been read, but the commit is missing
+    AllCommitted,  // all data has been read and commited offset points to the end of topic
+};
+
+static EStaleReadStatus ReadSessionStaleStatus(const TActorContext& ctx, bool hasLastReadOffset, TInstant init, const NYdb::NTopic::TReadSessionEvent::TPartitionSessionStatusEvent* streamStatus) {
+    if (hasLastReadOffset) { /* seen some data in this read session */
+        return EStaleReadStatus::NonStale;
+    }
+    if (!streamStatus) {
+        return EStaleReadStatus::Unknown;
+    }
+    if (streamStatus->GetReadOffset() != streamStatus->GetEndOffset()) {
+        return EStaleReadStatus::HasUnreadData;
+    }
+    if (ctx.Now() - init <= GetRewindCommitDelay(ctx)) {
+        return EStaleReadStatus::ForceDelay;
+    }
+    if (streamStatus->GetCommittedOffset() < streamStatus->GetEndOffset()) {
+        return EStaleReadStatus::CommitLag;
+    }
+    return EStaleReadStatus::AllCommitted;
+}
+
+void TMirrorer::TryUpdateWriteTimetsamp(const TActorContext &ctx) {
+    if (!Config.GetSyncWriteTime() || WriteRequestInFlight || !StreamStatus) {
+        return;
+    }
+    const EStaleReadStatus staleStatus = ReadSessionStaleStatus(ctx, LastReadOffset.Defined(), LastInitStageTimestamp, StreamStatus.Get());
+    if (EndOffset != StreamStatus->GetEndOffset() && staleStatus != EStaleReadStatus::AllCommitted) {
+        return;
+    }
+    LOG_I("update write timestamp from original topic: " << StreamStatus->DebugString());
+    THolder<TEvPersQueue::TEvRequest> request = MakeHolder<TEvPersQueue::TEvRequest>();
+    auto req = request->Record.MutablePartitionRequest();
+    req->SetTopic(TopicConverter->GetClientsideName());
+    req->SetPartition(Partition);
+    req->SetCookie(UPDATE_WRITE_TIMESTAMP);
+    req->MutableCmdUpdateWriteTimestamp()->SetWriteTimeMS(StreamStatus->GetWriteTimeHighWatermark().MilliSeconds());
+    ctx.Send(TabletActorId, request.Release());
 }
 
 void TMirrorer::AddMessagesToQueue(std::vector<TPersQueueReadEvent::TDataReceivedEvent::TCompressedMessage>&& messages) {
@@ -763,25 +804,13 @@ void TMirrorer::DoProcessNextReaderEvent(const TActorContext& ctx, bool wakeup) 
     ConsumerInitInterval = CONSUMER_INIT_INTERVAL_START;
 }
 
-static TDuration GetRewindCommitDelay(const TActorContext& ctx) {
-    const auto& mirrorConfig = AppData(ctx)->PQConfig.GetMirrorConfig();
-    if (!mirrorConfig.HasRewindCommitDelaySeconds()) {
-        return DEFAULT_REWIND_COMMIT_OFFSET_DELAY;
-    }
-    return TDuration::Seconds(mirrorConfig.GetRewindCommitDelaySeconds());
-}
-
 bool TMirrorer::TryRewindCommittedOffset(const TActorContext& ctx) {
     LOG_T("TryRewindCommittedOffset " << LabeledOutput(OffsetToRead, StreamStatus->GetCommittedOffset(),  StreamStatus->GetReadOffset(), StreamStatus->GetEndOffset(), (ctx.Now() - LastInitStageTimestamp).Seconds(), (ctx.Now() - LastRewindCommitTimestamp).Seconds()));
-    if (!(LastReadOffset.Empty() /* never seen any data is this read session */
-        && StreamStatus->GetCommittedOffset() < StreamStatus->GetEndOffset()
-        && StreamStatus->GetReadOffset() == StreamStatus->GetEndOffset())) {
+    const EStaleReadStatus staleStatus = ReadSessionStaleStatus(ctx, LastReadOffset.Defined(), LastInitStageTimestamp, StreamStatus.Get());
+    if (staleStatus != EStaleReadStatus::CommitLag) {
         return false;
     }
     const auto now = ctx.Now();
-    if (now - LastInitStageTimestamp <= GetRewindCommitDelay(ctx)) {
-        return false;
-    }
     if (now - LastRewindCommitTimestamp <= REWIND_COMMIT_INTERVAL) {
         return false;
     }

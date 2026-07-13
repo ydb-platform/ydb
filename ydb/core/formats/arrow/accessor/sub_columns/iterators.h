@@ -1,5 +1,6 @@
 #pragma once
 #include "columns_storage.h"
+#include "types.h"
 #include "others_storage.h"
 
 namespace NKikimr::NArrow::NAccessor::NSubColumns {
@@ -13,15 +14,19 @@ private:
     ui32 KeyIndex = 0;
     bool IsValidFlag = false;
     bool HasValueFlag = false;
-    std::string_view RawValue;
     bool IsColumnKeyFlag = false;
+    EValueType ValueType = EValueType::BinaryJson;
+    // Current value as (array, local index); the reader interprets it per ValueType.
+    const arrow::Array* CurrentArray = nullptr;
+    i64 LocalIndex = 0;
 
     void InitFromIterator(const TColumnsData::TIterator& iterator) {
         RecordIndex = iterator.GetCurrentRecordIndex();
         KeyIndex = RemappedKey.value_or(iterator.GetKeyIndex());
         IsValidFlag = true;
         HasValueFlag = iterator.HasValue();
-        RawValue = iterator.GetRawValue();
+        CurrentArray = &iterator.GetArray();
+        LocalIndex = iterator.GetLocalIndex();
     }
 
     void InitFromIterator(const TOthersData::TIterator& iterator) {
@@ -29,7 +34,8 @@ private:
         KeyIndex = RemapKeys.size() ? RemapKeys[iterator.GetKeyIndex()] : iterator.GetKeyIndex();
         IsValidFlag = true;
         HasValueFlag = iterator.HasValue();
-        RawValue = iterator.GetRawValue();
+        CurrentArray = &iterator.GetArray();
+        LocalIndex = iterator.GetLocalIndex();
     }
 
     bool Initialize() {
@@ -63,9 +69,10 @@ private:
     }
 
 public:
-    TGeneralIterator(TColumnsData::TIterator&& iterator, const std::optional<ui32> remappedKey = {})
+    TGeneralIterator(TColumnsData::TIterator&& iterator, const EValueType valueType, const std::optional<ui32> remappedKey = {})
         : Iterator(iterator)
-        , RemappedKey(remappedKey) {
+        , RemappedKey(remappedKey)
+        , ValueType(valueType) {
         Initialize();
     }
     TGeneralIterator(TOthersData::TIterator&& iterator, const std::vector<ui32>& remapKeys = {})
@@ -149,9 +156,11 @@ public:
         return KeyIndex;
     }
 
-    std::string_view GetRawValue() const {
+    // The ordered iterator (compaction's reader) expects BinaryJson. BinaryJson columns pass their
+    // bytes through directly; native columns are re-encoded into an owned buffer.
+    NBinaryJson::TBinaryJson GetValueAsBinaryJson() {
         AFL_VERIFY(IsValidFlag);
-        return RawValue;
+        return ArrayElementToBinaryJson(*CurrentArray, LocalIndex, ValueType);
     }
 
     NJson::TJsonValue GetValue() const;
@@ -181,7 +190,7 @@ public:
         : ColumnsData(columnsData)
         , OthersData(othersData) {
         for (ui32 i = 0; i < ColumnsData.GetStats().GetColumnsCount(); ++i) {
-            Iterators.emplace_back(ColumnsData.BuildIterator(i));
+            Iterators.emplace_back(ColumnsData.BuildIterator(i), ColumnsData.GetStats().GetValueType(i));
         }
         Iterators.emplace_back(OthersData.BuildIterator());
         for (auto&& i : Iterators) {
@@ -294,7 +303,7 @@ public:
             }
         }
         for (ui32 i = 0; i < ColumnsData.GetStats().GetColumnsCount(); ++i) {
-            Iterators.emplace_back(ColumnsData.BuildIterator(i), remapColumns[i]);
+            Iterators.emplace_back(ColumnsData.BuildIterator(i), ColumnsData.GetStats().GetValueType(i), remapColumns[i]);
         }
         Iterators.emplace_back(OthersData.BuildIterator(), remapOthers);
         for (auto&& i : Iterators) {
@@ -325,7 +334,7 @@ public:
             while (SortedIterators.size() && SortedIterators.front()->GetRecordIndex() == recordIndex) {
                 std::pop_heap(SortedIterators.begin(), SortedIterators.end(), TIteratorsComparator());
                 auto& itColumn = *SortedIterators.back();
-                kvActor(Addresses[itColumn.GetKeyIndex()].GetOriginalIndex(), itColumn.GetRawValue(), itColumn.IsColumnKey());
+                kvActor(Addresses[itColumn.GetKeyIndex()].GetOriginalIndex(), itColumn.GetValueAsBinaryJson(), itColumn.IsColumnKey());
                 if (!itColumn.Next()) {
                     SortedIterators.pop_back();
                 } else {

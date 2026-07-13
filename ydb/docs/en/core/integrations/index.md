@@ -4,7 +4,7 @@ This section provides the main information about {{ ydb-name }} integrations wit
 
 {% note info %}
 
-In addition to its own native protocol, {{ ydb-name }} has a compatibility layer that allows external systems to connect to databases via network protocols [PostgreSQL](../postgresql/intro.md) or [Apache Kafka](../reference/kafka-api/index.md). Due to the compatibility layer, many tools designed to work with these systems can also interact with {{ ydb-name }}. The compatibility level of each specific application needs to be clarified separately.
+In addition to its own native protocol, {{ ydb-name }} has a compatibility layer that allows external systems to connect to databases via the [Apache Kafka](../reference/kafka-api/index.md) network protocol. Due to the compatibility layer, many tools designed to work with Kafka can also interact with {{ ydb-name }}. The compatibility level of each specific application needs to be clarified separately.
 
 {% endnote %}
 
@@ -29,9 +29,17 @@ In addition to its own native protocol, {{ ydb-name }} has a compatibility layer
 
 {% include notitle [Table of contents](ingestion/_includes/toc-table-streaming.md) %}
 
-## Data migrations {#schema_migration}
+## Data migrations {#data_migration}
+
+{% include notitle [Table of contents](data-migration/_includes/toc-table.md) %}
+
+## Schema migrations {#schema_migration}
 
 {% include notitle [Table of contents](migration/_includes/toc-table.md) %}
+
+## Query engines {#query_engines}
+
+{% include notitle [Table of contents](query-engines/_includes/toc-table.md) %}
 
 ## Object–relational mapping (ORM) {#orm}
 

@@ -191,7 +191,6 @@ namespace NKikimr {
             ::NMonitoring::TDynamicCounters::TCounterPtr SkeletonFrontDelayedBytes;
             ::NMonitoring::TDynamicCounters::TCounterPtr SkeletonFrontCostProcessed;
             TLight IdleLight;
-            ui16 IdleLightSeqNo = 0;
 
             bool CanSendToSkeleton(ui64 cost) const {
                 bool inFlightCond = InFlightCount < MaxInFlightCount;
@@ -251,7 +250,7 @@ namespace NKikimr {
                 if (!Queue.Head() && CanSendToSkeleton(cost)) {
                     // send to Skeleton for further processing
                     ctx.Send(converted.release());
-                    IdleLight.Set(true, ++IdleLightSeqNo);
+                    IdleLight.Set(true);
                     ++InFlightCount;
                     InFlightCost += cost;
                     InFlightBytes += recByteSize;
@@ -313,7 +312,7 @@ namespace NKikimr {
                         } else {
                             ctx.Send(rec->Ev.release());
 
-                            IdleLight.Set(true, ++IdleLightSeqNo);
+                            IdleLight.Set(true);
                             ++InFlightCount;
                             InFlightCost += cost;
                             InFlightBytes += recByteSize;
@@ -351,7 +350,7 @@ namespace NKikimr {
                          << " Deadlines# " << Deadlines);
 
                 --InFlightCount;
-                IdleLight.Set(InFlightCount == 0, ++IdleLightSeqNo);
+                IdleLight.Set(InFlightCount == 0);
                 InFlightCost -= msgCtx.Cost;
                 InFlightBytes -= msgCtx.RecByteSize;
 

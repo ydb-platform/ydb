@@ -25,13 +25,13 @@ public:
     void Increment() {
         TAtomicBlockCounter::TResult res;
         ReversedInFlight.ThresholdSub(1, InFlightThreshold, res);
-        IdleLight.Set(res.A, res.Seqno);
+        IdleLight.Set([this] { return ReversedInFlight.IsBlocked(); });
     }
 
     void Decrement() {
         TAtomicBlockCounter::TResult res;
         ReversedInFlight.ThresholdAdd(1, InFlightThreshold, res);
-        IdleLight.Set(res.A, res.Seqno);
+        IdleLight.Set([this] { return ReversedInFlight.IsBlocked(); });
     }
 };
 

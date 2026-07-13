@@ -100,7 +100,6 @@ TPDiskMon::TPDiskMon(const TIntrusivePtr<::NMonitoring::TDynamicCounters>& count
     COUNTER_INIT_IF_EXTENDED(StateGroup, LastOwnerId, false);
     COUNTER_INIT_IF_EXTENDED(StateGroup, PendingYardInits, false);
 
-    SeqnoL6 = 0;
     LastDoneOperationTimestamp = 0;
 
     // device subgroup
@@ -435,8 +434,7 @@ void TPDiskMon::UpdatePercentileTrackers() {
 
 void TPDiskMon::UpdateLights() {
     if (HPSecondsFloat(std::abs(HPNow() - AtomicGet(LastDoneOperationTimestamp))) > 15.0) {
-        auto seqnoL6 = AtomicGetAndIncrement(SeqnoL6);
-        L6.Set(false, seqnoL6);
+        L6.Set(false);
     }
 
     L6. Update();

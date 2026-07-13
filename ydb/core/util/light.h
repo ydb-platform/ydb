@@ -1,6 +1,10 @@
 #pragma once
 
 #include <optional>
+#include <type_traits>
+
+#include <util/system/guard.h>
+#include <util/system/spinlock.h>
 
 #include <ydb/core/mon/mon.h>
 
@@ -151,107 +155,37 @@ private:
 };
 
 // Thread-safe light
+// State changes are serialized by an internal lock. When the state is derived from
+// data shared between threads, pass a callable so it is evaluated under the lock:
+// this makes the observed sequence of states consistent with real time. A state
+// computed before the call may be stale by the time the lock is acquired, so
+// concurrent writers could publish states in the wrong order and leave the light
+// stuck in a state that is no longer true. Note that rapid intermediate flips
+// happening between two calls are coalesced and do not affect the switch count.
 class TLight : public TLightBase {
 private:
-    struct TItem {
-        bool State;
-        bool Filled;
-        TItem(bool state = false, bool filled = false)
-            : State(state)
-            , Filled(filled)
-        {}
-    };
-
-    // Cyclic buffer to enforce event ordering by seqno
     TSpinLock Lock;
-    size_t HeadIdx = 0; // Index of current state
-    size_t FilledCount = 0;
-    ui16 Seqno = 0; // Current seqno
-    TStackVec<TItem, 32> Data; // In theory should have not more than thread count items
+    bool CurrentState = false;
 public:
-    TLight() {
-        InitData();
+    // computeState is invoked under a spin lock, it must be cheap and non-blocking
+    template <typename TComputeState, typename = std::enable_if_t<std::is_invocable_r_v<bool, TComputeState>>>
+    void Set(TComputeState&& computeState) {
+        TGuard<TSpinLock> g(Lock);
+        const bool state = computeState();
+        Advance(CurrentState, Now());
+        Modify(state, CurrentState);
+        CurrentState = state;
     }
 
-    void Set(bool state, ui16 seqno) {
-        TGuard<TSpinLock> g(Lock);
-        Push(state, seqno);
-        bool prevState;
-        // Note that 'state' variable is being reused
-        NHPTimer::STime now = Now();
-        while (Pop(state, prevState)) {
-            Modify(state, prevState);
-            Advance(prevState, now);
-        }
+    // Only for states not derived from shared data (single writer thread or
+    // independent per-event values); otherwise use the callable overload
+    void Set(bool state) {
+        Set([state] { return state; });
     }
 
     void Update() {
         TGuard<TSpinLock> g(Lock);
-        Advance(Data[HeadIdx].State, Now());
-    }
-
-private:
-    void InitData(bool state = false, bool filled = false) {
-        Data.clear();
-        Data.emplace_back(state, filled);
-        Data.resize(32);
-        HeadIdx = 0;
-    }
-
-    void Push(bool state, ui16 seqno) {
-        FilledCount++;
-        if (FilledCount == 1) { // First event must initialize seqno
-            Seqno = seqno;
-            InitData(state, true);
-            if (state) {
-                Modify(true, false);
-            }
-            return;
-        }
-        Y_ABORT_UNLESS(seqno != Seqno, "ordering overflow or duplicate event headSeqno# %d seqno# %d state# %d filled# %d",
-                 (int)Seqno, (int)seqno, (int)state, (int)CountFilled());
-        ui16 diff = seqno;
-        diff -= Seqno; // Underflow is fine
-        size_t size = Data.size();
-        if (size <= diff) { // Buffer is full -- extend and move wrapped part
-            Data.resize(size * 2);
-            for (size_t i = 0; i < HeadIdx; i++) {
-                Data[size + i] = Data[i];
-                Data[i].Filled = false;
-            }
-        }
-        TItem& item = Data[(HeadIdx + diff) % Data.size()];
-        Y_ABORT_UNLESS(!item.Filled, "ordering overflow or duplicate event headSeqno# %d seqno# %d state# %d filled# %d",
-                 (int)Seqno, (int)seqno, (int)state, (int)CountFilled());
-        item.Filled = true;
-        item.State = state;
-    }
-
-    bool Pop(bool& state, bool& prevState) {
-        size_t nextIdx = (HeadIdx + 1) % Data.size();
-        TItem& head = Data[HeadIdx];
-        TItem& next = Data[nextIdx];
-        if (!head.Filled || !next.Filled) {
-            return false;
-        }
-        state = next.State;
-        prevState = head.State;
-        head.Filled = false;
-        HeadIdx = nextIdx;
-        Seqno++; // Overflow is fine
-        FilledCount--;
-        if (FilledCount == 1 && Data.size() > 32) {
-            InitData(state, true);
-        }
-        return true;
-    }
-
-    size_t CountFilled() const {
-        size_t ret = 0;
-        for (const TItem& item : Data) {
-            ret += item.Filled;
-        }
-        return ret;
+        Advance(CurrentState, Now());
     }
 };
 

@@ -280,7 +280,6 @@ struct TPDiskMon {
     ::NMonitoring::TDynamicCounters::TCounterPtr LastOwnerId;
     ::NMonitoring::TDynamicCounters::TCounterPtr PendingYardInits;
 
-    TAtomic SeqnoL6;
     TAtomic LastDoneOperationTimestamp;
 
     // device subgroup

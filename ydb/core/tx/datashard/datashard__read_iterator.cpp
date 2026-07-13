@@ -1409,6 +1409,38 @@ const NHPTimer::STime TReader::MaxCyclesPerIteration =
     ((NHPTimer::GetCyclesPerSecond() * MaxTimePerIteration.MicroSeconds()) + TDuration::Seconds(1).MicroSeconds() - 1)
     / TDuration::Seconds(1).MicroSeconds();
 
+// Emits a retro-span covering the intended throttle wait [now, now + delay] as a
+// child of the read's span. It is constructed already terminated, so there is no
+// span lifecycle to manage across the async reschedule (no member storage, no
+// teardown obligations). Note: the duration is the *scheduled* delay decided by
+// the quota, not the measured wait - hence the "predicted" attribute.
+void EmitReadThrottleSpan(const NWilson::TSpan& readSpan, TInstant now, TDuration delay, TStringBuf path) {
+    if (!readSpan) {
+        return;
+    }
+    const auto parentTraceId = readSpan.GetTraceId();
+    // Use the read span's own verbosity level (TopLevel): ConstructTerminated does no
+    // verbosity gating on its own, and Span() would otherwise return the parent's span
+    // id (self-parent span) when the requested verbosity exceeds the trace's. At
+    // TopLevel a live ReadSpan always yields a fresh child id. An empty id means
+    // tracing is off for this branch (e.g. TTL exhausted) - nothing to emit.
+    const auto childTraceId = parentTraceId.Span(TWilsonTablet::TabletTopLevel);
+    if (!childTraceId) {
+        return;
+    }
+    NWilson::TSpan::ConstructTerminated(
+            parentTraceId,
+            childTraceId,
+            now,
+            now + delay,
+            NWilson::NTraceProto::Status::STATUS_CODE_OK,
+            "Datashard.ReadThrottled")
+        .Attribute("delay_ms", static_cast<i64>(delay.MilliSeconds()))
+        .Attribute("path", TString(path))
+        .Attribute("predicted", true)
+        .End();
+}
+
 } // namespace
 
 void TReadIteratorState::ForwardScanEvent(std::unique_ptr<IEventHandle>&& ev, ui64 tabletId) {
@@ -2508,6 +2540,7 @@ public:
             // it via TTxReadContinue after the delay. No result is sent here.
             // ReadContinuePending prevents ReadAck from scheduling a duplicate.
             state.ReadContinuePending = true;
+            EmitReadThrottleSpan(request->ReadSpan, ctx.Now(), *ThrottleDelay, "execute");
             ctx.Schedule(*ThrottleDelay, new TEvDataShard::TEvReadContinue(LocalReadId));
             LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD, Self->TabletID() << " read iterator# " << state.ReadId
                 << " throttled, rescheduling continue after " << *ThrottleDelay);
@@ -3438,12 +3471,14 @@ public:
             if (!schedulableRead->TryConsumeQuota(MaxTimePerIteration)) {
                 // KQP read quota exhausted, reschedule with delay.
                 // Keep ReadContinuePending=true so that ReadAck doesn't schedule a duplicate TEvReadContinue while we wait.
+                const auto delay = schedulableRead->EstimateQuotaDelay(MaxTimePerIteration);
                 state.ReadContinuePending = true;
                 Reader.reset();
                 Result.reset();
-                ctx.Schedule(
-                    schedulableRead->EstimateQuotaDelay(MaxTimePerIteration),
-                    new TEvDataShard::TEvReadContinue(LocalReadId));
+                EmitReadThrottleSpan(state.Request->ReadSpan, ctx.Now(), delay, "continue-tx");
+                LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD, Self->TabletID() << " read iterator# " << state.ReadId
+                    << " throttled in continue-tx, rescheduling after " << delay);
+                ctx.Schedule(delay, new TEvDataShard::TEvReadContinue(LocalReadId));
                 return true;
             }
         }
@@ -3872,10 +3907,12 @@ void TDataShard::Handle(TEvDataShard::TEvReadContinue::TPtr& ev, const TActorCon
     // Explicitly set ReadContinuePending so ReadAck won't schedule a duplicate
     // continue regardless of what may have cleared the flag before this point.
     if (state.SchedulableRead && !state.SchedulableRead->HasAvailableQuota()) {
+        const auto delay = state.SchedulableRead->EstimateQuotaDelay(MaxTimePerIteration);
         state.ReadContinuePending = true;
-        ctx.Schedule(
-            state.SchedulableRead->EstimateQuotaDelay(MaxTimePerIteration),
-            new TEvDataShard::TEvReadContinue(localReadId));
+        EmitReadThrottleSpan(state.Request->ReadSpan, ctx.Now(), delay, "continue");
+        LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD, TabletID() << " read iterator# " << state.ReadId
+            << " throttled in continue, rescheduling after " << delay);
+        ctx.Schedule(delay, new TEvDataShard::TEvReadContinue(localReadId));
         return;
     }
 

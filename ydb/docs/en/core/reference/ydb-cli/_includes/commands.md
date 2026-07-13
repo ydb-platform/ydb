@@ -98,9 +98,6 @@ Command / subcommand | Brief description
 || [tools copy](../tools-copy.md) | Copying [tables](../../../concepts/glossary.md#table) |
 || [tools dump](../export-import/tools-dump.md#schema-objects) | Dumping individual schema objects to the file system |
 || [tools infer csv](../tools-infer.md) | Generate a `CREATE TABLE` SQL query from a CSV file |
-{% if ydb-cli == "ydb" %}
-|| [tools pg-convert](../../../postgresql/import.md#pg-convert) | Converting a PostgreSQL dump obtained with the pg_dump utility into a format understood by YDB |
-{% endif %}
 || [tools rename](../commands/tools/rename.md) | Renaming row-oriented [tables](../../../concepts/glossary.md#row-oriented-table) |
 || [tools restore](../export-import/tools-restore.md#schema-objects) | Restoring individual schema objects from the file system |
 || [topic create](../topic-create.md) | Creating a [topic](../../../concepts/glossary.md#topic) |

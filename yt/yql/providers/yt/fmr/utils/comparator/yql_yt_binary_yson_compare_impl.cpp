@@ -192,6 +192,14 @@ int CompareYsonCurrentValuesFromReaders(TYsonReader& lhs, TYsonReader& rhs) {
     auto rhsTypeOrder = GetTypeOrder(rhsType);
 
     if (lhsTypeOrder != rhsTypeOrder) {
+        // A nullable column legitimately holds either a scalar or an explicit '#' entity across
+        // different rows of the same key column (e.g. a FULL JOIN's direct-output rows for a NULL
+        // join key vs. matched rows with a real key value). That is not a genuine type mismatch,
+        // so order null before any concrete value instead of throwing - any other type pairing is
+        // a real schema violation and should still fail loudly.
+        if (lhsTypeOrder == ETypeOrder::Null || rhsTypeOrder == ETypeOrder::Null) {
+            return TernaryCompare(static_cast<int>(lhsTypeOrder), static_cast<int>(rhsTypeOrder));
+        }
         ythrow yexception() << "Types mismatch: " << lhsType << " vs " << rhsType;
     }
 

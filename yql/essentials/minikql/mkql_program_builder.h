@@ -260,8 +260,7 @@ public:
     TRuntimeNode Ascending(TRuntimeNode data);
     TRuntimeNode Descending(TRuntimeNode data);
 
-    // FIXME: Drop the default argument value, when all the callers are adjusted.
-    TRuntimeNode ToFlow(TRuntimeNode stream, const TArrayRef<const TRuntimeNode>& dependentNodes = {});
+    TRuntimeNode ToFlow(TRuntimeNode stream, const TArrayRef<const TRuntimeNode>& dependentNodes);
     TRuntimeNode FromFlow(TRuntimeNode flow);
     TRuntimeNode Steal(TRuntimeNode input);
 

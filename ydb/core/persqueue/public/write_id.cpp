@@ -44,6 +44,11 @@ int CompareWriteIdProto(const NKikimrPQ::TWriteId& lhs, const NKikimrPQ::TWriteI
             }
             return CompareScalars(l.GetEpoch(), r.GetEpoch());
         }
+        case NKikimrPQ::TWriteId::kDeferredPublicationApi: {
+            const auto& l = lhs.GetDeferredPublicationApi();
+            const auto& r = rhs.GetDeferredPublicationApi();
+            return CompareScalars(l.GetIntPublicationId(), r.GetIntPublicationId());
+        }
         case NKikimrPQ::TWriteId::ID_NOT_SET:
             return 0;
     }
@@ -98,13 +103,16 @@ bool TWriteId::operator<(const TWriteId& rhs) const
 
 size_t TWriteId::GetHash() const
 {
+    const auto idCase = static_cast<size_t>(Proto.Id_case());
     switch (Proto.Id_case()) {
         case NKikimrPQ::TWriteId::kTopicApi:
-            return MultiHash(Proto.GetTopicApi().GetNodeId(), Proto.GetTopicApi().GetKeyId());
+            return MultiHash(idCase, Proto.GetTopicApi().GetNodeId(), Proto.GetTopicApi().GetKeyId());
         case NKikimrPQ::TWriteId::kKafkaApi:
-            return MultiHash(KafkaProducerInstanceId.Id, KafkaProducerInstanceId.Epoch);
+            return MultiHash(idCase, KafkaProducerInstanceId.Id, KafkaProducerInstanceId.Epoch);
+        case NKikimrPQ::TWriteId::kDeferredPublicationApi:
+            return MultiHash(idCase, Proto.GetDeferredPublicationApi().GetIntPublicationId());
         case NKikimrPQ::TWriteId::ID_NOT_SET:
-            return 0;
+            return MultiHash(idCase);
     }
     Y_UNREACHABLE();
     return 0;
@@ -119,6 +127,12 @@ void TWriteId::ToStream(IOutputStream& s) const
         case NKikimrPQ::TWriteId::kTopicApi:
             s << '{' << GetNodeId() << ", " << GetKeyId() << '}';
             break;
+        case NKikimrPQ::TWriteId::kDeferredPublicationApi: {
+            const auto& deferredPublicationApi = Proto.GetDeferredPublicationApi();
+            s << "DeferredPublicationWriteId{" << deferredPublicationApi.GetIntPublicationId()
+                << ", " << deferredPublicationApi.GetExtPublicationId() << '}';
+            break;
+        }
         case NKikimrPQ::TWriteId::ID_NOT_SET:
             s << "{}";
             break;

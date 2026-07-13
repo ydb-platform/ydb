@@ -37,10 +37,13 @@ message TRequestedConstructor {
             optional uint32 ChunkMemoryLimit = 3 [default = 50000000];
             optional double OthersAllowedFraction = 4 [default = 0.05];
             optional TDataExtractor DataExtractor = 5;
-            // Apply dictionary encoding to subcolumn with string storage (BinaryJson ones or with deduced string types in future)
+            // Apply dictionary encoding to subcolumn with string storage (BinaryJson ones or with deduced string type)
             // if the fraction of unique values (<unique count> / <total present count>) <= this value.
             // Value of `1` means always dictionary-encode; `0` (default) - never dictionary-encode.
             optional double DictionaryUniqueFraction = 6 [default = 0];
+            // Store a separated sub-column whose present values are all scalars of one type in the corresponding
+            // native Arrow array instead of per-value BinaryJson blobs. `false` (default) - always BinaryJson.
+            optional bool EnableNativeColumns = 7 [default = false];
         }
         optional TSettings Settings = 1;
     }
@@ -73,6 +76,7 @@ message TConstructor {
             optional double OthersAllowedFraction = 4 [default = 0.05];
             optional TDataExtractor DataExtractor = 5;
             optional double DictionaryUniqueFraction = 6 [default = 0];
+            optional bool EnableNativeColumns = 7 [default = false];
         }
         optional TSettings Settings = 1;
     }

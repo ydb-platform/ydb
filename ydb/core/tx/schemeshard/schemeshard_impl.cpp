@@ -6078,6 +6078,7 @@ void TSchemeShard::StateWork(STFUNC_SIG) {
         HFuncTraced(TEvPrivate::TEvCleanDroppedPaths, Handle);
         HFuncTraced(TEvPrivate::TEvCleanDroppedSubDomains, Handle);
         HFuncTraced(TEvPrivate::TEvSubscribeToShardDeletion, Handle);
+        HFuncTraced(TEvPrivate::TEvMoveShardToStoragePool, Handle);
 
         // Test-only notification
         IgnoreFunc(TEvPrivate::TEvTestNotifySubdomainCleanup);

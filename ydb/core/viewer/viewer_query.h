@@ -394,6 +394,8 @@ public:
             if (!OperationId && ExecutionId.empty()) {
                 return TBase::ReplyAndPassAway(GetHTTPBADREQUEST("text/plain", "operation_id or execution_id required for fetch-long-query"), "BadRequest");
             }
+        } else if (Action != "cancel-query" && Syntax == "pg") {
+            return TBase::ReplyAndPassAway(GetHTTPBADREQUEST("text/plain", "PostgreSQL syntax (syntax=pg) is not supported"), "BadRequest");
         }
         if (Streaming != EStreamingType::None) {
             NHttp::THeaders headers(HttpEvent->Get()->Request->Headers);
@@ -648,8 +650,6 @@ public:
         }
         if (Syntax == "yql_v1") {
             request.SetSyntax(Ydb::Query::Syntax::SYNTAX_YQL_V1);
-        } else if (Syntax == "pg") {
-            request.SetSyntax(Ydb::Query::Syntax::SYNTAX_PG);
         }
         if (OutputChunkMaxSize) {
             request.SetOutputChunkMaxSize(OutputChunkMaxSize);
@@ -1522,9 +1522,8 @@ public:
                 description: >
                     query syntax:
                       * `yql_v1` - YQL v1 (default)
-                      * `pg` - PostgreSQL compatible
                 type: string
-                enum: [yql_v1, pg]
+                enum: [yql_v1]
                 required: false
               - name: schema
                 in: query

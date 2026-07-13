@@ -518,7 +518,8 @@ class TRealBlockDevice : public IBlockDevice {
                     completionAction->FlushAction = nullptr;
                 }
                 Device.CompletionThreads->Schedule(completionAction);
-                Device.Mon.L6.Set(duration > Device.Reordering);
+                AtomicSet(Device.Mon.LastOperationReordered, duration > Device.Reordering);
+                Device.Mon.UpdateL6();
             }
 
             if (isSeekExpected) {

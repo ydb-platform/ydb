@@ -281,6 +281,10 @@ struct TPDiskMon {
     ::NMonitoring::TDynamicCounters::TCounterPtr PendingYardInits;
 
     TAtomic LastDoneOperationTimestamp;
+    TAtomic LastOperationReordered;
+    // L6 shows "the last completed operation exceeded the reordering threshold";
+    // the claim expires if no operation completed for this long
+    static constexpr double L6StalenessSec = 15.0;
 
     // device subgroup
     TIntrusivePtr<::NMonitoring::TDynamicCounters> DeviceGroup;
@@ -559,6 +563,7 @@ public:
     void IncrementQueueTime(ui8 priorityClass, size_t timeMs);
     void IncrementResponseTime(ui8 priorityClass, double timeMs, size_t sizeBytes);
     void UpdatePercentileTrackers();
+    void UpdateL6();
     void UpdateLights();
     bool UpdateDeviceHaltCounters();
     void UpdateStats();

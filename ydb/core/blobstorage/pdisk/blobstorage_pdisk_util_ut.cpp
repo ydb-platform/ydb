@@ -216,6 +216,35 @@ Y_UNIT_TEST_SUITE(TPDiskUtil) {
         UNIT_ASSERT_EQUAL(count->Val(), 2);
     }
 
+    Y_UNIT_TEST(PDiskMonL6Staleness) {
+        TIntrusivePtr<::NMonitoring::TDynamicCounters> counters = new ::NMonitoring::TDynamicCounters;
+        THolder<TPDiskMon> mon(new TPDiskMon(counters, 0, nullptr));
+        auto state = counters->GetSubgroup("subsystem", "state")->GetCounter("L6_state");
+
+        // A fresh operation that exceeded the reordering threshold turns L6 on
+        AtomicSet(mon->LastDoneOperationTimestamp, HPNow());
+        AtomicSet(mon->LastOperationReordered, 1);
+        mon->UpdateL6();
+        UNIT_ASSERT_EQUAL(state->Val(), 1);
+
+        // The periodic update recomputes the state from shared data, so it
+        // cannot overwrite a fresh operation with a stale force-off decision
+        mon->UpdateLights();
+        UNIT_ASSERT_EQUAL(state->Val(), 1);
+
+        // The claim expires when no operation completed for too long
+        AtomicSet(mon->LastDoneOperationTimestamp,
+                HPNow() - HPCyclesMs(ui64(TPDiskMon::L6StalenessSec * 1000) + 1000));
+        mon->UpdateLights();
+        UNIT_ASSERT_EQUAL(state->Val(), 0);
+
+        // A fresh operation below the threshold keeps L6 off
+        AtomicSet(mon->LastDoneOperationTimestamp, HPNow());
+        AtomicSet(mon->LastOperationReordered, 0);
+        mon->UpdateL6();
+        UNIT_ASSERT_EQUAL(state->Val(), 0);
+    }
+
     Y_UNIT_TEST(DriveEstimator) {
         TTempFileHandle file;
         file.Resize(1 << 30);

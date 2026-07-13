@@ -11,6 +11,7 @@
 #include "blobstorage_pdisk_ut_defs.h"
 #include "blobstorage_pdisk_util_atomicblockcounter.h"
 #include "blobstorage_pdisk_util_flightcontrol.h"
+#include "blobstorage_pdisk_util_idlecounter.h"
 #include "blobstorage_pdisk_util_sector.h"
 
 #include <ydb/core/blobstorage/crypto/default.h>
@@ -175,6 +176,44 @@ Y_UNIT_TEST_SUITE(TPDiskUtil) {
         UNIT_ASSERT_EQUAL(inFlight, 0);
         UNIT_ASSERT_GT(count->Val(), 0);
         UNIT_ASSERT_EQUAL(state->Val(), 0);
+    }
+
+    Y_UNIT_TEST(IdleCounterMergesOverlappingTasks) {
+        // Tasks overlapping in time must form one continuous busy period:
+        // a task finishing while another is in flight must not blink the light
+        TLight light;
+        TIntrusivePtr<::NMonitoring::TDynamicCounters> c(new ::NMonitoring::TDynamicCounters());
+        light.Initialize(c, TLightCounterConfig::WithDefaultLightSet("idle"));
+        auto state = c->GetCounter("idle_state"); // 1 = idle
+        auto count = c->GetCounter("idle_count"); // number of idle periods
+        TIdleCounter tasks(light);
+
+        tasks.Increment(); // task 1 starts
+        UNIT_ASSERT_EQUAL(state->Val(), 0);
+        Sleep(TDuration::MilliSeconds(200));
+        tasks.Increment(); // task 2 starts
+        UNIT_ASSERT_EQUAL(state->Val(), 0);
+        tasks.Decrement(); // task 1 ends, task 2 is still in flight
+        UNIT_ASSERT_EQUAL(state->Val(), 0); // no idle blink
+        UNIT_ASSERT_EQUAL(count->Val(), 0);
+        Sleep(TDuration::MilliSeconds(200));
+        tasks.Decrement(); // task 2 ends
+        UNIT_ASSERT_EQUAL(state->Val(), 1); // the single merged busy period is over
+        UNIT_ASSERT_EQUAL(count->Val(), 1);
+        // All elapsed time belongs to the busy (green) period, none to idle (red)
+        UNIT_ASSERT_GE(light.GetGreenMs(), 300);
+        UNIT_ASSERT_EQUAL(light.GetRedMs(), 0);
+
+        // Task ends signaled in reverse order (a stalled thread): the refcount
+        // does not care which task an event belongs to, still one busy period
+        tasks.Increment(); // task 3 starts
+        tasks.Increment(); // task 4 starts
+        tasks.Decrement(); // task 4 ends first
+        UNIT_ASSERT_EQUAL(state->Val(), 0);
+        UNIT_ASSERT_EQUAL(count->Val(), 1);
+        tasks.Decrement(); // task 3 ends last
+        UNIT_ASSERT_EQUAL(state->Val(), 1);
+        UNIT_ASSERT_EQUAL(count->Val(), 2);
     }
 
     Y_UNIT_TEST(DriveEstimator) {

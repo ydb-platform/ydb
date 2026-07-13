@@ -40,11 +40,11 @@ public:
     {}
 
     void Bootstrap(const TActorContext& ctx) {
-        YDB_LOG_INFO_CTX_COMP(ctx, NKikimrServices::SYSTEM_VIEWS, "Scan started, scan sys view",
-            {"actor", TBase::SelfId()},
-            {"owner", OwnerActorId},
-            {"id", ScanId},
-            {"info", SysViewInfo.ShortDebugString()});
+        YDB_LOG_INFO_CTX_COMP(ctx, NKikimrServices::SYSTEM_VIEWS, "TScanActorBase::Bootstrap: scan started",
+            {"actorId", TBase::SelfId()},
+            {"ownerId", OwnerActorId},
+            {"scanId", ScanId},
+            {"sysViewInfo", SysViewInfo.ShortDebugString()});
 
         auto sysViewServiceId = MakeSysViewServiceID(TBase::SelfId().NodeId());
         TBase::Send(sysViewServiceId, new TEvSysView::TEvGetScanLimiter());
@@ -61,9 +61,9 @@ protected:
     }
 
     void SendBatch(THolder<NKqp::TEvKqpCompute::TEvScanData> batch) {
-        YDB_LOG_DEBUG_COMP(NKikimrServices::SYSTEM_VIEWS, "Sending scan batch, row",
-            {"actor", TBase::SelfId()},
-            {"count", batch->Rows.size()},
+        YDB_LOG_DEBUG_COMP(NKikimrServices::SYSTEM_VIEWS, "TScanActorBase::SendBatch: sending scan batch",
+            {"actorId", TBase::SelfId()},
+            {"rowCount", batch->Rows.size()},
             {"finished", batch->Finished});
 
         bool finished = batch->Finished;
@@ -78,10 +78,10 @@ protected:
     }
 
     void HandleAbortExecution(NKqp::TEvKqp::TEvAbortExecution::TPtr& ev) {
-        YDB_LOG_ERROR_COMP(NKikimrServices::SYSTEM_VIEWS, "Got abort execution event, scan sys view",
-            {"actor", TBase::SelfId()},
-            {"owner", OwnerActorId},
-            {"id", ScanId},
+        YDB_LOG_ERROR_COMP(NKikimrServices::SYSTEM_VIEWS, "TScanActorBase::HandleAbortExecution: scan aborted",
+            {"actorId", TBase::SelfId()},
+            {"ownerId", OwnerActorId},
+            {"scanId", ScanId},
             {"info", SysViewInfo.ShortDebugString()},
             {"code", NYql::NDqProto::StatusIds::StatusCode_Name(ev->Get()->Record.GetStatusCode())},
             {"error", ev->Get()->GetIssues().ToOneLineString()});
@@ -94,10 +94,10 @@ protected:
     }
 
     void ReplyErrorAndDie(Ydb::StatusIds::StatusCode status, const NYql::TIssues& issues) {
-        YDB_LOG_ERROR_COMP(NKikimrServices::SYSTEM_VIEWS, "Scan error, scan sys view",
-            {"actor", TBase::SelfId()},
-            {"owner", OwnerActorId},
-            {"id", ScanId},
+        YDB_LOG_ERROR_COMP(NKikimrServices::SYSTEM_VIEWS, "TScanActorBase::ReplyErrorAndDie: scan failed",
+            {"actorId", TBase::SelfId()},
+            {"ownerId", OwnerActorId},
+            {"scanId", ScanId},
             {"info", SysViewInfo.ShortDebugString()},
             {"issues", issues.ToOneLineString()});
 
@@ -119,10 +119,10 @@ protected:
     }
 
     void PassAway() override {
-        YDB_LOG_INFO_COMP(NKikimrServices::SYSTEM_VIEWS, "Scan finished, scan sys view",
-            {"actor", TBase::SelfId()},
-            {"owner", OwnerActorId},
-            {"id", ScanId},
+        YDB_LOG_INFO_COMP(NKikimrServices::SYSTEM_VIEWS, "TScanActorBase::ReplyEmptyAndDie: scan finished",
+            {"actorId", TBase::SelfId()},
+            {"ownerId", OwnerActorId},
+            {"scanId", ScanId},
             {"info", SysViewInfo.ShortDebugString()});
 
         if (AllowedByLimiter) {
@@ -319,14 +319,14 @@ private:
             }
         }
 
-        YDB_LOG_INFO_COMP(NKikimrServices::SYSTEM_VIEWS, "Scan prepared, schemeshard hive database domain database node",
-            {"actor", TBase::SelfId()},
-            {"id", SchemeShardId},
+        YDB_LOG_INFO_COMP(NKikimrServices::SYSTEM_VIEWS, "TScanActorBase::HandleLookup: scan prepared",
+            {"actorId", TBase::SelfId()},
+            {"schemeShardId", SchemeShardId},
             {"hiveId", HiveId},
             {"database", TenantName},
-            {"owner", DatabaseOwner},
-            {"key", DomainKey},
-            {"count", TenantNodes.size()});
+            {"databaseOwner", DatabaseOwner},
+            {"domainKey", DomainKey},
+            {"tenantNodeCount", TenantNodes.size()});
 
         ProceedToScan();
     }

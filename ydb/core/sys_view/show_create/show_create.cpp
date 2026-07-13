@@ -108,8 +108,8 @@ private:
 
         AllowedByLimiter = true;
 
-        YDB_LOG_INFO("Scan prepared,",
-            {"actor", TBase::SelfId()});
+        YDB_LOG_INFO("TShowCreateScan::ProceedToScan: scan prepared",
+            {"actorId", TBase::SelfId()});
 
         ProceedToScan();
         return;

@@ -235,7 +235,7 @@ private:
     }
 
     void SkipCurrentNode(const char* reason, ui32 nodeId, const NYql::TIssues* peerIssues = nullptr) {
-        YDB_LOG_WARN("Skipping compile cache scan for peer",
+        YDB_LOG_WARN("TCompileCacheQueriesScan::SkipCurrentNode: skipping compile cache scan for peer",
             {"nodeId", nodeId},
             {"reason", reason},
             {"issues", (peerIssues && !peerIssues->Empty() ? peerIssues->ToOneLineString() : TString())});
@@ -289,7 +289,7 @@ private:
         PartialWarningSent = true;
 
         const ui32 nodesTotal = NodesTotal > 0 ? NodesTotal : (NodesSucceeded + NodesFailed);
-        YDB_LOG_WARN("Compile cache scan: skipped of nodes",
+        YDB_LOG_WARN("TCompileCacheQueriesScan::FinishScan: compile cache scan skipped on some nodes",
             {"nodesFailed", NodesFailed},
             {"nodesTotal", nodesTotal});
 
@@ -362,8 +362,8 @@ private:
 
             req->Record.SetFreeSpace(FreeSpace);
 
-            YDB_LOG_DEBUG("Send request",
-                {"toNodeId", nodeId},
+            YDB_LOG_DEBUG("TCompileCacheQueriesScan::StartScan: sending list query cache request",
+                {"nodeId", nodeId},
                 {"request", req->Record.ShortDebugString()});
 
             Send(kqpProxyId, req.release(), IEventHandle::FlagTrackDelivery, nodeId);
@@ -405,8 +405,8 @@ private:
 
         // Stale: timeout/disconnect already advanced PendingNodes.
         if (!PendingRequest || PendingNodes.empty() || PendingNodes.front() != responseNodeId) {
-            YDB_LOG_DEBUG("Ignoring stale TEvListQueryCacheQueriesResponse",
-                {"fromNodeId", responseNodeId});
+            YDB_LOG_DEBUG("TCompileCacheQueriesScan::HandleListQueryCacheQueriesResponse: ignoring stale response",
+                {"nodeId", responseNodeId});
             return;
         }
 
@@ -440,8 +440,8 @@ private:
         }
         const ui32 nodeId = ev->Cookie;
         if (!PendingRequest || PendingNodes.empty() || PendingNodes.front() != nodeId) {
-            YDB_LOG_DEBUG("Ignoring stale TEvUndelivered",
-                {"fromNodeId", nodeId});
+            YDB_LOG_DEBUG("TCompileCacheQueriesScan::Undelivered: ignoring stale undelivered event",
+                {"nodeId", nodeId});
             return;
         }
         SkipCurrentNode("undelivered", nodeId);

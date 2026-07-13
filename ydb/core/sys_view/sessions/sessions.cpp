@@ -220,7 +220,7 @@ private:
 
             req->Record.SetFreeSpace(FreeSpace);
 
-            YDB_LOG_DEBUG("Send request to node,",
+            YDB_LOG_DEBUG("TSessionsScan::StartScan: sending list sessions request to node",
                 {"nodeId", nodeId},
                 {"request", req->Record.ShortDebugString()});
 
@@ -252,7 +252,7 @@ private:
     void Undelivered(TEvents::TEvUndelivered::TPtr& ev) {
         if (ev->Get()->SourceType == NKqp::TKqpEvents::EvListSessionsRequest) {
             ui32 nodeId = ev->Cookie;
-            YDB_LOG_INFO("Received undelivered response",
+            YDB_LOG_INFO("TSessionsScan::Undelivered: list sessions response undelivered",
                 {"nodeId", nodeId});
             StartScan();
         }

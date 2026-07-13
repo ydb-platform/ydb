@@ -90,11 +90,11 @@ protected:
         bool isDatabaseAdmin = (AppData()->FeatureFlags.GetEnableDatabaseAdmin() && IsDatabaseAdministrator(UserToken.Get(), TBase::DatabaseOwner));
         bool isAdmin = isClusterAdmin || isDatabaseAdmin;
 
-        YDB_LOG_DEBUG_COMP(NKikimrServices::SYSTEM_VIEWS, "ProceedToScan, tenant tenant subject require admin is",
-            {"name", TBase::TenantName},
-            {"owner", TBase::DatabaseOwner},
-            {"sid", (UserToken ? UserToken->GetUserSID() : "empty")},
-            {"access", RequireUserAdministratorAccess},
+        YDB_LOG_DEBUG_COMP(NKikimrServices::SYSTEM_VIEWS, "TAuthScanBase::ProceedToScan: starting auth scan",
+            {"tenantName", TBase::TenantName},
+            {"databaseOwner", TBase::DatabaseOwner},
+            {"userSid", (UserToken ? UserToken->GetUserSID() : "empty")},
+            {"requireAdministratorAccess", RequireUserAdministratorAccess},
             {"admin", isAdmin});
 
         if (RequireUserAdministratorAccess && !isAdmin) {
@@ -170,8 +170,8 @@ protected:
             return;
         }
 
-        YDB_LOG_TRACE_CTX_COMP(ctx, NKikimrServices::SYSTEM_VIEWS, "Got",
-            {"navigate", request->ToString(*AppData()->TypeRegistry)});
+        YDB_LOG_TRACE_CTX_COMP(ctx, NKikimrServices::SYSTEM_VIEWS, "TAuthScanBase::HandleNavigateResult: received navigate result",
+            {"navigateRequest", request->ToString(*AppData()->TypeRegistry)});
 
         auto batch = MakeHolder<NKqp::TEvKqpCompute::TEvScanData>(TBase::ScanId);
 
@@ -211,8 +211,8 @@ protected:
         entry.Operation = TSchemeCacheNavigate::OpList;
         entry.RedirectRequired = false;
 
-        YDB_LOG_TRACE_COMP(NKikimrServices::SYSTEM_VIEWS, "Navigate",
-            {"requestString", request->ToString(*AppData()->TypeRegistry)});
+        YDB_LOG_TRACE_COMP(NKikimrServices::SYSTEM_VIEWS, "TAuthScanBase::Navigate: sending navigate request",
+            {"navigateRequest", request->ToString(*AppData()->TypeRegistry)});
 
         TBase::Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(request.Release()));
     }

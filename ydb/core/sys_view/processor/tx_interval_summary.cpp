@@ -148,16 +148,16 @@ struct TSysViewProcessor::TTxIntervalSummary : public TTxBase {
             Record.GetTopByCpuTime().ValuesSize() != Record.GetTopByCpuTime().HashesSize() ||
             Record.GetTopByRequestUnits().ValuesSize() != Record.GetTopByRequestUnits().HashesSize())
         {
-            YDB_LOG_WARN("TTxIntervalSummary::Execute, malformed summary: node",
+            YDB_LOG_WARN("TTxIntervalSummary::Execute: malformed summary from node",
                 {"tabletId", Self->TabletID()},
-                {"id", nodeId});
+                {"nodeId", nodeId});
             return true;
         }
 
         if (Self->SummaryNodes.find(nodeId) != Self->SummaryNodes.end()) {
-            YDB_LOG_WARN("TTxIntervalSummary::Execute, duplicate summary: node",
+            YDB_LOG_WARN("TTxIntervalSummary::Execute: duplicate summary from node",
                 {"tabletId", Self->TabletID()},
-                {"id", nodeId});
+                {"nodeId", nodeId});
             return true;
         }
         Self->SummaryNodes.insert(nodeId);
@@ -165,10 +165,10 @@ struct TSysViewProcessor::TTxIntervalSummary : public TTxBase {
         const auto& metrics = Record.GetMetrics();
         auto count = metrics.HashesSize();
 
-        YDB_LOG_DEBUG("TTxIntervalSummary::Execute: node query",
+        YDB_LOG_DEBUG("TTxIntervalSummary::Execute: processing interval summary from node",
             {"tabletId", Self->TabletID()},
-            {"id", nodeId},
-            {"count", count});
+            {"nodeId", nodeId},
+            {"queryCount", count});
 
         NIceDb::TNiceDb db(txc.DB);
         for (size_t i = 0; i < count; ++i) {
@@ -206,26 +206,27 @@ void TSysViewProcessor::Handle(TEvSysView::TEvIntervalQuerySummary::TPtr& ev) {
     auto nodeId = record.GetNodeId();
 
     if (CurrentStage != COLLECT) {
-        YDB_LOG_WARN("TEvIntervalQuerySummary, wrong stage: node",
-            {"tabletID", TabletID()},
-            {"id", nodeId});
+        YDB_LOG_WARN("Handle TEvSysView::TEvIntervalQuerySummary: wrong stage",
+            {"tabletId", TabletID()},
+            {"nodeId", nodeId},
+            {"currentStage", static_cast<ui64>(CurrentStage)});
         return;
     }
 
     if (record.GetIntervalEndUs() != IntervalEnd.MicroSeconds()) {
-        YDB_LOG_WARN("TEvIntervalQuerySummary, time mismath: node interval event interval",
-            {"tabletID", TabletID()},
-            {"id", nodeId},
-            {"end", IntervalEnd},
+        YDB_LOG_WARN("Handle TEvSysView::TEvIntervalQuerySummary: interval end mismatch",
+            {"tabletId", TabletID()},
+            {"nodeId", nodeId},
+            {"expectedIntervalEnd", IntervalEnd},
             {"recordIntervalEnd", TInstant::MicroSeconds(record.GetIntervalEndUs())});
         return;
     }
 
     if (record.GetDatabase() != Database) {
-        YDB_LOG_WARN("TEvIntervalQuerySummary, db mismatch: node event",
-            {"tabletID", TabletID()},
-            {"id", nodeId},
-            {"database", Database},
+        YDB_LOG_WARN("Handle TEvSysView::TEvIntervalQuerySummary: database mismatch",
+            {"tabletId", TabletID()},
+            {"nodeId", nodeId},
+            {"expectedDatabase", Database},
             {"recordDatabase", record.GetDatabase()});
         return;
     }

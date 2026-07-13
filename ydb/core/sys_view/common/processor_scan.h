@@ -44,8 +44,8 @@ public:
             cFunc(TEvents::TEvWakeup::EventType, this->HandleTimeout);
             cFunc(TEvents::TEvPoison::EventType, PassAway);
             default:
-                YDB_LOG_CRIT_COMP(NKikimrServices::SYSTEM_VIEWS, "NSysView::TProcessorScan: unexpected",
-                    {"event", ev->GetTypeRewrite()});
+                YDB_LOG_CRIT_COMP(NKikimrServices::SYSTEM_VIEWS, "TProcessorScan::StateWork: unexpected event",
+                    {"eventType", ev->GetTypeRewrite()});
         }
     }
 
@@ -59,7 +59,7 @@ private:
 
     void RequestBatch() {
         if (!this->SysViewProcessorId) {
-            YDB_LOG_WARN_COMP(NKikimrServices::SYSTEM_VIEWS, "NSysView::TProcessorScan: no sysview processor for database sending empty response",
+            YDB_LOG_WARN_COMP(NKikimrServices::SYSTEM_VIEWS, "TProcessorScan::ProceedToScan: sysview processor not configured, sending empty response",
                 {"tenantName", this->TenantName});
             this->ReplyEmptyAndDie();
             return;

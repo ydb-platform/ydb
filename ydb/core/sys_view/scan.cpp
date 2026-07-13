@@ -127,12 +127,12 @@ public:
     }
 
     void HandleAbortExecution(NKqp::TEvKqp::TEvAbortExecution::TPtr& ev) {
-        YDB_LOG_ERROR("Got abort execution event, scan table",
-            {"actor", TBase::SelfId()},
-            {"owner", OwnerId},
-            {"id", ScanId},
+        YDB_LOG_ERROR("Handle NKqp::TEvKqp::TEvAbortExecution: scan aborted",
+            {"actorId", TBase::SelfId()},
+            {"ownerId", OwnerId},
+            {"scanId", ScanId},
             {"tableId", TableId},
-            {"code", NYql::NDqProto::StatusIds::StatusCode_Name(ev->Get()->Record.GetStatusCode())},
+            {"statusCode", NYql::NDqProto::StatusIds::StatusCode_Name(ev->Get()->Record.GetStatusCode())},
             {"error", ev->Get()->GetIssues().ToOneLineString()});
 
         if (ScanActorId) {

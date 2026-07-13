@@ -31,7 +31,8 @@ public:
     {}
 
     void Bootstrap() {
-        YDB_LOG_DEBUG("NSysView::TPartitionStatsCollector bootstrapped");
+        YDB_LOG_DEBUG("NSysView::TPartitionStatsCollector::Bootstrap",
+            {"domainKey", DomainKey});
 
         if (AppData()->UsePartitionStatsCollectorForTests) {
             OverloadedByCpuPartitionBound = 0.0;
@@ -80,11 +81,11 @@ private:
         const auto& domainKey = ev->Get()->DomainKey;
         const auto& pathId = ev->Get()->PathId;
 
-        YDB_LOG_TRACE("TEvSysView::TEvSetPartitioning: domainKey pathId path ShardIndices size",
+        YDB_LOG_TRACE("Handle TEvSysView::TEvSetPartitioning: received table partitioning",
             {"domainKey", domainKey},
             {"pathId", pathId},
             {"path", ev->Get()->Path},
-            {"shardIndicesCount", ev->Get()->ShardIndices.size()});
+            {"shardIndexCount", ev->Get()->ShardIndices.size()});
 
         auto& tables = DomainTables[domainKey];
         auto tableFound = tables.Stats.find(pathId);
@@ -149,13 +150,13 @@ private:
         auto& newStats = ev->Get()->Stats;
         const ui32 followerId = newStats.GetFollowerId();
 
-        YDB_LOG_TRACE("TEvSysView::TEvSendPartitionStats: domainKey pathId shardIdx followerId stats",
+        YDB_LOG_TRACE("Handle TEvSysView::TEvSendPartitionStats: received partition stats",
             {"domainKey", domainKey},
             {"pathId", pathId},
-            {"shardIdxFirst", shardIdx.first},
-            {"shardIdxSecond", shardIdx.second},
+            {"shardIndexFirst", shardIdx.first},
+            {"shardIndexSecond", shardIdx.second},
             {"followerId", followerId},
-            {"newStats", newStats.ShortDebugString()});
+            {"stats", newStats.ShortDebugString()});
 
         auto& tables = DomainTables[domainKey];
         auto tableFound = tables.Stats.find(pathId);
@@ -417,7 +418,8 @@ private:
 
         auto domainFound = DomainTables.find(DomainKey);
         if (domainFound == DomainTables.end()) {
-            YDB_LOG_DEBUG("NSysView::TPartitionStatsCollector: TEvProcessOverloaded: no tables");
+            YDB_LOG_DEBUG("NSysView::TPartitionStatsCollector::HandleProcessOverloaded: no tables in domain",
+                {"domainKey", DomainKey});
             return;
         }
         auto& domainTables = domainFound->second;
@@ -510,10 +512,10 @@ private:
 
         sendEvent->Record.SetTimeUs(nowUs);
 
-        YDB_LOG_DEBUG("NSysView::TPartitionStatsCollector: TEvProcessOverloaded top size by top size by",
-            {"CPU", sortedByCpu.size()},
-            {"TLI", sortedByTli.size()},
-            {"time", now});
+        YDB_LOG_DEBUG("NSysView::TPartitionStatsCollector::HandleProcessOverloaded: sending top overloaded partitions",
+            {"topByCpuCount", sortedByCpu.size()},
+            {"topByTliCount", sortedByTli.size()},
+            {"timestamp", now});
 
         Send(MakePipePerNodeCacheID(false),
             new TEvPipeCache::TEvForward(sendEvent.Release(), SysViewProcessorId, true));
@@ -523,9 +525,9 @@ private:
         DomainKey = ev->Get()->DomainKey;
         SysViewProcessorId = ev->Get()->SysViewProcessorId;
 
-        YDB_LOG_INFO("NSysView::TPartitionStatsCollector initialized: domain sysview processor",
-            {"key", DomainKey},
-            {"id", SysViewProcessorId});
+        YDB_LOG_INFO("NSysView::TPartitionStatsCollector::HandleConfigure: initialized for domain",
+            {"domainKey", DomainKey},
+            {"sysViewProcessorId", SysViewProcessorId});
     }
 
     void PassAway() override {

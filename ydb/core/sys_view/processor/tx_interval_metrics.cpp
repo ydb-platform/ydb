@@ -21,11 +21,11 @@ struct TSysViewProcessor::TTxIntervalMetrics : public TTxBase {
     TTxType GetTxType() const override { return TXTYPE_INTERVAL_METRICS; }
 
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
-        YDB_LOG_DEBUG("TTxIntervalMetrics::Execute: node metrics texts",
+        YDB_LOG_DEBUG("TTxIntervalMetrics::Execute: applying interval metrics from node",
             {"tabletId", Self->TabletID()},
-            {"id", NodeId},
-            {"count", Record.MetricsSize()},
-            {"queryTextsCount", Record.QueryTextsSize()});
+            {"nodeId", NodeId},
+            {"metricsCount", Record.MetricsSize()},
+            {"queryTextCount", Record.QueryTextsSize()});
 
         NIceDb::TNiceDb db(txc.DB);
 
@@ -125,18 +125,19 @@ void TSysViewProcessor::Handle(TEvSysView::TEvGetIntervalMetricsResponse::TPtr& 
     TNodeId nodeId = ev.Get()->Cookie;
 
     if (CurrentStage != AGGREGATE) {
-        YDB_LOG_WARN("TEvGetIntervalMetricsResponse, wrong stage: node",
-            {"tabletID", TabletID()},
-            {"id", nodeId});
+        YDB_LOG_WARN("Handle TEvSysView::TEvGetIntervalMetricsResponse: wrong stage",
+            {"tabletId", TabletID()},
+            {"nodeId", nodeId},
+            {"currentStage", static_cast<ui64>(CurrentStage)});
         return;
     }
 
     if (record.GetIntervalEndUs() != IntervalEnd.MicroSeconds()) {
-        YDB_LOG_WARN("TEvGetIntervalMetricsResponse, time mismatch: node interval event interval",
-            {"tabletID", TabletID()},
-            {"id", nodeId},
-            {"end", IntervalEnd},
-            {"recordIntervalEnd", TInstant::MicroSeconds(record.GetIntervalEndUs())});
+        YDB_LOG_WARN("Handle TEvSysView::TEvGetIntervalMetricsResponse: interval end mismatch",
+            {"tabletId", TabletID()},
+            {"nodeId", nodeId},
+            {"expectedIntervalEnd", IntervalEnd},
+            {"responseIntervalEnd", TInstant::MicroSeconds(record.GetIntervalEndUs())});
         return;
     }
 

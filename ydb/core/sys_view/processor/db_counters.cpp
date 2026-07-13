@@ -409,9 +409,9 @@ void TSysViewProcessor::Handle(TEvSysView::TEvSendDbCountersRequest::TPtr& ev) {
     state.FreshCount = 0;
 
     if (state.Generation == record.GetGeneration()) {
-        YDB_LOG_DEBUG("TEvSendDbCountersRequest, known generation: node",
-            {"tabletID", TabletID()},
-            {"id", nodeId},
+        YDB_LOG_DEBUG("Handle TEvSysView::TEvSendDbCountersRequest: duplicate generation, sending ack",
+            {"tabletId", TabletID()},
+            {"nodeId", nodeId},
             {"generation", record.GetGeneration()});
 
         auto response = MakeHolder<TEvSysView::TEvSendDbCountersResponse>();
@@ -445,12 +445,12 @@ void TSysViewProcessor::Handle(TEvSysView::TEvSendDbCountersRequest::TPtr& ev) {
         }
     }
 
-    YDB_LOG_DEBUG("TEvSendDbCountersRequest: node services request",
-        {"tabletID", TabletID()},
-        {"id", nodeId},
+    YDB_LOG_DEBUG("Handle TEvSysView::TEvSendDbCountersRequest: applying counters from node",
+        {"tabletId", TabletID()},
+        {"nodeId", nodeId},
         {"generation", state.Generation},
-        {"count", incomingServicesSet.size()},
-        {"size", record.ByteSize()});
+        {"serviceCount", incomingServicesSet.size()},
+        {"recordByteSize", record.ByteSize()});
 
     auto response = MakeHolder<TEvSysView::TEvSendDbCountersResponse>();
     response->Record.SetDatabase(Database);
@@ -470,9 +470,9 @@ void TSysViewProcessor::Handle(TEvSysView::TEvSendDbLabeledCountersRequest::TPtr
     state.FreshCount = 0;
 
     if (state.Generation == record.GetGeneration()) {
-        YDB_LOG_DEBUG("TEvSendDbLabeledCountersRequest, known generation: node",
-            {"tabletID", TabletID()},
-            {"id", nodeId},
+        YDB_LOG_DEBUG("Handle TEvSysView::TEvSendDbLabeledCountersRequest: duplicate generation, sending ack",
+            {"tabletId", TabletID()},
+            {"nodeId", nodeId},
             {"generation", record.GetGeneration()});
 
         auto response = MakeHolder<TEvSysView::TEvSendDbLabeledCountersResponse>();
@@ -503,11 +503,11 @@ void TSysViewProcessor::Handle(TEvSysView::TEvSendDbLabeledCountersRequest::TPtr
         }
     }
 
-    YDB_LOG_DEBUG("TEvSendDbLabeledCountersRequest: node request",
-        {"tabletID", TabletID()},
-        {"id", nodeId},
+    YDB_LOG_DEBUG("Handle TEvSysView::TEvSendDbLabeledCountersRequest: applying labeled counters from node",
+        {"tabletId", TabletID()},
+        {"nodeId", nodeId},
         {"generation", state.Generation},
-        {"size", record.ByteSize()});
+        {"recordByteSize", record.ByteSize()});
 
     auto response = MakeHolder<TEvSysView::TEvSendDbLabeledCountersResponse>();
     response->Record.SetDatabase(Database);
@@ -545,9 +545,9 @@ void TSysViewProcessor::Handle(TEvPrivate::TEvApplyCounters::TPtr&) {
         counters->FromProto(aggrCounters);
     }
 
-    YDB_LOG_DEBUG("TEvApplyCounters: services",
-        {"tabletID", TabletID()},
-        {"count", AggregatedCountersState.size()});
+    YDB_LOG_DEBUG("Handle TEvPrivate::TEvApplyCounters: applying aggregated counters",
+        {"tabletId", TabletID()},
+        {"serviceCount", AggregatedCountersState.size()});
 
     ScheduleApplyCounters();
 }
@@ -583,9 +583,9 @@ void TSysViewProcessor::Handle(TEvPrivate::TEvApplyLabeledCounters::TPtr&) {
         counters->FromProto(aggrCounters);
     }
 
-    YDB_LOG_DEBUG("TEvApplyLabeledCounters: services",
-        {"tabletID", TabletID()},
-        {"count", AggregatedLabeledState.size()});
+    YDB_LOG_DEBUG("Handle TEvPrivate::TEvApplyLabeledCounters: applying aggregated labeled counters",
+        {"tabletId", TabletID()},
+        {"serviceCount", AggregatedLabeledState.size()});
 
     ScheduleApplyLabeledCounters();
 }
@@ -599,9 +599,9 @@ void TSysViewProcessor::Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::T
 
     THolder<TNavigate> request(ev->Get()->Request.Release());
     if (request->ResultSet.size() != 1) {
-        YDB_LOG_CRIT("TEvNavigateKeySetResult failed: result set",
-            {"tabletID", TabletID()},
-            {"size", request->ResultSet.size()});
+        YDB_LOG_CRIT("Handle TEvTxProxySchemeCache::TEvNavigateKeySetResult: unexpected result set size",
+            {"tabletId", TabletID()},
+            {"resultSetSize", request->ResultSet.size()});
         ScheduleSendNavigate();
         return;
     }
@@ -609,8 +609,8 @@ void TSysViewProcessor::Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::T
     auto& entry = request->ResultSet.back();
 
     if (entry.Status != TNavigate::EStatus::Ok) {
-        YDB_LOG_WARN("TEvNavigateKeySetResult failed",
-            {"tabletID", TabletID()},
+        YDB_LOG_WARN("Handle TEvTxProxySchemeCache::TEvNavigateKeySetResult: navigation failed",
+            {"tabletId", TabletID()},
             {"status", entry.Status});
         ScheduleSendNavigate();
         return;
@@ -631,8 +631,8 @@ void TSysViewProcessor::Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::T
 
     Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvWatchPathId(entry.TableId.PathId));
 
-    YDB_LOG_DEBUG("TEvNavigateKeySetResult",
-        {"tabletID", TabletID()},
+    YDB_LOG_DEBUG("Handle TEvTxProxySchemeCache::TEvNavigateKeySetResult: database attributes resolved",
+        {"tabletId", TabletID()},
         {"database", Database},
         {"pathId", entry.TableId.PathId},
         {"cloudId", CloudId},
@@ -645,9 +645,9 @@ void TSysViewProcessor::Handle(TEvTxProxySchemeCache::TEvWatchNotifyUpdated::TPt
 
     TString path = describeResult->GetPath();
     if (path != Database) {
-        YDB_LOG_WARN("TEvWatchNotifyUpdated, invalid path",
-            {"tabletID", TabletID()},
-            {"database", Database},
+        YDB_LOG_WARN("Handle TEvTxProxySchemeCache::TEvWatchNotifyUpdated: path mismatch",
+            {"tabletId", TabletID()},
+            {"expectedDatabase", Database},
             {"path", path});
         return;
     }
@@ -666,8 +666,8 @@ void TSysViewProcessor::Handle(TEvTxProxySchemeCache::TEvWatchNotifyUpdated::TPt
         }
     }
 
-    YDB_LOG_DEBUG("TEvWatchNotifyUpdated",
-        {"tabletID", TabletID()},
+    YDB_LOG_DEBUG("Handle TEvTxProxySchemeCache::TEvWatchNotifyUpdated: database attributes updated",
+        {"tabletId", TabletID()},
         {"database", Database},
         {"cloudId", cloudId},
         {"folderId", folderId},

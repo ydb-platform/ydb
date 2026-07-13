@@ -77,21 +77,21 @@ static void CalculateCountersDiff(NKikimrSysView::TDbCounters* diff,
     auto histogramSize = current.HistogramSize();
 
     if (prev.SimpleSize() != simpleSize) {
-        YDB_LOG_CRIT("CalculateCountersDiff: simple count mismatch, prev current",
+        YDB_LOG_CRIT("CalculateCountersDiff: simple counter count mismatch",
             {"prevSimpleSize", prev.SimpleSize()},
-            {"simpleSize", simpleSize});
+            {"currentSimpleSize", simpleSize});
         prev.MutableSimple()->Resize(simpleSize, 0);
     }
     if (prev.CumulativeSize() != cumulativeSize) {
-        YDB_LOG_CRIT("CalculateCountersDiff: cumulative count mismatch, prev current",
+        YDB_LOG_CRIT("CalculateCountersDiff: cumulative counter count mismatch",
             {"prevCumulativeSize", prev.CumulativeSize()},
-            {"cumulativeSize", cumulativeSize});
+            {"currentCumulativeSize", cumulativeSize});
         prev.MutableCumulative()->Resize(cumulativeSize, 0);
     }
     if (prev.HistogramSize() != histogramSize) {
-        YDB_LOG_CRIT("CalculateCountersDiff: histogram count mismatch, prev current",
+        YDB_LOG_CRIT("CalculateCountersDiff: histogram counter count mismatch",
             {"prevHistogramSize", prev.HistogramSize()},
-            {"histogramSize", histogramSize});
+            {"currentHistogramSize", histogramSize});
         if (prev.HistogramSize() < histogramSize) {
             auto missing = histogramSize - prev.HistogramSize();
             for (; missing > 0; --missing) {
@@ -123,10 +123,10 @@ static void CalculateCountersDiff(NKikimrSysView::TDbCounters* diff,
         auto& prevH = *prev.MutableHistogram(i);
         auto bucketCount = currentH.BucketsSize();
         if (prevH.BucketsSize() != bucketCount) {
-            YDB_LOG_CRIT("CalculateCountersDiff: histogram buckets count mismatch, index prev current",
-                {"i", i},
-                {"prevBucketsSize", prevH.BucketsSize()},
-                {"bucketCount", bucketCount});
+            YDB_LOG_CRIT("CalculateCountersDiff: histogram bucket count mismatch",
+                {"histogramIndex", i},
+                {"prevBucketCount", prevH.BucketsSize()},
+                {"currentBucketCount", bucketCount});
             prevH.MutableBuckets()->Resize(bucketCount, 0);
         }
         auto* histogram = diff->AddHistogram();
@@ -297,8 +297,8 @@ public:
             hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle);
             cFunc(TEvents::TEvPoison::EventType, PassAway);
             default:
-                YDB_LOG_CRIT("NSysView::TSysViewService: unexpected",
-                    {"event", ev->GetTypeRewrite()});
+                YDB_LOG_CRIT("TSysViewService::StateWork: unexpected event",
+                    {"eventType", ev->GetTypeRewrite()});
         }
     }
 
@@ -388,12 +388,12 @@ private:
         log.TopByCpuTime.Report.FillSummary(*record.MutableTopByCpuTime());
         log.TopByRequestUnits.Report.FillSummary(*record.MutableTopByRequestUnits());
 
-        YDB_LOG_DEBUG("Send interval summary: service processor interval query",
-            {"id", SelfId()},
+        YDB_LOG_DEBUG("TSysViewService::SendSummary: sending interval query summary",
+            {"actorId", SelfId()},
             {"processorId", processorId},
             {"database", database},
-            {"end", intervalEnd},
-            {"count", record.GetMetrics().HashesSize()});
+            {"intervalEnd", intervalEnd},
+            {"queryHashCount", record.GetMetrics().HashesSize()});
 
         Send(MakePipePerNodeCacheID(false),
             new TEvPipeCache::TEvForward(summary.Release(), processorId, true),
@@ -409,10 +409,10 @@ private:
 
         Attempts.clear();
 
-        YDB_LOG_DEBUG("Rotate logs: service query logs processor ids processor id to database",
-            {"id", SelfId()},
-            {"count", QueryLogs.size()},
-            {"processorIdsCount", ProcessorIds.size()},
+        YDB_LOG_DEBUG("TSysViewService::Rotate: rotating query logs",
+            {"actorId", SelfId()},
+            {"queryLogCount", QueryLogs.size()},
+            {"processorIdCount", ProcessorIds.size()},
             {"processorIdToDatabaseCount", ProcessorIdToDatabase.size()});
 
         if (QueryLogs.empty()) {
@@ -521,8 +521,8 @@ private:
             }
         }
 
-        YDB_LOG_DEBUG("Send counters: service processor node is is",
-            {"id", SelfId()},
+        YDB_LOG_DEBUG("TSysViewService::SendCounters: sending database counters",
+            {"actorId", SelfId()},
             {"processorId", processorId},
             {"database", database},
             {"generation", record.GetGeneration()},
@@ -597,9 +597,9 @@ private:
     }
 
     void Handle(TEvPrivate::TEvProcessInterval::TPtr& ev) {
-        YDB_LOG_DEBUG("Handle TEvPrivate::TEvProcessInterval: service interval event interval",
-            {"id", SelfId()},
-            {"end", IntervalEnd},
+        YDB_LOG_DEBUG("Handle TEvPrivate::TEvProcessInterval: processing interval",
+            {"actorId", SelfId()},
+            {"intervalEnd", IntervalEnd},
             {"eventIntervalEnd", ev->Get()->IntervalEnd});
 
         if (IntervalEnd == ev->Get()->IntervalEnd) {
@@ -621,11 +621,11 @@ private:
 
         auto prevIntervalEnd = IntervalEnd - TotalInterval;
         if (record.GetIntervalEndUs() != prevIntervalEnd.MicroSeconds()) {
-            YDB_LOG_WARN("Handle TEvSysView::TEvGetIntervalMetricsRequest, time mismatch: service prev interval event interval",
-                {"id", SelfId()},
+            YDB_LOG_WARN("Handle TEvSysView::TEvGetIntervalMetricsRequest: interval end mismatch",
+                {"actorId", SelfId()},
                 {"database", database},
-                {"end", prevIntervalEnd},
-                {"recordIntervalEnd", record.GetIntervalEndUs()});
+                {"expectedIntervalEnd", prevIntervalEnd},
+                {"requestIntervalEndUs", record.GetIntervalEndUs()});
 
             Send(ev->Sender, std::move(response), 0, ev->Cookie);
             return;
@@ -633,10 +633,10 @@ private:
 
         auto it = QueryLogs.find(database);
         if (it == QueryLogs.end()) {
-            YDB_LOG_WARN("Handle TEvSysView::TEvGetIntervalMetricsRequest, no database: service prev interval",
-                {"id", SelfId()},
+            YDB_LOG_WARN("Handle TEvSysView::TEvGetIntervalMetricsRequest: database not found",
+                {"actorId", SelfId()},
                 {"database", database},
-                {"end", prevIntervalEnd});
+                {"intervalEnd", prevIntervalEnd});
 
             Send(ev->Sender, std::move(response), 0, ev->Cookie);
             return;
@@ -653,19 +653,19 @@ private:
         log.TopByRequestUnits.Report.FillStats(
             record.GetTopByRequestUnits(), *response->Record.MutableTopByRequestUnits());
 
-        YDB_LOG_DEBUG("Handle TEvSysView::TEvGetIntervalMetricsRequest: service prev interval metrics texts",
-            {"id", SelfId()},
+        YDB_LOG_DEBUG("Handle TEvSysView::TEvGetIntervalMetricsRequest: returning interval metrics",
+            {"actorId", SelfId()},
             {"database", database},
-            {"end", prevIntervalEnd},
-            {"count", response->Record.MetricsSize()},
-            {"queryTextsCount", response->Record.QueryTextsSize()});
+            {"intervalEnd", prevIntervalEnd},
+            {"metricsCount", response->Record.MetricsSize()},
+            {"queryTextCount", response->Record.QueryTextsSize()});
 
         Send(ev->Sender, std::move(response), 0, ev->Cookie);
     }
 
     void Handle(TEvPrivate::TEvProcessCounters::TPtr&) {
-        YDB_LOG_DEBUG("Handle TEvPrivate::TEvProcessCounters: service",
-            {"id", SelfId()});
+        YDB_LOG_DEBUG("Handle TEvPrivate::TEvProcessCounters: processing database counters",
+            {"actorId", SelfId()});
 
         for (auto& [database, dbCounters] : DatabaseCounters) {
             SendCounters<TEvSysView::TEvSendDbCountersRequest>(database);
@@ -675,8 +675,8 @@ private:
     }
 
     void Handle(TEvPrivate::TEvProcessLabeledCounters::TPtr&) {
-        YDB_LOG_DEBUG("Handle TEvPrivate::TEvProcessLabeledCounters: service",
-            {"id", SelfId()});
+        YDB_LOG_DEBUG("Handle TEvPrivate::TEvProcessLabeledCounters: processing labeled database counters",
+            {"actorId", SelfId()});
 
         for (auto& [database, dbCounters] : DatabaseLabeledCounters) {
             SendCounters<TEvSysView::TEvSendDbLabeledCountersRequest>(database);
@@ -689,7 +689,7 @@ private:
         auto database = ev->Get()->Database;
         auto pathId = ev->Get()->PathId;
 
-        YDB_LOG_DEBUG("Handle TEvPrivate::TEvRemoveDatabase",
+        YDB_LOG_DEBUG("Handle TEvPrivate::TEvRemoveDatabase: removing database state",
             {"database", database},
             {"pathId", pathId});
 
@@ -713,19 +713,19 @@ private:
 
         auto it = DatabaseCounters.find(database);
         if (it == DatabaseCounters.end()) {
-            YDB_LOG_WARN("Handle TEvSysView::TEvSendDbCountersResponse: service unknown",
-                {"id", SelfId()},
+            YDB_LOG_WARN("Handle TEvSysView::TEvSendDbCountersResponse: unknown database",
+                {"actorId", SelfId()},
                 {"database", database});
             return;
         }
 
         auto& dbCounters = it->second;
         if (generation != dbCounters.Generation) {
-            YDB_LOG_WARN("Handle TEvSysView::TEvSendDbCountersResponse, wrong generation: service service",
-                {"id", SelfId()},
+            YDB_LOG_WARN("Handle TEvSysView::TEvSendDbCountersResponse: generation mismatch",
+                {"actorId", SelfId()},
                 {"database", database},
-                {"generation", generation},
-                {"dbCountersGeneration", dbCounters.Generation});
+                {"responseGeneration", generation},
+                {"expectedGeneration", dbCounters.Generation});
             return;
         }
 
@@ -738,8 +738,8 @@ private:
             SendCounters<TEvSysView::TEvSendDbCountersRequest>(database);
         }
 
-        YDB_LOG_DEBUG("Handle TEvSysView::TEvSendDbCountersResponse: service",
-            {"id", SelfId()},
+        YDB_LOG_DEBUG("Handle TEvSysView::TEvSendDbCountersResponse: counters confirmed",
+            {"actorId", SelfId()},
             {"database", database},
             {"generation", generation});
     }
@@ -768,8 +768,8 @@ private:
             SendCounters<TEvSysView::TEvSendDbLabeledCountersRequest>(database);
         }
 
-        YDB_LOG_DEBUG("Handle TEvSysView::TEvSendDbLabeledCountersResponse: service",
-            {"id", SelfId()},
+        YDB_LOG_DEBUG("Handle TEvSysView::TEvSendDbLabeledCountersResponse: labeled counters confirmed",
+            {"actorId", SelfId()},
             {"database", database},
             {"generation", generation});
     }
@@ -782,28 +782,28 @@ private:
             UnresolvedTabletCounters[pathId] = ev->Get()->Counters;
             RequestDatabaseName(pathId);
 
-            YDB_LOG_DEBUG("Handle TEvSysView::TEvRegisterDbCounters: service path",
-                {"id", SelfId()},
+            YDB_LOG_DEBUG("Handle TEvSysView::TEvRegisterDbCounters: registering counters by path id",
+                {"actorId", SelfId()},
                 {"pathId", pathId},
-                {"service", (int)service});
+                {"service", static_cast<int>(service)});
 
         } else if (service == NKikimrSysView::LABELED) {
             const auto& database = ev->Get()->Database;
             RegisterDbLabeledCounters(database, service, ev->Get()->Counters);
 
-            YDB_LOG_DEBUG("Handle TEvSysView::TEvRegisterDbLabeledCounters: service",
-                {"id", SelfId()},
+            YDB_LOG_DEBUG("Handle TEvSysView::TEvRegisterDbLabeledCounters: registering labeled counters",
+                {"actorId", SelfId()},
                 {"database", database},
-                {"service", (int)service});
+                {"service", static_cast<int>(service)});
 
         } else { // register by database name
             const auto& database = ev->Get()->Database;
             RegisterDbCounters(database, service, ev->Get()->Counters);
 
-            YDB_LOG_DEBUG("Handle TEvSysView::TEvRegisterDbCounters: service",
-                {"id", SelfId()},
+            YDB_LOG_DEBUG("Handle TEvSysView::TEvRegisterDbCounters: registering counters",
+                {"actorId", SelfId()},
                 {"database", database},
-                {"service", (int)service});
+                {"service", static_cast<int>(service)});
         }
     }
 
@@ -816,8 +816,8 @@ private:
             RequestProcessorId(database);
         }
 
-        YDB_LOG_WARN("Summary delivery problem: service processor",
-            {"id", SelfId()},
+        YDB_LOG_WARN("Handle TEvPipeCache::TEvDeliveryProblem: summary delivery failed",
+            {"actorId", SelfId()},
             {"processorId", processorId},
             {"database", database});
 
@@ -851,8 +851,8 @@ private:
             auto pathId = entry.TableId.PathId;
 
             if (entry.Status != TNavigate::EStatus::Ok) {
-                YDB_LOG_WARN("Navigate by path id failed: service path",
-                    {"id", SelfId()},
+                YDB_LOG_WARN("Handle TEvTxProxySchemeCache::TEvNavigateKeySetResult: navigate by path id failed",
+                    {"actorId", SelfId()},
                     {"pathId", pathId},
                     {"status", entry.Status});
                 return;
@@ -867,8 +867,8 @@ private:
             RegisterDbCounters(database, NKikimrSysView::TABLETS, it->second);
             UnresolvedTabletCounters.erase(it);
 
-            YDB_LOG_INFO("Navigate by path id succeeded: service path",
-                {"id", SelfId()},
+            YDB_LOG_INFO("Handle TEvTxProxySchemeCache::TEvNavigateKeySetResult: navigate by path id succeeded",
+                {"actorId", SelfId()},
                 {"pathId", pathId},
                 {"database", database});
 
@@ -876,8 +876,8 @@ private:
             auto database = CanonizePath(entry.Path);
 
             if (entry.Status != TNavigate::EStatus::Ok) {
-                YDB_LOG_WARN("Navigate by database failed: service",
-                    {"id", SelfId()},
+                YDB_LOG_WARN("Handle TEvTxProxySchemeCache::TEvNavigateKeySetResult: navigate by database failed",
+                    {"actorId", SelfId()},
                     {"database", database},
                     {"status", entry.Status});
                 ProcessorIds.erase(database);
@@ -889,15 +889,15 @@ private:
                 ProcessorIds[database] = processorId;
                 ProcessorIdToDatabase[processorId] = database;
 
-                YDB_LOG_INFO("Navigate by database succeeded: service processor",
-                    {"id", SelfId()},
+                YDB_LOG_INFO("Handle TEvTxProxySchemeCache::TEvNavigateKeySetResult: sysview processor found",
+                    {"actorId", SelfId()},
                     {"database", database},
                     {"processorId", processorId});
             } else {
                 ProcessorIds[database] = 0;
 
-                YDB_LOG_INFO("Navigate by database succeeded: service no sysview processor",
-                    {"id", SelfId()},
+                YDB_LOG_INFO("Handle TEvTxProxySchemeCache::TEvNavigateKeySetResult: sysview processor not configured",
+                    {"actorId", SelfId()},
                     {"database", database});
             }
         }
@@ -909,11 +909,11 @@ private:
         auto stats = std::make_shared<NKikimrSysView::TQueryStats>();
         stats->Swap(&ev->Get()->QueryStats);
 
-        YDB_LOG_TRACE("Collect query stats: service query cpu",
-            {"id", SelfId()},
+        YDB_LOG_TRACE("Handle TEvSysView::TEvCollectQueryStats: collecting query stats",
+            {"actorId", SelfId()},
             {"database", database},
-            {"hash", stats->GetQueryTextHash()},
-            {"time", stats->GetTotalCpuTimeUs()});
+            {"queryTextHash", stats->GetQueryTextHash()},
+            {"totalCpuTimeUs", stats->GetTotalCpuTimeUs()});
 
         if (AppData()->FeatureFlags.GetEnablePersistentQueryStats() && !database.empty()) {
             auto queryEnd = TInstant::MilliSeconds(stats->GetEndTimeMs());
@@ -991,8 +991,8 @@ private:
                 TopByRequestUnits1Hour->ToProto(startBucket, result->Record);
                 break;
             default:
-                YDB_LOG_CRIT("NSysView::TSysViewService: unexpected query stats",
-                    {"type", (size_t)record.GetStatsType()});
+                YDB_LOG_CRIT("Handle TEvSysView::TEvGetQueryStats: unexpected stats type",
+                    {"statsType", static_cast<size_t>(record.GetStatsType())});
                 // send empty result
                 break;
         }

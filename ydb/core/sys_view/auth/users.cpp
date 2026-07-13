@@ -63,7 +63,7 @@ protected:
             }
         }
 
-        YDB_LOG_TRACE("Sending list users request",
+        YDB_LOG_TRACE("TUsersScan::SendListUsersRequest: sending list users request",
             {"requestRecord", request->Record.ShortUtf8DebugString()});
 
         TBase::SendThroughPipeCache(request.Release(), TBase::SchemeShardId);
@@ -72,7 +72,7 @@ protected:
     void Handle(TEvSchemeShard::TEvListUsersResult::TPtr& ev, const TActorContext& ctx) {
         const auto& record = ev->Get()->Record;
 
-        YDB_LOG_TRACE_CTX(ctx, "Got list users response",
+        YDB_LOG_TRACE_CTX(ctx, "TUsersScan::HandleListUsersResponse: received list users response",
             {"responseRecord", record.ShortUtf8DebugString()});
 
         auto batch = MakeHolder<NKqp::TEvKqpCompute::TEvScanData>(TBase::ScanId);

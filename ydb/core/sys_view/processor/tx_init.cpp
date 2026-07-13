@@ -48,10 +48,10 @@ struct TSysViewProcessor::TTxInit : public TTxBase {
             }
         }
 
-        YDB_LOG_DEBUG("Loading results: result",
+        YDB_LOG_DEBUG("TTxInit::LoadQueryResults: loaded persisted results",
             {"tabletId", Self->TabletID()},
-            {"table", TSchema::TableId},
-            {"count", results.size()});
+            {"tableId", TSchema::TableId},
+            {"resultCount", results.size()});
 
         return true;
     };
@@ -80,10 +80,10 @@ struct TSysViewProcessor::TTxInit : public TTxBase {
             }
         }
 
-        YDB_LOG_DEBUG("Loading results: result",
+        YDB_LOG_DEBUG("TTxInit::LoadPartitionResults: loaded persisted partition results",
             {"tabletId", Self->TabletID()},
-            {"table", S::TableId},
-            {"count", results.size()});
+            {"tableId", S::TableId},
+            {"resultCount", results.size()});
 
         return true;
     };
@@ -118,9 +118,9 @@ struct TSysViewProcessor::TTxInit : public TTxBase {
                         Self->PartitionTopByTliHour.emplace_back(std::move(partition));
                         break;
                     default:
-                        YDB_LOG_CRIT("Ignoring unexpected partition stats",
+                        YDB_LOG_CRIT("TTxInit::LoadIntervalPartitionTops: ignoring unexpected partition stats type",
                             {"tabletId", Self->TabletID()},
-                            {"type", type});
+                            {"statsType", type});
                 }
                 ++partCount;
             }
@@ -130,10 +130,10 @@ struct TSysViewProcessor::TTxInit : public TTxBase {
             }
         }
 
-        YDB_LOG_DEBUG("Loading results: partCount",
+        YDB_LOG_DEBUG("TTxInit::LoadIntervalPartitionTops: loaded interval partition tops",
             {"tabletId", Self->TabletID()},
-            {"table", S::TableId},
-            {"count", partCount});
+            {"tableId", S::TableId},
+            {"partitionCount", partCount});
 
         return true;
     }
@@ -204,28 +204,28 @@ struct TSysViewProcessor::TTxInit : public TTxBase {
                 switch (id) {
                     case Schema::SysParam_Database:
                         Self->Database = value;
-                        YDB_LOG_DEBUG("Loading",
+                        YDB_LOG_DEBUG("TTxInit::Execute: loaded database sys param",
                             {"tabletId", Self->TabletID()},
                             {"database", Self->Database});
                         break;
                     case Schema::SysParam_CurrentStage: {
                         auto stage = FromString<ui64>(value);
                         Self->CurrentStage = static_cast<EStage>(stage);
-                        YDB_LOG_DEBUG("Loading",
+                        YDB_LOG_DEBUG("TTxInit::Execute: loaded current stage sys param",
                             {"tabletId", Self->TabletID()},
                             {"stage", stage});
                         break;
                     }
                     case Schema::SysParam_IntervalEnd:
                         Self->IntervalEnd = TInstant::MicroSeconds(FromString<ui64>(value));
-                        YDB_LOG_DEBUG("Loading interval",
+                        YDB_LOG_DEBUG("TTxInit::Execute: loaded interval end sys param",
                             {"tabletId", Self->TabletID()},
-                            {"end", Self->IntervalEnd});
+                            {"intervalEnd", Self->IntervalEnd});
                         break;
                     default:
-                        YDB_LOG_CRIT("Unexpected SysParam",
+                        YDB_LOG_CRIT("TTxInit::Execute: unexpected sys param id",
                             {"tabletId", Self->TabletID()},
-                            {"id", id});
+                            {"sysParamId", id});
                 }
 
                 if (!rowset.Next()) {
@@ -267,11 +267,11 @@ struct TSysViewProcessor::TTxInit : public TTxBase {
                 Self->ByCpu.emplace(query.Cpu, queryHash);
             }
 
-            YDB_LOG_DEBUG("Loading interval summaries: query node ids total",
+            YDB_LOG_DEBUG("TTxInit::Execute: loaded interval summaries",
                 {"tabletId", Self->TabletID()},
-                {"count", Self->Queries.size()},
-                {"summaryNodesCount", Self->SummaryNodes.size()},
-                {"totalNodeIdsCount", totalNodeIdsCount});
+                {"queryCount", Self->Queries.size()},
+                {"summaryNodeCount", Self->SummaryNodes.size()},
+                {"totalNodeEntryCount", totalNodeIdsCount});
         }
 
         // IntervalMetrics
@@ -297,9 +297,9 @@ struct TSysViewProcessor::TTxInit : public TTxBase {
                     return false;
                 }
             }
-            YDB_LOG_DEBUG("Loading interval metrics: query",
+            YDB_LOG_DEBUG("TTxInit::Execute: loaded interval metrics",
                 {"tabletId", Self->TabletID()},
-                {"count", Self->QueryMetrics.size()});
+                {"queryCount", Self->QueryMetrics.size()});
         }
 
         // IntervalTops
@@ -358,9 +358,9 @@ struct TSysViewProcessor::TTxInit : public TTxBase {
                         Self->ByRequestUnitsHour.emplace_back(std::move(query));
                         break;
                     default:
-                        YDB_LOG_CRIT("Ignoring unexpected query stats",
+                        YDB_LOG_CRIT("TTxInit::Execute: ignoring unexpected query stats type",
                             {"tabletId", Self->TabletID()},
-                            {"type", type});
+                            {"statsType", type});
                 }
 
                 ++queryCount;
@@ -378,9 +378,9 @@ struct TSysViewProcessor::TTxInit : public TTxBase {
             std::sort(Self->ByRequestUnitsMinute.begin(), Self->ByRequestUnitsMinute.end(), TopQueryCompare);
             std::sort(Self->ByRequestUnitsHour.begin(), Self->ByRequestUnitsHour.end(), TopQueryCompare);
 
-            YDB_LOG_DEBUG("Loading interval query tops: total query",
+            YDB_LOG_DEBUG("TTxInit::Execute: loaded interval query tops",
                 {"tabletId", Self->TabletID()},
-                {"count", queryCount});
+                {"queryCount", queryCount});
         }
 
         // NodesToRequest
@@ -424,10 +424,10 @@ struct TSysViewProcessor::TTxInit : public TTxBase {
                     return false;
                 }
             }
-            YDB_LOG_DEBUG("Loading nodes to request: nodes hashes",
+            YDB_LOG_DEBUG("TTxInit::Execute: loaded nodes to request",
                 {"tabletId", Self->TabletID()},
-                {"count", Self->NodesToRequest.size()},
-                {"totalHashesCount", totalHashesCount});
+                {"nodeCount", Self->NodesToRequest.size()},
+                {"totalHashCount", totalHashesCount});
         }
 
         // Metrics...

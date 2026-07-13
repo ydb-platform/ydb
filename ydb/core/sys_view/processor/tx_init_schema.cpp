@@ -46,7 +46,7 @@ struct TSysViewProcessor::TTxInitSchema : public TTxBase {
             {"tabletId", Self->TabletID()});
 
         if (!AppData()->FeatureFlags.GetEnablePersistentQueryStats()) {
-            YDB_LOG_DEBUG("Tablet is offline",
+            YDB_LOG_DEBUG("TTxInitSchema::Complete: persistent query stats disabled, tablet offline",
                 {"tabletId", Self->TabletID()});
             Self->SignalTabletActive(ctx);
             Self->Become(&TThis::StateOffline);

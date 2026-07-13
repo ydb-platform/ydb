@@ -121,9 +121,9 @@ struct TSysViewProcessor::TTxTopPartitions : public TTxBase {
     }
 
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
-        YDB_LOG_DEBUG("TTxTopPartitions::Execute: partition by CPU partition by TLI",
+        YDB_LOG_DEBUG("TTxTopPartitions::Execute: processing partition tops by CPU and TLI",
             {"tabletId", Self->TabletID()},
-            {"count", Record.PartitionsByCpuSize()},
+            {"partitionsByCpuCount", Record.PartitionsByCpuSize()},
             {"partitionsByTliCount", Record.PartitionsByTliSize()});
 
         NIceDb::TNiceDb db(txc.DB);
@@ -146,14 +146,14 @@ void TSysViewProcessor::Handle(TEvSysView::TEvSendTopPartitions::TPtr& ev) {
     auto timeUs = record.GetTimeUs();
     auto partitionIntervalEnd = IntervalEnd + TotalInterval;
 
-    YDB_LOG_TRACE("TEvSysView::TEvSendTopPartitions: record",
+    YDB_LOG_TRACE("Handle TEvSysView::TEvSendTopPartitions: received partition tops",
         {"record", record.ShortDebugString()});
 
     if (timeUs < IntervalEnd.MicroSeconds() || timeUs >= partitionIntervalEnd.MicroSeconds()) {
-        YDB_LOG_WARN("TEvSendTopPartitions, time mismath: partition interval event",
-            {"tabletID", TabletID()},
-            {"end", partitionIntervalEnd},
-            {"time", TInstant::MicroSeconds(timeUs)});
+        YDB_LOG_WARN("Handle TEvSysView::TEvSendTopPartitions: interval end mismatch",
+            {"tabletId", TabletID()},
+            {"intervalEnd", partitionIntervalEnd},
+            {"eventTimeUs", timeUs});
         return;
     }
 

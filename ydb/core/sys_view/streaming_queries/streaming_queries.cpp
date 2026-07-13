@@ -111,7 +111,7 @@ public:
 
 private:
     void OnRunQuery() final {
-        YDB_LOG_DEBUG("[StreamingQueries] [SysView] Start fetch streaming queries,",
+        YDB_LOG_DEBUG("TStreamingQueryFetcherActor::OnRunQuery: starting fetch",
             {"logPrefix", LogPrefix()},
             {"reverse", Settings.Reverse});
 
@@ -127,7 +127,7 @@ private:
                 .Build();
 
         if (const auto& from = Settings.From) {
-            YDB_LOG_TRACE("[StreamingQueries] [SysView] Filter",
+            YDB_LOG_TRACE("TStreamingQueryFetcherActor::OnRunQuery: applying from filter",
                 {"logPrefix", LogPrefix()},
                 {"from", from->Value},
                 {"inclusive", from->Inclusive});
@@ -140,7 +140,7 @@ private:
         }
 
         if (const auto& to = Settings.To) {
-            YDB_LOG_TRACE("[StreamingQueries] [SysView] Filter",
+            YDB_LOG_TRACE("TStreamingQueryFetcherActor::OnRunQuery: applying to filter",
                 {"logPrefix", LogPrefix()},
                 {"to", to->Value},
                 {"inclusive", to->Inclusive});
@@ -153,9 +153,9 @@ private:
         }
 
         if (const auto& pageToken = Settings.PageToken) {
-            YDB_LOG_TRACE("[StreamingQueries] [SysView] Setup page",
+            YDB_LOG_TRACE("TStreamingQueryFetcherActor::OnRunQuery: applying page token",
                 {"logPrefix", LogPrefix()},
-                {"token", *pageToken});
+                {"pageToken", *pageToken});
 
             paramsDecl << "DECLARE $page_token AS Text;\n";
             rangeFilter << " AND query_path " << (Settings.Reverse ? "<" : ">") << " $page_token";
@@ -269,7 +269,7 @@ public:
     {}
 
     void Bootstrap() {
-        YDB_LOG_DEBUG("[StreamingQueries] [SysView] Bootstrap",
+        YDB_LOG_DEBUG("TSchemeDescribeActorBase::Bootstrap",
             {"logPrefix", LogPrefix()});
         StartRequest();
 
@@ -284,9 +284,9 @@ public:
 
     void StartRequest() {
         WaitRetry = false;
-        YDB_LOG_DEBUG("[StreamingQueries] [SysView] paths",
+        YDB_LOG_DEBUG("TSchemeDescribeActorBase::StartRequest: describing paths",
             {"logPrefix", LogPrefix()},
-            {"describe", Paths.size()});
+            {"pathCount", Paths.size()});
 
         auto request = std::make_unique<NSchemeCache::TSchemeCacheNavigate>();
         request->DatabaseName = Database;
@@ -320,7 +320,7 @@ public:
         for (ui64 i = 0; i < results.size(); ++i) {
             const auto& path = Paths[i];
             const auto& result = results[i];
-            YDB_LOG_DEBUG("[StreamingQueries] [SysView] Got scheme cache response for path",
+            YDB_LOG_DEBUG("TSchemeDescribeActorBase::Handle: received scheme cache response",
                 {"logPrefix", LogPrefix()},
                 {"path", path},
                 {"status", result.Status});
@@ -333,9 +333,9 @@ public:
                 case EStatus::RootUnknown:
                 case EStatus::PathErrorUnknown:
                 case EStatus::AccessDenied: {
-                    YDB_LOG_WARN("[StreamingQueries] [SysView] Path not found or access denied user",
+                    YDB_LOG_WARN("TSchemeDescribeActorBase::Handle: path not found or access denied",
                         {"logPrefix", LogPrefix()},
-                        {"inSS", path},
+                        {"path", path},
                         {"status", result.Status},
                         {"userSid", (UserToken ? UserToken->GetUserSID() : "<null>")});
                     continue;
@@ -370,9 +370,9 @@ public:
             return;
         }
 
-        YDB_LOG_ERROR("[StreamingQueries] [SysView] Scheme service is",
+        YDB_LOG_ERROR("TSchemeDescribeActorBase::Handle: scheme service unavailable",
             {"logPrefix", LogPrefix()},
-            {"unavailable", ev->Get()->Reason});
+            {"reason", ev->Get()->Reason});
         FatalError(Ydb::StatusIds::UNAVAILABLE, "Scheme service is unavailable");
     }
 
@@ -388,10 +388,10 @@ protected:
 
     void Finish(Ydb::StatusIds::StatusCode status) {
         if (status == Ydb::StatusIds::SUCCESS) {
-            YDB_LOG_DEBUG("[StreamingQueries] [SysView] Successfully finished",
+            YDB_LOG_DEBUG("TQueryRetryActorMixin::Finish: successfully finished",
                 {"logPrefix", LogPrefix()});
         } else {
-            YDB_LOG_WARN("[StreamingQueries] [SysView] Failed with",
+            YDB_LOG_WARN("TQueryRetryActorMixin::Finish: failed",
                 {"logPrefix", LogPrefix()},
                 {"status", status},
                 {"issues", Issues.ToOneLineString()});
@@ -434,7 +434,7 @@ private:
         }
 
         if (const auto delay = RetryState->GetNextRetryDelay()) {
-            YDB_LOG_WARN("[StreamingQueries] [SysView] Schedule retry",
+            YDB_LOG_WARN("TQueryRetryActorMixin::ScheduleRetry: scheduling retry",
                 {"logPrefix", LogPrefix()},
                 {"error", issues.ToOneLineString()},
                 {"retryDelay", *delay});
@@ -477,9 +477,9 @@ protected:
         Y_UNUSED(path);
 
         TablesExist = entry.Kind == NSchemeCache::TSchemeCacheNavigate::KindTable;
-        YDB_LOG_TRACE("[StreamingQueries] [SysView] Streaming queries tables",
+        YDB_LOG_TRACE("TStreamingQueriesTableCheckerActor::Finish: streaming queries tables checked",
             {"logPrefix", LogPrefix()},
-            {"exists", TablesExist});
+            {"tablesExist", TablesExist});
 
         return true;
     }
@@ -503,10 +503,10 @@ public:
 protected:
     bool HandlePath(const TString& path, const NSchemeCache::TSchemeCacheNavigate::TEntry& entry) final {
         if (entry.Kind != NSchemeCache::TSchemeCacheNavigate::KindStreamingQuery) {
-            YDB_LOG_WARN("[StreamingQueries] [SysView] Path exists, but it is not a streaming",
+            YDB_LOG_WARN("TStreamingQueryDescriberActor::Handle: path exists but is not a streaming query",
                 {"logPrefix", LogPrefix()},
                 {"path", path},
-                {"query", entry.Kind});
+                {"entryKind", entry.Kind});
             return true;
         }
 
@@ -516,7 +516,7 @@ protected:
         }
 
         const auto& description = entry.StreamingQueryInfo->Description;
-        YDB_LOG_TRACE("[StreamingQueries] [SysView] Found streaming query",
+        YDB_LOG_TRACE("TStreamingQueryDescriberActor::Handle: found streaming query",
             {"logPrefix", LogPrefix()},
             {"description", description.ShortDebugString()});
 
@@ -652,7 +652,7 @@ public:
             cFunc(TEvents::TEvWakeup::EventType, HandleTimeout);
             cFunc(TEvents::TEvPoison::EventType, PassAway);
             default:
-                YDB_LOG_CRIT("[StreamingQueries] [SysView] NSysView::TStreamingQueriesScan: unexpected event",
+                YDB_LOG_CRIT("TStreamingQueriesScan::StateScan: unexpected event",
                     {"logPrefix", LogPrefix()},
                     {"eventType", ev->GetTypeRewrite()});
         }
@@ -660,10 +660,10 @@ public:
 
     void Handle(NKqp::TEvKqpCompute::TEvScanDataAck::TPtr& ev) {
         FreeSpace = ev->Get()->FreeSpace;
-        YDB_LOG_TRACE("[StreamingQueries] [SysView] Received ack from free",
+        YDB_LOG_TRACE("TStreamingQueriesScan::Handle: received scan data ack",
             {"logPrefix", LogPrefix()},
             {"sender", ev->Sender},
-            {"space", FreeSpace});
+            {"freeSpace", FreeSpace});
 
         ContinueScan();
     }
@@ -673,7 +673,7 @@ public:
 
         if (const auto status = ev->Get()->Status; status != Ydb::StatusIds::SUCCESS) {
             const auto& issues = ev->Get()->Issues;
-            YDB_LOG_ERROR("[StreamingQueries] [SysView] Fetch database failed",
+            YDB_LOG_ERROR("TStreamingQueriesScan::Handle: fetch database failed",
                 {"logPrefix", LogPrefix()},
                 {"sender", ev->Sender},
                 {"status", status},
@@ -688,10 +688,10 @@ public:
             return;
         }
 
-        YDB_LOG_DEBUG("[StreamingQueries] [SysView] Fetch database succeeded, database",
+        YDB_LOG_DEBUG("TStreamingQueriesScan::Handle: fetch database succeeded",
             {"logPrefix", LogPrefix()},
             {"sender", ev->Sender},
-            {"id", DatabaseId});
+            {"databaseId", DatabaseId});
         ContinueScan();
     }
 
@@ -700,7 +700,7 @@ public:
 
         if (const auto status = ev->Get()->Status; status != Ydb::StatusIds::SUCCESS) {
             const auto& issues = ev->Get()->Issues;
-            YDB_LOG_ERROR("[StreamingQueries] [SysView] Check streaming queries tables failed",
+            YDB_LOG_ERROR("TStreamingQueriesScan::Handle: check streaming queries tables failed",
                 {"logPrefix", LogPrefix()},
                 {"sender", ev->Sender},
                 {"status", status},
@@ -710,10 +710,10 @@ public:
         }
 
         const auto tablesExist = ev->Get()->TablesExist;
-        YDB_LOG_DEBUG("[StreamingQueries] [SysView] Check streaming queries tables succeeded, tables",
+        YDB_LOG_DEBUG("TStreamingQueriesScan::Handle: check streaming queries tables succeeded",
             {"logPrefix", LogPrefix()},
             {"sender", ev->Sender},
-            {"exists", tablesExist});
+            {"tablesExist", tablesExist});
 
         CheckedTablesExistence = true;
         ListStreamingQueriesFinished = !tablesExist;
@@ -725,7 +725,7 @@ public:
 
         if (const auto status = ev->Get()->Status; status != Ydb::StatusIds::SUCCESS) {
             const auto& issues = ev->Get()->Issues;
-            YDB_LOG_ERROR("[StreamingQueries] [SysView] Fetch streaming queries failed",
+            YDB_LOG_ERROR("TStreamingQueriesScan::Handle: fetch streaming queries failed",
                 {"logPrefix", LogPrefix()},
                 {"sender", ev->Sender},
                 {"status", status},
@@ -735,12 +735,12 @@ public:
         }
 
         auto& result = ev->Get()->Info;
-        YDB_LOG_DEBUG("[StreamingQueries] [SysView] streaming queries from page",
+        YDB_LOG_DEBUG("TStreamingQueriesScan::Handle: fetched streaming queries page",
             {"logPrefix", LogPrefix()},
-            {"fetched", result.Queries.size()},
+            {"fetchedCount", result.Queries.size()},
             {"sender", ev->Sender},
             {"truncated", result.Truncated},
-            {"token", result.PageToken.value_or("<null>")});
+            {"pageToken", result.PageToken.value_or("<null>")});
 
         ListStreamingQueriesFinished = !result.Truncated;
         ListStreamingQueriesPageToken = result.PageToken;
@@ -753,7 +753,7 @@ public:
 
         if (const auto status = ev->Get()->Status; status != Ydb::StatusIds::SUCCESS) {
             const auto& issues = ev->Get()->Issues;
-            YDB_LOG_ERROR("[StreamingQueries] [SysView] Describe streaming queries failed",
+            YDB_LOG_ERROR("TStreamingQueriesScan::Handle: describe streaming queries failed",
                 {"logPrefix", LogPrefix()},
                 {"sender", ev->Sender},
                 {"status", status},
@@ -763,15 +763,15 @@ public:
         }
 
         const auto& infos = ev->Get()->Infos;
-        YDB_LOG_DEBUG("[StreamingQueries] [SysView] streaming queries",
+        YDB_LOG_DEBUG("TStreamingQueriesScan::Handle: described streaming queries",
             {"logPrefix", LogPrefix()},
-            {"described", infos.size()},
+            {"describedCount", infos.size()},
             {"sender", ev->Sender});
 
         for (const auto& query : ListedQueries) {
             const auto it = infos.find(query.Path);
             if (it == infos.end()) {
-                YDB_LOG_INFO("[StreamingQueries] [SysView] Describe query not found, it was removed or user has no permissions",
+                YDB_LOG_INFO("TStreamingQueriesScan::Handle: describe query not found",
                     {"logPrefix", LogPrefix()},
                     {"queryPath", query.Path},
                     {"userSid", (UserToken ? UserToken->GetUserSID() : "<null>")});
@@ -780,9 +780,9 @@ public:
 
             const auto& info = it->second;
             // Streaming queries don't support DDL such as CREATE SECRET or ALTER USER, so we don't hide their texts.
-            YDB_LOG_TRACE("[StreamingQueries] [SysView] Described resource",
+            YDB_LOG_TRACE("TStreamingQueriesScan::Handle: described streaming query resource",
                 {"logPrefix", LogPrefix()},
-                {"query", query.Path},
+                {"queryPath", query.Path},
                 {"state", query.State.ShortDebugString()},
                 {"text", info.QueryText},
                 {"run", info.Run},
@@ -821,10 +821,10 @@ public:
         const auto operationStatus = event.Status;
         if (const auto requestStatus = event.RequestStatus; requestStatus != Ydb::StatusIds::SUCCESS) {
             const auto& issues = event.Issues;
-            YDB_LOG_ERROR("[StreamingQueries] [SysView] Get script execution info failed",
+            YDB_LOG_ERROR("TStreamingQueriesScan::Handle: get script execution info failed",
                 {"logPrefix", LogPrefix()},
                 {"sender", ev->Sender},
-                {"requestStatus",  requestStatus},
+                {"requestStatus", requestStatus},
                 {"issues", issues.ToOneLineString()},
                 {"operationStatus", operationStatus},
                 {"ready", ready});
@@ -834,14 +834,14 @@ public:
 
         ResolvedQueriesCount = std::max(ResolvedQueriesCount, ev->Cookie + 1);
         const bool entryExists = event.ExecutionEntryExists;
-        YDB_LOG_DEBUG("[StreamingQueries] [SysView] Get script execution info finished operation",
+        YDB_LOG_DEBUG("TStreamingQueriesScan::Handle: get script execution info finished",
             {"logPrefix", LogPrefix()},
             {"sender", ev->Sender},
             {"operationStatus", operationStatus},
             {"ready", ready},
             {"entryExists", entryExists},
             {"queryPath", path},
-            {"remains", InflightScriptExecutionInfoResolve});
+            {"remainingResolveCount", InflightScriptExecutionInfoResolve});
 
         if (entryExists) {
             const auto it = QueriesBatch.find(path);
@@ -900,14 +900,14 @@ public:
 
 private:
     void ProceedToScan() final {
-        YDB_LOG_DEBUG("[StreamingQueries] [SysView] Proceed to scan",
+        YDB_LOG_DEBUG("TStreamingQueriesScan::ProceedToScan: proceeding to scan",
             {"logPrefix", LogPrefix()});
         Become(&TStreamingQueriesScan::StateScan);
 
         if (AckReceived) {
-            YDB_LOG_TRACE("[StreamingQueries] [SysView] Start scan with free",
+            YDB_LOG_TRACE("TStreamingQueriesScan::ProceedToScan: starting scan with available free space",
                 {"logPrefix", LogPrefix()},
-                {"space", FreeSpace});
+                {"freeSpace", FreeSpace});
             ContinueScan();
         }
     }
@@ -920,18 +920,18 @@ private:
         if (!DatabaseId) {
             HasInflightOperation = true;
             const auto& databaseFetcher = Register(NKqp::NWorkload::CreateDatabaseFetcherActor(SelfId(), DatabaseName, MakeIntrusive<NACLib::TUserToken>(BUILTIN_ACL_METADATA, TVector<NACLib::TSID>{})));
-            YDB_LOG_DEBUG("[StreamingQueries] [SysView] Start database fetcher",
+            YDB_LOG_DEBUG("TStreamingQueriesScan::ContinueScan: starting database fetcher",
                 {"logPrefix", LogPrefix()},
-                {"databaseFetcher", databaseFetcher});
+                {"databaseFetcherActorId", databaseFetcher});
             return;
         }
 
         if (!CheckedTablesExistence) {
             HasInflightOperation = true;
             const auto& checker = Register(new TStreamingQueriesTablesCheckerActor(AppData()->TenantName));
-            YDB_LOG_DEBUG("[StreamingQueries] [SysView] Start streaming queries table existence check",
+            YDB_LOG_DEBUG("TStreamingQueriesScan::ContinueScan: starting streaming queries table checker",
                 {"logPrefix", LogPrefix()},
-                {"checker", checker});
+                {"checkerActorId", checker});
             return;
         }
 
@@ -941,7 +941,7 @@ private:
         }
 
         if (FreeSpace <= 0) {
-            YDB_LOG_DEBUG("[StreamingQueries] [SysView] Pause scan, no free space",
+            YDB_LOG_DEBUG("TStreamingQueriesScan::ContinueScan: pausing scan, no free space",
                 {"logPrefix", LogPrefix()});
             return;
         }
@@ -956,9 +956,9 @@ private:
             }
 
             const auto& describer = Register(new TStreamingQueryDescribeActor(DatabaseName, std::move(queriesPaths), UserToken));
-            YDB_LOG_DEBUG("[StreamingQueries] [SysView] Start streaming query describer",
+            YDB_LOG_DEBUG("TStreamingQueriesScan::ContinueScan: starting streaming query describer",
                 {"logPrefix", LogPrefix()},
-                {"describer", describer});
+                {"describerActorId", describer});
             return;
         }
 
@@ -1003,10 +1003,10 @@ private:
 
             Send(kqpProxyId, std::make_unique<NKqp::TEvGetScriptExecutionOperation>(DatabaseName, NKqp::OperationIdFromExecutionId(executionId), BUILTIN_ACL_METADATA, /* failOnNotFound */ false), /* flags */ 0, i);
 
-            YDB_LOG_DEBUG("[StreamingQueries] [SysView] Resolving script execution info for query execution",
+            YDB_LOG_DEBUG("TStreamingQueriesScan::ResolveScriptExecutionInfo: resolving script execution info",
                 {"logPrefix", LogPrefix()},
-                {"path", path},
-                {"id", executionId});
+                {"queryPath", path},
+                {"executionId", executionId});
             InflightScriptExecutionInfoResolve++;
         }
 
@@ -1019,9 +1019,9 @@ private:
     }
 
     void DrainReadyQueries() {
-        YDB_LOG_DEBUG("[StreamingQueries] [SysView] ready queries to CA",
+        YDB_LOG_DEBUG("TStreamingQueriesScan::DrainReadyQueries: sending ready queries to compute actor",
             {"logPrefix", LogPrefix()},
-            {"sending", ReadyQueries.size()});
+            {"readyQueryCount", ReadyQueries.size()});
 
         auto batch = MakeHolder<NKqp::TEvKqpCompute::TEvScanData>(ScanId);
         batch->Finished = ListStreamingQueriesFinished && PendingScriptExecutionInfo.empty();
@@ -1082,14 +1082,14 @@ private:
         }
 
         const auto& fetcher = Register(TStreamingQueryFetcherActor::MakeRetry(SelfId(), DatabaseId, settings));
-        YDB_LOG_DEBUG("[StreamingQueries] [SysView] Start streaming query fetcher",
+        YDB_LOG_DEBUG("TStreamingQueriesScan::ListStreamingQueries: starting streaming query fetcher",
             {"logPrefix", LogPrefix()},
-            {"fetcher", fetcher});
+            {"fetcherActorId", fetcher});
     }
 
 private:
     void InternalError(const TString& message) {
-        YDB_LOG_ERROR("[StreamingQueries] [SysView]",
+        YDB_LOG_ERROR("TStreamingQueriesScan::InternalError: internal error",
             {"logPrefix", LogPrefix()},
             {"message", message});
         ReplyErrorAndDie(Ydb::StatusIds::INTERNAL_ERROR, message);

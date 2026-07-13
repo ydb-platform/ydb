@@ -73,4 +73,25 @@ Y_UNIT_TEST_SUITE(JsonValueView) {
         UNIT_ASSERT_VALUES_EQUAL(ScalarStr(TJsonValueView::OfNumber(2.5)), BlobScalar("2.5"));
         UNIT_ASSERT_VALUES_EQUAL(ScalarStr(TJsonValueView::OfBool(true)), BlobScalar("true"));
     }
+
+    // ToBinaryJson of a native scalar yields a blob that reads back to the same value.
+    Y_UNIT_TEST(ToBinaryJsonRoundTrip) {
+        const auto check = [](const TJsonValueView& native) {
+            const auto blob = native.ToBinaryJson();
+            UNIT_ASSERT_VALUES_EQUAL(ScalarStr(TJsonValueView::OfBinaryJson(TStringBuf(blob.data(), blob.size()))), ScalarStr(native));
+        };
+        check(TJsonValueView::OfString("hi"));
+        check(TJsonValueView::OfNumber(5.0));
+        check(TJsonValueView::OfNumber(2.5));
+        check(TJsonValueView::OfBool(true));
+    }
+
+    Y_UNIT_TEST(ToJsonValue) {
+        UNIT_ASSERT_VALUES_EQUAL(TJsonValueView::OfString("hi").ToJsonValue().GetString(), "hi");
+        UNIT_ASSERT_VALUES_EQUAL(TJsonValueView::OfNumber(2.5).ToJsonValue().GetDouble(), 2.5);
+        UNIT_ASSERT(TJsonValueView::OfBool(true).ToJsonValue().GetBoolean());
+        const auto blob = ToBinaryJson(R"({"a":1})");
+        const auto json = TJsonValueView::OfBinaryJson(TStringBuf(blob.data(), blob.size())).ToJsonValue();
+        UNIT_ASSERT_VALUES_EQUAL(json["a"].GetInteger(), 1);
+    }
 }

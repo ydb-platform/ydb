@@ -195,7 +195,7 @@ public:
             IChunkedArray::EType accessorType = IChunkedArray::EType::Array;
             if (settings.IsSparsed(presentCount, recordsCount)) {
                 accessorType = IChunkedArray::EType::SparsedArray;
-            } else if (separateColumns && DictionaryApplicableForValueType(valueType) &&
+            } else if (separateColumns && GetCodecForValueType(valueType)->CanBeDictionaryEncoded() &&
                        settings.IsDictionary(presentCount, enumerateValues)) {
                 accessorType = IChunkedArray::EType::Dictionary;
             }

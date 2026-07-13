@@ -85,7 +85,7 @@ public:
         }
 
         NArrow::NAccessor::TJsonValueView GetValue() const {
-            return ArrayElementToJsonValueView(*CurrentArrayData, GetLocalIndex(), ValueType);
+            return GetCodecForValueType(ValueType)->ReadValueView(*CurrentArrayData, GetLocalIndex());
         }
 
         bool HasValue() const {

@@ -1,17 +1,53 @@
 -- For full reload via data_mart_executor_by_month.py. Issues on a daily timeline: for each date, which issues are open at end of day and which were closed that day.
+-- Open/closed state and SLA start come from info.open_periods (close/reopen intervals from GitHub export).
 -- Run: python3 .github/scripts/analytics/data_mart_executor_by_month.py --query_path .github/scripts/analytics/data_mart_queries/datalens_ds_queries/github_issues_timeline_full.sql --table_path test_results/analytics/github_issues_timeline --store_type column --partition_keys date --primary_keys date issue_number project_item_id
 -- Optional: --by_month 12 (default)
 -- FULL WINDOW: use with data_mart_executor (full 365-day window) or data_mart_executor_by_month (per-month).
--- Dates come from tests_monitor (date_window), no ListFromRange/FLATTEN BY.
+-- Dates come from tests_monitor (date_window), no ListFromRange/FLATTEN BY for the date spine.
 -- In BI: filter by date, owner_team; for issue list per day — filter by date; for counts — GROUP BY date, SUM(is_open_at_end_of_day), SUM(closed_on_this_day).
 --
 -- Windows (change here or override via script):
---   $timeline_days   — date dimension and "open in window": include issues open on at least one day in [now - timeline_days, now].
---   Include: created_date <= today and (still open or closed within window: closed_at >= now - timeline_days).
+--   $timeline_days   — date dimension and "open in window": include issues with any open period overlapping [now - timeline_days, now].
 $timeline_days = 365;
+$max_open_periods = 20;
 -- For by_month wrapper: script overwrites these to restrict to one month (avoids connection timeouts)
 $month_start = Date("1970-01-01");
 $month_end = Date("2100-01-01");
+
+$period_indices = (
+    SELECT idx AS idx
+    FROM (SELECT ListFromRange(0, $max_open_periods) AS idxs) AS src
+    FLATTEN LIST BY idxs AS idx
+);
+
+$issue_periods = (
+    SELECT
+        t.project_item_id AS project_item_id,
+        t.issue_number AS issue_number,
+        Cast(JSON_VALUE(t.info, "$.open_periods[" || CAST(pi.idx AS Utf8) || "].start") AS Date) AS period_start,
+        Cast(JSON_VALUE(t.info, "$.open_periods[" || CAST(pi.idx AS Utf8) || "].end") AS Date) AS period_end
+    FROM `github_data/issues` AS t
+    CROSS JOIN $period_indices AS pi
+    WHERE JSON_VALUE(t.info, "$.open_periods[0].start") IS NOT NULL
+      AND JSON_VALUE(t.info, "$.open_periods[" || CAST(pi.idx AS Utf8) || "].start") IS NOT NULL
+    UNION ALL
+    SELECT
+        t.project_item_id AS project_item_id,
+        t.issue_number AS issue_number,
+        t.created_date AS period_start,
+        Cast(t.closed_at AS Date) AS period_end
+    FROM `github_data/issues` AS t
+    WHERE JSON_VALUE(t.info, "$.open_periods[0].start") IS NULL
+);
+
+$issues_in_window = (
+    SELECT DISTINCT
+        ip.project_item_id AS project_item_id,
+        ip.issue_number AS issue_number
+    FROM $issue_periods AS ip
+    WHERE ip.period_start <= CurrentUtcDate()
+      AND (ip.period_end IS NULL OR ip.period_end >= CurrentUtcDate() - $timeline_days * Interval("P1D"))
+);
 
 SELECT
     dt.d AS date,
@@ -53,11 +89,12 @@ SELECT
     i.releaseblocker_state AS releaseblocker_state,
     i.branch AS branch,
     i.area AS area,
+    p.period_start AS sla_start_date,
     CAST(
-        (i.closed_at IS NULL OR Cast(i.closed_at AS Date) > dt.d) AS Uint8
+        (p.period_start IS NOT NULL) AS Uint8
     ) AS is_open_at_end_of_day,
     CAST(
-        (i.closed_at IS NOT NULL AND Cast(i.closed_at AS Date) = dt.d) AS Uint8
+        (p.period_end IS NOT NULL AND p.period_end = dt.d) AS Uint8
     ) AS closed_on_this_day
 FROM (
     SELECT DISTINCT date_window AS d
@@ -105,10 +142,16 @@ CROSS JOIN (
         COALESCE(JSON_VALUE(t.info, "$.branch"), '-') AS branch,
         COALESCE(JSON_VALUE(t.info, "$.area"), 'area/-') AS area
     FROM `github_data/issues` AS t
+    INNER JOIN $issues_in_window AS w
+        ON w.project_item_id = t.project_item_id AND w.issue_number = t.issue_number
     LEFT JOIN `test_results/analytics/area_to_owner_mapping` AS m
         ON m.area = COALESCE(JSON_VALUE(t.info, "$.area"), 'area/-')
     WHERE t.created_date <= CurrentUtcDate()
-      AND (t.closed_at IS NULL OR Cast(t.closed_at AS Date) >= CurrentUtcDate() - $timeline_days * Interval("P1D"))
 ) AS i
+LEFT JOIN $issue_periods AS p
+    ON p.project_item_id = i.project_item_id
+    AND p.issue_number = i.issue_number
+    AND p.period_start <= dt.d
+    AND (p.period_end IS NULL OR p.period_end > dt.d)
 WHERE i.created_date <= dt.d
   AND dt.d >= $month_start AND dt.d < $month_end;

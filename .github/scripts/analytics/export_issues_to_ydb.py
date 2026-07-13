@@ -165,14 +165,18 @@ def fetch_single_issue(org_name: str, repo_name: str, issue_number: int) -> Opti
             issueType {
               name
             }
-            timelineItems(last: 20, itemTypes: [CLOSED_EVENT]) {
+            timelineItems(last: 50, itemTypes: [CLOSED_EVENT, REOPENED_EVENT]) {
               nodes {
+                __typename
                 ... on ClosedEvent {
                   createdAt
                   actor {
                     __typename
                     login
                   }
+                }
+                ... on ReopenedEvent {
+                  createdAt
                 }
               }
             }
@@ -287,14 +291,18 @@ def fetch_repository_issues(org_name: str = ORG_NAME, repo_name: str = REPO_NAME
               issueType {
                 name
               }
-              timelineItems(last: 20, itemTypes: [CLOSED_EVENT]) {
+              timelineItems(last: 50, itemTypes: [CLOSED_EVENT, REOPENED_EVENT]) {
                 nodes {
+                  __typename
                   ... on ClosedEvent {
                     createdAt
                     actor {
                       __typename
                       login
                     }
+                  }
+                  ... on ReopenedEvent {
+                    createdAt
                   }
                 }
               }
@@ -507,7 +515,7 @@ def extract_last_close_actor(issue: Dict[str, Any]) -> Dict[str, Any]:
     event_at = None
     nodes = (issue.get('timelineItems') or {}).get('nodes') or []
     for event in reversed(nodes):
-        if not event:
+        if not event or event.get('__typename') != 'ClosedEvent':
             continue
         actor = event.get('actor') or {}
         cand_login = actor.get('login') or ''
@@ -517,6 +525,67 @@ def extract_last_close_actor(issue: Dict[str, Any]) -> Dict[str, Any]:
             event_at = parse_datetime(event.get('createdAt'))
             break
     return {'login': login, 'actor_type': actor_type, 'event_at': event_at}
+
+
+def build_open_periods(
+    issue: Dict[str, Any],
+    created_at: Optional[datetime],
+    closed_at: Optional[datetime],
+) -> List[Dict[str, Optional[str]]]:
+    """Build open intervals from GitHub close/reopen timeline events.
+
+    Each period is ``{"start": "YYYY-MM-DD", "end": "YYYY-MM-DD"|null}``.
+    ``end`` is the close date (issue is open through end-of-day before ``end``).
+    """
+    if created_at is None:
+        return []
+
+    events: List[tuple[str, datetime]] = []
+    for event in (issue.get('timelineItems') or {}).get('nodes') or []:
+        if not event:
+            continue
+        typename = event.get('__typename') or ''
+        event_at = parse_datetime(event.get('createdAt'))
+        if event_at is None:
+            continue
+        if typename == 'ClosedEvent':
+            events.append(('close', event_at))
+        elif typename == 'ReopenedEvent':
+            events.append(('reopen', event_at))
+
+    events.sort(key=lambda item: item[1])
+
+    periods: List[Dict[str, Optional[str]]] = []
+    open_start = created_at
+    is_open = True
+
+    for kind, event_at in events:
+        if kind == 'close' and is_open:
+            periods.append({
+                'start': open_start.date().isoformat(),
+                'end': event_at.date().isoformat(),
+            })
+            is_open = False
+        elif kind == 'reopen' and not is_open:
+            open_start = event_at
+            is_open = True
+
+    if is_open:
+        end = None
+        if (issue.get('state') or '').upper() == 'CLOSED' and closed_at is not None:
+            end = closed_at.date().isoformat()
+        periods.append({
+            'start': open_start.date().isoformat(),
+            'end': end,
+        })
+
+    if not periods:
+        periods.append({
+            'start': created_at.date().isoformat(),
+            'end': closed_at.date().isoformat() if closed_at is not None else None,
+        })
+
+    return periods
 
 
 def projects_for_info_json(issue: Dict[str, Any]) -> List[Dict[str, Any]]:
@@ -686,6 +755,10 @@ def transform_issues_for_ydb(issues: List[Dict[str, Any]], project_fields: Optio
             info['closed_event_at_iso'] = closer['event_at'].isoformat()
         if closed_at:
             info['closed_at_iso'] = closed_at.isoformat()
+
+        open_periods = build_open_periods(issue, created_at, closed_at)
+        if open_periods:
+            info['open_periods'] = open_periods
 
         now = datetime.now(timezone.utc)
         

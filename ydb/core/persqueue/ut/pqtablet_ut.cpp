@@ -3334,6 +3334,32 @@ Y_UNIT_TEST_F(DeferredPublication_Cancel_Successful_Commit, TPQTabletFixture) {
     UNIT_ASSERT_VALUES_EQUAL(messages.size(), 0u);
 }
 
+Y_UNIT_TEST_F(DeferredPublication_Several_Partitions_One_Tablet_Successful_Commit, TPQTabletFixture) {
+    using TDeferredPublicationApi = NKikimrPQ::TPartitionOperation::TWriteOp::TDeferredPublicationApi;
+    const TWriteId writeId = NHelpers::MakeDeferredWriteId(51, "ext-51");
+    const ui64 txId = 70012;
+
+    PQTabletPrepare({.partitions=2}, {}, *Ctx);
+    EnsurePipeExist();
+
+    const TString ownerCookie0 = CreateSupportivePartitionForDeferredPublication(writeId, 0);
+    const TString ownerCookie1 = CreateSupportivePartitionForDeferredPublication(writeId, 1);
+    UNIT_ASSERT_VALUES_UNEQUAL(ownerCookie0, ownerCookie1);
+
+    SendDeferredPublicationWriteRequest(writeId, ownerCookie0, 0);
+    SendDeferredPublicationWriteRequest(writeId, ownerCookie1, 1);
+    WaitForExactTxWritesCount(2);
+
+    CommitDeferredPublicationFinalize(writeId, txId, TDeferredPublicationApi::Publish, {0, 1});
+
+    const auto messages0 = ReadMainPartitionMessages(0);
+    const auto messages1 = ReadMainPartitionMessages(1);
+    UNIT_ASSERT_VALUES_EQUAL(messages0.size(), 1u);
+    UNIT_ASSERT_VALUES_EQUAL(messages1.size(), 1u);
+    UNIT_ASSERT_VALUES_EQUAL(messages0[0], "deferred-publish-payload");
+    UNIT_ASSERT_VALUES_EQUAL(messages1[0], "deferred-publish-payload");
+}
+
 Y_UNIT_TEST_F(DeferredPublication_Publish_Before_Write_Ack, TPQTabletFixture) {
     using TDeferredPublicationApi = NKikimrPQ::TPartitionOperation::TWriteOp::TDeferredPublicationApi;
     const TWriteId writeId = NHelpers::MakeDeferredWriteId(45, "ext-45");

@@ -3428,6 +3428,16 @@ bool HasDeferredPublicationFinalizeOperation(const NKikimrPQ::TDataTransaction& 
     return false;
 }
 
+bool AllOperationsAreDeferredPublicationFinalize(const NKikimrPQ::TDataTransaction& txBody)
+{
+    for (const auto& operation : txBody.GetOperations()) {
+        if (!IsDeferredPublicationFinalizeOperation(operation)) {
+            return false;
+        }
+    }
+    return true;
+}
+
 TMaybe<EDeferredFinalizeOp> GetSingleDeferredPublicationFinalizeOp(const NKikimrPQ::TDataTransaction& txBody)
 {
     TMaybe<EDeferredFinalizeOp> result;
@@ -3502,23 +3512,23 @@ void TPersQueue::HandleDataTransaction(TAutoPtr<TEvPersQueue::TEvProposeTransact
             return;
         }
 
-        if (txBody.GetOperations().size() != 1) {
-            PQ_LOG_TX_W("TxId " << event.GetTxId() << " deferred publication finalize expects exactly one operation");
+        if (!AllOperationsAreDeferredPublicationFinalize(txBody)) {
+            PQ_LOG_TX_W("TxId " << event.GetTxId() << " deferred publication finalize allows only finalize operations");
             SendProposeTransactionAbort(ActorIdFromProto(event.GetSourceActor()),
                                         event.GetTxId(),
                                         NKikimrPQ::TError::BAD_REQUEST,
-                                        "deferred publication finalize expects exactly one operation",
+                                        "deferred publication finalize allows only finalize operations",
                                         ctx);
             return;
         }
 
         const auto finalizeOp = GetSingleDeferredPublicationFinalizeOp(txBody);
         if (!finalizeOp.Defined()) {
-            PQ_LOG_TX_W("TxId " << event.GetTxId() << " invalid deferred publication finalize operation");
+            PQ_LOG_TX_W("TxId " << event.GetTxId() << " deferred publication finalize requires matching Publish or Cancel op");
             SendProposeTransactionAbort(ActorIdFromProto(event.GetSourceActor()),
                                         event.GetTxId(),
                                         NKikimrPQ::TError::BAD_REQUEST,
-                                        "invalid deferred publication finalize operation",
+                                        "deferred publication finalize requires matching Publish or Cancel op",
                                         ctx);
             return;
         }

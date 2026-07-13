@@ -33,7 +33,7 @@ message TNodeLocation {
     optional string Rack = 30 [(PrintName) = "R"];
     optional string Unit = 40 [(PrintName) = "U"];
     // value 50 is used for PDisk domain mapping
-    // optional string DiscScope = 50 [(PrintName) = "DS"];
+    // optional string DiskScope = 50 [(PrintName) = "DS"];
 }
 
 message TClusterUUIDs {

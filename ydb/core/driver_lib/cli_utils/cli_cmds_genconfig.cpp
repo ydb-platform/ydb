@@ -132,7 +132,7 @@ public:
             s == "room" ? 20 :
             s == "rack" ? 30 :
             s == "body" ? 40 :
-            s == "disk_scope" ? 60 : 0;
+            s == "disk_scope" ? 51 : 0;
         if (!level) {
             ythrow yexception() << "unknown distinction level provided: \"" << s << "\"";
         }

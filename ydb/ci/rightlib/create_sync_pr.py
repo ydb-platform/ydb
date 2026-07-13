@@ -126,8 +126,11 @@ class PrSyncCreator:
         """
         for path in self.overwrite_from_head:
             self.logger.info(f"Overwriting {path} fully from {self.head_branch} for 100% match")
-            # Remove the base-side version so files deleted in head disappear too.
-            self.git_run("rm", "-r", "--ignore-unmatch", path)
+            # Remove the current version so files deleted in head disappear too.
+            # -f is required because the still-open merge has already staged changes
+            # for some of these files; we intentionally discard them and take the exact
+            # head-branch content below. --ignore-unmatch keeps it a no-op when nothing matches.
+            self.git_run("rm", "-r", "-f", "--ignore-unmatch", path)
             # Restore the exact head-branch content (stages it as well).
             self.git_run("checkout", self.head_branch, "--", path)
             self.git_run("add", path)

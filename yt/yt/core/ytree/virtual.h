@@ -76,31 +76,6 @@ private:
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TCompositeMapService
-    : public TVirtualMapBase
-{
-public:
-    TCompositeMapService();
-    ~TCompositeMapService();
-
-    std::vector<std::string> GetKeys(i64 limit = std::numeric_limits<i64>::max()) const override;
-    i64 GetSize() const override;
-    IYPathServicePtr FindItemService(const std::string& key) const override;
-    void ListSystemAttributes(std::vector<TAttributeDescriptor>* descriptors) override;
-    bool GetBuiltinAttribute(TInternedAttributeKey key, NYson::IYsonConsumer* consumer) override;
-
-    TIntrusivePtr<TCompositeMapService> AddChild(const std::string& key, IYPathServicePtr service);
-    TIntrusivePtr<TCompositeMapService> AddAttribute(TInternedAttributeKey key, NYson::TYsonCallback producer);
-
-private:
-    class TImpl;
-    const TIntrusivePtr<TImpl> Impl_;
-};
-
-DEFINE_REFCOUNTED_TYPE(TCompositeMapService)
-
-////////////////////////////////////////////////////////////////////////////////
-
 INodePtr CreateVirtualNode(IYPathServicePtr service);
 
 ////////////////////////////////////////////////////////////////////////////////

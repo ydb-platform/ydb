@@ -1,5 +1,6 @@
 #include "schemeshard_xxport__helpers.h"
 
+#include <ydb/core/base/auth.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/core/tx/schemeshard/schemeshard_impl.h>
 #include <ydb/core/tx/schemeshard/schemeshard_info_types.h>
@@ -28,6 +29,9 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> MakeModifySchemeTransactionI
         record.SetOwner(*xxportInfo.UserSID);
         record.SetUserSID(*xxportInfo.UserSID);
     }
+
+    SetSystemOwnerIfNeeded(record, AppData());
+
     return propose;
 }
 

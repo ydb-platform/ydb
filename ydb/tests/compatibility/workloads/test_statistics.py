@@ -322,7 +322,9 @@ class TestAnalyzeRollingUpdate(RollingUpgradeAndDowngradeFixture):
         return rc
 
     def multi_column_stats_present(self):
-        query = "SELECT count(*) FROM `.metadata/_statistics_multi`"
+        # Multi-column stats live in the unified statistics_v2 table; their column_tags key holds the
+        # comma-joined tuple, so a comma distinguishes them from single-column / tag-less rows.
+        query = "SELECT count(*) FROM `.metadata/statistics_v2` WHERE column_tags LIKE '%,%'"
         count = self.driver.table_client.scan_query(query).next().result_set.rows[0][0]
         logger.debug(f"multi-column statistics row count: {count}")
         return count > 0

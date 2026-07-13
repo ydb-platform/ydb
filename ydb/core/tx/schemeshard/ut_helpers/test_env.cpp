@@ -2,6 +2,7 @@
 
 #include "helpers.h"
 
+#include <ydb/core/base/backtrace.h>
 #include <ydb/core/base/tablet_resolver.h>
 #include <ydb/core/blockstore/core/blockstore.h>
 #include <ydb/core/cms/console/configs_dispatcher.h>
@@ -622,6 +623,7 @@ NSchemeShardUT_Private::TTestEnv::TTestEnv(TTestActorRuntime& runtime, const TTe
     , CoordinatorState(new TFakeCoordinator::TState)
     , ChannelsCount(opts.NChannels_)
 {
+    EnableYDBBacktraceFormat();
     ui64 hive = TTestTxConfig::Hive;
     ui64 schemeRoot = TTestTxConfig::SchemeShard;
     ui64 coordinator = TTestTxConfig::Coordinator;

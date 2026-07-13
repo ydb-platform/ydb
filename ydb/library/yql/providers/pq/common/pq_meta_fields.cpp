@@ -91,8 +91,9 @@ std::optional<TString> SkipYdbSystemPrefix(const TString& sysColumn) {
 std::optional<TMetaFieldDescriptor> GetPqMetaFieldDescriptorByKey(
     const TString& key,
     bool addTransparentPrefix,
-    bool includeUserAttributes)
-{
+    bool includeUserAttributes,
+    bool forbidYqlSysColumnsAndSystemMetadata
+) {
     if (!includeUserAttributes && key == "user_attributes") {
         return std::nullopt;
     }
@@ -101,7 +102,9 @@ std::optional<TMetaFieldDescriptor> GetPqMetaFieldDescriptorByKey(
         return std::nullopt;
     }
 
-    return it->second.GetDescriptor(key, addTransparentPrefix);
+    return forbidYqlSysColumnsAndSystemMetadata
+        ? it->second.GetYdbDescriptor(key)
+        : it->second.GetDescriptor(key, addTransparentPrefix);
 }
 
 std::optional<TMetaFieldDescriptor> GetPqMetaFieldDescriptorBySysColumn(

@@ -8,6 +8,7 @@
 #include "schemeshard_xxport__helpers.h"
 #include "schemeshard_xxport__tx_base.h"
 
+#include <ydb/core/base/auth.h>
 #include <ydb/core/base/table_index.h>
 #include <ydb/public/api/protos/ydb_import.pb.h>
 #include <ydb/public/api/protos/ydb_issue_message.pb.h>
@@ -698,6 +699,10 @@ private:
             return false;
         }
 
+        if (AppData()->AlwaysSetSystemOwner) {
+            op.SetNewOwner(BUILTIN_ACL_METADATA);
+        }
+
         Send(Self->SelfId(), std::move(propose));
         return true;
     }
@@ -748,6 +753,8 @@ private:
             record.SetOwner(*importInfo->UserSID);
         }
         FillOwner(record, item.Permissions);
+
+        SetSystemOwnerIfNeeded(record, AppData());
 
         if (TString error; !FillACL(modifyScheme, item.Permissions, error)) {
             NIceDb::TNiceDb db(txc.DB);

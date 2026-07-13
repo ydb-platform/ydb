@@ -1581,7 +1581,7 @@ Y_UNIT_TEST(TestWriteReadWithRestartsThenResponseOk) {
                 values.push_back(value.Str());
             }
         }
-        CmdWrite(keys, values, NKikimrClient::TKeyValueRequest::EXTRA9,
+        CmdWrite(keys, values, NKikimrClient::TKeyValueRequest::MAIN,
             NKikimrClient::TKeyValueRequest::REALTIME, tc);
 
         TDeque<TString> expectedKeys;
@@ -1628,7 +1628,7 @@ Y_UNIT_TEST(TestWriteReadWithRestartsThenResponseOkNewApi) {
             }
         }
 
-        ExecuteWrite(tc, pairs, 0, 11, NKikimrKeyValue::Priorities::PRIORITY_REALTIME);
+        ExecuteWrite(tc, pairs, 0, NKikimrClient::TKeyValueRequest::MAIN, NKikimrKeyValue::Priorities::PRIORITY_REALTIME);
 
         TDeque<TKeyValuePair> expectedPairs;
         for (ui32 itemIdx = 1; itemIdx < 4; ++itemIdx) {

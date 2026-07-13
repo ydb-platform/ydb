@@ -15,12 +15,13 @@ class PrSyncCreator:
     check_name = "checks_integrated"
     failed_comment_mark = "<!--SyncFailed-->"
 
-    def __init__(self, repo, base_branch, head_branch, token, pr_label, pr_label_failed, ours_on_conflict, theirs_on_conflict):
+    def __init__(self, repo, base_branch, head_branch, token, pr_label, pr_label_failed, ours_on_conflict, theirs_on_conflict, overwrite_from_head):
         self.repo_name = repo
         self.base_branch = base_branch
         self.head_branch = head_branch
         self.ours_on_conflict = ours_on_conflict
         self.theirs_on_conflict = theirs_on_conflict
+        self.overwrite_from_head = overwrite_from_head
         self.token = token
         self.pr_label = pr_label
         self.pr_label_fail = pr_label_failed
@@ -115,6 +116,22 @@ class PrSyncCreator:
     def git_revparse_head(self):
         return self.git_run("rev-parse", "HEAD").stdout.decode().strip()
 
+    def overwrite_paths_from_head(self):
+        """Stage the given paths to exactly match the head branch (100% match, incl. deletions).
+
+        This only updates the working tree and index; it does NOT create a commit.
+        The caller folds the result into the merge commit itself, so git blame/log
+        keep pointing at the original head-branch commits (the head branch is a
+        parent of that merge commit) instead of a shadowing snapshot commit.
+        """
+        for path in self.overwrite_from_head:
+            self.logger.info(f"Overwriting {path} fully from {self.head_branch} for 100% match")
+            # Remove the base-side version so files deleted in head disappear too.
+            self.git_run("rm", "-r", "--ignore-unmatch", path)
+            # Restore the exact head-branch content (stages it as well).
+            self.git_run("checkout", self.head_branch, "--", path)
+            self.git_run("add", path)
+
     def create_new_pr(self):
         dev_branch_name = f"merge-{self.head_branch}-{self.dtm}"
         commit_msg = f"Sync branches {self.dtm}"
@@ -129,13 +146,20 @@ class PrSyncCreator:
 
         self.git_run("checkout", self.base_branch)
         self.git_run("checkout", "-b", dev_branch_name)
-        merge_result = self.git_run("merge", self.head_branch, "-m", commit_msg, fail=False)
+        # When overwriting paths from head, defer the commit (--no-commit --no-ff) so the
+        # overwrite is folded into the single merge commit. That merge commit keeps the
+        # head branch as a parent, so git blame/log for the overwritten paths still point
+        # at the original head-branch commits instead of a separate snapshot commit.
+        if self.overwrite_from_head:
+            merge_result = self.git_run("merge", "--no-commit", "--no-ff", self.head_branch, fail=False)
+        else:
+            merge_result = self.git_run("merge", self.head_branch, "-m", commit_msg, fail=False)
         merge_output = merge_result.stdout.decode()
         merge_failed = merge_result.returncode != 0
         conflict_files = ''
+        should_commit = False
         if merge_failed and "Automatic merge failed; fix conflicts and then commit the result." in merge_output:
             conflict_files = self.git_run("ls-files", "-u").stdout.decode()
-            should_commit = False
             for ours_file in self.ours_on_conflict:
                 if ours_file in conflict_files:
                     self.logger.warning(f"Conflicts while merging. Attempting to resolve for {ours_file} with --ours")
@@ -153,10 +177,17 @@ class PrSyncCreator:
                 self.logger.info(f"Resolved conflicts while merging. Other conflicts should be fixed manually: {conflict_files}")
                 self.git_run("add", *list(conflict_files))
                 should_commit = True
-            if should_commit:
+            # In the overwrite path the merge was started with --no-commit, so the commit
+            # is deferred below and folded together with the overwrite into one commit.
+            if should_commit and not self.overwrite_from_head:
                 self.git_run("commit", "-m", commit_msg)
         elif merge_failed:
             raise Exception(f"Unexpected error during merge {merge_output}")
+        if self.overwrite_from_head:
+            # Stage the exact head-branch content for the requested paths, then finalize the
+            # still-open merge with a single commit (two parents: base and head branch).
+            self.overwrite_paths_from_head()
+            self.git_run("commit", "-m", commit_msg)
         self.git_run("push", "--set-upstream", "origin", dev_branch_name)
 
         if self.workflow_url:
@@ -174,7 +205,7 @@ class PrSyncCreator:
             self.base_branch, dev_branch_name, title=pr_title, body=pr_body, maintainer_can_modify=True
         )
         pr.add_to_labels(self.pr_label)
-        pr.add_to_labels(automerge.automerge_pr_label)
+        # pr.add_to_labels(automerge.automerge_pr_label)
         if merge_failed and len(conflict_files) > 0:
             pr.add_to_labels(automerge.pr_label_fail)
 
@@ -200,6 +231,7 @@ def main():
     parser.add_argument("--process-label", help="Label to filter PRs")
     parser.add_argument("--merge-ours", action="extend", nargs="+", default=[], type=str, help='Files that will be merged with --ours upon conflict')
     parser.add_argument("--merge-theirs", action="extend", nargs="+", default=[], type=str, help='Files that will be merged with --theirs upon conflict')
+    parser.add_argument("--overwrite-from-head", action="extend", nargs="+", default=[], type=str, help='Directories/files to fully overwrite from the head branch (100%% match) instead of merging')
     args = parser.parse_args()
 
     log_fmt = "%(asctime)s - %(levelname)s - %(name)s - %(message)s"
@@ -207,7 +239,7 @@ def main():
     repo = os.environ["REPO"]
     token = os.environ["TOKEN"]
 
-    syncer = PrSyncCreator(repo, args.base_branch, args.head_branch, token, args.process_label, f'{args.process_label}-fail', args.merge_ours, args.merge_theirs)
+    syncer = PrSyncCreator(repo, args.base_branch, args.head_branch, token, args.process_label, f'{args.process_label}-fail', args.merge_ours, args.merge_theirs, args.overwrite_from_head)
 
     syncer.cmd_create_pr()
 

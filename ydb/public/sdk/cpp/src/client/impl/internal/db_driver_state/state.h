@@ -8,8 +8,7 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/common_client/ssl_credentials.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/core_facility/core_facility.h>
 
-#include <library/cpp/threading/atomic_shared_ptr/atomic_shared_ptr.h>
-
+#include <memory>
 #include <mutex>
 
 namespace NYdb::inline Dev {
@@ -80,9 +79,9 @@ public:
     NThreading::TFuture<void> CredentialsReady;
 
 private:
-    TTrueAtomicSharedPtr<std::shared_ptr<ICredentialsProvider>> CredentialsProvider;
+    std::shared_ptr<ICredentialsProvider> CredentialsProvider;
 #ifndef YDB_GRPC_UNSECURE_AUTH
-    TTrueAtomicSharedPtr<std::shared_ptr<grpc::CallCredentials>> CallCredentials;
+    std::shared_ptr<grpc::CallCredentials> CallCredentials;
 #endif
     mutable std::once_flag ClientTlsValidationOnceFlag_;
     mutable bool ClientTlsCredentialsValid_ = true;

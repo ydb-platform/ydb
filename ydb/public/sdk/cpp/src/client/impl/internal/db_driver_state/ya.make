@@ -8,7 +8,6 @@ SRCS(
 
 PEERDIR(
     library/cpp/string_utils/quote
-    library/cpp/threading/atomic_shared_ptr
     library/cpp/threading/future
     ydb/public/sdk/cpp/src/client/impl/endpoints
     ydb/public/sdk/cpp/src/client/impl/internal/logger

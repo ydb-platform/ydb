@@ -63,17 +63,13 @@ TDbDriverState::TDbDriverState(
 
 void TDbDriverState::SetCredentialsProvider(std::shared_ptr<ICredentialsProvider> credentialsProvider) {
     auto authenticatorProvider = credentialsProvider;
-    auto credentialsProviderHolder = MakeTrueAtomicShared<std::shared_ptr<ICredentialsProvider>>(
-        std::move(credentialsProvider));
 #ifndef YDB_GRPC_UNSECURE_AUTH
     auto callCredentials = grpc::MetadataCredentialsFromPlugin(
         std::unique_ptr<grpc::MetadataCredentialsPlugin>(new TYdbAuthenticator(std::move(authenticatorProvider))));
-    auto callCredentialsHolder = MakeTrueAtomicShared<std::shared_ptr<grpc::CallCredentials>>(
-        std::move(callCredentials));
 #endif
-    CredentialsProvider.swap(credentialsProviderHolder);
+    std::atomic_store(&CredentialsProvider, std::move(credentialsProvider));
 #ifndef YDB_GRPC_UNSECURE_AUTH
-    CallCredentials.swap(callCredentialsHolder);
+    std::atomic_store(&CallCredentials, std::move(callCredentials));
 #endif
 }
 
@@ -99,14 +95,12 @@ NThreading::TFuture<void> TDbDriverState::GetCredentialsReady() const {
 }
 
 std::shared_ptr<ICredentialsProvider> TDbDriverState::GetCredentialsProvider() const {
-    auto credentialsProvider = CredentialsProvider;
-    return credentialsProvider ? *credentialsProvider : nullptr;
+    return std::atomic_load(&CredentialsProvider);
 }
 
 #ifndef YDB_GRPC_UNSECURE_AUTH
 std::shared_ptr<grpc::CallCredentials> TDbDriverState::GetCallCredentials() const {
-    auto callCredentials = CallCredentials;
-    return callCredentials ? *callCredentials : nullptr;
+    return std::atomic_load(&CallCredentials);
 }
 #endif
 

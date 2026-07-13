@@ -37,8 +37,6 @@ Request {
 }
 
 ===== http_calls =====
-GET viewer/json/vdiskinfo?... (mocked)
-GET viewer/json/vdiskinfo?... (mocked)
 
 ===== mock_base_config =====
 
@@ -84,6 +82,8 @@ VSlot {
   GroupId: 2147483649
   GroupGeneration: 1
   VDiskMetrics {
+    Replicated: true
+    State: OK
     AvailableSize: 0
     AllocatedSize: 0
   }
@@ -98,6 +98,8 @@ VSlot {
   GroupId: 2147483650
   GroupGeneration: 1
   VDiskMetrics {
+    Replicated: true
+    State: OK
     AvailableSize: 0
     AllocatedSize: 0
   }
@@ -112,6 +114,8 @@ VSlot {
   GroupId: 2147483651
   GroupGeneration: 1
   VDiskMetrics {
+    Replicated: true
+    State: OK
     AvailableSize: 0
     AllocatedSize: 0
   }
@@ -126,6 +130,8 @@ VSlot {
   GroupId: 2147483652
   GroupGeneration: 1
   VDiskMetrics {
+    Replicated: true
+    State: OK
     AvailableSize: 0
     AllocatedSize: 0
   }
@@ -140,6 +146,8 @@ VSlot {
   GroupId: 2147483653
   GroupGeneration: 1
   VDiskMetrics {
+    Replicated: true
+    State: OK
     AvailableSize: 0
     AllocatedSize: 0
   }
@@ -154,6 +162,8 @@ VSlot {
   GroupId: 2147483654
   GroupGeneration: 1
   VDiskMetrics {
+    Replicated: true
+    State: OK
     AvailableSize: 0
     AllocatedSize: 0
   }
@@ -168,6 +178,8 @@ VSlot {
   GroupId: 2147483655
   GroupGeneration: 1
   VDiskMetrics {
+    Replicated: true
+    State: OK
     AvailableSize: 0
     AllocatedSize: 0
   }
@@ -182,6 +194,8 @@ VSlot {
   GroupId: 2147483656
   GroupGeneration: 1
   VDiskMetrics {
+    Replicated: true
+    State: OK
     AvailableSize: 0
     AllocatedSize: 0
   }

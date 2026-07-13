@@ -11,7 +11,6 @@ success
 ===== grpc_calls =====
 
 ===== http_calls =====
-GET viewer/json/vdiskinfo?... (mocked)
 
 ===== mock_base_config =====
 
@@ -57,6 +56,8 @@ VSlot {
   GroupId: 2147483649
   GroupGeneration: 1
   VDiskMetrics {
+    Replicated: true
+    State: OK
     AvailableSize: 0
     AllocatedSize: 0
   }
@@ -71,6 +72,8 @@ VSlot {
   GroupId: 2147483650
   GroupGeneration: 1
   VDiskMetrics {
+    Replicated: true
+    State: OK
     AvailableSize: 0
     AllocatedSize: 0
   }

@@ -524,7 +524,7 @@ class Test(TestBase):
                 pending_reassigns = {}
             fake_grpc_handler = FakeReassignGroupDiskHandler(pending_reassigns, base_config)
             return self._trace('--verbose', 'cluster', 'balance', '--storage-pool=test-pool', '--max-iterations=1', *args,
-                               with_grpc_calls=True, allow_http_fetch=True,
+                               with_grpc_calls=True,
                                mock_base_config=base_config,
                                fake_grpc_handler=fake_grpc_handler)
 
@@ -561,7 +561,7 @@ class Test(TestBase):
             fake_grpc_handler = FakeReassignGroupDiskHandler(pending_reassigns, base_config)
             return self._trace('--verbose', 'cluster', 'balance', '--only-from-overpopulated-pdisks',
                                '--storage-pool=test-pool', '--max-iterations=1',
-                               with_grpc_calls=True, allow_http_fetch=True,
+                               with_grpc_calls=True,
                                mock_base_config=base_config,
                                fake_grpc_handler=fake_grpc_handler)
 

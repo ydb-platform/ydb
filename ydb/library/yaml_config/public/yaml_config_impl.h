@@ -54,4 +54,26 @@ TSelector ParseSelector(const NFyaml::TNodeRef& selectors);
 
 TIncompatibilityRules ParseIncompatibilityRules(const NFyaml::TNodeRef& root);
 
+/**
+ * Apply all matching selectors for specific set of labels
+ *
+ *  - existing 'config' nodes tags are preserved (if any) at all nested levels
+ *  - tags (if any) of added nodes at any nested level are propagated from selectors into 'config'
+ */
+void ApplySelectors(NFyaml::TDocument& doc, const TSet<TNamedLabel>& labels);
+
+/**
+ * Re-create node tags to prevent dangling references after cross-document copy
+ *
+ *  - fy_node_copy does fyn->tag = fy_token_ref(fyn_from->tag), which only
+ *    increments the refcount on the same tag token; the token's fy_input
+ *    still references the source document's memory (input buffer for
+ *    parser-created tags, or TUserDataHolder-owned TString for SetTag tags)
+ *  - when the source document is destroyed, that backing memory is freed
+ *    and the copied node's tag token becomes a dangling reference
+ *  - this function recursively re-sets every tag via SetTag, which allocates
+ *    a fresh fy_input and TUserDataHolder per node in the target document
+ */
+void DeepCopyTags(NFyaml::TNodeRef node);
+
 } // namespace NKikimr::NYamlConfig

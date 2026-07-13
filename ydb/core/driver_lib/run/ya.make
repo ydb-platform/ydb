@@ -78,7 +78,6 @@ PEERDIR(
     ydb/core/kqp/finalize_script_service
     ydb/core/kqp/rm_service
     ydb/core/load_test
-    ydb/core/local_pgwire
     ydb/core/log_backend
     ydb/core/memory_controller
     ydb/core/metering
@@ -90,6 +89,7 @@ PEERDIR(
     ydb/core/mon_alloc
     ydb/core/node_whiteboard
     ydb/core/persqueue
+    ydb/core/persqueue/deferred_publish
     ydb/core/protos
     ydb/core/public_http
     ydb/core/quoter

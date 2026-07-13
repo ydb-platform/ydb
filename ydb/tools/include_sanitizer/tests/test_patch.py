@@ -378,6 +378,51 @@ class DetectSelfBinaryTest(unittest.TestCase):
             shutil.rmtree(tmp, ignore_errors=True)
 
 
+class RepoRootDetectionTest(unittest.TestCase):
+    """Regression for the build_root/CWD-dependent REPO_ROOT bug.
+
+    In a bundled binary, __file__ can resolve relative to CWD. During the
+    build, CWD is ya's ephemeral build_root (which stages
+    build/scripts/clang_wrapper.py). The old detector keyed on that file
+    and mis-detected the build_root as the repo root, producing absolute,
+    unstable cache keys that never matched the later analyze.
+    """
+
+    def test_marker_only_arcadia_root(self) -> None:
+        from ydb.tools.include_sanitizer.common import _find_marker_root
+        tmp = Path(tempfile.mkdtemp(prefix="ydb-iclean-root-"))
+        try:
+            # A fake build_root: has build/scripts/clang_wrapper.py but NO
+            # .arcadia.root. Must NOT be detected as a repo root.
+            (tmp / "build" / "scripts").mkdir(parents=True)
+            (tmp / "build" / "scripts" / "clang_wrapper.py").write_text("", encoding="utf-8")
+            nested = tmp / "ydb" / "tools" / "include_sanitizer"
+            nested.mkdir(parents=True)
+            self.assertIsNone(_find_marker_root(nested))
+
+            # Now add the real marker at the top; it must be found.
+            (tmp / ".arcadia.root").write_text("", encoding="utf-8")
+            self.assertEqual(_find_marker_root(nested), tmp.resolve())
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
+
+    def test_env_override_wins(self) -> None:
+        from ydb.tools.include_sanitizer.common import _detect_repo_root
+        tmp = Path(tempfile.mkdtemp(prefix="ydb-iclean-rootenv-"))
+        try:
+            saved = os.environ.get("YDB_REPO_ROOT")
+            try:
+                os.environ["YDB_REPO_ROOT"] = str(tmp)
+                self.assertEqual(_detect_repo_root(), tmp.resolve())
+            finally:
+                if saved is None:
+                    os.environ.pop("YDB_REPO_ROOT", None)
+                else:
+                    os.environ["YDB_REPO_ROOT"] = saved
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
+
+
 class BinaryShimTemplateTest(unittest.TestCase):
     def test_recorder_bin_bakes_binary_exec_shim(self) -> None:
         """patch_retry_cc(recorder_bin=...) must emit a binary-exec shim."""

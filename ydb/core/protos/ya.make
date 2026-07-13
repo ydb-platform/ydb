@@ -72,6 +72,7 @@ SRCS(
     counters_tx_allocator.proto
     counters_tx_proxy.proto
     data_events.proto
+    data_format_settings.proto
     data_integrity_trails.proto
     database_basic_sausage_metainfo.proto
     datashard_backup.proto
@@ -194,7 +195,6 @@ PEERDIR(
     ydb/core/protos/schemeshard
     ydb/core/scheme/protos
     ydb/core/tx/columnshard/common/protos
-    ydb/core/tx/columnshard/engines/protos
     ydb/core/tx/columnshard/engines/scheme/defaults/protos
     ydb/library/actors/protos
     ydb/library/formats/arrow/protos

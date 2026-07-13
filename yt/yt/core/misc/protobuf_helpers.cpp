@@ -355,7 +355,7 @@ private:
     std::vector<TRegisterAction> RegisterActions_;
 
     THashMap<int, TProtobufExtensionDescriptor> ExtensionTagToExtensionDescriptor_;
-    THashMap<TString, TProtobufExtensionDescriptor> ExtensionNameToExtensionDescriptor_;
+    THashMap<std::string, TProtobufExtensionDescriptor> ExtensionNameToExtensionDescriptor_;
 
     void EnsureInitialized()
     {

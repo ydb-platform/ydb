@@ -36,19 +36,13 @@ IInvokerPtr GetNullInvoker();
 //! activities (fiber unwinding, abandoned promise cancelation etc).
 IInvokerPtr GetFinalizerInvoker();
 
-//! Tries to invoke #onSuccess via #invoker.
-//! If the invoker discards the callback without executing it then
-//! #onCancel is run.
-template <CInvocable<void()> TOnSuccess, CInvocable<void()> TOnCancel>
-void GuardedInvoke(
-    const IInvokerPtr& invoker,
-    TOnSuccess onSuccess,
-    TOnCancel onCancel);
+//! Returns a callback that runs #onSuccess when invoked or #onCancel when
+//! destroyed without having been invoked (e.g. discarded by an invoker).
+//! Must be invoked at most once.
+TClosure MakeGuardedCallback(
+    TClosure onSuccess,
+    TClosure onCancel);
 
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT
-
-#define INVOKER_UTIL_INL_H_
-#include "invoker_util-inl.h"
-#undef INVOKER_UTIL_INL_H_

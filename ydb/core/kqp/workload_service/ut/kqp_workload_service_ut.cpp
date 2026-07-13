@@ -3,7 +3,6 @@
 
 #include <ydb/core/kqp/workload_service/ut/common/kqp_workload_service_ut_common.h>
 
-
 namespace NKikimr::NKqp {
 
 namespace {
@@ -877,21 +876,11 @@ Y_UNIT_TEST_SUITE(ResourcePoolClassifiersDdl) {
     }
 
     void WaitForFail(TIntrusivePtr<IYdbSetup> ydb, const TQueryRunnerSettings& settings, const TString& poolId) {
-        ydb->WaitFor(TDuration::Seconds(10), "Resource pool classifier fail", [ydb, settings, poolId](TString& errorString) {
-            auto result = ydb->ExecuteQuery(TSampleQueries::TSelect42::Query, settings);
-
-            errorString = result.GetIssues().ToOneLineString();
-            return result.GetStatus() == EStatus::PRECONDITION_FAILED && errorString.Contains(TStringBuilder() << "Resource pool " << poolId << " was disabled due to zero concurrent query limit");
-        });
+        NWorkload::WaitForClassifierFail(ydb, settings, poolId);
     }
 
     void WaitForSuccess(TIntrusivePtr<IYdbSetup> ydb, const TQueryRunnerSettings& settings) {
-        ydb->WaitFor(TDuration::Seconds(30), "Resource pool classifier success", [ydb, settings](TString& errorString) {
-            auto result = ydb->ExecuteQuery(TSampleQueries::TSelect42::Query, settings);
-
-            errorString = result.GetIssues().ToOneLineString();
-            return result.GetStatus() == EStatus::SUCCESS;
-        });
+        NWorkload::WaitForClassifierSuccess(ydb, settings);
     }
 
     Y_UNIT_TEST(TestCreateResourcePoolClassifier) {
@@ -1050,6 +1039,7 @@ Y_UNIT_TEST_SUITE(ResourcePoolClassifiersDdl) {
 
         WaitForSuccess(ydb, settings.GroupSIDs({firstSID, secondSID}));
     }
+
 }
 
 Y_UNIT_TEST_SUITE(ResourcePoolClassifiersSysView) {

@@ -1343,6 +1343,17 @@ struct TIndexDescription {
     TIndexSettings IndexSettings;
 };
 
+struct TStatisticsDescription {
+    explicit TStatisticsDescription(TIdentifier name)
+        : Name(std::move(name))
+    {
+    }
+
+    TIdentifier Name;
+    TVector<TIdentifier> Columns;
+    TVector<TIdentifier> Types; // raw parsed type identifiers; validated later
+};
+
 struct TChangefeedSettings {
     struct TLocalSinkSettings {
         // no special settings
@@ -1382,6 +1393,7 @@ struct TCreateTableParameters {
     TVector<TIdentifier> PartitionByColumns;
     TVector<std::pair<TIdentifier, bool>> OrderByColumns;
     TVector<TIndexDescription> Indexes;
+    TVector<TStatisticsDescription> Statistics;
     TVector<TFamilyEntry> ColumnFamilies;
     TVector<TChangefeedDescription> Changefeeds;
     TTableSettings TableSettings;
@@ -1418,6 +1430,8 @@ struct TAlterTableParameters {
     TVector<TIndexDescription> AddIndexes;
     TVector<TIndexDescription> AlterIndexes;
     TVector<TIdentifier> DropIndexes;
+    TVector<TStatisticsDescription> AddStatistics;
+    TVector<TIdentifier> DropStatistics;
     TMaybe<std::pair<TIdentifier, TIdentifier>> RenameIndexTo;
     TMaybe<TIdentifier> RenameTo;
     TVector<TChangefeedDescription> AddChangefeeds;
@@ -1436,6 +1450,8 @@ struct TAlterTableParameters {
                AddIndexes.empty() &&
                AlterIndexes.empty() &&
                DropIndexes.empty() &&
+               AddStatistics.empty() &&
+               DropStatistics.empty() &&
                !RenameIndexTo.Defined() &&
                !RenameTo.Defined() &&
                AddChangefeeds.empty() &&
@@ -1502,6 +1518,8 @@ struct TTopicConsumerSettings {
     TNodePtr MaxProcessingAttempts;
     TNodePtr DeadLetterPolicy;
     TNodePtr DeadLetterQueue;
+    TNodePtr ReceiveMessageWaitTime;
+    TNodePtr ReceiveMessageDelay;
 };
 
 struct TTopicConsumerDescription {
@@ -1743,8 +1761,8 @@ TNodePtr BuildAlterAsyncReplication(TPosition pos, const TString& id,
                                     std::map<TString, TNodePtr>&& settings,
                                     const TObjectOperatorContext& context);
 TNodePtr BuildDropAsyncReplication(TPosition pos, const TString& id, bool cascade, const TObjectOperatorContext& context);
-TNodePtr BuildCreateTransfer(TPosition pos, const TString& id, const TString&& source, const TString&& target,
-                             const TString&& transformLambda,
+TNodePtr BuildCreateTransfer(TPosition pos, const TString& id, const TString& source, const TString& target,
+                             const TString& transformLambda,
                              std::map<TString, TNodePtr>&& settings,
                              const TObjectOperatorContext& context);
 TNodePtr BuildAlterTransfer(TPosition pos, const TString& id, std::optional<TString>&& transformLambda,
@@ -1832,4 +1850,9 @@ void EnumerateBuiltins(const std::function<void(std::string_view name, std::stri
 bool Parseui32(TNodePtr from, ui32& to);
 TNodePtr GroundWithExpr(const TNodePtr& ground, const TNodePtr& expr);
 const TString* DeriveCommonSourceName(const TVector<TNodePtr>& nodes);
+
+// Strips system columns (the built-in "_yql_" prefix via RemoveSystemMembers) and, additionally,
+// any columns matching the provided extra system column prefixes (e.g. provider-specific
+// "__ydb_"-prefixed topic metadata). Keeps explicitly referenced columns intact.
+TNodePtr RemoveSystemColumns(TNodePtr input, const TVector<TString>& extraSystemColumnPrefixes);
 } // namespace NSQLTranslationV1

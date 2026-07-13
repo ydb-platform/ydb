@@ -1,7 +1,7 @@
 {
     "Materialize": {
         "description": "MATERIALIZE",
-        "min_langver": "max"
+        "min_langver": "2026.02"
     },
     "Experiments": {
         "min_langver": "max"

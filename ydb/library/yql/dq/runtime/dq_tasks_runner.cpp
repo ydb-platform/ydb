@@ -370,12 +370,13 @@ public:
             optLLVM = "OFF";
         }
 
-        auto runtimeSettings = NYql::DeserializeRuntimeSettingsFromProto(task.GetProgram().GetRuntimeSettings());
+
+        Y_ENSURE(RuntimeSettings, "RuntimeSettings must be set in Prepare stage of TDqTaskRunner");
 
         TComputationPatternOpts opts(alloc.Ref(), typeEnv, taskRunnerFactory,
             Context.FuncRegistry, NUdf::EValidateMode::None, validatePolicy, optLLVM, EGraphPerProcess::Multi,
             AllocatedHolder->ProgramParsed.StatsRegistry.Get(), CollectFull() ? &CountersProvider : nullptr, nullptr,
-            ComputationLogProvider.Get(), task.GetProgram().GetLangVer(), runtimeSettings);
+            ComputationLogProvider.Get(), task.GetProgram().GetLangVer(), RuntimeSettings);
 
         if (!SecureParamsProvider) {
             SecureParamsProvider = MakeSimpleSecureParamsProvider(Settings.SecureParams);
@@ -506,19 +507,21 @@ public:
         bool canBeCached;
         if (UseSeparatePatternAlloc(task) && Context.PatternCache) {
             auto& cache = Context.PatternCache;
-            auto future = cache->FindOrSubscribe(program.GetRaw());
+            Y_ENSURE(RuntimeSettings, "RuntimeSettings must be set in Prepare stage of TDqTaskRunner");
+            TProgramKey cacheKey{program.GetLangVer(), StableHashRuntimeSettings(*RuntimeSettings), program.GetRaw()};
+            auto future = cache->FindOrSubscribe(cacheKey);
             if (!future.HasValue()) {
                 try {
                     entry = CreateComputationPattern(task, program.GetRaw(), true, canBeCached);
                     if (canBeCached && entry->Pattern->GetSuitableForCache()) {
-                        cache->EmplacePattern(task.GetProgram().GetRaw(), entry);
+                        cache->EmplacePattern(cacheKey, entry);
                     } else {
                         cache->IncNotSuitablePattern();
-                        cache->NotifyPatternMissing(program.GetRaw());
+                        cache->NotifyPatternMissing(cacheKey);
                     }
                 } catch (...) {
                     // TODO: not sure if there may be exceptions in the first place.
-                    cache->NotifyPatternMissing(program.GetRaw());
+                    cache->NotifyPatternMissing(cacheKey);
                     throw;
                 }
             } else {
@@ -587,6 +590,8 @@ public:
         TaskId = task.GetId();
         StageId = task.GetStageId();
         LangVer = task.GetProgram().GetLangVer();
+        RuntimeSettings = DeserializeRuntimeSettingsFromProto(task.GetProgram().GetRuntimeSettings());
+
         auto entry = BuildTask(task);
 
         LOG(TStringBuilder() << "Prepare task: " << TaskId);
@@ -674,6 +679,7 @@ public:
                         .Level = StatsModeToCollectStatsLevel(Settings.StatsMode),
                         .TransportVersion = inputChannelDesc.GetTransportVersion(),
                         .PackerVersion = FromProto(task.GetValuePackerVersion()),
+                        .DatumValidationMode = RuntimeSettings->DatumValidation.Get(),
                         .MaxStoredBytes = memoryLimits.ChannelBufferSize,
                         .ChannelQuotaManager = memoryLimits.ChannelQuotaManager,
                     };
@@ -833,6 +839,7 @@ public:
                         .Level = StatsModeToCollectStatsLevel(Settings.StatsMode),
                         .TransportVersion = outputChannelDesc.GetTransportVersion(),
                         .PackerVersion = FromProto(task.GetValuePackerVersion()),
+                        .DatumValidationMode = RuntimeSettings->DatumValidation.Get(),
                         .MaxStoredBytes = memoryLimits.ChannelBufferSize,
                         .ChannelQuotaManager = memoryLimits.ChannelQuotaManager,
                         .MaxChunkBytes = memoryLimits.OutputChunkMaxSize,
@@ -1228,6 +1235,8 @@ private:
     std::unique_ptr<NUdf::ISecureParamsProvider> SecureParamsProvider;
     TDqTaskCountersProvider CountersProvider;
     TLangVersion LangVer = MinLangVersion;
+    TRuntimeSettings::TConstPtr RuntimeSettings;
+
     ui64 InputsConsumed = 0;
 
     struct TInputTransformInfo {

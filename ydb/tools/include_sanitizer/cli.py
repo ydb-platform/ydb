@@ -45,7 +45,7 @@ def _explain_missing_subpackage(sub: str, exc: ModuleNotFoundError) -> None:
 SUBCOMMANDS = (
     "compdb", "analyze", "aggregate", "report", "all",
     "pilot", "doctor", "selfcheck", "selfcontain",
-    "timetrace", "timing", "worklist",
+    "timetrace", "timing", "worklist", "bench",
 )
 
 
@@ -65,6 +65,8 @@ def _help() -> str:
         "                hottest headers by cumulative parse time, hottest templates\n"
         "  worklist    - fuse timing cost + include graph into a ranked, explained\n"
         "                header-optimization worklist (which headers to fix, why, how)\n"
+        "  bench       - measure per-file compile time (clang -ftime-trace, min of N)\n"
+        "                for real .cpp TUs; save a baseline and diff after edits\n"
         "  all         - run analyze -> aggregate -> report in order\n"
         "  pilot       - exercise the pipeline WITHOUT clang-include-cleaner using\n"
         "                synthesized verdicts; for tool development and CI smoke tests\n"
@@ -101,6 +103,7 @@ def run_selfcheck(rest: Sequence[str]) -> int:
         "timing.aggregate",
         "timing.collect",
         "timing.run",
+        "bench.run",
         "pilot",
         "doctor",
     )
@@ -240,6 +243,7 @@ def main(argv: Optional[List[str]] = None) -> int:
         "timetrace": "timing.collect",
         "timing": "timing.run",
         "worklist": "report.worklist",
+        "bench": "bench.run",
         "pilot": "pilot",
         "doctor": "doctor",
     }

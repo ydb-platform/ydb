@@ -1,5 +1,7 @@
 #include "ls_checks.h"
 
+#include <algorithm>
+
 #include <google/protobuf/text_format.h>
 #include <ydb/public/api/protos/ydb_cms.pb.h>
 #include <ydb/public/api/protos/ydb_coordination.pb.h>
@@ -498,6 +500,10 @@ void IsReplication(const NKikimrScheme::TEvDescribeSchemeResult& record) {
 
 void IsTransfer(const NKikimrScheme::TEvDescribeSchemeResult& record) {
     CheckPathType(record, NKikimrSchemeOp::EPathTypeTransfer);
+}
+
+void IsTestShardSet(const NKikimrScheme::TEvDescribeSchemeResult& record) {
+    CheckPathType(record, NKikimrSchemeOp::EPathTypeTestShardSet);
 }
 
 void CheckPathType(const NKikimrScheme::TEvDescribeSchemeResult& record, NKikimrSchemeOp::EPathType pathType) {
@@ -1620,6 +1626,44 @@ TCheckFunc CheckPathState(NKikimrSchemeOp::EPathState pathState) {
         UNIT_ASSERT(self.HasCreateFinished());
         ui32 curPathState = self.GetPathState();
         UNIT_ASSERT_VALUES_EQUAL(curPathState, (ui32)pathState);
+    };
+}
+
+TCheckFunc CheckMultiColumnStatistics(const TString& name, const TVector<TString>& columns, const TVector<NKikimrSchemeOp::EMultiColumnStatisticsType>& types) {
+    return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
+        const auto& table = record.GetPathDescription().GetTable();
+        const auto& stats = table.GetMultiColumnStatistics();
+        auto it = std::find_if(stats.begin(), stats.end(),
+            [&](const auto& s) { return s.GetName() == name; });
+        UNIT_ASSERT_C(it != stats.end(), "MultiColumnStatistics '" << name << "' not found");
+        const auto& stat = *it;
+        UNIT_ASSERT_VALUES_EQUAL(stat.ColumnNamesSize(), static_cast<i32>(columns.size()));
+        for (i32 i = 0; i < static_cast<i32>(columns.size()); ++i) {
+            UNIT_ASSERT_VALUES_EQUAL(stat.GetColumnNames(i), columns[i]);
+        }
+        UNIT_ASSERT_VALUES_EQUAL(stat.TypesSize(), static_cast<i32>(types.size()));
+        for (i32 i = 0; i < static_cast<i32>(types.size()); ++i) {
+            UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(stat.GetTypes(i)), static_cast<int>(types[i]));
+        }
+    };
+}
+
+TCheckFunc CheckColumnTableMultiColumnStatistics(const TString& name, const TVector<TString>& columns, const TVector<NKikimrSchemeOp::EMultiColumnStatisticsType>& types) {
+    return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
+        const auto& tableDesc = record.GetPathDescription().GetColumnTableDescription();
+        const auto& stats = tableDesc.GetMultiColumnStatistics();
+        auto it = std::find_if(stats.begin(), stats.end(),
+            [&](const auto& s) { return s.GetName() == name; });
+        UNIT_ASSERT_C(it != stats.end(), "MultiColumnStatistics '" << name << "' not found");
+        const auto& stat = *it;
+        UNIT_ASSERT_VALUES_EQUAL(stat.ColumnNamesSize(), static_cast<i32>(columns.size()));
+        for (i32 i = 0; i < static_cast<i32>(columns.size()); ++i) {
+            UNIT_ASSERT_VALUES_EQUAL(stat.GetColumnNames(i), columns[i]);
+        }
+        UNIT_ASSERT_VALUES_EQUAL(stat.TypesSize(), static_cast<i32>(types.size()));
+        for (i32 i = 0; i < static_cast<i32>(types.size()); ++i) {
+            UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(stat.GetTypes(i)), static_cast<int>(types[i]));
+        }
     };
 }
 

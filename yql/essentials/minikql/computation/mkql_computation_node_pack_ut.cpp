@@ -62,7 +62,7 @@ class TMiniKQLComputationNodePackTest: public TTestBase {
                                      EValuePackerVersion valuePackerVersion, TMaybe<size_t> bufferPageAllocSize = Nothing(),
                                      arrow::MemoryPool* pool = nullptr, TMaybe<ui8> minFillPercentage = Nothing()) {
         if constexpr (Transport) {
-            return TValuePackerType(stable, type, valuePackerVersion, bufferPageAllocSize, pool, minFillPercentage);
+            return TValuePackerType(stable, type, valuePackerVersion, NYql::DefaultDatumTestValidationMode, bufferPageAllocSize, pool, minFillPercentage);
         } else {
             Y_UNUSED(valuePackerVersion);
             return TValuePackerType(stable, type);
@@ -215,11 +215,11 @@ protected:
     void TestStructType() {
         const std::vector<std::pair<std::string_view, TType*>> structElemenTypes = {
             {"a", PgmBuilder_.NewDataType(NUdf::TDataType<NUdf::TUtf8>::Id)},
-            {"b", PgmBuilder_.NewDataType(NUdf::TDataType<NUdf::TUtf8>::Id, true)},
-            {"c", PgmBuilder_.NewDataType(NUdf::TDataType<NUdf::TUtf8>::Id, true)},
+            {"b", PgmBuilder_.NewDataType(NUdf::TDataType<NUdf::TUtf8>::Id, /*optional=*/true)},
+            {"c", PgmBuilder_.NewDataType(NUdf::TDataType<NUdf::TUtf8>::Id, /*optional=*/true)},
             {"d", PgmBuilder_.NewDataType(NUdf::TDataType<ui64>::Id)},
-            {"e", PgmBuilder_.NewDataType(NUdf::TDataType<ui64>::Id, true)},
-            {"f", PgmBuilder_.NewDataType(NUdf::TDataType<ui64>::Id, true)}};
+            {"e", PgmBuilder_.NewDataType(NUdf::TDataType<ui64>::Id, /*optional=*/true)},
+            {"f", PgmBuilder_.NewDataType(NUdf::TDataType<ui64>::Id, /*optional=*/true)}};
         TType* structType = PgmBuilder_.NewStructType(structElemenTypes);
 
         TUnboxedValueVector structElemens;
@@ -290,7 +290,7 @@ protected:
     void TestDictType() {
         TType* keyType = PgmBuilder_.NewDataType(NUdf::TDataType<ui32>::Id);
         TType* payloadType = PgmBuilder_.NewDataType(NUdf::TDataType<NUdf::TUtf8>::Id);
-        TType* dictType = PgmBuilder_.NewDictType(keyType, payloadType, false);
+        TType* dictType = PgmBuilder_.NewDictType(keyType, payloadType, /*multi=*/false);
 
         TValuesDictHashSingleFixedMap<ui32> map;
         map[4] = NUdf::TUnboxedValuePod::Embedded("4");
@@ -310,7 +310,7 @@ protected:
     void TestVariantTypeOverStruct() {
         const std::vector<std::pair<std::string_view, TType*>> structElemenTypes = {
             {"a", PgmBuilder_.NewDataType(NUdf::TDataType<NUdf::TUtf8>::Id)},
-            {"b", PgmBuilder_.NewDataType(NUdf::TDataType<NUdf::TUtf8>::Id, true)},
+            {"b", PgmBuilder_.NewDataType(NUdf::TDataType<NUdf::TUtf8>::Id, /*optional=*/true)},
             {"d", PgmBuilder_.NewDataType(NUdf::TDataType<ui64>::Id)}};
         TType* structType = PgmBuilder_.NewStructType(structElemenTypes);
         TestVariantTypeImpl(PgmBuilder_.NewVariantType(structType));
@@ -350,7 +350,7 @@ protected:
 
     void TestPackPerformance(TType* type, const NUdf::TUnboxedValuePod& uValue)
     {
-        auto packer = MakeValuePacker(false, type, EValuePackerVersion::V0);
+        auto packer = MakeValuePacker(/*stable=*/false, type, EValuePackerVersion::V0);
         const THPTimer timer;
         for (size_t i = 0U; i < PERFORMANCE_COUNT; ++i) {
             packer.Pack(uValue);
@@ -380,7 +380,7 @@ protected:
     NUdf::TUnboxedValue TestPackUnpack(TType* type, const NUdf::TUnboxedValuePod& uValue, const TString& additionalMsg,
                                        const std::optional<ui32>& expectedLength = {})
     {
-        auto packer = MakeValuePacker(false, type, EValuePackerVersion::V0);
+        auto packer = MakeValuePacker(/*stable=*/false, type, EValuePackerVersion::V0);
         return TestPackUnpack(packer, uValue, additionalMsg, expectedLength);
     }
 
@@ -394,7 +394,7 @@ protected:
     template <typename T>
     void TestNumericType(NUdf::TDataTypeId schemeType) {
         TString typeDesc = TStringBuilder() << ", Type:" << NUdf::GetDataTypeInfo(NUdf::GetDataSlot(schemeType)).Name;
-        auto packer = MakeValuePacker(false, PgmBuilder_.NewDataType(schemeType), EValuePackerVersion::V0);
+        auto packer = MakeValuePacker(/*stable=*/false, PgmBuilder_.NewDataType(schemeType), EValuePackerVersion::V0);
 
         TestNumericValue<T>(Max<T>(), packer, typeDesc);
         TestNumericValue<T>(Min<T>(), packer, typeDesc);
@@ -419,7 +419,7 @@ protected:
     template <typename T>
     void TestOptionalNumericType(NUdf::TDataTypeId schemeType) {
         TString typeDesc = TStringBuilder() << ", Type:Optional(" << NUdf::GetDataTypeInfo(NUdf::GetDataSlot(schemeType)).Name;
-        auto packer = MakeValuePacker(false, PgmBuilder_.NewOptionalType(PgmBuilder_.NewDataType(schemeType)), EValuePackerVersion::V0);
+        auto packer = MakeValuePacker(/*stable=*/false, PgmBuilder_.NewOptionalType(PgmBuilder_.NewDataType(schemeType)), EValuePackerVersion::V0);
         TestOptionalNumericValue<T>(std::optional<T>(Max<T>()), packer, typeDesc);
         TestOptionalNumericValue<T>(std::optional<T>(Min<T>()), packer, typeDesc);
         TestOptionalNumericValue<T>(std::optional<T>(), packer, typeDesc, 1);
@@ -436,7 +436,7 @@ protected:
 
     void TestStringType(NUdf::TDataTypeId schemeType) {
         TString typeDesc = TStringBuilder() << ", Type:" << NUdf::GetDataTypeInfo(NUdf::GetDataSlot(schemeType)).Name;
-        auto packer = MakeValuePacker(false, PgmBuilder_.NewDataType(schemeType), EValuePackerVersion::V0);
+        auto packer = MakeValuePacker(/*stable=*/false, PgmBuilder_.NewDataType(schemeType), EValuePackerVersion::V0);
         TestStringValue("0123456789012345678901234567890123456789", packer, typeDesc, 40 + 4);
         TestStringValue("[]", packer, typeDesc, Fast ? (2 + 4) : (2 + 1));
         TestStringValue("1234567", packer, typeDesc, Fast ? (7 + 4) : (7 + 1));
@@ -450,7 +450,7 @@ protected:
     void TestUuidType() {
         auto schemeType = NUdf::TDataType<NUdf::TUuid>::Id;
         TString typeDesc = TStringBuilder() << ", Type:" << NUdf::GetDataTypeInfo(NUdf::GetDataSlot(schemeType)).Name;
-        auto packer = MakeValuePacker(false, PgmBuilder_.NewDataType(schemeType), EValuePackerVersion::V0);
+        auto packer = MakeValuePacker(/*stable=*/false, PgmBuilder_.NewDataType(schemeType), EValuePackerVersion::V0);
         TestStringValue("0123456789abcdef", packer, typeDesc, Fast ? 16 : (16 + 4));
     }
 
@@ -564,7 +564,7 @@ protected:
 
     void TestTuplePackPerformance() {
         TType* tupleType;
-        const auto value = MakeTupleValue(tupleType, true);
+        const auto value = MakeTupleValue(tupleType, /*forPerf=*/true);
         TestPackPerformance(tupleType, value);
     }
 
@@ -599,7 +599,7 @@ protected:
             TType* tupleType;
             const auto value = MakeTupleValue(tupleType);
 
-            auto packer = MakeValuePacker(false, tupleType, EValuePackerVersion::V0);
+            auto packer = MakeValuePacker(/*stable=*/false, tupleType, EValuePackerVersion::V0);
 
             auto buffer = packer.Pack(value);
 
@@ -633,8 +633,8 @@ protected:
         if constexpr (Transport) {
             auto itemType = NTest::ConvertToMinikqlType<TStringBuf>(PgmBuilder_);
             auto listType = NTest::ConvertToMinikqlType<TVector<TStringBuf>>(PgmBuilder_);
-            auto packer = MakeValuePacker(false, itemType, EValuePackerVersion::V0);
-            auto listPacker = MakeValuePacker(false, listType, EValuePackerVersion::V0);
+            auto packer = MakeValuePacker(/*stable=*/false, itemType, EValuePackerVersion::V0);
+            auto listPacker = MakeValuePacker(/*stable=*/false, listType, EValuePackerVersion::V0);
 
             TStringBuf str = "01234567890ABCDEFG";
 
@@ -758,12 +758,12 @@ protected:
         ui64 blockLen = 1000;
         UNIT_ASSERT_LE(offset + len, blockLen);
 
-        auto builder1 = MakeArrayBuilder(TTypeInfoHelper(), ui32Type, *ArrowPool_, CalcBlockLen(CalcMaxBlockItemSize(ui32Type)), nullptr);
-        auto builder2 = MakeArrayBuilder(TTypeInfoHelper(), optStrType, *ArrowPool_, CalcBlockLen(CalcMaxBlockItemSize(optStrType)), nullptr);
-        auto builder3 = MakeArrayBuilder(TTypeInfoHelper(), optTupleOptUi32StrType, *ArrowPool_, CalcBlockLen(CalcMaxBlockItemSize(optTupleOptUi32StrType)), nullptr);
-        auto builder4 = MakeArrayBuilder(TTypeInfoHelper(), tzDateType, *ArrowPool_, CalcBlockLen(CalcMaxBlockItemSize(tzDateType)), nullptr);
-        auto builder5 = MakeArrayBuilder(TTypeInfoHelper(), nullType, *ArrowPool_, CalcBlockLen(CalcMaxBlockItemSize(nullType)), nullptr);
-        auto builder6 = MakeArrayBuilder(TTypeInfoHelper(), optOptUi32Type, *ArrowPool_, CalcBlockLen(CalcMaxBlockItemSize(optOptUi32Type)), nullptr);
+        auto builder1 = MakeArrayBuilder(TTypeInfoHelper(), ui32Type, *ArrowPool_, CalcBlockLen(CalcMaxBlockItemSize(ui32Type)), /*pgBuilder=*/nullptr);
+        auto builder2 = MakeArrayBuilder(TTypeInfoHelper(), optStrType, *ArrowPool_, CalcBlockLen(CalcMaxBlockItemSize(optStrType)), /*pgBuilder=*/nullptr);
+        auto builder3 = MakeArrayBuilder(TTypeInfoHelper(), optTupleOptUi32StrType, *ArrowPool_, CalcBlockLen(CalcMaxBlockItemSize(optTupleOptUi32StrType)), /*pgBuilder=*/nullptr);
+        auto builder4 = MakeArrayBuilder(TTypeInfoHelper(), tzDateType, *ArrowPool_, CalcBlockLen(CalcMaxBlockItemSize(tzDateType)), /*pgBuilder=*/nullptr);
+        auto builder5 = MakeArrayBuilder(TTypeInfoHelper(), nullType, *ArrowPool_, CalcBlockLen(CalcMaxBlockItemSize(nullType)), /*pgBuilder=*/nullptr);
+        auto builder6 = MakeArrayBuilder(TTypeInfoHelper(), optOptUi32Type, *ArrowPool_, CalcBlockLen(CalcMaxBlockItemSize(optOptUi32Type)), /*pgBuilder=*/nullptr);
 
         for (ui32 i = 0; i < blockLen; ++i) {
             TBlockItem b1(i);
@@ -847,7 +847,7 @@ protected:
             columns.emplace_back(HolderFactory_.CreateArrowBlock(std::move(datum), NYql::DefaultDatumTestValidationMode));
         }
 
-        auto senderPacker = MakeValuePacker(false, rowType, args.PackerVersion, {}, ArrowPool_, args.MinFillPercentage);
+        auto senderPacker = MakeValuePacker(/*stable=*/false, rowType, args.PackerVersion, {}, ArrowPool_, args.MinFillPercentage);
         if (legacyStruct) {
             TUnboxedValueVector columnsCopy = columns;
             NUdf::TUnboxedValue row = HolderFactory_.VectorAsArray(columnsCopy);
@@ -858,7 +858,7 @@ protected:
         TChunkedBuffer packed = senderPacker.Finish();
 
         TUnboxedValueBatch unpacked(rowType);
-        auto receiverPacker = MakeValuePacker(false, rowType, args.PackerVersion, {}, ArrowPool_, args.MinFillPercentage);
+        auto receiverPacker = MakeValuePacker(/*stable=*/false, rowType, args.PackerVersion, {}, ArrowPool_, args.MinFillPercentage);
         receiverPacker.UnpackBatch(std::move(packed), HolderFactory_, unpacked);
 
         UNIT_ASSERT_VALUES_EQUAL(unpacked.RowCount(), 1);
@@ -983,14 +983,14 @@ protected:
         auto blockUi32Type = PgmBuilder_.NewBlockType(ui32Type, TBlockType::EShape::Many);
         auto* rowType = PgmBuilder_.NewMultiType({blockUi32Type, scalarUi64Type});
 
-        auto builder = MakeArrayBuilder(TTypeInfoHelper(), ui32Type, *ArrowPool_, CalcBlockLen(CalcMaxBlockItemSize(ui32Type)), nullptr);
+        auto builder = MakeArrayBuilder(TTypeInfoHelper(), ui32Type, *ArrowPool_, CalcBlockLen(CalcMaxBlockItemSize(ui32Type)), /*pgBuilder=*/nullptr);
         builder->Add(NYql::NUdf::TBlockItem(1));
         builder->Add(NYql::NUdf::TBlockItem(2));
         builder->Add(NYql::NUdf::TBlockItem(3));
         TUnboxedValueVector columns;
         columns.emplace_back(HolderFactory_.CreateArrowBlock(builder->Build(/*finish=*/true), NYql::DefaultDatumTestValidationMode));
         columns.emplace_back(HolderFactory_.CreateArrowBlock(arrow::Datum(std::make_shared<arrow::UInt64Scalar>(3)), NYql::DefaultDatumTestValidationMode));
-        TChunkedBuffer serialized = MakeValuePacker(false, rowType, valuePackerVersion, {}, ArrowPool_, Nothing()).AddWideItem(columns.data(), columns.size()).Finish();
+        TChunkedBuffer serialized = MakeValuePacker(/*stable=*/false, rowType, valuePackerVersion, {}, ArrowPool_, Nothing()).AddWideItem(columns.data(), columns.size()).Finish();
         TStringStream stream;
         serialized.CopyTo(stream);
         auto actualHash = THash<TStringBuf>{}(stream.Str());
@@ -1011,14 +1011,14 @@ protected:
         auto blockOptUi32Type = PgmBuilder_.NewBlockType(optUi32Type, TBlockType::EShape::Many);
         auto* rowType = PgmBuilder_.NewMultiType({blockOptUi32Type, scalarUi64Type});
 
-        auto builder = MakeArrayBuilder(TTypeInfoHelper(), optUi32Type, *ArrowPool_, CalcBlockLen(CalcMaxBlockItemSize(optUi32Type)), nullptr);
+        auto builder = MakeArrayBuilder(TTypeInfoHelper(), optUi32Type, *ArrowPool_, CalcBlockLen(CalcMaxBlockItemSize(optUi32Type)), /*pgBuilder=*/nullptr);
         builder->Add(NYql::NUdf::TBlockItem(ui32(1)));
         builder->Add(NYql::NUdf::TBlockItem());
         builder->Add(NYql::NUdf::TBlockItem(ui32(3)));
         TUnboxedValueVector columns;
         columns.emplace_back(HolderFactory_.CreateArrowBlock(builder->Build(/*finish=*/true), NYql::DefaultDatumTestValidationMode));
         columns.emplace_back(HolderFactory_.CreateArrowBlock(arrow::Datum(std::make_shared<arrow::UInt64Scalar>(3)), NYql::DefaultDatumTestValidationMode));
-        TChunkedBuffer serialized = MakeValuePacker(false, rowType, valuePackerVersion, {}, ArrowPool_, Nothing()).AddWideItem(columns.data(), columns.size()).Finish();
+        TChunkedBuffer serialized = MakeValuePacker(/*stable=*/false, rowType, valuePackerVersion, {}, ArrowPool_, Nothing()).AddWideItem(columns.data(), columns.size()).Finish();
         TStringStream stream;
         serialized.CopyTo(stream);
         auto actualHash = THash<TStringBuf>{}(stream.Str());
@@ -1038,14 +1038,14 @@ protected:
         auto blockStrType = PgmBuilder_.NewBlockType(strType, TBlockType::EShape::Many);
         auto* rowType = PgmBuilder_.NewMultiType({blockStrType, scalarUi64Type});
 
-        auto builder = MakeArrayBuilder(TTypeInfoHelper(), strType, *ArrowPool_, CalcBlockLen(CalcMaxBlockItemSize(strType)), nullptr);
+        auto builder = MakeArrayBuilder(TTypeInfoHelper(), strType, *ArrowPool_, CalcBlockLen(CalcMaxBlockItemSize(strType)), /*pgBuilder=*/nullptr);
         builder->Add(NYql::NUdf::TBlockItem(NYql::NUdf::TStringRef("str1")));
         builder->Add(NYql::NUdf::TBlockItem(NYql::NUdf::TStringRef("str2")));
         builder->Add(NYql::NUdf::TBlockItem(NYql::NUdf::TStringRef("str3")));
         TUnboxedValueVector columns;
         columns.emplace_back(HolderFactory_.CreateArrowBlock(builder->Build(/*finish=*/true), NYql::DefaultDatumTestValidationMode));
         columns.emplace_back(HolderFactory_.CreateArrowBlock(arrow::Datum(std::make_shared<arrow::UInt64Scalar>(3)), NYql::DefaultDatumTestValidationMode));
-        TChunkedBuffer serialized = MakeValuePacker(false, rowType, valuePackerVersion, {}, ArrowPool_, Nothing()).AddWideItem(columns.data(), columns.size()).Finish();
+        TChunkedBuffer serialized = MakeValuePacker(/*stable=*/false, rowType, valuePackerVersion, {}, ArrowPool_, Nothing()).AddWideItem(columns.data(), columns.size()).Finish();
         TStringStream stream;
         serialized.CopyTo(stream);
         auto actualHash = THash<TStringBuf>{}(stream.Str());
@@ -1066,14 +1066,14 @@ protected:
         auto blockOptStrType = PgmBuilder_.NewBlockType(optStrType, TBlockType::EShape::Many);
         auto* rowType = PgmBuilder_.NewMultiType({blockOptStrType, scalarUi64Type});
 
-        auto builder = MakeArrayBuilder(TTypeInfoHelper(), optStrType, *ArrowPool_, CalcBlockLen(CalcMaxBlockItemSize(optStrType)), nullptr);
+        auto builder = MakeArrayBuilder(TTypeInfoHelper(), optStrType, *ArrowPool_, CalcBlockLen(CalcMaxBlockItemSize(optStrType)), /*pgBuilder=*/nullptr);
         builder->Add(NYql::NUdf::TBlockItem(NYql::NUdf::TStringRef("str1")));
         builder->Add(NYql::NUdf::TBlockItem());
         builder->Add(NYql::NUdf::TBlockItem(NYql::NUdf::TStringRef("str3")));
         TUnboxedValueVector columns;
         columns.emplace_back(HolderFactory_.CreateArrowBlock(builder->Build(/*finish=*/true), NYql::DefaultDatumTestValidationMode));
         columns.emplace_back(HolderFactory_.CreateArrowBlock(arrow::Datum(std::make_shared<arrow::UInt64Scalar>(3)), NYql::DefaultDatumTestValidationMode));
-        TChunkedBuffer serialized = MakeValuePacker(false, rowType, valuePackerVersion, {}, ArrowPool_, Nothing()).AddWideItem(columns.data(), columns.size()).Finish();
+        TChunkedBuffer serialized = MakeValuePacker(/*stable=*/false, rowType, valuePackerVersion, {}, ArrowPool_, Nothing()).AddWideItem(columns.data(), columns.size()).Finish();
         TStringStream stream;
         serialized.CopyTo(stream);
         auto actualHash = THash<TStringBuf>{}(stream.Str());
@@ -1095,14 +1095,14 @@ protected:
         auto blockOptOptUi32Type = PgmBuilder_.NewBlockType(optOptUi32Type, TBlockType::EShape::Many);
         auto* rowType = PgmBuilder_.NewMultiType({blockOptOptUi32Type, scalarUi64Type});
 
-        auto builder = MakeArrayBuilder(TTypeInfoHelper(), optOptUi32Type, *ArrowPool_, CalcBlockLen(CalcMaxBlockItemSize(optOptUi32Type)), nullptr);
+        auto builder = MakeArrayBuilder(TTypeInfoHelper(), optOptUi32Type, *ArrowPool_, CalcBlockLen(CalcMaxBlockItemSize(optOptUi32Type)), /*pgBuilder=*/nullptr);
         builder->Add(NYql::NUdf::TBlockItem(ui32(1)));
         builder->Add(NYql::NUdf::TBlockItem());
         builder->Add(NYql::NUdf::TBlockItem(ui32(3)));
         TUnboxedValueVector columns;
         columns.emplace_back(HolderFactory_.CreateArrowBlock(builder->Build(/*finish=*/true), NYql::DefaultDatumTestValidationMode));
         columns.emplace_back(HolderFactory_.CreateArrowBlock(arrow::Datum(std::make_shared<arrow::UInt64Scalar>(3)), NYql::DefaultDatumTestValidationMode));
-        TChunkedBuffer serialized = MakeValuePacker(false, rowType, valuePackerVersion, {}, ArrowPool_, Nothing()).AddWideItem(columns.data(), columns.size()).Finish();
+        TChunkedBuffer serialized = MakeValuePacker(/*stable=*/false, rowType, valuePackerVersion, {}, ArrowPool_, Nothing()).AddWideItem(columns.data(), columns.size()).Finish();
         TStringStream stream;
         serialized.CopyTo(stream);
         auto actualHash = THash<TStringBuf>{}(stream.Str());
@@ -1123,14 +1123,14 @@ protected:
         auto blockNullType = PgmBuilder_.NewBlockType(nullType, TBlockType::EShape::Many);
         auto* rowType = PgmBuilder_.NewMultiType({blockNullType, scalarUi64Type});
 
-        auto builder = MakeArrayBuilder(TTypeInfoHelper(), nullType, *ArrowPool_, CalcBlockLen(CalcMaxBlockItemSize(nullType)), nullptr);
+        auto builder = MakeArrayBuilder(TTypeInfoHelper(), nullType, *ArrowPool_, CalcBlockLen(CalcMaxBlockItemSize(nullType)), /*pgBuilder=*/nullptr);
         builder->Add(NYql::NUdf::TBlockItem());
         builder->Add(NYql::NUdf::TBlockItem());
         builder->Add(NYql::NUdf::TBlockItem());
         TUnboxedValueVector columns;
         columns.emplace_back(HolderFactory_.CreateArrowBlock(builder->Build(/*finish=*/true), NYql::DefaultDatumTestValidationMode));
         columns.emplace_back(HolderFactory_.CreateArrowBlock(arrow::Datum(std::make_shared<arrow::UInt64Scalar>(3)), NYql::DefaultDatumTestValidationMode));
-        TChunkedBuffer serialized = MakeValuePacker(false, rowType, valuePackerVersion, {}, ArrowPool_, Nothing()).AddWideItem(columns.data(), columns.size()).Finish();
+        TChunkedBuffer serialized = MakeValuePacker(/*stable=*/false, rowType, valuePackerVersion, {}, ArrowPool_, Nothing()).AddWideItem(columns.data(), columns.size()).Finish();
         TStringStream stream;
         serialized.CopyTo(stream);
         auto actualHash = THash<TStringBuf>{}(stream.Str());
@@ -1152,14 +1152,14 @@ protected:
         auto blockOptNullType = PgmBuilder_.NewBlockType(optNullType, TBlockType::EShape::Many);
         auto* rowType = PgmBuilder_.NewMultiType({blockOptNullType, scalarUi64Type});
 
-        auto builder = MakeArrayBuilder(TTypeInfoHelper(), optNullType, *ArrowPool_, CalcBlockLen(CalcMaxBlockItemSize(optNullType)), nullptr);
+        auto builder = MakeArrayBuilder(TTypeInfoHelper(), optNullType, *ArrowPool_, CalcBlockLen(CalcMaxBlockItemSize(optNullType)), /*pgBuilder=*/nullptr);
         builder->Add(NYql::NUdf::TBlockItem().MakeOptional());
         builder->Add(NYql::NUdf::TBlockItem());
         builder->Add(NYql::NUdf::TBlockItem().MakeOptional());
         TUnboxedValueVector columns;
         columns.emplace_back(HolderFactory_.CreateArrowBlock(builder->Build(/*finish=*/true), NYql::DefaultDatumTestValidationMode));
         columns.emplace_back(HolderFactory_.CreateArrowBlock(arrow::Datum(std::make_shared<arrow::UInt64Scalar>(3)), NYql::DefaultDatumTestValidationMode));
-        TChunkedBuffer serialized = MakeValuePacker(false, rowType, valuePackerVersion, {}, ArrowPool_, Nothing()).AddWideItem(columns.data(), columns.size()).Finish();
+        TChunkedBuffer serialized = MakeValuePacker(/*stable=*/false, rowType, valuePackerVersion, {}, ArrowPool_, Nothing()).AddWideItem(columns.data(), columns.size()).Finish();
         TStringStream stream;
         serialized.CopyTo(stream);
         auto actualHash = THash<TStringBuf>{}(stream.Str());
@@ -1180,7 +1180,7 @@ protected:
         auto blockTzDateType = PgmBuilder_.NewBlockType(tzDateType, TBlockType::EShape::Many);
         auto* rowType = PgmBuilder_.NewMultiType({blockTzDateType, scalarUi64Type});
 
-        auto builder = MakeArrayBuilder(TTypeInfoHelper(), tzDateType, *ArrowPool_, CalcBlockLen(CalcMaxBlockItemSize(tzDateType)), nullptr);
+        auto builder = MakeArrayBuilder(TTypeInfoHelper(), tzDateType, *ArrowPool_, CalcBlockLen(CalcMaxBlockItemSize(tzDateType)), /*pgBuilder=*/nullptr);
         NYql::NUdf::TBlockItem tzDate1{ui16(1)};
         tzDate1.SetTimezoneId(100);
         builder->Add(tzDate1);
@@ -1193,7 +1193,7 @@ protected:
         TUnboxedValueVector columns;
         columns.emplace_back(HolderFactory_.CreateArrowBlock(builder->Build(/*finish=*/true), NYql::DefaultDatumTestValidationMode));
         columns.emplace_back(HolderFactory_.CreateArrowBlock(arrow::Datum(std::make_shared<arrow::UInt64Scalar>(3)), NYql::DefaultDatumTestValidationMode));
-        TChunkedBuffer serialized = MakeValuePacker(false, rowType, valuePackerVersion, {}, ArrowPool_, Nothing()).AddWideItem(columns.data(), columns.size()).Finish();
+        TChunkedBuffer serialized = MakeValuePacker(/*stable=*/false, rowType, valuePackerVersion, {}, ArrowPool_, Nothing()).AddWideItem(columns.data(), columns.size()).Finish();
         TStringStream stream;
         serialized.CopyTo(stream);
         auto actualHash = THash<TStringBuf>{}(stream.Str());
@@ -1215,7 +1215,7 @@ protected:
         auto blockOptTzDateType = PgmBuilder_.NewBlockType(optTzDateType, TBlockType::EShape::Many);
         auto* rowType = PgmBuilder_.NewMultiType({blockOptTzDateType, scalarUi64Type});
 
-        auto builder = MakeArrayBuilder(TTypeInfoHelper(), optTzDateType, *ArrowPool_, CalcBlockLen(CalcMaxBlockItemSize(optTzDateType)), nullptr);
+        auto builder = MakeArrayBuilder(TTypeInfoHelper(), optTzDateType, *ArrowPool_, CalcBlockLen(CalcMaxBlockItemSize(optTzDateType)), /*pgBuilder=*/nullptr);
         NYql::NUdf::TBlockItem tzDate1{ui16(1)};
         tzDate1.SetTimezoneId(100);
         builder->Add(tzDate1);
@@ -1226,7 +1226,7 @@ protected:
         TUnboxedValueVector columns;
         columns.emplace_back(HolderFactory_.CreateArrowBlock(builder->Build(/*finish=*/true), NYql::DefaultDatumTestValidationMode));
         columns.emplace_back(HolderFactory_.CreateArrowBlock(arrow::Datum(std::make_shared<arrow::UInt64Scalar>(3)), NYql::DefaultDatumTestValidationMode));
-        TChunkedBuffer serialized = MakeValuePacker(false, rowType, valuePackerVersion, {}, ArrowPool_, Nothing()).AddWideItem(columns.data(), columns.size()).Finish();
+        TChunkedBuffer serialized = MakeValuePacker(/*stable=*/false, rowType, valuePackerVersion, {}, ArrowPool_, Nothing()).AddWideItem(columns.data(), columns.size()).Finish();
         TStringStream stream;
         serialized.CopyTo(stream);
         auto actualHash = THash<TStringBuf>{}(stream.Str());
@@ -1249,7 +1249,7 @@ protected:
         auto blockTupleType = PgmBuilder_.NewBlockType(tupleType, TBlockType::EShape::Many);
         auto* rowType = PgmBuilder_.NewMultiType({blockTupleType, scalarUi64Type});
 
-        auto builder = MakeArrayBuilder(TTypeInfoHelper(), tupleType, *ArrowPool_, CalcBlockLen(CalcMaxBlockItemSize(tupleType)), nullptr);
+        auto builder = MakeArrayBuilder(TTypeInfoHelper(), tupleType, *ArrowPool_, CalcBlockLen(CalcMaxBlockItemSize(tupleType)), /*pgBuilder=*/nullptr);
         auto tuple1Items = std::to_array<NYql::NUdf::TBlockItem>({NYql::NUdf::TBlockItem(i32(1)), NYql::NUdf::TBlockItem(NYql::NUdf::TStringRef("a"))});
         builder->Add(NYql::NUdf::TBlockItem(tuple1Items.data()));
         auto tuple2Items = std::to_array<NYql::NUdf::TBlockItem>({NYql::NUdf::TBlockItem(i32(2)), NYql::NUdf::TBlockItem(NYql::NUdf::TStringRef("b"))});
@@ -1259,7 +1259,7 @@ protected:
         TUnboxedValueVector columns;
         columns.emplace_back(HolderFactory_.CreateArrowBlock(builder->Build(/*finish=*/true), NYql::DefaultDatumTestValidationMode));
         columns.emplace_back(HolderFactory_.CreateArrowBlock(arrow::Datum(std::make_shared<arrow::UInt64Scalar>(3)), NYql::DefaultDatumTestValidationMode));
-        TChunkedBuffer serialized = MakeValuePacker(false, rowType, valuePackerVersion, {}, ArrowPool_, Nothing()).AddWideItem(columns.data(), columns.size()).Finish();
+        TChunkedBuffer serialized = MakeValuePacker(/*stable=*/false, rowType, valuePackerVersion, {}, ArrowPool_, Nothing()).AddWideItem(columns.data(), columns.size()).Finish();
         TStringStream stream;
         serialized.CopyTo(stream);
         auto actualHash = THash<TStringBuf>{}(stream.Str());
@@ -1283,7 +1283,7 @@ protected:
         auto blockOptTupleType = PgmBuilder_.NewBlockType(optTupleType, TBlockType::EShape::Many);
         auto* rowType = PgmBuilder_.NewMultiType({blockOptTupleType, scalarUi64Type});
 
-        auto builder = MakeArrayBuilder(TTypeInfoHelper(), optTupleType, *ArrowPool_, CalcBlockLen(CalcMaxBlockItemSize(optTupleType)), nullptr);
+        auto builder = MakeArrayBuilder(TTypeInfoHelper(), optTupleType, *ArrowPool_, CalcBlockLen(CalcMaxBlockItemSize(optTupleType)), /*pgBuilder=*/nullptr);
         auto tuple1Items = std::to_array<NYql::NUdf::TBlockItem>({NYql::NUdf::TBlockItem(i32(1)), NYql::NUdf::TBlockItem(NYql::NUdf::TStringRef("a"))});
         builder->Add(NYql::NUdf::TBlockItem(tuple1Items.data()));
         builder->Add(NYql::NUdf::TBlockItem());
@@ -1292,7 +1292,7 @@ protected:
         TUnboxedValueVector columns;
         columns.emplace_back(HolderFactory_.CreateArrowBlock(builder->Build(/*finish=*/true), NYql::DefaultDatumTestValidationMode));
         columns.emplace_back(HolderFactory_.CreateArrowBlock(arrow::Datum(std::make_shared<arrow::UInt64Scalar>(3)), NYql::DefaultDatumTestValidationMode));
-        TChunkedBuffer serialized = MakeValuePacker(false, rowType, valuePackerVersion, {}, ArrowPool_, Nothing()).AddWideItem(columns.data(), columns.size()).Finish();
+        TChunkedBuffer serialized = MakeValuePacker(/*stable=*/false, rowType, valuePackerVersion, {}, ArrowPool_, Nothing()).AddWideItem(columns.data(), columns.size()).Finish();
         TStringStream stream;
         serialized.CopyTo(stream);
         auto actualHash = THash<TStringBuf>{}(stream.Str());
@@ -1316,7 +1316,7 @@ protected:
         auto* rowType = PgmBuilder_.NewMultiType({blockTupleType, scalarUi64Type});
 
         auto bigString = (TString("Very long string") * 1000000).substr(0, 2000000);
-        auto builder = MakeArrayBuilder(TTypeInfoHelper(), tupleType, *ArrowPool_, CalcBlockLen(CalcMaxBlockItemSize(tupleType)), nullptr);
+        auto builder = MakeArrayBuilder(TTypeInfoHelper(), tupleType, *ArrowPool_, CalcBlockLen(CalcMaxBlockItemSize(tupleType)), /*pgBuilder=*/nullptr);
         {
             auto tuple = std::to_array<TBlockItem>({TBlockItem(1), TBlockItem(NYql::NUdf::TStringRef("Short string"))});
             builder->Add(TBlockItem(tuple.data()));
@@ -1347,7 +1347,7 @@ protected:
             UNIT_ASSERT_EXCEPTION(MakeValuePacker(false, rowType, valuePackerVersion, {}, ArrowPool_, Nothing()).AddWideItem(columns.data(), columns.size()).Finish(), yexception);
             return;
         }
-        TChunkedBuffer serialized = MakeValuePacker(false, rowType, valuePackerVersion, {}, ArrowPool_, Nothing()).AddWideItem(columns.data(), columns.size()).Finish();
+        TChunkedBuffer serialized = MakeValuePacker(/*stable=*/false, rowType, valuePackerVersion, {}, ArrowPool_, Nothing()).AddWideItem(columns.data(), columns.size()).Finish();
         TStringStream stream;
         serialized.CopyTo(stream);
         auto actualHash = THash<TStringBuf>{}(stream.Str());
@@ -1356,7 +1356,7 @@ protected:
 
         // Test deserialization result
         TUnboxedValueBatch unpacked(rowType);
-        auto receiverPacker = MakeValuePacker(false, rowType, valuePackerVersion, {}, ArrowPool_, Nothing());
+        auto receiverPacker = MakeValuePacker(/*stable=*/false, rowType, valuePackerVersion, {}, ArrowPool_, Nothing());
         receiverPacker.UnpackBatch(std::move(serialized), HolderFactory_, unpacked);
 
         UNIT_ASSERT_VALUES_EQUAL(unpacked.RowCount(), 1);

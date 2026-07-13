@@ -929,7 +929,7 @@ void THive::Handle(TEvPrivate::TEvKickTablet::TPtr &ev) {
             Execute(CreateRestartTablet(tabletId));
         }
     } else {
-        Execute(CreateRestartTablet(tabletId));
+        Execute(CreateForceRestartTablet(tabletId));
     }
 }
 
@@ -1064,6 +1064,9 @@ void THive::Handle(TEvHive::TEvReassignTablet::TPtr &ev) {
                     groups[i].SetErasureSpecies(groupParameters.GetErasureSpecies());
                 }
                 groups[i].SetGroupID(record.GetForcedGroupIDs(i));
+            }
+            if (!std::exchange(tablet->IsMarkedForReassign, true)) {
+                UpdateCounterTabletsReassigning(+1);
             }
             Execute(CreateUpdateTabletGroups(tablet->Id, std::move(groups)));
         } else {
@@ -1834,6 +1837,14 @@ void THive::UpdateCounterTabletsDeleting() {
     if (TabletCounters != nullptr) {
         auto& counter = TabletCounters->Simple()[NHive::COUNTER_TABLETS_DELETING];
         counter.Set(DeleteTabletInProgress);
+    }
+}
+
+void THive::UpdateCounterTabletsReassigning(i64 tabletsReassigningDiff) {
+    if (TabletCounters != nullptr) {
+        auto& counter = TabletCounters->Simple()[NHive::COUNTER_TABLETS_REASSIGNING];
+        auto newValue = counter.Get() + tabletsReassigningDiff;
+        counter.Set(newValue);
     }
 }
 

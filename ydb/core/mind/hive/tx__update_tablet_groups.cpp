@@ -290,6 +290,12 @@ public:
             }
         }
 
+        if (tablet->ChannelProfileNewGroup.none()) {
+            if (std::exchange(tablet->IsMarkedForReassign, false)) {
+                Self->UpdateCounterTabletsReassigning(-1);
+            }
+        }
+
         db.Table<Schema::Tablet>().Key(tablet->Id).Update<Schema::Tablet::State>(newTabletState);
         tablet->State = newTabletState;
 

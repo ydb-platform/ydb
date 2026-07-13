@@ -19,7 +19,7 @@ int Main(int argc, const char** argv)
         json.WriteKey("kind");
         json.WriteString(kind);
         json.EndObject();
-    }, true);
+    }, /*flexibleTypesEnabled=*/true);
     TVector<TString> pgNames;
     NPg::EnumTypes([&](ui32, const NPg::TTypeDesc& desc) {
         pgNames.push_back(desc.Name);

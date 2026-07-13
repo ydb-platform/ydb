@@ -106,6 +106,7 @@ void TNodeBroker::OnActivateExecutor(const TActorContext &ctx)
     MaxDynamicId = Max(MinDynamicId, (ui64)Min(appData->DynamicNameserviceConfig->MaxDynamicNodeId, TActorId::MaxNodeId));
 
     EnableStableNodeNames = appData->FeatureFlags.GetEnableStableNodeNames();
+    EnableLongLease = appData->FeatureFlags.GetEnableNodeBrokerLongLease();
 
     Executor()->RegisterExternalTabletCounters(TabletCountersPtr);
     Committed.ClearState();
@@ -171,6 +172,9 @@ bool TNodeBroker::OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev,
                     << "   Location: " << node.Location.ToString() << Endl
                     << "   Lease: " << node.Lease << Endl
                     << "   Expire: " << node.ExpirationString() << Endl
+                    << "   ExpireV2: " << node.ExpirationV2String() << Endl
+                    << "   AliveUntil: " << node.AliveUntilString() << Endl
+                    << "   Liveness: " << (node.Liveness == ENodeLiveness::Dead ? "Dead" : "Alive") << Endl
                     << "   AuthorizedByCertificate: " << (node.AuthorizedByCertificate ? "true" : "false") << Endl
                     << "   ServicedSubDomain: " << node.ServicedSubDomain << Endl
                     << "   SlotIndex: " << node.SlotIndex << Endl;
@@ -311,24 +315,40 @@ void TNodeBroker::TState::AddNode(const TNodeInfo &info)
     }
 }
 
+bool TNodeBroker::TState::IsLeaseExtendable(const TNodeInfo &node) const
+{
+    return node.Expire < Epoch.NextEnd || node.ExpireV2 < Epoch.NextEnd + LeaseDuration;
+}
+
 void TNodeBroker::TState::ExtendLease(TNodeInfo &node)
 {
     node.Version = Epoch.Version + 1;
+
     ++node.Lease;
     node.Expire = Epoch.NextEnd;
+    node.ExpireV2 = Epoch.NextEnd + LeaseDuration;
 
-    YDB_LOG_DEBUG_CTX(TActorContext::AsActorContext(), "Extended lease of up to (lease",
+    node.AliveUntil = Epoch.NextEnd;
+    node.Liveness = ENodeLiveness::Alive;
+
+    YDB_LOG_DEBUG_CTX(TActorContext::AsActorContext(), "Extended lease",
         {"logPrefix", LogPrefix()},
         {"nodeIdString", node.IdString()},
-        {"expirationString", node.ExpirationString()},
+        {"v1", node.ExpirationString()},
+        {"v1", node.ExpirationV2String()},
         {"lease", node.Lease});
 }
 
 void TNodeBroker::TState::FixNodeId(TNodeInfo &node)
 {
     node.Version = Epoch.Version + 1;
+
     ++node.Lease;
     node.Expire = TInstant::Max();
+    node.ExpireV2 = TInstant::Max();
+
+    node.AliveUntil = TInstant::Max();
+    node.Liveness = ENodeLiveness::Alive;
 
     YDB_LOG_DEBUG_CTX(TActorContext::AsActorContext(), "Fix ID for node",
         {"logPrefix", LogPrefix()},
@@ -485,6 +505,8 @@ void TNodeBroker::FillNodeInfo(const TNodeInfo &node,
     info.SetResolveHost(node.ResolveHost);
     info.SetAddress(node.Address);
     info.SetExpire(node.Expire.GetValue());
+    info.SetExpireV2(node.ExpireV2.GetValue());
+    info.SetLiveness(static_cast<ui32>(node.Liveness));
     node.Location.Serialize(info.MutableLocation(), false);
     FillNodeName(node.SlotIndex, info);
 }
@@ -500,8 +522,17 @@ void TNodeBroker::FillNodeName(const std::optional<ui32> &slotIndex,
 
 void TNodeBroker::TState::ComputeNextEpochDiff(TStateDiff &diff)
 {
+    if (Self->EnableLongLease) {
+        for (auto &pr : Nodes) {
+            if (pr.second.AliveUntil <= Epoch.End && pr.second.Liveness == ENodeLiveness::Alive) {
+                diff.NodesToMakeDead.push_back(pr.first);
+            }
+        }
+    }
+
     for (auto &pr : Nodes) {
-        if (pr.second.Expire <= Epoch.End)
+        auto expire = Self->EnableLongLease ? pr.second.ExpireV2 : pr.second.Expire;
+        if (expire <= Epoch.End)
             diff.NodesToExpire.push_back(pr.first);
     }
 
@@ -532,6 +563,17 @@ void TNodeBroker::TState::ApplyStateDiff(const TStateDiff &diff)
         it->second.Version = diff.NewEpoch.Version;
         ExpiredNodes.emplace(id, std::move(it->second));
         Nodes.erase(it);
+    }
+
+    for (auto id : diff.NodesToMakeDead) {
+        auto it = Nodes.find(id);
+        Y_ABORT_UNLESS(it != Nodes.end());
+
+        LOG_DEBUG_S(TActorContext::AsActorContext(), NKikimrServices::NODE_BROKER,
+                    LogPrefix() << " Node " << it->second.IdString() << " is marked as dead");
+
+        it->second.Liveness = ENodeLiveness::Dead;
+        it->second.Version = diff.NewEpoch.Version;
     }
 
     for (auto id : diff.NodesToRemove) {
@@ -810,11 +852,19 @@ void TNodeBroker::TState::LoadConfigFromProto(const NKikimrNodeBroker::TConfig &
 
     EpochDuration = TDuration::MicroSeconds(config.GetEpochDuration());
     if (EpochDuration < MIN_LEASE_DURATION) {
-        YDB_LOG_ERROR_CTX(TActorContext::AsActorContext(), "Configured lease duration",
+        YDB_LOG_ERROR_CTX(TActorContext::AsActorContext(), "Configured epoch duration is too small",
             {"logPrefix", LogPrefix()},
             {"epochDuration", EpochDuration},
-            {"value", MIN_LEASE_DURATION});
+            {"minValue", MIN_LEASE_DURATION});
         EpochDuration = MIN_LEASE_DURATION;
+    }
+
+    LeaseDuration = TDuration::MicroSeconds(config.GetLeaseDuration());
+    if (LeaseDuration < MIN_LEASE_DURATION) {
+        LOG_ERROR_S(TActorContext::AsActorContext(), NKikimrServices::NODE_BROKER,
+                    LogPrefix() << " Configured lease duration (" << LeaseDuration << ") is too"
+                    " small. Using min. value: " << MIN_LEASE_DURATION);
+        LeaseDuration = MIN_LEASE_DURATION;
     }
 
     StableNodeNamePrefix = config.GetStableNodeNamePrefix();
@@ -872,15 +922,16 @@ void TNodeBroker::TDirtyState::DbAddNode(const TNodeInfo &node,
         {"dbLogPrefix", DbLogPrefix()},
         {"nodeIdString", node.IdString()},
         {"state", node.State},
-        {"resolvehost", node.ResolveHost},
+        {"resolveHost", node.ResolveHost},
         {"address", node.Address},
         {"dc", node.Location.GetDataCenterId()},
         {"location", node.Location},
         {"lease", node.Lease},
         {"expire", node.ExpirationString()},
-        {"servicedsubdomain", node.ServicedSubDomain},
-        {"slotindex", node.SlotIndex},
-        {"authorizedbycertificate", (node.AuthorizedByCertificate ? "true" : "false")});
+        {"expireV2", node.ExpirationV2String()},
+        {"servicedSubDomain", node.ServicedSubDomain},
+        {"slotIndex", node.SlotIndex},
+        {"authorizedByCertificate", (node.AuthorizedByCertificate ? "true" : "false")});
 
     NIceDb::TNiceDb db(txc.DB);
 
@@ -898,6 +949,9 @@ void TNodeBroker::TDirtyState::DbAddNode(const TNodeInfo &node,
         .Update<T::Address>(node.Address)
         .Update<T::Lease>(node.Lease)
         .Update<T::Expire>(node.Expire.GetValue())
+        .Update<T::ExpireV2>(node.ExpireV2.GetValue())
+        .Update<T::AliveUntil>(node.AliveUntil.GetValue())
+        .Update<T::Liveness>(node.Liveness)
         .Update<T::Location>(node.Location.GetSerializedLocation())
         .Update<T::ServicedSubDomain>(node.ServicedSubDomain)
         .Update<T::AuthorizedByCertificate>(node.AuthorizedByCertificate);
@@ -916,6 +970,7 @@ void TNodeBroker::TDirtyState::DbApplyStateDiff(const TStateDiff &diff,
                                    TTransactionContext &txc)
 {
     DbUpdateNodes(diff.NodesToExpire, txc);
+    DbUpdateNodes(diff.NodesToMakeDead, txc);
     DbUpdateNodes(diff.NodesToRemove, txc);
     DbUpdateEpoch(diff.NewEpoch, txc);
     DbUpdateApproxEpochStart(diff.NewApproxEpochStart, txc);
@@ -1120,6 +1175,8 @@ TNodeBroker::TDbChanges TNodeBroker::TDirtyState::DbLoadNodes(auto &nodesRowset,
             AddNode(info);
         } else {
             auto expire = TInstant::FromValue(nodesRowset.template GetValue<Schema::Nodes::Expire>());
+            auto expireV2 = Max(expire, TInstant::FromValue(nodesRowset.template GetValue<Schema::Nodes::ExpireV2>()));
+
             std::optional<TNodeLocation> modernLocation;
             if (nodesRowset.template HaveValue<Schema::Nodes::Location>()) {
                 modernLocation.emplace(TNodeLocation::FromSerialized, nodesRowset.template GetValue<Schema::Nodes::Location>());
@@ -1140,12 +1197,22 @@ TNodeBroker::TDbChanges TNodeBroker::TDirtyState::DbLoadNodes(auto &nodesRowset,
 
             info.Lease = nodesRowset.template GetValue<Schema::Nodes::Lease>();
             info.Expire = expire;
+            info.ExpireV2 = expireV2;
+            info.AliveUntil = Max(expire, TInstant::FromValue(nodesRowset.template GetValue<Schema::Nodes::AliveUntil>()));
+            info.Liveness = nodesRowset.template GetValue<Schema::Nodes::Liveness>();
+
             info.ServicedSubDomain = TSubDomainKey(nodesRowset.template GetValueOrDefault<Schema::Nodes::ServicedSubDomain>());
             if (nodesRowset.template HaveValue<Schema::Nodes::SlotIndex>()) {
                 info.SlotIndex = nodesRowset.template GetValue<Schema::Nodes::SlotIndex>();
             }
             info.AuthorizedByCertificate = nodesRowset.template GetValue<Schema::Nodes::AuthorizedByCertificate>();
-            info.State = expire > Epoch.Start ? ENodeState::Active : ENodeState::Expired;
+
+            if (Self->EnableLongLease) {
+                info.State = expireV2 > Epoch.Start ? ENodeState::Active : ENodeState::Expired;
+            } else {
+                // Dead nodes stay active until epoch end
+                info.State = info.Liveness == ENodeLiveness::Dead || expire > Epoch.Start ? ENodeState::Active : ENodeState::Expired;
+            }
             AddNode(info);
 
             YDB_LOG_DEBUG_CTX(ctx, "Loaded node",
@@ -1475,6 +1542,7 @@ void TNodeBroker::Handle(TEvConsole::TEvConfigNotificationRequest::TPtr &ev,
     const auto& appConfig = ev->Get()->Record.GetConfig();
     if (appConfig.HasFeatureFlags()) {
         EnableStableNodeNames = appConfig.GetFeatureFlags().GetEnableStableNodeNames();
+        EnableLongLease = appConfig.GetFeatureFlags().GetEnableNodeBrokerLongLease();
     }
 
     if (ev->Get()->Record.HasLocal() && ev->Get()->Record.GetLocal()) {
@@ -1807,11 +1875,14 @@ TNodeBroker::TNodeInfo::TNodeInfo(ui32 nodeId, ENodeState state, ui64 version, c
                                  TNodeLocation(schema.GetLocation()))
     , Lease(schema.GetLease())
     , Expire(TInstant::MicroSeconds(schema.GetExpire()))
+    , ExpireV2(TInstant::MicroSeconds(schema.GetExpireV2()))
     , AuthorizedByCertificate(schema.GetAuthorizedByCertificate())
     , SlotIndex(schema.GetSlotIndex())
     , ServicedSubDomain(schema.GetServicedSubDomain())
     , State(state)
     , Version(version)
+    , AliveUntil(TInstant::MicroSeconds(schema.GetAliveUntil()))
+    , Liveness(static_cast<ENodeLiveness>(schema.GetLiveness()))
 {}
 
 TNodeBroker::TNodeInfo::TNodeInfo(ui32 nodeId, ENodeState state, ui64 version)
@@ -1825,7 +1896,9 @@ bool TNodeBroker::TNodeInfo::EqualCachedData(const TNodeInfo &other) const
         && ResolveHost == other.ResolveHost
         && Address == other.Address
         && Location == other.Location
-        && Expire == other.Expire;
+        && Expire == other.Expire
+        && ExpireV2 == other.ExpireV2
+        && Liveness == other.Liveness;
 }
 
 bool TNodeBroker::TNodeInfo::EqualExceptVersion(const TNodeInfo &other) const
@@ -1861,6 +1934,9 @@ TString TNodeBroker::TNodeInfo::ToString() const
         << ", Address: " << Address
         << ", Lease: " << Lease
         << ", Expire: " << ExpirationString()
+        << ", ExpireV2: " << ExpirationV2String()
+        << ", AliveUntil: " << AliveUntilString()
+        << ", Liveness: " << static_cast<ui32>(Liveness)
         << ", Location: " << Location.ToString()
         << ", AuthorizedByCertificate: " << AuthorizedByCertificate
         << ", SlotIndex: " << SlotIndex
@@ -1877,6 +1953,9 @@ TNodeInfoSchema TNodeBroker::TNodeInfo::SerializeToSchema() const {
     serialized.SetAddress(Address);
     serialized.SetLease(Lease);
     serialized.SetExpire(Expire.MicroSeconds());
+    serialized.SetExpireV2(ExpireV2.MicroSeconds());
+    serialized.SetAliveUntil(AliveUntil.MicroSeconds());
+    serialized.SetLiveness(static_cast<ui32>(Liveness));
     Location.Serialize(serialized.MutableLocation(), false);
     serialized.MutableServicedSubDomain()->CopyFrom(ServicedSubDomain);
     if (SlotIndex.has_value()) {

@@ -32,7 +32,7 @@ SRCS(
     gc_quorum_3dc.cpp
     get.cpp
     get_block.cpp
-    group_reconfiguration.cpp
+    group_mapping.cpp
     incorrect_queries.cpp
     index_restore_get.cpp
     main.cpp
@@ -43,9 +43,9 @@ SRCS(
     node_warden_cache.cpp
     patch.cpp
     recovery.cpp
-    retro_tracing.cpp
     sanitize_groups.cpp
     scrub_fast.cpp
+    select_groups.cpp
     self_heal.cpp
     shred.cpp
     snapshots.cpp
@@ -78,7 +78,7 @@ RECURSE_FOR_TESTS(
     ut_comp_defrag
     ut_ddisk
     ut_donor
-    ut_group_reconfiguration
+    ut_group_mapping
     ut_huge
     ut_startup_brokers
     ut_read_only_vdisk
@@ -88,6 +88,7 @@ RECURSE_FOR_TESTS(
     ut_scrub
     ut_statestorage
     ut_vdisk_restart
+    ut_race
     ut_restart_pdisk
     ut_read_only_pdisk
     ut_stop_pdisk

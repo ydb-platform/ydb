@@ -8,6 +8,7 @@
 #include <ydb/core/tx/columnshard/common/portion.h>
 
 #include <ydb/library/accessor/positive_integer.h>
+#include <ydb/library/actors/struct_log/log_stack.h>
 #include <ydb/library/conclusion/result.h>
 #include <ydb/services/bg_tasks/abstract/interface.h>
 
@@ -186,6 +187,14 @@ protected:
         return TConclusionStatus::Success();
     }
 
+    // Forced-compaction support: reports whether all portions have settled into the regular last
+    // level with no remaining intersections. Fail() means the optimizer does not support forced
+    // compaction (i.e. it is not tiling++); Success(true) means there are no intersections left,
+    // Success(false) means compaction is still in progress. Only tiling++ overrides this.
+    virtual TConclusion<bool> DoCheckNoIntersections() const {
+        return TConclusionStatus::Fail("forced compaction is not supported by this optimizer");
+    }
+
 public:
     static ui64 GetNodePortionsConsumption() {
         return NodePortionsCounter.Val() * NKikimr::NOlap::TGlobalLimits::AveragePortionSizeLimit;
@@ -217,14 +226,18 @@ public:
         }
 
         if (std::cmp_less_equal(GetBadPortionsLimit(), badPortions->Val())) {
-            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_WRITE)
-            ("error", "overload: bad portions")("value", badPortions->Val())("limit", GetBadPortionsLimit());
+            YDB_LOG_ERROR_COMP(NKikimrServices::TX_COLUMNSHARD_WRITE, "",
+                {"error", "overload: bad portions"},
+                {"value", badPortions->Val()},
+                {"limit", GetBadPortionsLimit()});
             return true;
         }
 
         if (std::cmp_less_equal(GetNodePortionsCountLimit(), NodePortionsCounter.Val())) {
-            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_WRITE)
-            ("error", "overload: node portions count limit")("value", NodePortionsCounter.Val())("limit", GetNodePortionsCountLimit());
+            YDB_LOG_ERROR_COMP(NKikimrServices::TX_COLUMNSHARD_WRITE, "",
+                {"error", "overload: node portions count limit"},
+                {"value", NodePortionsCounter.Val()},
+                {"limit", GetNodePortionsCountLimit()});
             return true;
         }
 
@@ -254,6 +267,10 @@ public:
 
     TConclusionStatus CheckWriteData() const {
         return DoCheckWriteData();
+    }
+
+    TConclusion<bool> CheckNoIntersections() const {
+        return DoCheckNoIntersections();
     }
 
     std::vector<TTaskDescription> GetTasksDescription() const {
@@ -300,7 +317,8 @@ public:
     }
 
     void ModifyPortions(const std::vector<std::shared_ptr<TPortionInfo>>& add, const std::vector<std::shared_ptr<TPortionInfo>>& remove) {
-        NActors::TLogContextGuard g(NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("path_id", PathId));
+        YDB_LOG_CREATE_CONTEXT_COMP(NKikimrServices::TX_COLUMNSHARD,
+            {"pathId", PathId});
         LocalPortionsCount.Add(add.size());
         LocalPortionsCount.Sub(remove.size());
         NodePortionsCounter.Add(add.size());

@@ -348,6 +348,10 @@ TOperationId::EKind ParseKind(const std::string_view value) {
         return TOperationId::ANALYZE;
     }
 
+    if (value.starts_with("setnotnull")) {
+        return TOperationId::SET_NOT_NULL;
+    }
+
     return TOperationId::UNUSED;
 }
 

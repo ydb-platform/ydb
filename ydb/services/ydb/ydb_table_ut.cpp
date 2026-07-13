@@ -5024,6 +5024,7 @@ R"___(<main>: Error: Transaction not found: , code: 2015
 
     Y_UNIT_TEST(SetNotNullOperationsLifecycle) {
         TKikimrWithGrpcAndRootSchema server;
+        server.Server_->GetRuntime()->GetAppData().FeatureFlags.SetEnableSetColumnConstraint(true);
 
         NYdb::TDriver driver(
             TDriverConfig()

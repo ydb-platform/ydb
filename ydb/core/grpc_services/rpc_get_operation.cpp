@@ -219,6 +219,7 @@ public:
             case TOperationId::RESTORE:
             case TOperationId::COMPACTION:
             case TOperationId::FULL_BACKUP:
+            case TOperationId::SET_NOT_NULL:
                 if (!TryGetId(OperationId_, RawOperationId_)) {
                     return ReplyWithStatus(StatusIds::BAD_REQUEST);
                 }

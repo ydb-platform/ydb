@@ -295,6 +295,12 @@ public:
         ChunkToReply = TSourceChunkToReply(indexStart, recordsCount, std::move(table));
     }
 
+    void SetEmptyResultChunk(const ui32 indexStart = 0, const ui32 recordsCount = 0) {
+        AFL_VERIFY(!ChunkToReply);
+        AFL_VERIFY(IsFinished());
+        ChunkToReply = TSourceChunkToReply(indexStart, recordsCount, nullptr);
+    }
+
     bool IsFinished() const {
         return GetPagesToResultVerified().empty();
     }

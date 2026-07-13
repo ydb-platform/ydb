@@ -1,5 +1,6 @@
 #include "controller.h"
 
+#include <ydb/core/tx/columnshard/bg_tasks/manager/manager.h>
 #include <ydb/core/tx/columnshard/blobs_action/abstract/gc.h>
 #include <ydb/core/tx/columnshard/columnshard_impl.h>
 #include <ydb/core/tx/columnshard/engines/changes/compaction.h>
@@ -132,6 +133,26 @@ void TController::OnAfterLocalTxCommitted(
     if (RestartOnLocalDbTxCommitted == txInfo) {
         ctx.Send(shard.SelfId(), new TEvents::TEvPoisonPill{});
     }
+}
+
+ui32 TController::GetBackgroundSessionsCount() const {
+    TGuard<TMutex> g(Mutex);
+    ui32 count = 0;
+    for (auto&& i : ShardActuals) {
+        if (auto mgr = i.second->GetBackgroundSessionsManager()) {
+            count += mgr->GetSessionsInfoForReport().size();
+        }
+    }
+    return count;
+}
+
+ui32 TController::GetTxOperatorsCount() const {
+    TGuard<TMutex> g(Mutex);
+    ui32 count = 0;
+    for (auto&& i : ShardActuals) {
+        count += i.second->GetProgressTxController().GetTxs().size();
+    }
+    return count;
 }
 
 }   // namespace NKikimr::NYDBTest::NColumnShard

@@ -563,6 +563,7 @@ ydb/core/load_test/ut unittest.[*/*] chunk
 ydb/core/load_test/ut_ycsb ReadLoad.ShouldReadIterate
 ydb/core/mind/hive/ut THiveTest.TestServerlessComputeResourcesMode
 ydb/core/mind/hive/ut THiveTestWithTenants.TestDrain
+ydb/core/mind/hive/ut unittest.[*/*] chunk
 ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/ut TVChunkTest.ShouldSwitchHostToOfflineAndBack
 ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/ut TWriteRequestWithPBufferReplicationTest.ShouldWorkWithMultipleResponsesAndHedge
 ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/ut unittest.sole chunk
@@ -660,6 +661,7 @@ ydb/core/tx/tiering/ut ColumnShardTiers.DSConfigsWithQueryServiceDdl
 ydb/core/tx/tx_proxy/ut_base_tenant TSubDomainTest.CoordinatorRunAtSubdomainNodeWhenAvailable
 ydb/core/tx/tx_proxy/ut_ext_tenant TExtSubDomainTest.CreateTableInsideAndAlterDomainAndTable-AlterDatabaseCreateHiveFirst-false
 ydb/core/viewer/tests test.py.TestViewer.test_viewer_cluster
+ydb/core/viewer/tests test.py.TestViewer.test_viewer_peers
 ydb/core/viewer/tests test.py.TestViewer.test_viewer_query_long_multipart
 ydb/core/viewer/tests test.py.TestViewer.test_viewer_tenantinfo
 ydb/core/viewer/ut Viewer.PutRecordViewer
@@ -765,6 +767,7 @@ ydb/tests/fq/yds test_watermarks.py.TestWatermarks.test_idle_watermarks[2-no_sha
 ydb/tests/fq/yds test_watermarks.py.TestWatermarks.test_idle_watermarks[2-shared]
 ydb/tests/fq/yds test_watermarks.py.TestWatermarks.test_watermarks[no_shared]
 ydb/tests/fq/yds test_watermarks.py.TestWatermarks.test_watermarks[shared]
+ydb/tests/functional/audit test_canonical_records.py.test_create_drop_and_alter_database
 ydb/tests/functional/audit test_canonical_records.py.test_dstool_evict_vdisk_grpc
 ydb/tests/functional/blobstorage test_node_warden_cache.py.TestNodeWardenCacheFile.test_cache_file_lifecycle_and_restart
 ydb/tests/functional/dstool test_canonical_requests.py.Test.test_capacity_metrics

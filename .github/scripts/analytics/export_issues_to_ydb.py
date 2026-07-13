@@ -974,7 +974,12 @@ def delete_issue_open_periods(ydb_wrapper: YDBWrapper, table_path: str, issue_nu
         """
         ydb_wrapper.execute_dml(
             query,
-            {'$issue_number': issue_number},
+            {
+                '$issue_number': ydb.TypedValue(
+                    value=int(issue_number),
+                    value_type=ydb.PrimitiveType.Uint64,
+                ),
+            },
             query_name='delete_issue_open_periods',
         )
 

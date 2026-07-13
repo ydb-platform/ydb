@@ -150,7 +150,7 @@ jobs:
           git fetch --depth=1 origin "$BASELINE_SHA"
           git worktree add ../baseline "$BASELINE_SHA"
           cd ../baseline
-          ./ya make --build "$INPUT_BUILD_PRESET" ydb/apps/ydbd
+          ./ya make -DDEBUGINFO_LINES_ONLY --build "$INPUT_BUILD_PRESET" ydb/apps/ydbd
           BINARY=$(find . -name ydbd -path '*/ydb/apps/ydbd/ydbd' -not -path '*/ydb/apps/ydbd/ydbd/*' 2>/dev/null | head -1)
           BINARY=$(realpath "$BINARY")
           echo "binary=$BINARY" >> "$GITHUB_OUTPUT"
@@ -200,7 +200,7 @@ jobs:
           if [[ "$INPUT_PERF_FREQ" != "9" ]]; then
             EXTRA_PARAMS="$EXTRA_PARAMS --test-param compare_perf_freq=$INPUT_PERF_FREQ"
           fi
-          ./ya make --build "$INPUT_BUILD_PRESET" -tA --test-disable-timeout \
+          ./ya make -DDEBUGINFO_LINES_ONLY --build "$INPUT_BUILD_PRESET" -tA --test-disable-timeout \
             ydb/tests/stress/compare_index_performance/tests \
             --test-param compare_duration="$INPUT_DURATION" \
             --test-param compare_build_preset="$INPUT_BUILD_PRESET" \

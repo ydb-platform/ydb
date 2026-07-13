@@ -274,7 +274,9 @@ private:
                     // All data was locked in parser, so copy is safe
                     FilteredRow[i++] = parsedData[rowId];
                 }
+                with_lock(Self.Alloc) {
                 DataPacker->AddWideItem(FilteredRow.data(), FilteredRow.size());
+                }
 
                 ++newNumberRows;
                 newDataPackerSize = DataPacker->PackedSizeEstimate();

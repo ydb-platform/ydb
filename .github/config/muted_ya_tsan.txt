@@ -86,6 +86,7 @@ ydb/core/kqp/executer_actor/ut TKqpTasksGraphBuild.TpchQuery22
 ydb/core/kqp/executer_actor/ut unittest.sole chunk
 ydb/core/kqp/rm_service/ut KqpRm.ConcurrentChannels
 ydb/core/kqp/rm_service/ut KqpRm.ConcurrentTasks
+ydb/core/kqp/ut/opt KqpNamedExpressions.NamedExpressionRandomUpsertRevert+UseDataQuery-EnableIndexStreamWrite
 ydb/core/kqp/ut/opt unittest.[*/*] chunk
 ydb/core/kqp/ut/query KqpAnalyze.AnalyzeTable+ColumnStore
 ydb/core/kqp/ut/query KqpAnalyzeOperations.AnalyzeOperationsLifecycle
@@ -93,6 +94,7 @@ ydb/core/kqp/ut/query KqpLimits.ComputeNodeMemoryLimit
 ydb/core/kqp/ut/query KqpLimits.OutOfSpaceBulkUpsertFail
 ydb/core/kqp/ut/query KqpLimits.OutOfSpaceYQLUpsertFail
 ydb/core/kqp/ut/query unittest.[*/*] chunk
+ydb/core/kqp/ut/rbo KqpRboOlap.DoubleOutOfRangeInJson
 ydb/core/kqp/ut/rbo KqpRboYql.Aggregation-ColumnStore
 ydb/core/kqp/ut/rbo KqpRboYql.ColumnStatistics-ColumnStore
 ydb/core/kqp/ut/rbo KqpRboYql.TPCDS_YQL
@@ -140,9 +142,12 @@ ydb/core/statistics/service/ut unittest.[*/*] chunk
 ydb/core/transfer/ut/column_table Transfer_ColumnTable.BigBatchSize_Local
 ydb/core/transfer/ut/column_table Transfer_ColumnTable.BigBatchSize_Remote
 ydb/core/transfer/ut/column_table Transfer_ColumnTable.ColumnType_Date
+ydb/core/transfer/ut/column_table Transfer_ColumnTable.ColumnType_Decimal
+ydb/core/transfer/ut/column_table Transfer_ColumnTable.ColumnType_Double
 ydb/core/transfer/ut/column_table Transfer_ColumnTable.ColumnType_Int16
 ydb/core/transfer/ut/column_table Transfer_ColumnTable.ColumnType_Int32
 ydb/core/transfer/ut/column_table Transfer_ColumnTable.ColumnType_Int64
+ydb/core/transfer/ut/column_table Transfer_ColumnTable.ColumnType_Int8
 ydb/core/transfer/ut/column_table Transfer_ColumnTable.ColumnType_Utf8_LongValue
 ydb/core/transfer/ut/column_table Transfer_ColumnTable.DropColumn
 ydb/core/transfer/ut/column_table Transfer_ColumnTable.MessageField_Attributes
@@ -203,11 +208,13 @@ ydb/tests/compatibility/topics test_kafka_topic.py.TestKafkaTopicRestartToAnothe
 ydb/tests/compatibility/udf test_datetime2.py.TestDatetime2.test_all[mixed_prestable-26-3_and_stable-26-2-1]
 ydb/tests/fq/http_api py3test.sole chunk
 ydb/tests/functional/audit test_canonical_records.py.test_dstool_evict_vdisk_grpc
+ydb/tests/functional/backup Backup.UuidValue
 ydb/tests/functional/benchmarks_init py3test.[test_generator.py */*] chunk
 ydb/tests/functional/benchmarks_init test_generator.py.TestTpcdsGenerator.test_s1
 ydb/tests/functional/benchmarks_init test_generator.py.TestTpcdsGenerator.test_s1_state
 ydb/tests/functional/benchmarks_init test_generator.py.TestTpcdsGenerator.test_s1_state_and_parts
 ydb/tests/functional/dstool py3test.sole chunk
+ydb/tests/functional/dstool test_canonical_requests.py.Test.test_capacity_metrics
 ydb/tests/functional/dstool test_canonical_requests.py.Test.test_cluster_get_set
 ydb/tests/functional/dstool test_canonical_requests.py.Test.test_essential
 ydb/tests/functional/dstool test_canonical_requests.py.Test.test_group_add
@@ -671,6 +678,7 @@ ydb/tests/functional/tpc/medium test_default_path.py.TestDefaultPath.test_clickb
 ydb/tests/functional/tpc/medium test_default_path.py.TestDefaultPath.test_tpcds
 ydb/tests/functional/tpc/medium test_default_path.py.TestDefaultPath.test_tpch
 ydb/tests/functional/tpc/medium test_diff_processing.py.TestClickbenchDiffProcessing.test_clickbench[CheckCanonicalPolicy.ERROR]
+ydb/tests/functional/tpc/medium test_diff_processing.py.TestClickbenchDiffProcessing.test_clickbench[CheckCanonicalPolicy.NO]
 ydb/tests/functional/tpc/medium test_diff_processing.py.TestClickbenchDiffProcessing.test_clickbench[CheckCanonicalPolicy.WARNING]
 ydb/tests/functional/tpc/medium test_diff_processing.py.TestTpcdsDiffProcessing.test_tpcds[CheckCanonicalPolicy.ERROR]
 ydb/tests/functional/tpc/medium test_diff_processing.py.TestTpcdsDiffProcessing.test_tpcds[CheckCanonicalPolicy.NO]
@@ -688,6 +696,8 @@ ydb/tests/functional/tpc/medium test_upload.py.TestUploadTpchS0_1.test_tpch[12]
 ydb/tests/functional/tpc/medium test_upload.py.TestUploadTpchS0_1.test_tpch[13]
 ydb/tests/functional/tpc/medium test_upload.py.TestUploadTpchS0_1.test_tpch[14]
 ydb/tests/functional/tpc/medium test_upload.py.TestUploadTpchS0_1.test_tpch[15]
+ydb/tests/functional/tpc/medium test_upload.py.TestUploadTpchS0_1.test_tpch[16]
+ydb/tests/functional/tpc/medium test_upload.py.TestUploadTpchS0_1.test_tpch[17]
 ydb/tests/functional/tpc/medium test_upload.py.TestUploadTpchS0_1.test_tpch[18]
 ydb/tests/functional/tpc/medium test_upload.py.TestUploadTpchS0_1.test_tpch[19]
 ydb/tests/functional/tpc/medium test_upload.py.TestUploadTpchS0_1.test_tpch[21]
@@ -700,6 +710,7 @@ ydb/tests/functional/tpc/medium test_workload_manager.py.TestClickbenchWMCompute
 ydb/tests/functional/tpc/medium test_workload_manager.py.TestTpchWMS0_1.test
 ydb/tests/functional/tpc/medium test_workload_manager.py.TestWMOltpAdHoc.test
 ydb/tests/functional/tpc/medium test_workload_manager.py.TestWMOltpTpchS0_1.test
+ydb/tests/functional/tpc/medium/tpch py3test.[test_decimal.py */*] chunk
 ydb/tests/functional/tpc/medium/tpch py3test.[test_duplicates.py */*] chunk
 ydb/tests/functional/tpc/medium/tpch py3test.[test_parallel.py */*] chunk
 ydb/tests/functional/tpc/medium/tpch py3test.[test_s1.py */*] chunk
@@ -876,11 +887,13 @@ ydb/tests/sql test_inserts.py.TestYdbInsertsOperations.test_insert_multiple_empt
 ydb/tests/stress/backup/tests test_workload.py.TestYdbBackupWorkload.test
 ydb/tests/stress/cdc/tests test_workload.py.TestYdbWorkload.test
 ydb/tests/stress/compare_index_performance/tests test_compare.py.TestCompareIndexPerformance.test_vector
+ydb/tests/stress/ctas/tests test_workload.py.TestYdbWorkload.test
 ydb/tests/stress/federated_queries/tests test_workload.py.TestYdbWorkload.test
 ydb/tests/stress/kafka/tests py3test.sole chunk
 ydb/tests/stress/kafka/tests test_kafka_streams.py.TestYdbTopicWorkload.test
 ydb/tests/stress/kafka_serverless/tests test_kafka_streams.py.TestYdbTopicWorkload.test
 ydb/tests/stress/log/tests test_workload.py.TestYdbLogWorkload.test[column]
+ydb/tests/stress/min_max_workload/tests test_workload.py.TestMinMaxWorkload.test
 ydb/tests/stress/mixedpy/tests py3test.sole chunk
 ydb/tests/stress/mixedpy/tests test_workload.py.TestYdbMixedWorkload.test[column]
 ydb/tests/stress/olap_workload/tests test_workload.py.TestYdbWorkload.test

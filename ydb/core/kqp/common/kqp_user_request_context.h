@@ -6,6 +6,7 @@
 
 #include <ydb/core/resource_pools/resource_pool_settings.h>
 #include <ydb/library/actors/core/actorid.h>
+#include <ydb/core/kqp/opt/cbo/cbo_optimizer_new.h>
 
 namespace NYql::NPq::NProto {
     class StreamingDisposition;
@@ -28,6 +29,8 @@ namespace NKikimr::NKqp {
         TString StreamingQueryPath;
         TString WatermarkLateEventsPolicy;
         std::shared_ptr<NYql::NPq::NProto::StreamingDisposition> StreamingDisposition;
+        std::shared_ptr<NKikimr::NKqp::TOptimizerHints> Hints{};
+        TMaybe<ui32> CostBasedOptimizationLevelOverride;
 
         TUserRequestContext() = default;
 

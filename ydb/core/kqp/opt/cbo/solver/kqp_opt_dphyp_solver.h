@@ -61,7 +61,7 @@ public:
     {}
 
     // Run DPHyp algorithm and produce the join tree in CBO's internal representation
-    std::shared_ptr<TJoinOptimizerNodeInternal> Solve(const TOptimizerHints& hints);
+    std::shared_ptr<TJoinOptimizerNodeInternal> Solve(const TOptimizerHints& hints, TOptimizerTrueCardinalitiesHints* costBasedHints = nullptr);
 
     // Calculate the size of a dynamic programming table with a budget
     ui32 CountCC(ui32 budget);
@@ -181,6 +181,22 @@ public:
         return *minCost;
     }
 
+    void FillCostBasedHints(TOptimizerTrueCardinalitiesHints& costBaseHints) {
+        for (const auto& [nodeSet, nodes]: DpTable_) {
+            for (const auto& node: nodes) {
+                const TOptimizerStatistics& stats = node->Stats;
+                auto labels = node->Labels();
+                std::sort(labels.begin(), labels.end());
+                costBaseHints.PushBack({
+                    .Labels = labels,
+                    .EstimatedBytesHint = stats.ByteSize,
+                    .EstimatedCardinalityHint = stats.Nrows,
+                    .TrueCards = {}
+                });
+            }
+        }
+    }
+
     void EmitCsgCmp(
         const TNodeSet& s1,
         const TNodeSet& s2,
@@ -269,6 +285,20 @@ public:
     std::shared_ptr<IBaseOptimizerNode> GetLowestCostTree(const TNodeSet& nodes) {
         Y_ASSERT(DpTable_.contains(nodes));
         return DpTable_[nodes];
+    }
+
+    void FillCostBasedHints(TOptimizerTrueCardinalitiesHints& costBaseHints) {
+        for (const auto& [nodeSet, node]: DpTable_) {
+            const TOptimizerStatistics& stats = node->Stats;
+            auto labels = node->Labels();
+            std::sort(labels.begin(), labels.end());
+            costBaseHints.PushBack({
+                .Labels = labels,
+                .EstimatedBytesHint = stats.ByteSize,
+                .EstimatedCardinalityHint = stats.Nrows,
+                .TrueCards = {}
+            });
+        }
     }
 
     void EmitCsgCmp(
@@ -520,7 +550,7 @@ template<typename TNodeSet, typename TDerived> TNodeSet TDPHypSolverBase<TNodeSe
     return res;
 }
 
-template<typename TNodeSet,  typename TDerived> std::shared_ptr<TJoinOptimizerNodeInternal> TDPHypSolverBase<TNodeSet, TDerived>::Solve(const TOptimizerHints& hints) {
+template<typename TNodeSet,  typename TDerived> std::shared_ptr<TJoinOptimizerNodeInternal> TDPHypSolverBase<TNodeSet, TDerived>::Solve(const TOptimizerHints& hints, TOptimizerTrueCardinalitiesHints* costBasedHints) {
     // Record start time for timeouts
     EnumerationStart_ = std::chrono::high_resolution_clock::now();
 
@@ -568,6 +598,10 @@ template<typename TNodeSet,  typename TDerived> std::shared_ptr<TJoinOptimizerNo
     TNodeSet allNodes{};
     for (size_t i = 0; i < NNodes_; ++i) {
         allNodes[i] = 1;
+    }
+
+    if (Y_UNLIKELY(costBasedHints)) {
+        Derived.FillCostBasedHints(*costBasedHints);
     }
 
     auto minCostTree = Derived.GetLowestCostTree(allNodes);

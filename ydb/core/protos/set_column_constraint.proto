@@ -84,8 +84,9 @@ message TEvForgetResponse {
 }
 
 message TEvCancelRequest {
-    optional string DatabaseName = 1;
-    optional uint64 OperationId = 2;
+    optional uint64 TxId = 1;
+    optional string DatabaseName = 2;
+    optional uint64 OperationId = 3;
 }
 
 message TEvCancelResponse {

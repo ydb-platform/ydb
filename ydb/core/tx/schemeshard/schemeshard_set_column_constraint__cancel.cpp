@@ -19,7 +19,7 @@ public:
         const auto& record = Request->Get()->Record;
         LOG_D("TTxCancelSetColumnConstraint::DoExecute " << record.ShortDebugString());
 
-        Response = MakeHolder<TEvSetColumnConstraint::TEvCancelResponse>(record.GetOperationId());
+        Response = MakeHolder<TEvSetColumnConstraint::TEvCancelResponse>(record.GetTxId());
 
         TPath database = TPath::Resolve(record.GetDatabaseName(), Self);
         if (!database.IsResolved()) {

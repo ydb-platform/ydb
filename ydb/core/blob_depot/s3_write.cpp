@@ -129,6 +129,7 @@ namespace NKikimr::NBlobDepot {
                 (S3WritesInFlight, S3WritesInFlight), (CurrentMaxWritesInFlight, CurrentMaxWritesInFlight),
                 (QueueSize, PendingPrepareWrites.size()));
             PendingPrepareWrites.push_back(std::move(ev));
+            Self->TabletCounters->Simple()[NKikimrBlobDepot::COUNTER_S3_PUT_PENDING_QUEUE_SIZE] = PendingPrepareWrites.size();
             if (timeThrottled && !PutWakeupScheduled) {
                 TActivationContext::Schedule(PutThrottleUntil, new IEventHandle(TEvPrivate::EvPutThrottleWakeup,
                     0, Self->SelfId(), {}, nullptr, 0));
@@ -148,8 +149,10 @@ namespace NKikimr::NBlobDepot {
 
     void TS3Manager::NotifyPutSlowDown() {
         Self->TabletCounters->Cumulative()[NKikimrBlobDepot::COUNTER_S3_PUTS_SLOW_DOWN] += 1;
+        Self->TabletCounters->Cumulative()[NKikimrBlobDepot::COUNTER_S3_PUT_THROTTLE_ACTIVATIONS] += 1;
 
         CurrentMaxWritesInFlight = 1;
+        Self->TabletCounters->Simple()[NKikimrBlobDepot::COUNTER_S3_PUT_MAX_WRITES_IN_FLIGHT] = CurrentMaxWritesInFlight;
         ConsecutiveSuccessfulWriteBatches = 0;
         const TDuration delay = PutBackoff.Next();
         PutThrottleUntil = TActivationContext::Monotonic() + delay;
@@ -194,15 +197,18 @@ namespace NKikimr::NBlobDepot {
             Self->Execute(std::make_unique<TTxPrepareWriteS3>(Self, agent,
                 std::unique_ptr<TEvBlobDepot::TEvPrepareWriteS3::THandle>(ev.Release())));
         }
+        Self->TabletCounters->Simple()[NKikimrBlobDepot::COUNTER_S3_PUT_PENDING_QUEUE_SIZE] = PendingPrepareWrites.size();
     }
 
     void TS3Manager::OnS3WriteInFlightAdded(ui32 count) {
         S3WritesInFlight += count;
+        Self->TabletCounters->Simple()[NKikimrBlobDepot::COUNTER_S3_PUT_WRITES_IN_FLIGHT] = S3WritesInFlight;
     }
 
     void TS3Manager::OnS3WriteInFlightRemoved(bool success) {
         Y_ABORT_UNLESS(S3WritesInFlight);
         --S3WritesInFlight;
+        Self->TabletCounters->Simple()[NKikimrBlobDepot::COUNTER_S3_PUT_WRITES_IN_FLIGHT] = S3WritesInFlight;
 
         if (success && CurrentMaxWritesInFlight < MaxWritesInFlight) {
             if (++ConsecutiveSuccessfulWriteBatches >= SuccessesPerWriteConcurrencyStepUp) {
@@ -212,6 +218,7 @@ namespace NKikimr::NBlobDepot {
                     CurrentMaxWritesInFlight = MaxWritesInFlight;
                     PutBackoff.Reset();
                 }
+                Self->TabletCounters->Simple()[NKikimrBlobDepot::COUNTER_S3_PUT_MAX_WRITES_IN_FLIGHT] = CurrentMaxWritesInFlight;
             }
         }
 

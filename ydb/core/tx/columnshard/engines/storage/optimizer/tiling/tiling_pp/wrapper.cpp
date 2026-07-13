@@ -246,8 +246,9 @@ protected:
 
 public:
     TOptimizerPlannerAdapter(const TInternalPathId pathId, const std::shared_ptr<IStoragesManager>& storagesManager,
-        const std::shared_ptr<arrow::Schema>& /*primaryKeysSchema*/, const TPlannerSettings& settings)
-        : TBase(pathId, std::nullopt)
+        const std::shared_ptr<arrow::Schema>& /*primaryKeysSchema*/, const TPlannerSettings& settings,
+        const std::optional<ui64>& nodePortionsCountLimit)
+        : TBase(pathId, nodePortionsCountLimit)
         , Counters()
         , Core(MakeCoreSettings(settings), Counters)
         , StoragesManager(storagesManager)
@@ -295,7 +296,8 @@ private:
 
     TConclusion<std::shared_ptr<IOptimizerPlanner>> DoBuildPlanner(const TBuildContext& context) const override {
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("message", "creating tiling++ compaction optimizer");
-        return std::make_shared<TOptimizerPlannerAdapter>(context.GetPathId(), context.GetStorages(), context.GetPKSchema(), Settings);
+        return std::make_shared<TOptimizerPlannerAdapter>(
+            context.GetPathId(), context.GetStorages(), context.GetPKSchema(), Settings, GetNodePortionsCountLimit());
     }
 
 public:

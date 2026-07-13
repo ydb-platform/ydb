@@ -392,8 +392,10 @@ void TKafkaMetadataActor::RespondIfRequired(const TActorContext& ctx) {
     Respond();
 }
 
-TString TKafkaMetadataActor::LogPrefix() const {
-    return TStringBuilder() << "TKafkaMetadataActor " << SelfId() << " ";
+NStructuredLog::TStructuredMessage TKafkaMetadataActor::LogPrefix() const {
+    return YDB_LOG_CREATE_MESSAGE(
+        {"actorClassName", "TKafkaMetadataActor"},
+        {"selfId", SelfId()});
 }
 
 } // namespace NKafka

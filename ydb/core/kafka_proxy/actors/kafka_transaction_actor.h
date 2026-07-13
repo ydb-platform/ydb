@@ -48,8 +48,15 @@ namespace NKafka {
                 TxnTimeoutMs(txnTimeoutMs),
                 CreatedAt(TAppData::TimeProvider->Now()) {};
 
-            TStringBuilder LogPrefix() const {
-                return TStringBuilder() << "KafkaTransactionActor{TransactionalId=" << TransactionalId << "; ProducerId=" << ProducerInstanceId.Id << "; ProducerEpoch=" << ProducerInstanceId.Epoch << "}: ";
+
+            NStructuredLog::TStructuredMessage LogPrefix() const {
+                return YDB_LOG_CREATE_MESSAGE(
+                    {"actorClassName", "KafkaTransactionActor"},
+                    {"selfId", SelfId()},
+                    {"transactionalId", TransactionalId},
+                    {"producerId", ProducerInstanceId.Id},
+                    {"producerEpoch", ProducerInstanceId.Epoch},
+                    {"databasePath", DatabasePath});
             }
 
         private:

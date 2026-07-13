@@ -68,8 +68,10 @@ class TTopicOffsetActor: public NKikimr::NGRpcProxy::V1::TPQInternalSchemaActor<
         Become(&TTopicOffsetActor::StateWork);
     };
 
-    TStringBuilder LogPrefix() const {
-        return TStringBuilder() << "KafkaTopicOffsetActor: ";
+    NStructuredLog::TStructuredMessage LogPrefix() const {
+        return YDB_LOG_CREATE_MESSAGE(
+            {"actorClassName", "KafkaTopicOffsetActor"},
+            {"selfId", SelfId()});
     }
 
     void StateWork(TAutoPtr<IEventHandle>& ev) {

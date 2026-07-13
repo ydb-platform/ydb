@@ -197,18 +197,23 @@ protected:
         return Socket->GetRawSocket();
     }
 
-    TString LogPrefix() const {
-        TStringBuilder sb;
-        sb << "TKafkaConnection " << SelfId() << "(#" << GetRawSocket() << "," << Address->ToString() << ") State: ";
+    NStructuredLog::TStructuredMessage LogPrefix() const {
+        TString state;
+
         auto stateFunc = CurrentStateFunc();
         if (stateFunc == &TKafkaConnection::StateConnected) {
-            sb << "Connected ";
+            state = "Connected ";
         } else if (stateFunc == &TKafkaConnection::StateAccepting) {
-            sb << "Accepting ";
+            state = "Accepting ";
         } else {
-            sb << "Unknown ";
+            state = "Unknown ";
         }
-        return sb;
+
+        return YDB_LOG_CREATE_MESSAGE(
+            {"actorClassName", "TKafkaConnection"},
+            {"selfId", SelfId()},
+            {"state", SelfId()},
+        );
     }
 
     void SendRequestMetrics(const TActorContext& ctx) {

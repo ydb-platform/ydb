@@ -3998,15 +3998,18 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     }
                 }
 
-                if (txState.SourcePathId) {
-                    auto srcPathIt = Self->PathsById.find(txState.SourcePathId);
-                    Y_VERIFY_S(srcPathIt != Self->PathsById.end(), "Source path element not found for in-flight tx"
+                if (txState.SourcePathId && !Self->PathsById.contains(txState.SourcePathId)) {
+                    Y_VERIFY_S(Self->TolerateOrphanedPaths, "Source path element not found for in-flight tx"
                         << ", txId: " << operationId.GetTxId()
                         << ", TxType: " << TTxState::TypeName(txState.TxType)
                         << ", pathId: " << txState.SourcePathId);
-                    Y_VERIFY_S(srcPathIt->second, "Null path element, pathId: " << txState.SourcePathId);
-                    srcPathIt->second->DbRefCount++;
+                    LOG_ERROR_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                        "Source path element not found for in-flight tx, skipping its reference"
+                            << ", txId: " << operationId.GetTxId()
+                            << ", TxType: " << TTxState::TypeName(txState.TxType)
+                            << ", pathId: " << txState.SourcePathId);
                 }
+                txState.AcquirePathRefs(Self);
 
                 if (txState.TxType == TTxState::TxCreateSubDomain) {
                     Y_ABORT_UNLESS(Self->SubDomains.contains(txState.TargetPathId));
@@ -4129,7 +4132,6 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 if (txState.TxType != TTxState::TxSplitTablePartition && txState.TxType != TTxState::TxMergeTablePartition) {
                     path->LastTxId = operationId.GetTxId();
                 }
-                path->DbRefCount++;
 
                 // Remember which paths are still under operation
                 pathsUnderOperation.insert(txState.TargetPathId);
@@ -4405,7 +4407,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                         if (!srcPath->Dropped()) {
                             srcPath->PathState = TPathElement::EPathState::EPathStateCopying;
                         }
-                        srcPath->DbRefCount++;
+                        txState->SourcePathRef.Reset(Self, txState->SourcePathId, "transaction source path");
                     }
                 }
             }

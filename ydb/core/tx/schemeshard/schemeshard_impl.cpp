@@ -794,7 +794,9 @@ void TSchemeShard::IncrementPathDbRefCount(const TPathId& pathId, const TStringB
     auto it = PathsById.find(pathId);
     Y_VERIFY_DEBUG_S(it != PathsById.end(), "pathId: " << pathId << " debug: " << debug);
     if (it != PathsById.end()) {
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::FLAT_TX_SCHEMESHARD, "IncrementPathDbRefCount reason " << debug << " for pathId " << pathId << " was " << it->second->DbRefCount);
+        if (TlsActivationContext) {
+            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::FLAT_TX_SCHEMESHARD, "IncrementPathDbRefCount reason " << debug << " for pathId " << pathId << " was " << it->second->DbRefCount);
+        }
         size_t newRefCount = ++it->second->DbRefCount;
         Y_DEBUG_ABORT_UNLESS(newRefCount > 0);
     }
@@ -805,14 +807,16 @@ void TSchemeShard::DecrementPathDbRefCount(const TPathId& pathId, const TStringB
     Y_VERIFY_DEBUG_S(it != PathsById.end(), "pathId " << pathId << " " << debug);
     if (it != PathsById.end()) {
         // FIXME: not all references are accounted right now
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::FLAT_TX_SCHEMESHARD, "DecrementPathDbRefCount reason " << debug << " for pathId " << pathId << " was " << it->second->DbRefCount);
+        if (TlsActivationContext) {
+            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::FLAT_TX_SCHEMESHARD, "DecrementPathDbRefCount reason " << debug << " for pathId " << pathId << " was " << it->second->DbRefCount);
+        }
         Y_DEBUG_ABORT_UNLESS(it->second->DbRefCount > 0);
         if (it->second->DbRefCount > 0) {
             size_t newRefCount = --it->second->DbRefCount;
-            if (newRefCount == 0 && it->second->Dropped()) {
+            if (newRefCount == 0 && it->second->Dropped() && TlsActivationContext) {
                 CleanDroppedPathsCandidates.insert(pathId);
                 ScheduleCleanDroppedPaths();
-            } else if (newRefCount == 1 && it->second->AllChildrenCount == 0 && it->second->Dropped()) {
+            } else if (newRefCount == 1 && it->second->AllChildrenCount == 0 && it->second->Dropped() && TlsActivationContext) {
                 auto itSubDomain = SubDomains.find(pathId);
                 if (itSubDomain != SubDomains.end() && itSubDomain->second->GetInternalShards().empty()) {
                     // We have an empty dropped subdomain, schedule its deletion
@@ -6183,10 +6187,7 @@ TTxState &TSchemeShard::CreateTx(TOperationId opId, TTxState::ETxType txType, TP
     TTxState& txState = TxInFlight[opId];
     txState = TTxState(txType, targetPath, sourcePath);
     TabletCounters->Simple()[TxTypeInFlightCounter(txType)].Add(1);
-    IncrementPathDbRefCount(targetPath, "transaction target path");
-    if (sourcePath) {
-        IncrementPathDbRefCount(sourcePath, "transaction source path");
-    }
+    txState.AcquirePathRefs(this);
     LOG_DEBUG_S(TActivationContext::AsActorContext(), NKikimrServices::FLAT_TX_SCHEMESHARD,
                     "CreateTx for txid " << opId
                     << " type: " << TTxState::TypeName(txType)
@@ -6216,7 +6217,6 @@ void TSchemeShard::RemoveTx(const TActorContext &ctx, NIceDb::TNiceDb &db, TOper
     }
 
     LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "RemoveTx for txid " << opId);
-    auto pathId = txState->TargetPathId;
 
     PersistRemoveTx(db, opId, *txState);
     TabletCounters->Simple()[TxTypeInFlightCounter(txState->TxType)].Sub(1);
@@ -6227,10 +6227,7 @@ void TSchemeShard::RemoveTx(const TActorContext &ctx, NIceDb::TNiceDb &db, TOper
         TabletCounters->Cumulative()[TxTypeFinishedCounter(txState->TxType)].Increment(1);
     }
 
-    DecrementPathDbRefCount(pathId, "remove txstate target path");
-    if (txState->SourcePathId) {
-        DecrementPathDbRefCount(txState->SourcePathId, "remove txstate source path");
-    }
+    // TargetPathRef/SourcePathRef are released by TxInFlight.erase below
 
     // Check if this operation is part of an incremental restore and notify completion
     if (TxIdToIncrementalRestore.contains(opId.GetTxId())) {

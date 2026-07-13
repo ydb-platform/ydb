@@ -40,6 +40,7 @@ SELECT
     t.max_branch AS max_branch,
     t.env AS env,
     t.priority AS priority,
+    t.releaseblocker_state AS releaseblocker_state,
     t.branch AS branch,
     t.area AS area_full,
     Cast(CASE

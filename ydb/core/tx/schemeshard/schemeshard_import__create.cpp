@@ -704,7 +704,7 @@ private:
             return false;
         }
 
-        if (AppData()->AlwaysSetSystemOwner) {
+        if (AppData()->AlwaysSetSystemOwner || AppData()->FeatureFlags.GetEnableIdmPermissionsManagement()) {
             op.SetNewOwner(BUILTIN_ACL_METADATA);
         }
 
@@ -760,7 +760,7 @@ private:
         }
         FillOwner(record, item.Permissions);
 
-        SetSystemOwnerIfNeeded(record, AppData());
+        record.SetOwner(ChooseAppropriateOwner(record, AppData()));
 
         if (TString error; !FillACL(modifyScheme, item.Permissions, error)) {
             NIceDb::TNiceDb db(txc.DB);

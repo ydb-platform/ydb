@@ -57,7 +57,7 @@ NNodes::TExprBase GetWorld(NNodes::TExprBase input, NNodes::TMaybeNode<NNodes::T
 struct TConvertInputOpts {
     NNodes::TMaybeNode<NNodes::TCoNameValueTupleList> Settings_;
     NNodes::TMaybeNode<NNodes::TCoAtomList> CustomFields_;
-    bool KeepDirecRead_;
+    bool KeepDirectRead_;
     bool MakeUnordered_;
     bool ClearUnordered_;
 
@@ -71,7 +71,7 @@ struct TConvertInputOpts {
 
     TConvertInputOpts& ExplicitFields(const TStructExprType& type, TPositionHandle pos, TExprContext& ctx);
 
-    TConvertInputOpts& KeepDirecRead(bool keepDirecRead = true);
+    TConvertInputOpts& KeepDirectRead(bool keepDirectRead = true);
 
     TConvertInputOpts& MakeUnordered(bool makeUnordered = true);
 

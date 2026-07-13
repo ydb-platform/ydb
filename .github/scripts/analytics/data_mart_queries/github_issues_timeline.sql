@@ -1,5 +1,5 @@
 -- Issues on a daily timeline: for each date, which issues are open at end of day and which were closed that day.
--- Open/closed state and SLA start come from info.open_periods (close/reopen intervals from GitHub export).
+-- Open/closed state and SLA start come from info.open_period_starts/ends (semicolon lists from GitHub export).
 -- RECENT DAYS: updates only the last $recent_days days (default 2). Use with data_mart_executor for quick refresh.
 -- Dates come from tests_monitor (date_window), no ListFromRange/FLATTEN BY for the date spine.
 -- In BI: filter by date, owner_team; for issue list per day — filter by date; for counts — GROUP BY date, SUM(is_open_at_end_of_day), SUM(closed_on_this_day).
@@ -35,12 +35,16 @@ $issue_periods = (
     SELECT
         t.project_item_id AS project_item_id,
         t.issue_number AS issue_number,
-        Cast(JSON_VALUE(t.info, "$.open_periods[" || CAST(pi.idx AS Utf8) || "].start") AS Date) AS period_start,
-        Cast(JSON_VALUE(t.info, "$.open_periods[" || CAST(pi.idx AS Utf8) || "].end") AS Date) AS period_end
+        Cast(String::SplitToList(JSON_VALUE(t.info, '$.open_period_starts'), ';')[pi.idx] AS Date) AS period_start,
+        IF(
+            String::SplitToList(JSON_VALUE(t.info, '$.open_period_ends'), ';')[pi.idx] != '',
+            Cast(String::SplitToList(JSON_VALUE(t.info, '$.open_period_ends'), ';')[pi.idx] AS Date),
+            NULL
+        ) AS period_end
     FROM `github_data/issues` AS t
     CROSS JOIN $period_indices AS pi
-    WHERE JSON_VALUE(t.info, "$.open_periods[0].start") IS NOT NULL
-      AND JSON_VALUE(t.info, "$.open_periods[" || CAST(pi.idx AS Utf8) || "].start") IS NOT NULL
+    WHERE JSON_VALUE(t.info, '$.open_period_starts') IS NOT NULL
+      AND pi.idx < ListLength(String::SplitToList(JSON_VALUE(t.info, '$.open_period_starts'), ';'))
     UNION ALL
     SELECT
         t.project_item_id AS project_item_id,
@@ -48,7 +52,7 @@ $issue_periods = (
         t.created_date AS period_start,
         Cast(t.closed_at AS Date) AS period_end
     FROM `github_data/issues` AS t
-    WHERE JSON_VALUE(t.info, "$.open_periods[0].start") IS NULL
+    WHERE JSON_VALUE(t.info, '$.open_period_starts') IS NULL
 );
 
 $issues_in_window = (

@@ -644,7 +644,6 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
         Variator::ToExecutor(Variator::SingleScript(scriptLocalIndexesOnInsertViaAddIndex)).Execute(MakeLocalIndexOnInsertTestSettings());
     }
 
-
     Y_UNIT_TEST(AlterIndexOnNotExistingTableResultsInError, EUseQueryService, ELocalIndexAsSchemeObject) {
         const bool useQueryService = (Arg<0>() == EUseQueryService::QueryService);
         const bool localIndexAsSchemeObject = (Arg<1>() == ELocalIndexAsSchemeObject::SchemeObjectEnabled);

@@ -1,7 +1,6 @@
 #include <ydb/core/kqp/ut/olap/helpers/typed_local.h>
 #include <ydb/core/tx/columnshard/hooks/testing/controller.h>
 
-
 namespace NKikimr::NKqp {
 
 Y_UNIT_TEST_SUITE(KqpOlapStatistics) {
@@ -45,7 +44,6 @@ Y_UNIT_TEST_SUITE(KqpOlapStatistics) {
             }
         }
     }
-
 
     Y_UNIT_TEST(StatsUsageNotPK) {
         auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();

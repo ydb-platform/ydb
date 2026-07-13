@@ -384,7 +384,6 @@ void TTxController::FinishProposeOnComplete(ITransactionOperator& txOperator, co
     NActors::TLogContextGuard lGuard =
         NActors::TLogContextBuilder::Build()("method", "TTxController::FinishProposeOnComplete")("tx_id", txOperator.GetTxId());
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_TX)("event", "start")("tx_info", txOperator.GetTxInfo().DebugString());
-    TTxController::TProposeResult proposeResult = txOperator.GetProposeStartInfoVerified();
     AFL_VERIFY(!txOperator.IsFail());
     txOperator.FinishProposeOnComplete(Owner, ctx);
     txOperator.SendReply(Owner, ctx);

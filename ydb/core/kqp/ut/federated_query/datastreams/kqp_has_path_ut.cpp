@@ -25,6 +25,41 @@ TString RejectClassifierDdl(TStringBuf classifierName, TStringBuf hasPath) {
     )";
 }
 
+void WaitClassifierVisible(TStreamingTestFixture& fixture,
+                           const std::string& classifierName,
+                           TDuration timeout = TDuration::Seconds(20))
+{
+    const auto probe = fmt::format(R"(
+        SELECT COUNT(*) FROM `.metadata/workload_manager/classifiers/resource_pool_classifiers`
+        WHERE name = "{name}";
+    )", "name"_a = classifierName);
+
+    auto session = fixture.GetQueryClient()->GetSession().GetValueSync().GetSession();
+    const auto execSettings = NYdb::NQuery::TExecuteQuerySettings()
+        .ResourcePool(std::string(NResourcePool::DEFAULT_POOL_ID));
+    const auto deadline = TInstant::Now() + timeout;
+
+    while (TInstant::Now() < deadline) {
+        auto result = session.ExecuteQuery(
+            probe, NYdb::NQuery::TTxControl::NoTx(), execSettings).ExtractValueSync();
+
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS,
+            result.GetIssues().ToOneLineString());
+
+        NYdb::TResultSetParser parser(result.GetResultSet(0));
+        UNIT_ASSERT(parser.TryNextRow());
+
+        if (parser.ColumnParser(0).GetUint64() == 1) {
+            Sleep(TDuration::MilliSeconds(500));  // pad for workload service snapshot refresh
+            return;
+        }
+
+        Sleep(TDuration::MilliSeconds(200));
+    }
+
+    UNIT_ASSERT_C(false, "Classifier '" << classifierName << "' not visible within " << timeout);
+}
+
 }  // anonymous namespace
 
 
@@ -32,10 +67,6 @@ TString RejectClassifierDdl(TStringBuf classifierName, TStringBuf hasPath) {
 // (real local PQ, mock connector, mock PQ gateway, http gateway) are only met
 // by TStreamingTestFixture. Cheaper kinds (regular tables, sysview, secondary
 // index, view underlying) live in ydb/core/kqp/workload_service/ut.
-//
-// All queries in this file are sync `ExecQuery` (via TStreamingTestFixture)
-// because streaming SELECT via the SDK is a classifier-visible call — real
-// cluster verification 2026-07-10 confirmed PostCompileClassify fires.
 Y_UNIT_TEST_SUITE(HasPathDatastreams) {
 
     // KindTopic — direct read of a local topic (no EDS in the chain).
@@ -49,6 +80,8 @@ Y_UNIT_TEST_SUITE(HasPathDatastreams) {
 
         ExecSchemeQuery(RejectClassifierDdl(
             "hp_direct_topic", "/Root/test_topic"));
+
+        WaitClassifierVisible(*this, "hp_direct_topic");
 
         ExecQuery(R"(
             SELECT * FROM `/Root/test_topic` WITH (
@@ -65,6 +98,11 @@ Y_UNIT_TEST_SUITE(HasPathDatastreams) {
         InternalInitFederatedQuerySetupFactory = true;
         SetupAppConfig().MutableFeatureFlags()->SetEnableTopicsSqlIoOperations(true);
 
+        ExecSchemeQuery(RejectClassifierDdl(
+            "hp_cdc", "/Root/t_cdc/cf"));
+
+        WaitClassifierVisible(*this, "hp_cdc");
+
         ExecSchemeQuery(R"(
             CREATE TABLE t_cdc (
                 Id Uint64 NOT NULL,
@@ -77,8 +115,6 @@ Y_UNIT_TEST_SUITE(HasPathDatastreams) {
             );
         )");
 
-        ExecSchemeQuery(RejectClassifierDdl(
-            "hp_cdc", "/Root/t_cdc/cf"));
 
         ExecQuery(R"(
             SELECT * FROM `/Root/t_cdc/cf` WITH (
@@ -97,6 +133,11 @@ Y_UNIT_TEST_SUITE(HasPathDatastreams) {
         constexpr TStringBuf topicName = "eds_topic";
         CreateTopic(std::string(topicName), std::nullopt, /*local*/ true);
 
+        ExecSchemeQuery(RejectClassifierDdl(
+            "hp_eds_local", "/Root/eds"));
+
+        WaitClassifierVisible(*this, "hp_eds_local");
+
         ExecSchemeQuery(fmt::format(R"(
             CREATE EXTERNAL DATA SOURCE eds WITH (
                 SOURCE_TYPE = "Ydb",
@@ -106,8 +147,6 @@ Y_UNIT_TEST_SUITE(HasPathDatastreams) {
             );
         )", "endpoint"_a = GetKikimrRunner()->GetEndpoint()));
 
-        ExecSchemeQuery(RejectClassifierDdl(
-            "hp_eds_local", "/Root/eds"));
 
         ExecQuery(fmt::format(R"(
             SELECT * FROM eds.`{topic}` WITH (
@@ -127,6 +166,13 @@ Y_UNIT_TEST_SUITE(HasPathDatastreams) {
         constexpr TStringBuf topicName = "remote_by_name_topic";
         CreateTopic(std::string(topicName), std::nullopt, /*local*/ true);
 
+        // CanonizePath prepends a leading slash to the bare TopicPath emitted
+        // by TDqPqTopicSource, so the regex is anchored on `/<topic>`.
+        ExecSchemeQuery(RejectClassifierDdl(
+            "hp_remote_name", "/remote_by_name_topic"));
+
+        WaitClassifierVisible(*this, "hp_remote_name");
+
         ExecSchemeQuery(fmt::format(R"(
             CREATE EXTERNAL DATA SOURCE eds WITH (
                 SOURCE_TYPE = "Ydb",
@@ -136,10 +182,6 @@ Y_UNIT_TEST_SUITE(HasPathDatastreams) {
             );
         )", "endpoint"_a = GetKikimrRunner()->GetEndpoint()));
 
-        // CanonizePath prepends a leading slash to the bare TopicPath emitted
-        // by TDqPqTopicSource, so the regex is anchored on `/<topic>`.
-        ExecSchemeQuery(RejectClassifierDdl(
-            "hp_remote_name", "/remote_by_name_topic"));
 
         ExecQuery(fmt::format(R"(
             SELECT * FROM eds.`{topic}` WITH (
@@ -154,6 +196,13 @@ Y_UNIT_TEST_SUITE(HasPathDatastreams) {
     // KindExternalTable — External Table on top of an ObjectStorage EDS.
     // Both the ET path and the underlying EDS path land in tx.Tables (B walk).
     Y_UNIT_TEST_F(ExternalTableMatches, TStreamingTestFixture) {
+        LogSettings.AddLogPriority(NKikimrServices::KQP_SESSION, NLog::PRI_DEBUG);
+
+        ExecSchemeQuery(RejectClassifierDdl(
+            "hp_et", "/Root/et_s3"));
+
+        WaitClassifierVisible(*this, "hp_et");
+
         ExecSchemeQuery(R"(
             CREATE EXTERNAL DATA SOURCE eds_s3 WITH (
                 SOURCE_TYPE = "ObjectStorage",
@@ -170,9 +219,6 @@ Y_UNIT_TEST_SUITE(HasPathDatastreams) {
                 FILE_PATTERN = "*.parquet"
             );
         )");
-
-        ExecSchemeQuery(RejectClassifierDdl(
-            "hp_et", "/Root/et_s3"));
 
         ExecQuery(R"(
             SELECT * FROM et_s3 LIMIT 1;

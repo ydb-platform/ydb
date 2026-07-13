@@ -4,6 +4,7 @@ FORK_SUBTESTS()
 SPLIT_FACTOR(200)
 
 REQUIREMENTS(cpu:2)
+
 IF (SANITIZER_TYPE)
     SIZE(LARGE)
     INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
@@ -15,8 +16,7 @@ SRCS(
     common.cpp
     datastreams_ut.cpp
     datastreams_table_mode_ut.cpp
-    # TODO: re-enable once federated fixture wiring supports the HAS_PATH end-to-end shapes
-    # kqp_has_path_ut.cpp
+    kqp_has_path_ut.cpp
     streaming_ddl_ut.cpp
     streaming_sys_view_ut.cpp
 )

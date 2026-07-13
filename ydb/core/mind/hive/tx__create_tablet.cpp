@@ -200,7 +200,7 @@ public:
         const TOwnerIdxType::TValueType ownerIdx(OwnerId, OwnerIdx);
         YDB_LOG_DEBUG("THive::TTxCreateTablet::Execute",
             {"logPrefix", GetLogPrefix()},
-            {"requestData", RequestData});
+            {"requestData", RequestData.ShortDebugString()});
         SideEffects.Reset(Self->SelfId());
         ErrorReason = NKikimrHive::ERROR_REASON_UNKNOWN;
         for (const auto& domain : AllowedDomains) {
@@ -457,19 +457,19 @@ public:
         YDB_LOG_DEBUG("THive::TTxCreateTablet::Execute; Default resources after merge for type",
             {"logPrefix", GetLogPrefix()},
             {"tabletType", tablet.Type},
-            {"resourceValues", resourceValues});
+            {"resourceValues", resourceValues.ShortDebugString()});
         if (IsValidObjectId(tablet.ObjectId)) {
             Self->GetDefaultResourceValuesForObject(tablet.ObjectId).ToProto(&resourceValues);
             YDB_LOG_DEBUG("THive::TTxCreateTablet::Execute; Default resources after merge for object",
                 {"logPrefix", GetLogPrefix()},
                 {"objectId", tablet.ObjectId},
-                {"resourceValues", resourceValues});
+                {"resourceValues", resourceValues.ShortDebugString()});
         }
         // TODO: provide Hive with resource profile used by the tablet instead of default one.
         Self->GetDefaultResourceValuesForProfile(tablet.Type, "default").ToProto(&resourceValues);
         YDB_LOG_DEBUG("THive::TTxCreateTablet::Execute; Default resources after merge for profile 'default'",
             {"logPrefix", GetLogPrefix()},
-            {"resourceValues", resourceValues});
+            {"resourceValues", resourceValues.ShortDebugString()});
         if (resourceValues.ByteSize() == 0) {
             resourceValues.SetStorage(1ULL << 30); // 1 GB
             resourceValues.SetReadThroughput(10ULL << 20); // 10 MB/s

@@ -85,7 +85,7 @@ public:
         }
         YDB_LOG_DEBUG("THive::TTxDeleteTablet::Execute() result",
             {"logPrefix", GetLogPrefix()},
-            {"responseRecord", response->Record});
+            {"responseRecord", response->Record.ShortDebugString()});
         SideEffects.Send(Event->Sender, response.Release(), 0, Event->Cookie);
     }
 
@@ -94,7 +94,7 @@ public:
         const NKikimrHive::TEvDeleteTablet& rec = Event->Get()->Record;
         YDB_LOG_DEBUG("THive::TTxDeleteTablet::Execute()",
             {"logPrefix", GetLogPrefix()},
-            {"rec", rec});
+            {"rec", rec.ShortDebugString()});
         // resolving ownerid:owneridx to tabletids
         std::vector<TTabletId> tablets;
         tablets.reserve(rec.ShardLocalIdxSize());
@@ -187,7 +187,7 @@ public:
         auto response = MakeHolder<TEvHive::TEvDeleteOwnerTabletsReply>(status, Self->TabletID(), rec.GetOwner(), rec.GetTxId());
         YDB_LOG_DEBUG("THive::TTxDeleteOwnerTablets::Execute() result",
             {"logPrefix", GetLogPrefix()},
-            {"responseRecord", response->Record});
+            {"responseRecord", response->Record.ShortDebugString()});
         SideEffects.Send(Event->Sender, response.Release(), 0, Event->Cookie);
     }
 
@@ -196,7 +196,7 @@ public:
         const NKikimrHive::TEvDeleteOwnerTablets& rec = Event->Get()->Record;
         YDB_LOG_DEBUG("THive::TEvDeleteOwnerTablets::Execute()",
             {"logPrefix", GetLogPrefix()},
-            {"rec", rec});
+            {"rec", rec.ShortDebugString()});
         // resolving owner to tabletids
         std::vector<TTabletId> tablets;
         ui64 owner = rec.GetOwner();

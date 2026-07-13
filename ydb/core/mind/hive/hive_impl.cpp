@@ -204,14 +204,14 @@ void THive::Handle(TEvLocal::TEvRegisterNode::TPtr& ev) {
         YDB_LOG_DEBUG("Handle TEvLocal::TEvRegisterNode",
             {"logPrefix", GetLogPrefix()},
             {"sender", ev->Sender},
-            {"record", record});
+            {"record", record.ShortDebugString()});
         Send(GetNameserviceActorId(), new TEvInterconnect::TEvGetNode(ev->Sender.NodeId()));
         Execute(CreateRegisterNode(local, std::move(record)));
     } else {
         YDB_LOG_WARN("Handle incorrect TEvLocal::TEvRegisterNode",
             {"logPrefix", GetLogPrefix()},
             {"sender", ev->Sender},
-            {"record", record});
+            {"record", record.ShortDebugString()});
     }
 }
 
@@ -234,9 +234,11 @@ void THive::Handle(TEvHive::TEvStopTablet::TPtr& ev) {
     if (rec.HasTabletID()) {
         Execute(CreateStopTablet(rec.GetTabletID(), actorToNotify));
     } else {
-        if (!(rec.HasTabletID())) { YDB_LOG_ERROR("Failed condition rec.HasTabletID()",
-                                        {"logPrefix", GetLogPrefix()},
-                                        {"rec", rec}); }
+        if (!(rec.HasTabletID())) {
+            YDB_LOG_ERROR("Failed condition rec.HasTabletID()",
+                {"logPrefix", GetLogPrefix()},
+                {"rec", rec.ShortDebugString()});
+        }
         Send(actorToNotify, new TEvHive::TEvStopTabletResult(NKikimrProto::ERROR, 0), 0, ev->Cookie);
     }
 }
@@ -551,7 +553,7 @@ void THive::Handle(TEvBlobStorage::TEvControllerSelectGroupsResult::TPtr& ev) {
     if (rec.GetStatus() == NKikimrProto::OK) {
         YDB_LOG_DEBUG("THive::Handle TEvControllerSelectGroupsResult: success",
             {"logPrefix", GetLogPrefix()},
-            {"rec", rec});
+            {"rec", rec.ShortDebugString()});
         if (rec.MatchingGroupsSize()) {
             TVector<TTabletId> tablets;
             for (const auto& matchingGroups : rec.GetMatchingGroups()) {
@@ -766,7 +768,7 @@ void THive::Handle(TEvHive::TEvInitMigration::TPtr& ev) {
         MigrationFilter.SetNewOwnerID(TabletID());
         YDB_LOG_DEBUG("Requesting migration",
             {"logPrefix", GetLogPrefix()},
-            {"migrationFilter", MigrationFilter});
+            {"migrationFilter", MigrationFilter.ShortDebugString()});
         SendToRootHivePipe(new TEvHive::TEvSeizeTablets(MigrationFilter));
         Send(ev->Sender, new TEvHive::TEvInitMigrationReply(NKikimrProto::OK));
     } else {
@@ -920,7 +922,7 @@ void THive::Handle(TEvLocal::TEvStatus::TPtr& ev) {
     YDB_LOG_DEBUG("Handle TEvLocal::TEvStatus for Node",
         {"logPrefix", GetLogPrefix()},
         {"senderNodeId", ev->Sender.NodeId()},
-        {"ev", ev->Get()->Record});
+        {"ev", ev->Get()->Record.ShortDebugString()});
     RemoveFromPingInProgress(ev->Sender.NodeId());
     Execute(CreateStatus(ev->Sender, ev->Get()->Record));
 }
@@ -961,7 +963,7 @@ void THive::Handle(TEvHive::TEvTabletMetrics::TPtr& ev) {
     YDB_LOG_TRACE("THive::Handle::TEvTabletMetrics, NodeId",
         {"logPrefix", GetLogPrefix()},
         {"nodeId", nodeId},
-        {"ev", ev->Get()->Record});
+        {"ev", ev->Get()->Record.ShortDebugString()});
     if (UpdateTabletMetricsInProgress < MAX_UPDATE_TABLET_METRICS_IN_PROGRESS) {
         UpdateTabletMetricsInProgress++;
         if (UpdateTabletMetricsInProgress > (MAX_UPDATE_TABLET_METRICS_IN_PROGRESS / 2)) {
@@ -1307,7 +1309,7 @@ void THive::AssignTabletGroups(TLeaderTabletInfo& tablet) {
             YDB_LOG_DEBUG("THive::AssignTabletGroups TEvControllerSelectGroups tablet",
                 {"logPrefix", GetLogPrefix()},
                 {"tabletId", tablet.Id},
-                {"record", ev->Record});
+                {"record", ev->Record.ShortDebugString()});
             SendToBSControllerPipe(ev.Release());
         } else {
             YDB_LOG_DEBUG("THive::AssignTabletGroups TEvControllerSelectGroups tablet waiting for response",
@@ -3861,14 +3863,14 @@ void THive::ProcessPendingOperations() {
 void THive::Handle(TEvSubDomain::TEvConfigure::TPtr& ev) {
     YDB_LOG_DEBUG("Handle TEvSubDomain::TEvConfigure(",
         {"logPrefix", GetLogPrefix()},
-        {"ev", ev->Get()->Record});
+        {"ev", ev->Get()->Record.ShortDebugString()});
     Send(ev->Sender, new TEvSubDomain::TEvConfigureStatus(NKikimrTx::TEvSubDomainConfigurationAck::SUCCESS, TabletID()));
 }
 
 void THive::Handle(TEvHive::TEvConfigureHive::TPtr& ev) {
     YDB_LOG_DEBUG("Handle TEvHive::TEvConfigureHive(",
         {"logPrefix", GetLogPrefix()},
-        {"ev", ev->Get()->Record});
+        {"ev", ev->Get()->Record.ShortDebugString()});
     Execute(CreateConfigureSubdomain(std::move(ev)));
 }
 
@@ -4016,35 +4018,35 @@ TSubDomainKey THive::GetMySubDomainKey() const {
 void THive::Handle(TEvHive::TEvSeizeTablets::TPtr& ev) {
     YDB_LOG_DEBUG("Handle TEvHive::TEvSeizeTablets(",
         {"logPrefix", GetLogPrefix()},
-        {"ev", ev->Get()->Record});
+        {"ev", ev->Get()->Record.ShortDebugString()});
     Execute(CreateSeizeTablets(ev));
 }
 
 void THive::Handle(TEvHive::TEvSeizeTabletsReply::TPtr& ev) {
     YDB_LOG_DEBUG("Handle TEvHive::TEvSeizeTabletsReply(",
         {"logPrefix", GetLogPrefix()},
-        {"ev", ev->Get()->Record});
+        {"ev", ev->Get()->Record.ShortDebugString()});
     Execute(CreateSeizeTabletsReply(ev));
 }
 
 void THive::Handle(TEvHive::TEvReleaseTablets::TPtr& ev) {
     YDB_LOG_DEBUG("Handle TEvHive::TEvReleaseTablets(",
         {"logPrefix", GetLogPrefix()},
-        {"ev", ev->Get()->Record});
+        {"ev", ev->Get()->Record.ShortDebugString()});
     Execute(CreateReleaseTablets(ev));
 }
 
 void THive::Handle(TEvHive::TEvReleaseTabletsReply::TPtr& ev) {
     YDB_LOG_DEBUG("Handle TEvHive::TEvReleaseTabletsReply(",
         {"logPrefix", GetLogPrefix()},
-        {"ev", ev->Get()->Record});
+        {"ev", ev->Get()->Record.ShortDebugString()});
     Execute(CreateReleaseTabletsReply(ev));
 }
 
 void THive::Handle(TEvHive::TEvRequestTabletOwners::TPtr& ev) {
     YDB_LOG_DEBUG("Handle TEvHive::TEvRequestTabletOwners(",
         {"logPrefix", GetLogPrefix()},
-        {"ev", ev->Get()->Record});
+        {"ev", ev->Get()->Record.ShortDebugString()});
     Execute(CreateRequestTabletOwners(std::move(ev)));
 }
 
@@ -4405,7 +4407,7 @@ void THive::Handle(TEvPrivate::TEvRefreshScaleRecommendation::TPtr&) {
 void THive::Handle(TEvHive::TEvRequestScaleRecommendation::TPtr& ev) {
     YDB_LOG_DEBUG("Handle TEvHive::TEvRequestScaleRecommendation(",
         {"logPrefix", GetLogPrefix()},
-        {"ev", ev->Get()->Record});
+        {"ev", ev->Get()->Record.ShortDebugString()});
     auto response = std::make_unique<TEvHive::TEvResponseScaleRecommendation>();
 
     const auto& record = ev->Get()->Record;
@@ -4546,7 +4548,7 @@ void THive::Handle(TEvPrivate::TEvGenerateTestData::TPtr&) {
 void THive::Handle(TEvHive::TEvConfigureScaleRecommender::TPtr& ev) {
     YDB_LOG_DEBUG("Handle TEvHive::TEvConfigureScaleRecommender(",
         {"logPrefix", GetLogPrefix()},
-        {"ev", ev->Get()->Record});
+        {"ev", ev->Get()->Record.ShortDebugString()});
     Execute(CreateConfigureScaleRecommender(ev));
 }
 

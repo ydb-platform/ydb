@@ -956,7 +956,7 @@ public:
     void Complete(const TActorContext& ctx) override {
         YDB_LOG_NOTICE("THive::TTxLoadEverything::Complete",
             {"logPrefix", GetLogPrefix()},
-            {"databaseConfig", Self->DatabaseConfig});
+            {"databaseConfig", Self->DatabaseConfig.ShortDebugString()});
         ui64 tabletsTotal = 0;
         for (auto it = Self->Tablets.begin(); it != Self->Tablets.end(); ++it) {
             ++tabletsTotal;

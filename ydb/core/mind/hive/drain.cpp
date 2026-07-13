@@ -146,7 +146,7 @@ protected:
         YDB_LOG_DEBUG("Drain received status from domain hive",
             {"logPrefix", GetLogPrefix()},
             {"selfId", SelfId()},
-            {"ev", ev->Get()->Record});
+            {"ev", ev->Get()->Record.ShortDebugString()});
         YDB_LOG_INFO("Drain continued for with tablets",
             {"logPrefix", GetLogPrefix()},
             {"selfId", SelfId()},

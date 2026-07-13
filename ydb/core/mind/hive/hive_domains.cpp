@@ -80,9 +80,9 @@ void THive::Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
 }
 
 void THive::Handle(TEvHive::TEvUpdateDomain::TPtr& ev) {
-    YDB_LOG_DEBUG("Handle TEvHive::TEvUpdateDomain(",
+    YDB_LOG_DEBUG("Handle TEvHive::TEvUpdateDomain",
         {"logPrefix", GetLogPrefix()},
-        {"ev", ev->Get()->Record});
+        {"ev", ev->Get()->Record.ShortDebugString()});
     const TSubDomainKey subdomainKey(ev->Get()->Record.GetDomainKey());
     TDomainInfo& domainInfo = Domains[subdomainKey];
     if (ev->Get()->Record.HasServerlessComputeResourcesMode()) {

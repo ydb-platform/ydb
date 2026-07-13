@@ -103,6 +103,14 @@ private:
                     const auto& hasAppName = config.GetConfigJson()["has_app_name"].GetString();
                     return TCell(hasAppName.data(), hasAppName.size());
                 }});
+                insert({TSchema::Action::ColumnId, [] (const NKqp::TResourcePoolClassifierConfig& config) {
+                    const auto& action = config.GetConfigJson()["action"].GetString();
+                    return TCell(action.data(), action.size());
+                }});
+                insert({TSchema::HasFullScan::ColumnId, [] (const NKqp::TResourcePoolClassifierConfig& config) {
+                    const auto& hasFullScan = config.GetConfigJson()["has_full_scan"].GetString();
+                    return TCell(hasFullScan.data(), hasFullScan.size());
+                }});
             }
         };
         static TExtractorsMap extractors;

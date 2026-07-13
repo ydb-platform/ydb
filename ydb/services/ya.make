@@ -17,6 +17,7 @@ RECURSE(
     local_discovery
     maintenance
     metadata
+    udf_store
     monitoring
     persqueue_cluster_discovery
     persqueue_v1

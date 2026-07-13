@@ -23,6 +23,9 @@ namespace NKikimr::NBsController {
             driveInfo.SharedWithOs = drive.GetSharedWithOs();
             driveInfo.ReadCentric = drive.GetReadCentric();
             driveInfo.Kind = drive.GetKind();
+            if (drive.HasDiskScope()) {
+                driveInfo.DiskScope = drive.GetDiskScope();
+            }
 
             if (drive.HasPDiskConfig()) {
                 TString config;

@@ -10,6 +10,7 @@ PEERDIR(
     ydb/core/testlib
     ydb/core/protos
     ydb/core/statistics
+    ydb/core/statistics/common
 )
 
 YQL_LAST_ABI_VERSION()

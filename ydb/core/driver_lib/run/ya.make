@@ -165,8 +165,6 @@ PEERDIR(
     ydb/services/deprecated/persqueue_v0
     ydb/services/discovery
     ydb/services/dynamic_config
-    ydb/services/ext_index/metadata
-    ydb/services/ext_index/service
     ydb/services/fq
     ydb/services/kesus
     ydb/services/keyvalue

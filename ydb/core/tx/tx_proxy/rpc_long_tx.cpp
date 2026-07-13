@@ -12,7 +12,6 @@
 #include <ydb/library/actors/prof/tag.h>
 #include <ydb/library/actors/wilson/wilson_profile_span.h>
 #include <ydb/library/signals/object_counter.h>
-#include <ydb/services/ext_index/common/service.h>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/compute/api.h>
 
@@ -106,13 +105,8 @@ protected:
         if (GetMemoryInFlightLimit() < (ui64)sizeInFlight && sizeInFlight != InFlightSize) {
             return ReplyError(Ydb::StatusIds::OVERLOADED, "a lot of memory in flight");
         }
-        if (NCSIndex::TServiceOperator::IsEnabled()) {
-            TBase::Send(
-                NCSIndex::MakeServiceId(TBase::SelfId().NodeId()), new NCSIndex::TEvAddData(accessor->GetDeserializedBatch(), DatabaseName, Path,
-                                                                       std::make_shared<NCSIndex::TNaiveDataUpsertController>(TBase::SelfId())));
-        } else {
-            IndexReady = true;
-        }
+
+        IndexReady = true;
 
         auto shardsSplitter = NEvWrite::IShardsSplitter::BuildSplitter(entry);
         if (!shardsSplitter) {
@@ -156,7 +150,6 @@ private:
         switch (ev->GetTypeRewrite()) {
             hFunc(NEvWrite::TWritersController::TEvPrivate::TEvShardsWriteResult, Handle);
             hFunc(TEvLongTxService::TEvAttachColumnShardWritesResult, Handle);
-            hFunc(NCSIndex::TEvAddDataResult, Handle);
         }
     }
 
@@ -194,21 +187,6 @@ private:
             ReplySuccess();
         } else {
             ColumnShardReady = true;
-        }
-    }
-
-    void Handle(NCSIndex::TEvAddDataResult::TPtr& ev) {
-        const auto* msg = ev->Get();
-        if (msg->GetErrorMessage()) {
-            NWilson::TProfileSpan pSpan(0, ActorSpan.GetTraceId(), "NCSIndex::TEvAddDataResult");
-            RaiseIssue(NYql::TIssue(msg->GetErrorMessage()));
-            return ReplyError(Ydb::StatusIds::GENERIC_ERROR, msg->GetErrorMessage());
-        } else {
-            if (ColumnShardReady) {
-                ReplySuccess();
-            } else {
-                IndexReady = true;
-            }
         }
     }
 

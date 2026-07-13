@@ -22,7 +22,7 @@ public:
         if (!slot->IsConnected) {
             SlotsToRemove.push_back(slot);
         } else {
-            YDB_LOG_WARN_CTX(ctx, "Repeat timeouted request",
+            YDB_LOG_WARN_CTX(ctx, "TTxCheckSlotStatus: repeat timed out configure request",
                 {"requestId", RequestId},
                 {"slotId", slot->IdString(true)});
             Self->SendConfigureSlot(slot, ctx);
@@ -47,8 +47,8 @@ public:
         }
 
         for (auto &slot : SlotsToRemove) {
-            YDB_LOG_DEBUG_CTX(ctx, "Removing slot due to connection timeout",
-                {"slotIdString", slot->IdString()});
+            YDB_LOG_DEBUG_CTX(ctx, "TTxCheckSlotStatus: removing slot due to connection timeout",
+                {"slotId", slot->IdString()});
             if (slot->AssignedTenant)
                 ReassignSlots = true;
             Self->RemoveSlot(slot, txc, ctx);

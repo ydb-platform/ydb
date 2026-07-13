@@ -55,11 +55,11 @@ public:
             Y_PROTOBUF_SUPPRESS_NODISCARD config.ParseFromArray(configString.data(), configString.size());
             Self->LoadConfigFromProto(config);
 
-            YDB_LOG_DEBUG_CTX(ctx, "Loaded",
-                {"configDebugString", config.DebugString()});
+            YDB_LOG_DEBUG_CTX(ctx, "TTxLoadState: loaded config",
+                {"config", config.DebugString()});
         } else {
             Self->LoadConfigFromProto(NKikimrTenantSlotBroker::TConfig());
-            YDB_LOG_DEBUG_CTX(ctx, "Using default config");
+            YDB_LOG_DEBUG_CTX(ctx, "TTxLoadState: using default config");
         }
 
         Self->ClearState();
@@ -76,8 +76,8 @@ public:
             auto count = tenantRowset.GetValue<Schema::RequiredSlots::Count>();
             tenant->AddSlotsAllocation(descr, count);
 
-            YDB_LOG_DEBUG_CTX(ctx, "Loaded required slots for tenant",
-                {"descr", descr},
+            YDB_LOG_DEBUG_CTX(ctx, "TTxLoadState: loaded required slots for tenant",
+                {"slotDescription", descr},
                 {"tenantName", tenantName});
 
             if (!tenantRowset.Next())
@@ -98,8 +98,8 @@ public:
             auto count = allocationRowset.GetValue<Schema::SlotsAllocations::Count>();
             tenant->AddSlotsAllocation(descr, count);
 
-            YDB_LOG_DEBUG_CTX(ctx, "Loaded required slots for tenant",
-                {"descr", descr},
+            YDB_LOG_DEBUG_CTX(ctx, "TTxLoadState: loaded required slots for tenant",
+                {"slotDescription", descr},
                 {"tenantName", tenantName});
 
             if (!allocationRowset.Next())
@@ -114,7 +114,7 @@ public:
             Y_ABORT_UNLESS(tenant);
             tenant->AddUnusedSlotLabel(label);
 
-            YDB_LOG_DEBUG_CTX(ctx, "Loaded slot label for tenant",
+            YDB_LOG_DEBUG_CTX(ctx, "TTxLoadState: loaded slot label for tenant",
                 {"label", label},
                 {"tenantName", tenantName});
 
@@ -160,7 +160,7 @@ public:
                 Self->AttachSlotNoConfigureNoDb(slot, tenant, usedAs, label);
             }
 
-            YDB_LOG_DEBUG_CTX(ctx, "Loaded",
+            YDB_LOG_DEBUG_CTX(ctx, "TTxLoadState: loaded slot",
                 {"slotId", slot->IdString(true)});
 
             if (!slotRowset.Next())
@@ -176,8 +176,8 @@ public:
 
         // Request node info to check slot's data center.
         for (auto &pr : Self->SlotsByNodeId) {
-            YDB_LOG_DEBUG_CTX(ctx, "Taking ownership of tenant pool on node",
-                {"key", pr.first});
+            YDB_LOG_DEBUG_CTX(ctx, "TTxLoadState: taking ownership of tenant pool on node",
+                {"nodeId", pr.first});
 
             ctx.Send(MakeTenantPoolID(pr.first), new TEvTenantPool::TEvTakeOwnership(Self->Generation()));
             ctx.Send(GetNameserviceActorId(), new TEvInterconnect::TEvGetNode(pr.first));

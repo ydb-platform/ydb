@@ -426,14 +426,14 @@ void TTenantSlotBroker::OnActivateExecutor(const TActorContext &ctx)
 
 void TTenantSlotBroker::OnDetach(const TActorContext &ctx)
 {
-    YDB_LOG_DEBUG_CTX(ctx, "OnDetach");
+    YDB_LOG_DEBUG_CTX(ctx, "TTenantSlotBroker::OnDetach");
     Die(ctx);
 }
 
 void TTenantSlotBroker::OnTabletDead(TEvTablet::TEvTabletDead::TPtr &,
                                      const TActorContext &ctx)
 {
-    YDB_LOG_INFO_CTX(ctx, "OnTabletDead",
+    YDB_LOG_INFO_CTX(ctx, "TTenantSlotBroker::OnTabletDead",
         {"tabletId", TabletID()});
 
     if (Counters)
@@ -607,7 +607,7 @@ bool TTenantSlotBroker::OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev,
 
 void TTenantSlotBroker::Cleanup(const TActorContext &ctx)
 {
-    YDB_LOG_DEBUG_CTX(ctx, "Cleanup");
+    YDB_LOG_DEBUG_CTX(ctx, "TTenantSlotBroker::Cleanup");
 
     NConsole::UnsubscribeViaConfigDispatcher(ctx, ctx.SelfID);
 }
@@ -680,7 +680,7 @@ void TTenantSlotBroker::MaybeRemoveTenant(TTenant::TPtr tenant)
     if (!tenant->CanBeRemoved())
         return;
 
-    YDB_LOG_DEBUG_CTX(TActorContext::AsActorContext(), "Remove tenant",
+    YDB_LOG_DEBUG_CTX(TActorContext::AsActorContext(), "TTenantSlotBroker::RemoveTenant: removed tenant",
         {"tenantName", tenant->Name});
     Tenants.erase(tenant->Name);
     *Counters->KnownTenants = Tenants.size();
@@ -754,7 +754,7 @@ void TTenantSlotBroker::AddSlot(TSlot::TPtr slot,
                                 TTransactionContext &txc,
                                 const TActorContext &ctx)
 {
-    YDB_LOG_DEBUG_CTX(ctx, "Added new",
+    YDB_LOG_DEBUG_CTX(ctx, "TTenantSlotBroker::AddSlot: added new slot",
         {"slotId", slot->IdString(true)});
 
     Y_ABORT_UNLESS(!slot->AssignedTenant);
@@ -801,7 +801,7 @@ bool TTenantSlotBroker::UpdateSlotDataCenter(TSlot::TPtr slot,
     if (slot->DataCenter == dataCenter)
         return false;
 
-    YDB_LOG_DEBUG_CTX(ctx, "Update data center",
+    YDB_LOG_DEBUG_CTX(ctx, "TTenantSlotBroker::UpdateSlotDataCenter: updated slot data center",
         {"dataCenter", dataCenter},
         {"slotId", slot->IdString(true)});
 
@@ -845,7 +845,7 @@ bool TTenantSlotBroker::UpdateSlotType(TSlot::TPtr slot,
     if (slot->Type == type)
         return false;
 
-    YDB_LOG_DEBUG_CTX(ctx, "Update type",
+    YDB_LOG_DEBUG_CTX(ctx, "TTenantSlotBroker::UpdateSlotType: updated slot type",
         {"type", type},
         {"slotId", slot->IdString(true)});
 
@@ -993,7 +993,7 @@ void TTenantSlotBroker::DetachSlot(TSlot::TPtr slot,
                                    const TActorContext &ctx,
                                    bool updateUnhappy)
 {
-    YDB_LOG_DEBUG_CTX(ctx, "Detach tenant",
+    YDB_LOG_DEBUG_CTX(ctx, "TTenantSlotBroker::DetachSlot: detached tenant from slot",
         {"slotId", slot->IdString(true)});
 
     DetachSlotNoConfigure(slot, txc, updateUnhappy);
@@ -1062,7 +1062,7 @@ void TTenantSlotBroker::AttachSlot(TSlot::TPtr slot,
                                    TTransactionContext &txc,
                                    const TActorContext &ctx)
 {
-    YDB_LOG_DEBUG_CTX(ctx, "Attach tenant",
+    YDB_LOG_DEBUG_CTX(ctx, "TTenantSlotBroker::AttachSlot: attached tenant to slot",
         {"tenantName", tenant->Name},
         {"slotId", slot->IdString(true)});
 
@@ -1374,10 +1374,10 @@ bool TTenantSlotBroker::AssignFreeSlotsForGroup(TTenant::TPtr tenant,
     // Instantly apply one if found.
     for (auto &dc : preferredDCs) {
         auto layout = ComputeLayoutForGroup(group, dc);
-        YDB_LOG_DEBUG_CTX(ctx, "Computed layout for group",
+        YDB_LOG_DEBUG_CTX(ctx, "TTenantSlotBroker::AssignFreeSlotsForGroup: computed layout for group",
             {"groupId", group->Id},
-            {"dc", dc},
-            {"layoutString", layout->ToString()});
+            {"dataCenter", dc},
+            {"layout", layout->ToString()});
         if (!layout->MissingCount && !layout->MisplacedCount && !layout->SplitCount) {
             group->SetPreferredDataCenter(dc);
             ApplyLayout(tenant, layout, txc, ctx);
@@ -1390,10 +1390,10 @@ bool TTenantSlotBroker::AssignFreeSlotsForGroup(TTenant::TPtr tenant,
     if (currentDC && !layouts.contains(currentDC)) {
         auto layout = ComputeLayoutForGroup(group, currentDC);
         layouts[currentDC] = layout;
-        YDB_LOG_DEBUG_CTX(ctx, "Computed layout for group",
+        YDB_LOG_DEBUG_CTX(ctx, "TTenantSlotBroker::AssignFreeSlotsForGroup: computed layout for group",
             {"groupId", group->Id},
-            {"currentDC", currentDC},
-            {"layoutString", layout->ToString()});
+            {"currentDataCenter", currentDC},
+            {"layout", layout->ToString()});
         if (!layout->MissingCount && !layout->MisplacedCount && !layout->SplitCount) {
             group->SetPreferredDataCenter(currentDC);
             ApplyLayout(tenant, layout, txc, ctx);
@@ -1405,16 +1405,16 @@ bool TTenantSlotBroker::AssignFreeSlotsForGroup(TTenant::TPtr tenant,
     for (auto &pr : FreeSlots.FreeSlotsByDataCenter) {
         if (!layouts.contains(pr.first)) {
             layouts[pr.first] = ComputeLayoutForGroup(group, pr.first);
-            YDB_LOG_DEBUG_CTX(ctx, "Computed layout for group",
+            YDB_LOG_DEBUG_CTX(ctx, "TTenantSlotBroker::AssignFreeSlotsForGroup: computed layout for group",
                 {"groupId", group->Id},
-                {"key", pr.first},
-                {"layoutString", layouts[pr.first]->ToString()});
+                {"dataCenter", pr.first},
+                {"layout", layouts[pr.first]->ToString()});
         }
     }
 
     // We expect at least one layout to be computed.
     if (layouts.empty())
-        YDB_LOG_ERROR_CTX(ctx, "AssignFreeSlotsForGroup: no computed layouts for group",
+        YDB_LOG_ERROR_CTX(ctx, "TTenantSlotBroker::AssignFreeSlotsForGroup: no computed layouts for group",
             {"groupId", group->Id});
 
     // Now choose the best layout and apply it if it is better than the
@@ -1423,17 +1423,17 @@ bool TTenantSlotBroker::AssignFreeSlotsForGroup(TTenant::TPtr tenant,
     double bestPenalty = ComputeLayoutPenalty(required, currentMissing, currentMisplaced,
                                               currentSplit, 0);
 
-    YDB_LOG_DEBUG_CTX(ctx, "Current layout in has penalty",
-        {"currentDC", currentDC},
-        {"bestPenalty", bestPenalty});
+    YDB_LOG_DEBUG_CTX(ctx, "TTenantSlotBroker::AssignFreeSlotsForGroup: current layout has penalty",
+        {"currentDataCenter", currentDC},
+        {"penalty", bestPenalty});
 
     for (auto it = layouts.begin(); it != layouts.end(); ++it) {
         auto layout = it->second;
         auto penalty = ComputeLayoutPenalty(required, layout->MissingCount, layout->MisplacedCount,
                                             layout->SplitCount, layout->DetachCount);
 
-        YDB_LOG_DEBUG_CTX(ctx, "Layout in has penalty",
-            {"key", it->first},
+        YDB_LOG_DEBUG_CTX(ctx, "TTenantSlotBroker::AssignFreeSlotsForGroup: candidate layout has penalty",
+            {"dataCenter", it->first},
             {"penalty", penalty});
 
         if (bestPenalty > penalty) {
@@ -1443,14 +1443,14 @@ bool TTenantSlotBroker::AssignFreeSlotsForGroup(TTenant::TPtr tenant,
     }
 
     if (best != layouts.end()) {
-        YDB_LOG_DEBUG_CTX(ctx, "Layout in was chosen",
-            {"bestKey", best->first});
+        YDB_LOG_DEBUG_CTX(ctx, "TTenantSlotBroker::AssignFreeSlotsForGroup: layout chosen",
+            {"dataCenter", best->first});
         if (best->first != currentDC)
             group->SetPreferredDataCenter(best->first);
         ApplyLayout(tenant, best->second, txc, ctx);
         return true;
     } else {
-        YDB_LOG_DEBUG_CTX(ctx, "Better layout was not found");
+        YDB_LOG_DEBUG_CTX(ctx, "TTenantSlotBroker::AssignFreeSlotsForGroup: better layout not found");
     }
 
     return false;
@@ -1461,7 +1461,7 @@ void TTenantSlotBroker::OnClientDisconnected(TActorId clientId,
 {
     if (KnownPoolPipes.contains(clientId)) {
         ui32 nodeId = clientId.NodeId();
-        YDB_LOG_DEBUG_CTX(ctx, "Pipe disconnected from pool on node",
+        YDB_LOG_DEBUG_CTX(ctx, "TTenantSlotBroker::DisconnectNodeSlots: pipe disconnected from pool on node",
             {"nodeId", nodeId});
 
         // Same dynamic node may be allocated in another data center next time.
@@ -1485,8 +1485,8 @@ void TTenantSlotBroker::DisconnectNodeSlots(ui32 nodeId,
 
     for (auto &slot : it->second) {
         if (slot->IsConnected) {
-            YDB_LOG_DEBUG_CTX(ctx, "Mark slot as disconnected",
-                {"slotIdString", slot->IdString()});
+            YDB_LOG_DEBUG_CTX(ctx, "TTenantSlotBroker::DisconnectNodeSlots: marked slot as disconnected",
+                {"slotId", slot->IdString()});
 
             if (slot->IsFree()) {
                 FreeSlots.Remove(slot);
@@ -1518,7 +1518,7 @@ void TTenantSlotBroker::SendConfigureSlot(TSlot::TPtr slot,
     }
     slot->LastRequestId = RequestId++;
 
-    YDB_LOG_DEBUG_CTX(ctx, "Send configuration request",
+    YDB_LOG_DEBUG_CTX(ctx, "TTenantSlotBroker::SendConfigureSlot: send configuration request",
         {"lastRequestId", slot->LastRequestId},
         {"slotId", slot->IdString(true)});
 
@@ -1638,16 +1638,16 @@ void TTenantSlotBroker::Handle(TEvConsole::TEvReplaceConfigSubscriptionsResponse
 {
     auto &rec = ev->Get()->Record;
     if (rec.GetStatus().GetCode() != Ydb::StatusIds::SUCCESS) {
-        YDB_LOG_ERROR_CTX(ctx, "Cannot subscribe for config",
-            {"updates", rec.GetStatus().GetCode()},
+        YDB_LOG_ERROR_CTX(ctx, "TTenantSlotBroker::Handle TEvConsole::TEvReplaceConfigSubscriptionsResponse: cannot subscribe for config",
+            {"statusCode", rec.GetStatus().GetCode()},
             {"statusReason", rec.GetStatus().GetReason()});
         return;
     }
 
     ConfigSubscriptionId = rec.GetSubscriptionId();
 
-    YDB_LOG_DEBUG_CTX(ctx, "Got config subscription",
-        {"id", ConfigSubscriptionId});
+    YDB_LOG_DEBUG_CTX(ctx, "TTenantSlotBroker::Handle TEvConsole::TEvReplaceConfigSubscriptionsResponse: got config subscription",
+        {"subscriptionId", ConfigSubscriptionId});
 }
 
 void TTenantSlotBroker::Handle(TEvents::TEvUndelivered::TPtr &ev,
@@ -1683,12 +1683,12 @@ void TTenantSlotBroker::Handle(TEvTenantPool::TEvLostOwnership::TPtr &ev,
                                const TActorContext &ctx)
 {
     ui32 nodeId = ev->Sender.NodeId();
-    YDB_LOG_CRIT_CTX(ctx, "Tenant pool ownership is lost on node",
+    YDB_LOG_CRIT_CTX(ctx, "TTenantSlotBroker::Handle TEvTenantPool::TEvLostOwnership: tenant pool ownership lost on node",
         {"nodeId", nodeId});
 
     DisconnectNodeSlots(nodeId, ctx);
 
-    YDB_LOG_DEBUG_CTX(ctx, "Re-taking ownership of tenant pool on node",
+    YDB_LOG_DEBUG_CTX(ctx, "TTenantSlotBroker::Handle TEvTenantPool::TEvLostOwnership: re-taking ownership of tenant pool on node",
         {"nodeId", nodeId});
 
     ctx.Send(MakeTenantPoolID(nodeId), new TEvTenantPool::TEvTakeOwnership(Generation()));
@@ -1737,7 +1737,7 @@ void TTenantSlotBroker::Handle(TEvTenantSlotBroker::TEvGetSlotStats::TPtr &ev,
     auto resp = MakeHolder<TEvTenantSlotBroker::TEvSlotStats>();
     Counters->FillSlotStats(resp->Record);
 
-    YDB_LOG_TRACE_CTX(ctx, "Send",
+    YDB_LOG_TRACE_CTX(ctx, "TTenantSlotBroker::Handle TEvTenantSlotBroker::TEvGetSlotStats: send TEvSlotStats",
         {"slotStats", resp->ToString()});
 
     ctx.Send(ev->Sender, resp.Release(), 0, ev->Cookie);
@@ -1749,7 +1749,7 @@ void TTenantSlotBroker::Handle(TEvTenantSlotBroker::TEvGetTenantState::TPtr &ev,
     auto resp = MakeHolder<TEvTenantSlotBroker::TEvTenantState>();
     FillTenantState(ev->Get()->Record.GetTenantName(), resp->Record);
 
-    YDB_LOG_TRACE_CTX(ctx, "Send",
+    YDB_LOG_TRACE_CTX(ctx, "TTenantSlotBroker::Handle TEvTenantSlotBroker::TEvGetTenantState: send TEvTenantState",
         {"tenantState", resp->ToString()});
 
     ctx.Send(ev->Sender, resp.Release());

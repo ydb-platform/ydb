@@ -24,7 +24,7 @@ public:
         const auto& rec = Event->Get()->Record;
         const auto nodeId = rec.GetNodeId();
 
-        YDB_LOG_DEBUG_CTX(ctx, "TTxGracefulShutdown Execute. Graceful Shutdown request",
+        YDB_LOG_DEBUG_CTX(ctx, "TTxGracefulShutdown Execute: graceful shutdown request",
             {"nodeId", nodeId});
 
         Response = MakeHolder<TEvNodeBroker::TEvGracefulShutdownResponse>();

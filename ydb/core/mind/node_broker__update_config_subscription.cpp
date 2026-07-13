@@ -39,8 +39,8 @@ public:
     {
         YDB_LOG_DEBUG_CTX(ctx, "TTxUpdateConfigSubscription Complete");
 
-        YDB_LOG_DEBUG_CTX(ctx, "Using new subscription",
-            {"id", SubscriptionId});
+        YDB_LOG_DEBUG_CTX(ctx, "TTxUpdateConfigSubscription: using new config subscription",
+            {"subscriptionId", SubscriptionId});
 
         Self->Committed.ConfigSubscriptionId = SubscriptionId;
 

@@ -47,7 +47,7 @@ public:
 
     void Bootstrap(const TActorContext &ctx)
     {
-        YDB_LOG_DEBUG_CTX(ctx, "Bootstrap");
+        YDB_LOG_DEBUG_CTX(ctx, "TLabelsMaintainer::Bootstrap");
 
         Send(MakeTenantPoolRootID(), new TEvents::TEvSubscribe);
         SubscribeForConfig(ctx);
@@ -153,14 +153,14 @@ private:
     {
         auto root = AppData(ctx)->Counters;
         for (auto &service : DatabaseSensorServices) {
-            YDB_LOG_DEBUG_CTX(ctx, "Reset counters",
+            YDB_LOG_DEBUG_CTX(ctx, "TLabelsMaintainer::ResetDerivCounters: reset database sensor counters",
                 {"service", service.data()});
 
             auto serviceGroup = GetServiceCounters(root, service);
             serviceGroup->ResetCounters(true);
         }
         for (auto &service : DatabaseAttributeSensorServices) {
-            YDB_LOG_DEBUG_CTX(ctx, "Reset counters",
+            YDB_LOG_DEBUG_CTX(ctx, "TLabelsMaintainer::ResetDerivCounters: reset database attribute sensor counters",
                 {"service", service.data()});
 
             auto serviceGroup = GetServiceCounters(root, service);
@@ -172,7 +172,7 @@ private:
     {
         auto root = AppData(ctx)->Counters;
         for (auto &service : AllSensorServices) {
-            YDB_LOG_DEBUG_CTX(ctx, "Removing database labels from counters",
+            YDB_LOG_DEBUG_CTX(ctx, "TLabelsMaintainer::RemoveLabels: removing database labels from counters",
                 {"service", service});
 
             ReplaceSubgroup(root, service);
@@ -345,15 +345,15 @@ private:
     {
         auto &rec = ev->Get()->Record;
 
-        YDB_LOG_INFO_CTX(ctx, "Got new",
-            {"config", rec.GetConfig()});
+        YDB_LOG_INFO_CTX(ctx, "TLabelsMaintainer::Handle TEvConsole::TEvConfigNotificationRequest: received monitoring config",
+            {"monitoringConfig", rec.GetConfig()});
 
         ApplyConfig(rec.GetConfig().GetMonitoringConfig(), ctx);
 
         auto resp = MakeHolder<TEvConsole::TEvConfigNotificationResponse>(rec);
 
-        YDB_LOG_TRACE_CTX(ctx, "Send",
-            {"TEvConfigNotificationResponse", resp->Record});
+        YDB_LOG_TRACE_CTX(ctx, "TLabelsMaintainer::Handle TEvConsole::TEvConfigNotificationRequest: send config notification response",
+            {"response", resp->Record});
 
         ctx.Send(ev->Sender, resp.Release(), 0, ev->Cookie);
     }
@@ -363,8 +363,8 @@ private:
     {
         CurrentStatus.CopyFrom(ev->Get()->Record);
 
-        YDB_LOG_INFO_CTX(ctx, "Got new pool",
-            {"status", CurrentStatus});
+        YDB_LOG_INFO_CTX(ctx, "TLabelsMaintainer::Handle TEvTenantPool::TEvTenantPoolStatus: received tenant pool status",
+            {"tenantPoolStatus", CurrentStatus});
 
         UpdateDatabaseLabels(ctx);
     }

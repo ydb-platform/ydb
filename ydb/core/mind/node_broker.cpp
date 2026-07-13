@@ -126,7 +126,7 @@ void TNodeBroker::OnTabletDead(TEvTablet::TEvTabletDead::TPtr &ev,
 {
     Y_UNUSED(ev);
 
-    YDB_LOG_INFO_CTX(ctx, "OnTabletDead",
+    YDB_LOG_INFO_CTX(ctx, "TNodeBroker::OnTabletDead",
         {"tabletId", TabletID()});
 
     Die(ctx);
@@ -243,9 +243,9 @@ void TNodeBroker::TState::UpdateLocation(TNodeInfo &node, const TNodeLocation &l
     node.Version = Epoch.Version + 1;
     node.Location = location;
 
-    YDB_LOG_DEBUG_CTX(TActorContext::AsActorContext(), "Updated location of",
+    YDB_LOG_DEBUG_CTX(TActorContext::AsActorContext(), "TNodeBroker::UpdateLocation: updated node location",
         {"logPrefix", LogPrefix()},
-        {"nodeIdString", node.IdString()},
+        {"nodeId", node.IdString()},
         {"location", node.Location});
 }
 
@@ -268,9 +268,9 @@ TNodeBroker::TNodeInfo* TNodeBroker::TState::FindNode(ui32 nodeId)
 
 void TNodeBroker::TState::RegisterNewNode(const TNodeInfo &info)
 {
-    YDB_LOG_DEBUG_CTX(TActorContext::AsActorContext(), "Register new active node",
+    YDB_LOG_DEBUG_CTX(TActorContext::AsActorContext(), "TNodeBroker::RegisterNewNode: registered new active node",
         {"logPrefix", LogPrefix()},
-        {"infoIdString", info.IdString()});
+        {"nodeId", info.IdString()});
 
     FreeIds.Reset(info.NodeId);
     if (info.SlotIndex.has_value()) {
@@ -286,9 +286,9 @@ void TNodeBroker::TState::AddNode(const TNodeInfo &info)
 {
     switch (info.State) {
         case ENodeState::Active:
-            YDB_LOG_DEBUG_CTX(TActorContext::AsActorContext(), "Added node",
+            YDB_LOG_DEBUG_CTX(TActorContext::AsActorContext(), "TNodeBroker::AddNode: added active node",
                 {"logPrefix", LogPrefix()},
-                {"infoIdString", info.IdString()});
+                {"nodeId", info.IdString()});
             FreeIds.Reset(info.NodeId);
             if (info.SlotIndex.has_value()) {
                 SlotIndexesPools[info.ServicedSubDomain].Acquire(info.SlotIndex.value());
@@ -297,9 +297,9 @@ void TNodeBroker::TState::AddNode(const TNodeInfo &info)
             Nodes.emplace(info.NodeId, info);
             break;
         case ENodeState::Expired:
-            YDB_LOG_DEBUG_CTX(TActorContext::AsActorContext(), "Added expired node",
+            YDB_LOG_DEBUG_CTX(TActorContext::AsActorContext(), "TNodeBroker::AddNode: added expired node",
                 {"logPrefix", LogPrefix()},
-                {"infoIdString", info.IdString()});
+                {"nodeId", info.IdString()});
             FreeIds.Reset(info.NodeId);
             if (info.SlotIndex.has_value()) {
                 SlotIndexesPools[info.ServicedSubDomain].Acquire(info.SlotIndex.value());
@@ -307,9 +307,9 @@ void TNodeBroker::TState::AddNode(const TNodeInfo &info)
             ExpiredNodes.emplace(info.NodeId, info);
             break;
         case ENodeState::Removed:
-            YDB_LOG_DEBUG_CTX(TActorContext::AsActorContext(), "Added removed node",
+            YDB_LOG_DEBUG_CTX(TActorContext::AsActorContext(), "TNodeBroker::AddNode: added removed node",
                 {"logPrefix", LogPrefix()},
-                {"infoIdShortString", info.IdShortString()});
+                {"nodeId", info.IdShortString()});
             RemovedNodes.emplace(info.NodeId, info);
             break;
     }
@@ -331,11 +331,11 @@ void TNodeBroker::TState::ExtendLease(TNodeInfo &node)
     node.AliveUntil = Epoch.NextEnd;
     node.Liveness = ENodeLiveness::Alive;
 
-    YDB_LOG_DEBUG_CTX(TActorContext::AsActorContext(), "Extended lease",
+    YDB_LOG_DEBUG_CTX(TActorContext::AsActorContext(), "TNodeBroker::ExtendLease: extended node lease",
         {"logPrefix", LogPrefix()},
-        {"nodeIdString", node.IdString()},
-        {"v1", node.ExpirationString()},
-        {"v1", node.ExpirationV2String()},
+        {"nodeId", node.IdString()},
+        {"expire", node.ExpirationString()},
+        {"expireV2", node.ExpirationV2String()},
         {"lease", node.Lease});
 }
 
@@ -350,9 +350,9 @@ void TNodeBroker::TState::FixNodeId(TNodeInfo &node)
     node.AliveUntil = TInstant::Max();
     node.Liveness = ENodeLiveness::Alive;
 
-    YDB_LOG_DEBUG_CTX(TActorContext::AsActorContext(), "Fix ID for node",
+    YDB_LOG_DEBUG_CTX(TActorContext::AsActorContext(), "TNodeBroker::FixNodeId: fixed node ID",
         {"logPrefix", LogPrefix()},
-        {"nodeIdString", node.IdString()});
+        {"nodeId", node.IdString()});
 }
 
 void TNodeBroker::TState::RecomputeFreeIds()
@@ -402,7 +402,7 @@ void TNodeBroker::AddDelayedListNodesRequest(ui64 epoch,
                                              TEvNodeBroker::TEvListNodes::TPtr &ev)
 {
     Y_ABORT_UNLESS(epoch > Committed.Epoch.Id);
-    YDB_LOG_DEBUG_CTX(TActorContext::AsActorContext(), "Delaying list nodes request",
+    YDB_LOG_DEBUG_CTX(TActorContext::AsActorContext(), "TNodeBroker::AddDelayedListNodesRequest: delaying list nodes request",
         {"epoch", epoch});
 
     DelayedListNodesRequests.emplace(epoch, ev);
@@ -450,7 +450,7 @@ void TNodeBroker::ProcessListNodesRequest(TEvNodeBroker::TEvListNodes::TPtr &ev)
     }
 
     TabletCounters->Percentile()[COUNTER_LIST_NODES_BYTES].IncrementFor(resp->GetCachedByteSize());
-    YDB_LOG_TRACE_CTX(TActorContext::AsActorContext(), "Send TEvNodesInfo for epoch",
+    YDB_LOG_TRACE_CTX(TActorContext::AsActorContext(), "TNodeBroker::ProcessListNodesRequest: send TEvNodesInfo",
         {"epoch", Committed.Epoch});
 
     Send(ev->Sender, resp.Release());
@@ -483,7 +483,7 @@ void TNodeBroker::ScheduleEpochUpdate(const TActorContext &ctx)
         CreateLongTimer(ctx, Committed.Epoch.End - now, ev, AppData(ctx)->SystemPoolId,
                         EpochTimerCookieHolder.Get());
 
-        YDB_LOG_TRACE_CTX(ctx, "Scheduled epoch update",
+        YDB_LOG_TRACE_CTX(ctx, "TNodeBroker::ScheduleEpochUpdate: scheduled epoch update",
             {"epochEnd", Committed.Epoch.End});
     }
 }
@@ -554,9 +554,9 @@ void TNodeBroker::TState::ApplyStateDiff(const TStateDiff &diff)
         auto it = Nodes.find(id);
         Y_ABORT_UNLESS(it != Nodes.end());
 
-        YDB_LOG_DEBUG_CTX(TActorContext::AsActorContext(), "Node has expired",
+        YDB_LOG_DEBUG_CTX(TActorContext::AsActorContext(), "TNodeBroker::RemoveExpiredNodes: node has expired",
             {"logPrefix", LogPrefix()},
-            {"nodeIdString", it->second.IdString()});
+            {"nodeId", it->second.IdString()});
 
         Hosts.erase(std::make_tuple(it->second.Host, it->second.Address, it->second.Port));
         it->second.State = ENodeState::Expired;
@@ -580,9 +580,9 @@ void TNodeBroker::TState::ApplyStateDiff(const TStateDiff &diff)
         auto it = ExpiredNodes.find(id);
         Y_ABORT_UNLESS(it != ExpiredNodes.end());
 
-        YDB_LOG_DEBUG_CTX(TActorContext::AsActorContext(), "Remove node",
+        YDB_LOG_DEBUG_CTX(TActorContext::AsActorContext(), "TNodeBroker::RemoveNode: removed node",
             {"logPrefix", LogPrefix()},
-            {"nodeIdString", it->second.IdString()});
+            {"nodeId", it->second.IdString()});
 
         if (!IsBannedId(id) && id >= Self->MinDynamicId && id <= Self->MaxDynamicId) {
             FreeIds.Set(id);
@@ -592,7 +592,7 @@ void TNodeBroker::TState::ApplyStateDiff(const TStateDiff &diff)
         ExpiredNodes.erase(it);
     }
 
-    YDB_LOG_DEBUG_CTX(TActorContext::AsActorContext(), "Move to new epoch approximate epoch start",
+    YDB_LOG_DEBUG_CTX(TActorContext::AsActorContext(), "TNodeBroker::ApplyStateDiff: moved to new epoch",
         {"logPrefix", LogPrefix()},
         {"newEpoch", diff.NewEpoch},
         {"newApproxEpochStart", diff.NewApproxEpochStart});
@@ -603,7 +603,7 @@ void TNodeBroker::TState::ApplyStateDiff(const TStateDiff &diff)
 
 void TNodeBroker::TState::UpdateEpochVersion()
 {
-    YDB_LOG_DEBUG_CTX(TActorContext::AsActorContext(), "Update current epoch version",
+    YDB_LOG_DEBUG_CTX(TActorContext::AsActorContext(), "TNodeBroker::UpdateEpochVersion: updated epoch version",
         {"logPrefix", LogPrefix()},
         {"epochVersion", Epoch.Version},
         {"nextEpochVersion", Epoch.Version + 1});
@@ -613,7 +613,7 @@ void TNodeBroker::TState::UpdateEpochVersion()
 
 void TNodeBroker::PrepareEpochCache()
 {
-    YDB_LOG_DEBUG_CTX(TActorContext::AsActorContext(), "Preparing nodes list cache for epoch approximate epoch start",
+    YDB_LOG_DEBUG_CTX(TActorContext::AsActorContext(), "TNodeBroker::PrepareEpochCache: preparing nodes list cache",
         {"epoch", Committed.Epoch},
         {"approxEpochStart", Committed.ApproxEpochStart},
         {"nodes", Committed.Nodes.size()},
@@ -654,7 +654,7 @@ void TNodeBroker::PrepareEpochCache()
 
 void TNodeBroker::PrepareUpdateNodesLog()
 {
-    YDB_LOG_DEBUG_CTX(TActorContext::AsActorContext(), "Preparing update nodes log",
+    YDB_LOG_DEBUG_CTX(TActorContext::AsActorContext(), "TNodeBroker::PrepareUpdateNodesLog: preparing update nodes log",
         {"epoch", Committed.Epoch},
         {"nodes", Committed.Nodes.size()},
         {"expired", Committed.ExpiredNodes.size()},
@@ -684,8 +684,8 @@ void TNodeBroker::PrepareUpdateNodesLog()
 
 void TNodeBroker::AddNodeToEpochCache(const TNodeInfo &node)
 {
-    YDB_LOG_DEBUG_CTX(TActorContext::AsActorContext(), "Add node to epoch cache",
-        {"nodeIdString", node.IdString()});
+    YDB_LOG_DEBUG_CTX(TActorContext::AsActorContext(), "TNodeBroker::AddNodeToEpochCache: added node to epoch cache",
+        {"nodeId", node.IdString()});
 
     NKikimrNodeBroker::TNodesInfo info;
     FillNodeInfo(node, *info.AddNodes());
@@ -713,8 +713,8 @@ void TNodeBroker::AddDeltaToEpochDeltasCache(const TString &delta, ui64 version)
 
 void TNodeBroker::AddNodeToUpdateNodesLog(const TNodeInfo &node)
 {
-    YDB_LOG_DEBUG_CTX(TActorContext::AsActorContext(), "Add node to update nodes log",
-        {"nodeIdShortString", node.IdShortString()});
+    YDB_LOG_DEBUG_CTX(TActorContext::AsActorContext(), "TNodeBroker::AddNodeToUpdateNodesLog: added node to update nodes log",
+        {"nodeId", node.IdShortString()});
 
     NKikimrNodeBroker::TUpdateNodes updateNodes;
 
@@ -783,7 +783,7 @@ void TNodeBroker::SendUpdateNodes(TSubscriberInfo &subscriber, const TActorConte
     }
 
     TabletCounters->Percentile()[COUNTER_UPDATE_NODES_BYTES].IncrementFor(response->GetCachedByteSize());
-    YDB_LOG_TRACE_CTX(ctx, "Send TEvUpdateNodes v -> v",
+    YDB_LOG_TRACE_CTX(ctx, "TNodeBroker::SendUpdateNodes: send TEvUpdateNodes",
         {"sentVersion", subscriber.SentVersion},
         {"committedEpochVersion", Committed.Epoch.Version},
         {"subscriberId", subscriber.Id});
@@ -799,11 +799,11 @@ TNodeBroker::TSubscriberInfo& TNodeBroker::AddSubscriber(TActorId subscriberId,
                                                          ui64 version,
                                                          const TActorContext &ctx)
 {
-    YDB_LOG_DEBUG_CTX(ctx, "New subscriber server pipe",
+    YDB_LOG_DEBUG_CTX(ctx, "TNodeBroker::AddSubscriber: new subscriber server pipe",
         {"subscriberId", subscriberId},
         {"seqNo", seqNo},
         {"version", version},
-        {"id", pipeServerId});
+        {"pipeServerId", pipeServerId});
 
     auto& pipeServer = PipeServers.at(pipeServerId);
     auto res = Subscribers.emplace(
@@ -821,10 +821,10 @@ void TNodeBroker::RemoveSubscriber(TActorId subscriber, const TActorContext &ctx
     auto it = Subscribers.find(subscriber);
     Y_ENSURE(it != Subscribers.end(), "No subscription for " << subscriber);
 
-    YDB_LOG_DEBUG_CTX(ctx, "Unsubscribed server pipe",
-        {"subscriber", subscriber},
+    YDB_LOG_DEBUG_CTX(ctx, "TNodeBroker::RemoveSubscriber: unsubscribed server pipe",
+        {"subscriberId", subscriber},
         {"seqNo", it->second.SeqNo},
-        {"id", it->second.PipeServerInfo->Id});
+        {"pipeServerId", it->second.PipeServerInfo->Id});
 
     it->second.PipeServerInfo->Subscribers.erase(subscriber);
     SubscribersQueue.Remove(&it->second);
@@ -852,7 +852,7 @@ void TNodeBroker::TState::LoadConfigFromProto(const NKikimrNodeBroker::TConfig &
 
     EpochDuration = TDuration::MicroSeconds(config.GetEpochDuration());
     if (EpochDuration < MIN_LEASE_DURATION) {
-        YDB_LOG_ERROR_CTX(TActorContext::AsActorContext(), "Configured epoch duration is too small",
+        YDB_LOG_ERROR_CTX(TActorContext::AsActorContext(), "TNodeBroker::LoadConfigFromProto: configured epoch duration is too small",
             {"logPrefix", LogPrefix()},
             {"epochDuration", EpochDuration},
             {"minValue", MIN_LEASE_DURATION});
@@ -901,9 +901,9 @@ void TNodeBroker::TDirtyState::DbUpdateNode(ui32 nodeId, TTransactionContext &tx
 
 void TNodeBroker::TDirtyState::DbRemoveNode(const TNodeInfo &node, TTransactionContext &txc)
 {
-    YDB_LOG_DEBUG_CTX(TActorContext::AsActorContext(), "Removing node from database",
+    YDB_LOG_DEBUG_CTX(TActorContext::AsActorContext(), "TNodeBroker::DbRemoveNode: removing node from database",
         {"dbLogPrefix", DbLogPrefix()},
-        {"nodeIdShortString", node.IdShortString()});
+        {"nodeId", node.IdShortString()});
 
     NIceDb::TNiceDb db(txc.DB);
     db.Table<Schema::NodesV2>().Key(node.NodeId)
@@ -918,9 +918,9 @@ void TNodeBroker::TDirtyState::DbRemoveNode(const TNodeInfo &node, TTransactionC
 void TNodeBroker::TDirtyState::DbAddNode(const TNodeInfo &node,
                             TTransactionContext &txc)
 {
-    YDB_LOG_DEBUG_CTX(TActorContext::AsActorContext(), "Adding node to database",
+    YDB_LOG_DEBUG_CTX(TActorContext::AsActorContext(), "TNodeBroker::DbAddNode: adding node to database",
         {"dbLogPrefix", DbLogPrefix()},
-        {"nodeIdString", node.IdString()},
+        {"nodeId", node.IdString()},
         {"state", node.State},
         {"resolveHost", node.ResolveHost},
         {"address", node.Address},
@@ -979,9 +979,9 @@ void TNodeBroker::TDirtyState::DbApplyStateDiff(const TStateDiff &diff,
 void TNodeBroker::TDirtyState::DbFixNodeId(const TNodeInfo &node,
                               TTransactionContext &txc)
 {
-    YDB_LOG_DEBUG_CTX(TActorContext::AsActorContext(), "Fix ID in database",
+    YDB_LOG_DEBUG_CTX(TActorContext::AsActorContext(), "TNodeBroker::DbFixNodeId: fixed node ID in database",
         {"dbLogPrefix", DbLogPrefix()},
-        {"node", node.IdString()});
+        {"nodeId", node.IdString()});
 
     NIceDb::TNiceDb db(txc.DB);
     db.Table<Schema::Nodes>().Key(node.NodeId)
@@ -1037,11 +1037,11 @@ TNodeBroker::TDbChanges TNodeBroker::TDirtyState::DbLoadState(TTransactionContex
         Y_PROTOBUF_SUPPRESS_NODISCARD config.ParseFromArray(configString.data(), configString.size());
         LoadConfigFromProto(config);
 
-        YDB_LOG_DEBUG_CTX(ctx, "Loaded",
+        YDB_LOG_DEBUG_CTX(ctx, "TNodeBroker::DbLoadState: loaded config",
             {"dbLogPrefix", DbLogPrefix()},
             {"configDebugString", config.DebugString()});
     } else {
-        YDB_LOG_DEBUG_CTX(ctx, "Using default config",
+        YDB_LOG_DEBUG_CTX(ctx, "TNodeBroker::DbLoadState: using default config",
             {"dbLogPrefix", DbLogPrefix()});
 
         LoadConfigFromProto(NKikimrNodeBroker::TConfig());
@@ -1050,9 +1050,9 @@ TNodeBroker::TDbChanges TNodeBroker::TDirtyState::DbLoadState(TTransactionContex
     if (subscriptionRow.IsValid()) {
         ConfigSubscriptionId = subscriptionRow.GetValue<Schema::Params::Value>();
 
-        YDB_LOG_DEBUG_CTX(ctx, "Loaded config",
+        YDB_LOG_DEBUG_CTX(ctx, "TNodeBroker::DbLoadState: loaded config subscription",
             {"dbLogPrefix", DbLogPrefix()},
-            {"subscription", ConfigSubscriptionId});
+            {"subscriptionId", ConfigSubscriptionId});
     }
 
     TDbChanges dbChanges;
@@ -1069,7 +1069,7 @@ TNodeBroker::TDbChanges TNodeBroker::TDirtyState::DbLoadState(TTransactionContex
         Epoch.End = TInstant::FromValue(currentEpochEndRow.GetValue<Schema::Params::Value>());
         Epoch.NextEnd = TInstant::FromValue(nextEpochEndRow.GetValue<Schema::Params::Value>());
 
-        YDB_LOG_DEBUG_CTX(ctx, "Loaded",
+        YDB_LOG_DEBUG_CTX(ctx, "TNodeBroker::DbLoadState: loaded current epoch",
             {"dbLogPrefix", DbLogPrefix()},
             {"currentEpoch", Epoch});
     } else {
@@ -1080,7 +1080,7 @@ TNodeBroker::TDbChanges TNodeBroker::TDirtyState::DbLoadState(TTransactionContex
         Epoch.End = Epoch.Start + EpochDuration;
         Epoch.NextEnd = Epoch.End + EpochDuration;
 
-        YDB_LOG_DEBUG_CTX(ctx, "Starting the",
+        YDB_LOG_DEBUG_CTX(ctx, "TNodeBroker::DbLoadState: starting first epoch",
             {"dbLogPrefix", DbLogPrefix()},
             {"firstEpoch", Epoch});
 
@@ -1095,23 +1095,23 @@ TNodeBroker::TDbChanges TNodeBroker::TDirtyState::DbLoadState(TTransactionContex
             ApproxEpochStart.Id = Epoch.Id;
             ApproxEpochStart.Version = Epoch.Version;
 
-            YDB_LOG_DEBUG_CTX(ctx, "Approximate epoch start is",
+            YDB_LOG_DEBUG_CTX(ctx, "TNodeBroker::DbLoadState: approximate epoch start changed",
                 {"dbLogPrefix", DbLogPrefix()},
-                {"changed", ApproxEpochStart});
+                {"approxEpochStart", ApproxEpochStart});
 
             dbChanges.UpdateApproxEpochStart = true;
         } else {
-            YDB_LOG_DEBUG_CTX(ctx, "Loaded approximate epoch",
+            YDB_LOG_DEBUG_CTX(ctx, "TNodeBroker::DbLoadState: loaded approximate epoch start",
                 {"dbLogPrefix", DbLogPrefix()},
-                {"start", ApproxEpochStart});
+                {"approxEpochStart", ApproxEpochStart});
         }
     } else {
         ApproxEpochStart.Id = Epoch.Id;
         ApproxEpochStart.Version = Epoch.Version;
 
-        YDB_LOG_DEBUG_CTX(ctx, "Loaded the first approximate epoch",
+        YDB_LOG_DEBUG_CTX(ctx, "TNodeBroker::DbLoadState: loaded first approximate epoch start",
             {"dbLogPrefix", DbLogPrefix()},
-            {"start", ApproxEpochStart});
+            {"approxEpochStart", ApproxEpochStart});
 
         dbChanges.UpdateApproxEpochStart = true;
     }
@@ -1120,9 +1120,9 @@ TNodeBroker::TDbChanges TNodeBroker::TDirtyState::DbLoadState(TTransactionContex
     if (mainNodesTableRow.IsValid()) {
         mainNodesTable = static_cast<Schema::EMainNodesTable>(mainNodesTableRow.GetValue<Schema::Params::Value>());
 
-        YDB_LOG_NOTICE_CTX(ctx, "Loaded main nodes",
+        YDB_LOG_NOTICE_CTX(ctx, "TNodeBroker::DbLoadState: loaded main nodes table",
             {"dbLogPrefix", DbLogPrefix()},
-            {"table", mainNodesTable});
+            {"mainNodesTable", mainNodesTable});
     }
 
     if (!mainNodesTableRow.IsValid() || mainNodesTable != Schema::EMainNodesTable::Nodes) {
@@ -1164,9 +1164,9 @@ TNodeBroker::TDbChanges TNodeBroker::TDirtyState::DbLoadNodes(auto &nodesRowset,
         // should still support nodes that have been registered before we
         // restarted, even though it's not available for allocation.
         if (id <= Self->MaxStaticId || id > Self->MaxDynamicId) {
-            YDB_LOG_ERROR_CTX(ctx, "Removing node with wrong ID not in range",
+            YDB_LOG_ERROR_CTX(ctx, "TNodeBroker::DbLoadState: removing node with wrong ID not in range",
                 {"dbLogPrefix", DbLogPrefix()},
-                {"id", id},
+                {"nodeId", id},
                 {"maxStaticId", Self->MaxStaticId},
                 {"maxDynamicId", Self->MaxDynamicId});
             toRemove.push_back(id);
@@ -1214,9 +1214,9 @@ TNodeBroker::TDbChanges TNodeBroker::TDirtyState::DbLoadNodes(auto &nodesRowset,
             }
             AddNode(info);
 
-            YDB_LOG_DEBUG_CTX(ctx, "Loaded node",
+            YDB_LOG_DEBUG_CTX(ctx, "TNodeBroker::DbLoadState: loaded node",
                 {"dbLogPrefix", DbLogPrefix()},
-                {"info", info});
+                {"nodeId", info});
         }
 
         if (!nodesRowset.Next())
@@ -1236,9 +1236,9 @@ TNodeBroker::TDbChanges TNodeBroker::TDirtyState::DbLoadNodesV2(auto &nodesV2Row
         ui32 id = nodesV2Rowset.template GetValue<Schema::NodesV2::NodeId>();
         ENodeState state = nodesV2Rowset.template GetValue<Schema::NodesV2::State>();
         if (state != ENodeState::Removed && (id <= Self->MaxStaticId || id > Self->MaxDynamicId)) {
-            YDB_LOG_ERROR_CTX(ctx, "Removing node with wrong ID not in range",
+            YDB_LOG_ERROR_CTX(ctx, "TNodeBroker::DbLoadState: removing node with wrong ID not in range",
                 {"dbLogPrefix", DbLogPrefix()},
-                {"id", id},
+                {"nodeId", id},
                 {"maxStaticId", Self->MaxStaticId},
                 {"maxDynamicId", Self->MaxDynamicId});
             toRemove.push_back(id);
@@ -1249,9 +1249,9 @@ TNodeBroker::TDbChanges TNodeBroker::TDirtyState::DbLoadNodesV2(auto &nodesV2Row
             ui64 version = nodesV2Rowset.template GetValue<Schema::NodesV2::Version>();
             TNodeInfo node(id, state, version, info);
             AddNode(node);
-            YDB_LOG_DEBUG_CTX(ctx, "Loaded nodeV2",
+            YDB_LOG_DEBUG_CTX(ctx, "TNodeBroker::DbLoadState: loaded node v2",
                 {"dbLogPrefix", DbLogPrefix()},
-                {"node", node});
+                {"nodeId", node});
         }
 
         if (!nodesV2Rowset.Next()) {
@@ -1295,9 +1295,9 @@ TNodeBroker::TDbChanges TNodeBroker::TDirtyState::DbMigrateNodes(auto &nodesV2Ro
         auto version = nodesV2Rowset.template GetValue<Schema::NodesV2::Version>();
         TNodeInfo nodeV2(id, state, version, info);
 
-        YDB_LOG_DEBUG_CTX(ctx, "Loaded nodeV2",
+        YDB_LOG_DEBUG_CTX(ctx, "TNodeBroker::DbLoadState: loaded node v2",
             {"dbLogPrefix", DbLogPrefix()},
-            {"nodeV2", nodeV2});
+            {"nodeId", nodeV2});
 
         auto* node = FindNode(id);
         bool nodeRemoved = node == nullptr || node->State == ENodeState::Removed;
@@ -1320,15 +1320,15 @@ TNodeBroker::TDbChanges TNodeBroker::TDirtyState::DbMigrateNodes(auto &nodesV2Ro
                 updateNodes.push_back(id);
             }
 
-            YDB_LOG_NOTICE_CTX(ctx, "Migrating changed node",
+            YDB_LOG_NOTICE_CTX(ctx, "TNodeBroker::DbLoadState: migrating changed node",
                 {"dbLogPrefix", DbLogPrefix()},
-                {"nodeString", node->ToString()});
+                {"node", node->ToString()});
         } else if (nodeRemoved) {
             if (node != nullptr) {
                 // Remove was made by new version, migration already in progress
-                YDB_LOG_NOTICE_CTX(ctx, "Migrating removed node",
+                YDB_LOG_NOTICE_CTX(ctx, "TNodeBroker::DbLoadState: migrating removed node",
                     {"dbLogPrefix", DbLogPrefix()},
-                    {"nodeIdShortString", node->IdShortString()});
+                    {"nodeId", node->IdShortString()});
             } else if (nodeV2.State != ENodeState::Removed) {
                 // Assume that old version removes nodes only with version bump. It is not always
                 // true, so it is possible that client never receive this remove until the restart.
@@ -1338,20 +1338,20 @@ TNodeBroker::TDbChanges TNodeBroker::TDirtyState::DbMigrateNodes(auto &nodesV2Ro
                 AddNode(removedNode);
                 updateNodes.push_back(id);
 
-                YDB_LOG_NOTICE_CTX(ctx, "Migrating removed node",
+                YDB_LOG_NOTICE_CTX(ctx, "TNodeBroker::DbLoadState: migrating removed node",
                     {"dbLogPrefix", DbLogPrefix()},
-                    {"removedNodeIdShortString", removedNode.IdShortString()});
+                    {"nodeId", removedNode.IdShortString()});
             } else {
                 AddNode(nodeV2);
-                YDB_LOG_DEBUG_CTX(ctx, "Removed node is already migrated",
+                YDB_LOG_DEBUG_CTX(ctx, "TNodeBroker::DbLoadState: removed node is already migrated",
                     {"dbLogPrefix", DbLogPrefix()},
-                    {"nodeV2IdShortString", nodeV2.IdShortString()});
+                    {"nodeId", nodeV2.IdShortString()});
             }
         } else {
             node->Version = nodeV2.Version;
-            YDB_LOG_DEBUG_CTX(ctx, "Node is already migrated",
+            YDB_LOG_DEBUG_CTX(ctx, "TNodeBroker::DbLoadState: node is already migrated",
                 {"dbLogPrefix", DbLogPrefix()},
-                {"nodeIdShortString", node->IdShortString()});
+                {"nodeId", node->IdShortString()});
         }
 
         if (!nodesV2Rowset.Next()) {
@@ -1364,9 +1364,9 @@ TNodeBroker::TDbChanges TNodeBroker::TDirtyState::DbMigrateNodes(auto &nodesV2Ro
             node.Version = Epoch.Version + 1;
             newVersionUpdateNodes.push_back(id);
 
-            YDB_LOG_NOTICE_CTX(ctx, "Migrating new active node",
+            YDB_LOG_NOTICE_CTX(ctx, "TNodeBroker::DbLoadState: migrating new active node",
                 {"dbLogPrefix", DbLogPrefix()},
-                {"node", node});
+                {"nodeId", node});
         }
     }
 
@@ -1375,9 +1375,9 @@ TNodeBroker::TDbChanges TNodeBroker::TDirtyState::DbMigrateNodes(auto &nodesV2Ro
             node.Version = Epoch.Version;
             updateNodes.push_back(id);
 
-            YDB_LOG_NOTICE_CTX(ctx, "Migrating new expired node",
+            YDB_LOG_NOTICE_CTX(ctx, "TNodeBroker::DbLoadState: migrating new expired node",
                 {"dbLogPrefix", DbLogPrefix()},
-                {"node", node});
+                {"nodeId", node});
         }
     }
 
@@ -1398,7 +1398,7 @@ void TNodeBroker::TDirtyState::DbUpdateNodes(const TVector<ui32> &nodes, TTransa
 void TNodeBroker::TDirtyState::DbUpdateConfig(const NKikimrNodeBroker::TConfig &config,
                                  TTransactionContext &txc)
 {
-    YDB_LOG_DEBUG_CTX(TActorContext::AsActorContext(), "Update config in database",
+    YDB_LOG_DEBUG_CTX(TActorContext::AsActorContext(), "TNodeBroker::DbUpdateConfig: update config in database",
         {"dbLogPrefix", DbLogPrefix()},
         {"config", config});
 
@@ -1412,9 +1412,9 @@ void TNodeBroker::TDirtyState::DbUpdateConfig(const NKikimrNodeBroker::TConfig &
 void TNodeBroker::TDirtyState::DbUpdateConfigSubscription(ui64 subscriptionId,
                                              TTransactionContext &txc)
 {
-    YDB_LOG_DEBUG_CTX(TActorContext::AsActorContext(), "Update config subscription in database",
+    YDB_LOG_DEBUG_CTX(TActorContext::AsActorContext(), "TNodeBroker::DbUpdateConfigSubscription: update config subscription in database",
         {"dbLogPrefix", DbLogPrefix()},
-        {"id", subscriptionId});
+        {"subscriptionId", subscriptionId});
 
     NIceDb::TNiceDb db(txc.DB);
     db.Table<Schema::Params>().Key(Schema::ParamKeyConfigSubscription)
@@ -1424,9 +1424,9 @@ void TNodeBroker::TDirtyState::DbUpdateConfigSubscription(ui64 subscriptionId,
 void TNodeBroker::TDirtyState::DbUpdateEpoch(const TEpochInfo &epoch,
                                 TTransactionContext &txc)
 {
-    YDB_LOG_DEBUG_CTX(TActorContext::AsActorContext(), "Update epoch",
+    YDB_LOG_DEBUG_CTX(TActorContext::AsActorContext(), "TNodeBroker::DbUpdateEpoch: update epoch in database",
         {"dbLogPrefix", DbLogPrefix()},
-        {"inDatabase", epoch});
+        {"epoch", epoch});
 
     NIceDb::TNiceDb db(txc.DB);
     db.Table<Schema::Params>().Key(Schema::ParamKeyCurrentEpochId)
@@ -1444,9 +1444,9 @@ void TNodeBroker::TDirtyState::DbUpdateEpoch(const TEpochInfo &epoch,
 void TNodeBroker::TDirtyState::DbUpdateApproxEpochStart(const TApproximateEpochStartInfo &epochStart,
                                     TTransactionContext &txc)
 {
-    YDB_LOG_DEBUG_CTX(TActorContext::AsActorContext(), "Update approx epoch start",
+    YDB_LOG_DEBUG_CTX(TActorContext::AsActorContext(), "TNodeBroker::DbUpdateApproxEpochStart: update approximate epoch start in database",
         {"dbLogPrefix", DbLogPrefix()},
-        {"inDatabase", epochStart});
+        {"approxEpochStart", epochStart});
 
     NIceDb::TNiceDb db(txc.DB);
     db.Table<Schema::Params>().Key(Schema::ParamKeyApproximateEpochStartId)
@@ -1458,9 +1458,9 @@ void TNodeBroker::TDirtyState::DbUpdateApproxEpochStart(const TApproximateEpochS
 void TNodeBroker::TDirtyState::DbUpdateMainNodesTable(TTransactionContext &txc)
 {
     Schema::EMainNodesTable newMainNodesTable = Schema::EMainNodesTable::Nodes;
-    YDB_LOG_NOTICE_CTX(TActorContext::AsActorContext(), "Update main nodes table",
+    YDB_LOG_NOTICE_CTX(TActorContext::AsActorContext(), "TNodeBroker::DbUpdateMainNodesTable: update main nodes table",
         {"dbLogPrefix", DbLogPrefix()},
-        {"to", newMainNodesTable});
+        {"mainNodesTable", newMainNodesTable});
 
     NIceDb::TNiceDb db(txc.DB);
     db.Table<Schema::Params>().Key(Schema::ParamKeyMainNodesTable)
@@ -1471,9 +1471,9 @@ void TNodeBroker::TDirtyState::DbUpdateMainNodesTable(TTransactionContext &txc)
 void TNodeBroker::TDirtyState::DbUpdateEpochVersion(ui64 version,
                                        TTransactionContext &txc)
 {
-    YDB_LOG_DEBUG_CTX(TActorContext::AsActorContext(), "Update epoch version in database",
+    YDB_LOG_DEBUG_CTX(TActorContext::AsActorContext(), "TNodeBroker::DbUpdateEpochVersion: update epoch version in database",
         {"dbLogPrefix", DbLogPrefix()},
-        {"version", version});
+        {"epochVersion", version});
 
     NIceDb::TNiceDb db(txc.DB);
     db.Table<Schema::Params>().Key(Schema::ParamKeyCurrentEpochVersion)
@@ -1483,9 +1483,9 @@ void TNodeBroker::TDirtyState::DbUpdateEpochVersion(ui64 version,
 void TNodeBroker::TDirtyState::DbUpdateNodeLease(const TNodeInfo &node,
                                     TTransactionContext &txc)
 {
-    YDB_LOG_DEBUG_CTX(TActorContext::AsActorContext(), "Update node lease in database",
+    YDB_LOG_DEBUG_CTX(TActorContext::AsActorContext(), "TNodeBroker::DbUpdateNodeLease: update node lease in database",
         {"dbLogPrefix", DbLogPrefix()},
-        {"nodeIdString", node.IdString()},
+        {"nodeId", node.IdString()},
         {"lease", node.Lease + 1},
         {"expire", Epoch.NextEnd});
 
@@ -1498,9 +1498,9 @@ void TNodeBroker::TDirtyState::DbUpdateNodeLease(const TNodeInfo &node,
 void TNodeBroker::TDirtyState::DbUpdateNodeLocation(const TNodeInfo &node,
                                        TTransactionContext &txc)
 {
-    YDB_LOG_DEBUG_CTX(TActorContext::AsActorContext(), "Update node location in database",
+    YDB_LOG_DEBUG_CTX(TActorContext::AsActorContext(), "TNodeBroker::DbUpdateNodeLocation: update node location in database",
         {"dbLogPrefix", DbLogPrefix()},
-        {"nodeIdString", node.IdString()},
+        {"nodeId", node.IdString()},
         {"location", node.Location});
 
     NIceDb::TNiceDb db(txc.DB);
@@ -1512,10 +1512,10 @@ void TNodeBroker::TDirtyState::DbReleaseSlotIndex(const TNodeInfo &node,
                                        TTransactionContext &txc)
 {
 
-    YDB_LOG_DEBUG_CTX(TActorContext::AsActorContext(), "Release slot index node in database",
+    YDB_LOG_DEBUG_CTX(TActorContext::AsActorContext(), "TNodeBroker::DbReleaseSlotIndex: release slot index in database",
         {"dbLogPrefix", DbLogPrefix()},
         {"slotIndex", node.SlotIndex},
-        {"nodeIdString", node.IdString()});
+        {"nodeId", node.IdString()});
     NIceDb::TNiceDb db(txc.DB);
     using T = Schema::Nodes;
     db.Table<T>().Key(node.NodeId)
@@ -1525,10 +1525,10 @@ void TNodeBroker::TDirtyState::DbReleaseSlotIndex(const TNodeInfo &node,
 void TNodeBroker::TDirtyState::DbUpdateNodeAuthorizedByCertificate(const TNodeInfo &node,
                                        TTransactionContext &txc)
 {
-    YDB_LOG_DEBUG_CTX(TActorContext::AsActorContext(), "Update node authorizedbycertificate in database",
+    YDB_LOG_DEBUG_CTX(TActorContext::AsActorContext(), "TNodeBroker::DbUpdateNodeAuthorizedByCertificate: update node authorized-by-certificate in database",
         {"dbLogPrefix", DbLogPrefix()},
-        {"nodeIdString", node.IdString()},
-        {"authorizedbycertificate", (node.AuthorizedByCertificate ? "true" : "false")});
+        {"nodeId", node.IdString()},
+        {"authorizedByCertificate", (node.AuthorizedByCertificate ? "true" : "false")});
 
     NIceDb::TNiceDb db(txc.DB);
     using T = Schema::Nodes;
@@ -1559,8 +1559,8 @@ void TNodeBroker::Handle(TEvConsole::TEvReplaceConfigSubscriptionsResponse::TPtr
 {
     auto &rec = ev->Get()->Record;
     if (rec.GetStatus().GetCode() != Ydb::StatusIds::SUCCESS) {
-        YDB_LOG_ERROR_CTX(ctx, "Cannot subscribe for config",
-            {"updates", rec.GetStatus().GetCode()},
+        YDB_LOG_ERROR_CTX(ctx, "TNodeBroker::Handle TEvConsole::TEvReplaceConfigSubscriptionsResponse: cannot subscribe for config",
+            {"statusCode", rec.GetStatus().GetCode()},
             {"statusReason", rec.GetStatus().GetReason()});
         return;
     }
@@ -1599,8 +1599,8 @@ void TNodeBroker::Handle(TEvNodeBroker::TEvResolveNode::TPtr &ev,
         resp->Record.MutableStatus()->SetReason("Unknown node");
     }
 
-    YDB_LOG_TRACE_CTX(ctx, "Send",
-        {"TEvResolvedNode", resp->ToString()});
+    YDB_LOG_TRACE_CTX(ctx, "TNodeBroker::Handle TEvNodeBroker::TEvResolveNode: send TEvResolvedNode",
+        {"response", resp->ToString()});
 
     ctx.Send(ev->Sender, resp.Release());
 }
@@ -1608,7 +1608,7 @@ void TNodeBroker::Handle(TEvNodeBroker::TEvResolveNode::TPtr &ev,
 void TNodeBroker::Handle(TEvNodeBroker::TEvRegistrationRequest::TPtr &ev,
                          const TActorContext &ctx)
 {
-    YDB_LOG_TRACE_CTX(ctx, "Handle TEvNodeBroker::TEvRegistrationRequest",
+    YDB_LOG_TRACE_CTX(ctx, "TNodeBroker::Handle TEvNodeBroker::TEvRegistrationRequest",
         {"request", ev->Get()->Record});
     TabletCounters->Cumulative()[COUNTER_REGISTRATION_REQUESTS].Increment(1);
 
@@ -1677,7 +1677,7 @@ void TNodeBroker::Handle(TEvNodeBroker::TEvRegistrationRequest::TPtr &ev,
             Y_ABORT_UNLESS(rset.size() == 1);
             auto& response = rset.front();
 
-            YDB_LOG_TRACE_CTX(ctx, "Handle TEvTxProxySchemeCache::TEvNavigateKeySetResult",
+            YDB_LOG_TRACE_CTX(ctx, "TResolveTenantActor::Handle TEvTxProxySchemeCache::TEvNavigateKeySetResult",
                 {"response", response.ToString(*AppData()->TypeRegistry)});
 
             if (response.Status == NSchemeCache::TSchemeCacheNavigate::EStatus::Ok && response.DomainInfo) {
@@ -1688,7 +1688,7 @@ void TNodeBroker::Handle(TEvNodeBroker::TEvRegistrationRequest::TPtr &ev,
                 }
                 ServicedSubDomain = TSubDomainKey(response.DomainInfo->DomainKey.OwnerId, response.DomainInfo->DomainKey.LocalPathId);
             } else {
-                YDB_LOG_WARN_CTX(ctx, "Cannot resolve tenant",
+                YDB_LOG_WARN_CTX(ctx, "TResolveTenantActor: cannot resolve tenant",
                     {"request", Ev->Get()->Record},
                     {"response", response.ToString(*AppData()->TypeRegistry)});
             }
@@ -1701,10 +1701,10 @@ void TNodeBroker::Handle(TEvNodeBroker::TEvRegistrationRequest::TPtr &ev,
         }
 
         void Finish(const TActorContext& ctx) {
-            YDB_LOG_TRACE_CTX(ctx, "Finished resolving tenant scope serviced",
+            YDB_LOG_TRACE_CTX(ctx, "TResolveTenantActor: finished resolving tenant scope",
                 {"request", Ev->Get()->Record},
-                {"id", ScopeIdToString(ScopeId)},
-                {"subdomain", ServicedSubDomain});
+                {"scopeId", ScopeIdToString(ScopeId)},
+                {"servicedSubDomain", ServicedSubDomain});
 
             Send(ReplyTo, new TEvPrivate::TEvResolvedRegistrationRequest(Ev, ScopeId, ServicedSubDomain, std::move(Error)));
             Die(ctx);
@@ -1720,7 +1720,7 @@ void TNodeBroker::Handle(TEvNodeBroker::TEvRegistrationRequest::TPtr &ev,
 
 void TNodeBroker::Handle(TEvNodeBroker::TEvGracefulShutdownRequest::TPtr &ev,
                          const TActorContext &ctx) {
-    YDB_LOG_TRACE_CTX(ctx, "Handle TEvNodeBroker::TEvGracefulShutdownRequest",
+    YDB_LOG_TRACE_CTX(ctx, "TNodeBroker::Handle TEvNodeBroker::TEvGracefulShutdownRequest",
         {"request", ev->Get()->Record});
     TabletCounters->Cumulative()[COUNTER_GRACEFUL_SHUTDOWN_REQUESTS].Increment(1);
     Execute(CreateTxGracefulShutdown(ev), ctx);
@@ -1747,8 +1747,8 @@ void TNodeBroker::Handle(TEvNodeBroker::TEvGetConfigRequest::TPtr &ev,
     auto resp = MakeHolder<TEvNodeBroker::TEvGetConfigResponse>();
     resp->Record.MutableConfig()->CopyFrom(Committed.Config);
 
-    YDB_LOG_TRACE_CTX(ctx, "Send",
-        {"TEvGetConfigResponse", resp->ToString()});
+    YDB_LOG_TRACE_CTX(ctx, "TNodeBroker::Handle TEvNodeBroker::TEvGetConfigRequest: send TEvGetConfigResponse",
+        {"response", resp->ToString()});
 
     ctx.Send(ev->Sender, resp.Release());
 }
@@ -1822,7 +1822,7 @@ void TNodeBroker::Handle(TEvPrivate::TEvUpdateEpoch::TPtr &ev,
 {
     Y_UNUSED(ev);
     if (Committed.Epoch.End > ctx.Now()) {
-        YDB_LOG_INFO_CTX(ctx, "Epoch update event is too early");
+        YDB_LOG_INFO_CTX(ctx, "TNodeBroker::Handle TEvPrivate::TEvUpdateEpoch: epoch update event is too early");
         ScheduleEpochUpdate(ctx);
         return;
     }

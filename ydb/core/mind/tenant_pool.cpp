@@ -179,7 +179,7 @@ public:
         request->Record.SetSeqNo(++TenantSlotBroker.SeqNo);
         NTabletPipe::SendData(ctx, TenantSlotBroker.Pipe, request.Release());
 
-        YDB_LOG_DEBUG_CTX(ctx, "Try to register in tenant slot broker (pipe",
+        YDB_LOG_DEBUG_CTX(ctx, "TDomainTenantPool::TryToRegister: try to register in tenant slot broker",
             {"logPrefix", LogPrefix},
             {"tenantSlotBrokerPipe", TenantSlotBroker.Pipe});
     }
@@ -232,7 +232,7 @@ public:
     {
         for (auto &slot : tenant->AssignedSlots) {
             if (slot->ActiveAction) {
-                YDB_LOG_DEBUG_CTX(ctx, "Slot configure for finished with status",
+                YDB_LOG_DEBUG_CTX(ctx, "TDomainTenantPool::HandleConfigureSlot: slot configure finished with status",
                     {"logPrefix", LogPrefix},
                     {"slotId", slot->Id},
                     {"tenantName", tenant->Name},
@@ -274,9 +274,9 @@ public:
     void SendStatusUpdates(const TActorContext &ctx)
     {
         for (auto &subscriber : StatusSubscribers) {
-            YDB_LOG_DEBUG_CTX(ctx, "Send status update",
+            YDB_LOG_DEBUG_CTX(ctx, "TDomainTenantPool::SendStatusUpdate: send status update",
                 {"logPrefix", LogPrefix},
-                {"subscriber", subscriber});
+                {"subscriberId", subscriber});
             ctx.Send(subscriber, BuildStatusEvent(true));
         }
     }
@@ -286,7 +286,7 @@ public:
         tenant->ComputeResourceLimit();
         if (tenant->LastStatus == TEvLocal::TEvTenantStatus::STOPPED
             || tenant->LastStatus == TEvLocal::TEvTenantStatus::UNKNOWN_TENANT) {
-            YDB_LOG_DEBUG_CTX(ctx, "Send request to add tenant with resources",
+            YDB_LOG_DEBUG_CTX(ctx, "TDomainTenantPool::UpdateTenant: send request to add tenant with resources",
                 {"logPrefix", LogPrefix},
                 {"tenantName", tenant->Name},
                 {"resourceLimit", tenant->ResourceLimit});
@@ -296,7 +296,7 @@ public:
             ctx.Send(LocalID, event.Release());
         } else if (tenant->LastStatus == TEvLocal::TEvTenantStatus::STARTED) {
             if (tenant->HasStaticSlot || tenant->AssignedSlots) {
-                YDB_LOG_DEBUG_CTX(ctx, "Send request to alter tenant with resources",
+                YDB_LOG_DEBUG_CTX(ctx, "TDomainTenantPool::UpdateTenant: send request to alter tenant with resources",
                     {"logPrefix", LogPrefix},
                     {"tenantName", tenant->Name},
                     {"resourceLimit", tenant->ResourceLimit});
@@ -305,7 +305,7 @@ public:
                                                                   tenant->ResourceLimit);
                 ctx.Send(LocalID, event.Release());
             } else {
-                YDB_LOG_DEBUG_CTX(ctx, "Send request to remove tenant",
+                YDB_LOG_DEBUG_CTX(ctx, "TDomainTenantPool::UpdateTenant: send request to remove tenant",
                     {"logPrefix", LogPrefix},
                     {"tenantName", tenant->Name});
 
@@ -326,7 +326,7 @@ public:
         slot->Label = label;
         tenant->AssignedSlots.insert(slot);
 
-        YDB_LOG_NOTICE_CTX(ctx, "Attached tenant to slot with label",
+        YDB_LOG_NOTICE_CTX(ctx, "TDomainTenantPool::AttachSlot: attached tenant to slot with label",
             {"logPrefix", LogPrefix},
             {"tenantName", tenant->Name},
             {"slotId", slot->Id},
@@ -338,9 +338,9 @@ public:
         Y_ABORT_UNLESS(slot->AssignedTenant);
         Y_ABORT_UNLESS(slot->AssignedTenant->AssignedSlots.contains(slot));
 
-        YDB_LOG_NOTICE_CTX(ctx, "Detach tenant from slot with label",
+        YDB_LOG_NOTICE_CTX(ctx, "TDomainTenantPool::DetachSlot: detach tenant from slot with label",
             {"logPrefix", LogPrefix},
-            {"assignedTenantName", slot->AssignedTenant->Name},
+            {"tenantName", slot->AssignedTenant->Name},
             {"slotId", slot->Id},
             {"slotLabel", slot->Label});
 
@@ -420,8 +420,7 @@ public:
     }
 
     void Bootstrap(const TActorContext &ctx) {
-        YDB_LOG_DEBUG_CTX(ctx, "Bootstrap",
-            {"logPrefix", LogPrefix});
+        YDB_LOG_DEBUG_CTX(ctx, "TDomainTenantPool::Bootstrap");
 
         SubscribeForConfig(ctx);
 
@@ -459,7 +458,7 @@ public:
         bool modified = false;
 
         if (Config->StaticSlotLabel != staticSlotLabel) {
-            YDB_LOG_DEBUG_CTX(ctx, "Static slot label modified",
+            YDB_LOG_DEBUG_CTX(ctx, "TDomainTenantPool::Handle TEvConsole::TEvConfigNotificationRequest: static slot label modified",
                 {"logPrefix", LogPrefix},
                 {"staticSlotLabel", staticSlotLabel});
             if (Config->StaticSlots.size())
@@ -472,7 +471,7 @@ public:
     }
 
     void HandlePoison(const TActorContext &ctx) {
-        YDB_LOG_DEBUG_CTX(ctx, "HandlePoison",
+        YDB_LOG_DEBUG_CTX(ctx, "TDomainTenantPool::HandlePoison",
             {"logPrefix", LogPrefix});
         Die(ctx);
     }
@@ -493,7 +492,7 @@ public:
     {
         auto &rec = ev->Get()->Record;
 
-        YDB_LOG_DEBUG_CTX(ctx, "Got new monitoring",
+        YDB_LOG_DEBUG_CTX(ctx, "TDomainTenantPool::Handle TEvConsole::TEvConfigNotificationRequest: got new monitoring config",
             {"logPrefix", LogPrefix},
             {"config", rec.GetConfig()});
 
@@ -501,9 +500,9 @@ public:
 
         auto resp = MakeHolder<TEvConsole::TEvConfigNotificationResponse>(rec);
 
-        YDB_LOG_TRACE_CTX(ctx, "Send",
+        YDB_LOG_TRACE_CTX(ctx, "TDomainTenantPool::Handle TEvConsole::TEvConfigNotificationRequest: send TEvConfigNotificationResponse",
             {"logPrefix", LogPrefix},
-            {"TEvConfigNotificationResponse", resp->Record});
+            {"response", resp->Record});
 
         ctx.Send(ev->Sender, resp.Release(), 0, ev->Cookie);
     }
@@ -524,17 +523,17 @@ public:
         case TEvLocal::TEvTenantStatus::STARTED:
             state = TTenantInfo::EState::TENANT_OK;
             if (!tenant->HasStaticSlot && !tenant->AssignedSlots.size()) {
-                YDB_LOG_DEBUG_CTX(ctx, "Started tenant which should be stopped",
+                YDB_LOG_DEBUG_CTX(ctx, "TDomainTenantPool::Handle TEvLocal::TEvTenantStatus: started tenant which should be stopped",
                     {"logPrefix", LogPrefix},
                     {"tenantName", tenant->Name});
                 UpdateTenant(tenant, ctx);
             } else if (!tenant->CompareLimit(ev->Get()->ResourceLimit)) {
-                YDB_LOG_DEBUG_CTX(ctx, "Started tenant has wrong resource limit",
+                YDB_LOG_DEBUG_CTX(ctx, "TDomainTenantPool::Handle TEvLocal::TEvTenantStatus: started tenant has wrong resource limit",
                     {"logPrefix", LogPrefix},
                     {"tenantName", tenant->Name});
                 UpdateTenant(tenant, ctx);
             } else {
-                YDB_LOG_NOTICE_CTX(ctx, "Started tenant",
+                YDB_LOG_NOTICE_CTX(ctx, "TDomainTenantPool::Handle TEvLocal::TEvTenantStatus: started tenant",
                     {"logPrefix", LogPrefix},
                     {"tenantName", tenant->Name});
                 if (tenant->Attributes != ev->Get()->Attributes) {
@@ -552,12 +551,12 @@ public:
         case TEvLocal::TEvTenantStatus::STOPPED:
             state = TTenantInfo::EState::TENANT_OK;
             if (tenant->AssignedSlots.size()) {
-                YDB_LOG_DEBUG_CTX(ctx, "Stopped tenant which should be started",
+                YDB_LOG_DEBUG_CTX(ctx, "TDomainTenantPool::Handle TEvLocal::TEvTenantStatus: stopped tenant which should be started",
                     {"logPrefix", LogPrefix},
                     {"tenantName", tenant->Name});
                 UpdateTenant(tenant, ctx);
             } else {
-                YDB_LOG_NOTICE_CTX(ctx, "Stopped tenant",
+                YDB_LOG_NOTICE_CTX(ctx, "TDomainTenantPool::Handle TEvLocal::TEvTenantStatus: stopped tenant",
                     {"logPrefix", LogPrefix},
                     {"tenantName", tenant->Name});
             }
@@ -565,7 +564,7 @@ public:
         case TEvLocal::TEvTenantStatus::UNKNOWN_TENANT:
             modified = true;
             state = TTenantInfo::EState::TENANT_UNKNOWN;
-            YDB_LOG_ERROR_CTX(ctx, "Couldn't start unknown tenant",
+            YDB_LOG_ERROR_CTX(ctx, "TDomainTenantPool::Handle TEvLocal::TEvTenantStatus: couldn't start unknown tenant",
                 {"logPrefix", LogPrefix},
                 {"tenantName", tenant->Name});
             SendTenantStatus(tenant, NKikimrTenantPool::UNKNOWN_TENANT,
@@ -612,23 +611,23 @@ public:
     {
         auto &rec = ev->Get()->Record;
 
-        YDB_LOG_DEBUG_CTX(ctx, "Configures slot for tenant",
+        YDB_LOG_DEBUG_CTX(ctx, "TDomainTenantPool::Handle TEvTenantPool::TEvConfigureSlot: configure slot for tenant",
             {"logPrefix", LogPrefix},
-            {"sender", ev->Sender},
+            {"senderId", ev->Sender},
             {"slotId", rec.GetSlotId()},
             {"assignedTenant", rec.GetAssignedTenant()});
 
         if (ev->Sender != TenantSlotBroker.ActorId) {
-            YDB_LOG_DEBUG_CTX(ctx, "Configure sender doesn't own pool",
+            YDB_LOG_DEBUG_CTX(ctx, "TDomainTenantPool::Handle TEvTenantPool::TEvConfigureSlot: configure sender doesn't own pool",
                 {"logPrefix", LogPrefix},
-                {"sender", ev->Sender});
+                {"senderId", ev->Sender});
             SendConfigureError(ev, rec.GetSlotId(), NKikimrTenantPool::NOT_OWNER,
                                "pool is not owned by request sender", ctx);
             return;
         }
 
         if (!DynamicSlots.contains(rec.GetSlotId())) {
-            YDB_LOG_DEBUG_CTX(ctx, "Got configure for unknown slot",
+            YDB_LOG_DEBUG_CTX(ctx, "TDomainTenantPool::Handle TEvTenantPool::TEvConfigureSlot: got configure for unknown slot",
                 {"logPrefix", LogPrefix},
                 {"slotId", rec.GetSlotId()});
             SendConfigureError(ev, rec.GetSlotId(), NKikimrTenantPool::UNKNOWN_SLOT,
@@ -667,14 +666,14 @@ public:
 
             if (TenantSlotBroker.ActorId != ev->Sender) {
                 if (TenantSlotBroker.ActorId) {
-                    YDB_LOG_DEBUG_CTX(ctx, "Lost ownership",
+                    YDB_LOG_DEBUG_CTX(ctx, "TDomainTenantPool::Handle TEvTenantPool::TEvTakeOwnership: lost ownership",
                         {"logPrefix", LogPrefix},
                         {"tenantSlotBrokerActorId", TenantSlotBroker.ActorId});
                     ctx.Send(TenantSlotBroker.ActorId, new TEvTenantPool::TEvLostOwnership);
                 }
 
                 TenantSlotBroker.ActorId = ev->Sender;
-                YDB_LOG_DEBUG_CTX(ctx, "Took ownership",
+                YDB_LOG_DEBUG_CTX(ctx, "TDomainTenantPool::Handle TEvTenantPool::TEvTakeOwnership: took ownership",
                     {"logPrefix", LogPrefix},
                     {"tenantSlotBrokerActorId", TenantSlotBroker.ActorId});
             }
@@ -838,7 +837,7 @@ public:
     }
 
     void Handle(TEvLocal::TEvLocalDrainNode::TPtr &ev, const TActorContext &ctx) {
-        YDB_LOG_NOTICE_CTX(ctx, "Forward drain node to local");
+        YDB_LOG_NOTICE_CTX(ctx, "TTenantPool::Handle TEvNodeBroker::TEvDrainNode: forward drain node to local");
         ctx.Send(ev->Forward(LocalID));
     }
 
@@ -852,7 +851,7 @@ public:
         }
 
         if (!Config->IsEnabled) {
-            YDB_LOG_DEBUG_CTX(ctx, "TenantPool is disabled");
+            YDB_LOG_DEBUG_CTX(ctx, "TTenantPool::Bootstrap: tenant pool is disabled");
             return;
         }
 

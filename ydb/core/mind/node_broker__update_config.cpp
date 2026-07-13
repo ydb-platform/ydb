@@ -90,8 +90,8 @@ public:
             Self->Committed.LoadConfigFromProto(Config);
 
         if (Response) {
-            YDB_LOG_TRACE_CTX(ctx, "TTxUpdateConfig reply",
-                {"with", Response->ToString()});
+            YDB_LOG_TRACE_CTX(ctx, "TTxUpdateConfig: reply",
+                {"response", Response->ToString()});
             ctx.Send(Response);
         }
 

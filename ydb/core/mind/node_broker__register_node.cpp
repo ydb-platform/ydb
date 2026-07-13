@@ -38,10 +38,10 @@ public:
         const auto &rec = Event->Get()->Record;
         auto host = rec.GetHost();
         auto port = rec.GetPort();
-        YDB_LOG_ERROR_CTX(ctx, "Cannot register node",
+        YDB_LOG_ERROR_CTX(ctx, "TTxRegisterNode: cannot register node",
             {"host", host},
             {"port", port},
-            {"code", code},
+            {"statusCode", code},
             {"reason", reason});
 
         Response->Record.MutableStatus()->SetCode(code);
@@ -60,8 +60,8 @@ public:
         if (Response->Record.GetStatus().GetCode() == TStatus::OK)
             Self->FillNodeInfo(Self->Committed.Nodes.at(NodeId), *Response->Record.MutableNode());
 
-        YDB_LOG_INFO_CTX(ctx, "TTxRegisterNode reply",
-            {"with", Response->Record});
+        YDB_LOG_INFO_CTX(ctx, "TTxRegisterNode: reply",
+            {"response", Response->Record});
 
         if (ScopeId != NActors::TScopeId()) {
             auto& record = Response->Record;
@@ -80,11 +80,11 @@ public:
         TString addr = rec.GetAddress();
 
         YDB_LOG_DEBUG_CTX(ctx, "TTxRegisterNode Execute");
-        YDB_LOG_INFO_CTX(ctx, "Registration request",
+        YDB_LOG_INFO_CTX(ctx, "TTxRegisterNode: registration request",
             {"host", host},
             {"port", port},
             {"fixedNodeIdNote", (rec.GetFixedNodeId() ? "(fixed)" : "(not fixed)")},
-            {"tenant", (rec.HasPath() ? rec.GetPath() : "<unspecified>")});
+            {"tenantName", (rec.HasPath() ? rec.GetPath() : "<unspecified>")});
 
         TNodeLocation loc(rec.GetLocation());
 

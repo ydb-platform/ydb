@@ -100,8 +100,8 @@ public:
     {
         auto &rec = Event->Get()->Record;
 
-        YDB_LOG_DEBUG_CTX(ctx, "TTxAlterTenant",
-            {"rec", rec});
+        YDB_LOG_DEBUG_CTX(ctx, "TTxAlterTenant Execute",
+            {"record", rec});
 
         THashMap<TSlotDescription, ui64> newSlots;
         for (auto &slot : rec.GetRequiredSlots()) {
@@ -121,8 +121,8 @@ public:
         if (it == Self->Tenants.end()) {
             // Don't create tenant with no slots.
             if (!newSlots.empty()) {
-                YDB_LOG_DEBUG_CTX(ctx, "Create new tenant",
-                    {"name", name});
+                YDB_LOG_DEBUG_CTX(ctx, "TTxAlterTenant: create new tenant",
+                    {"tenantName", name});
 
                 tenant = Self->AddTenant(name);
 
@@ -135,8 +135,8 @@ public:
             }
 
         } else {
-            YDB_LOG_DEBUG_CTX(ctx, "Alter existing tenant",
-                {"name", name});
+            YDB_LOG_DEBUG_CTX(ctx, "TTxAlterTenant: alter existing tenant",
+                {"tenantName", name});
 
             tenant = it->second;
             Self->RemoveUnhappyTenant(tenant);
@@ -218,8 +218,8 @@ public:
     void Complete(const TActorContext &ctx) override
     {
         auto &name = Event->Get()->Record.GetTenantName();
-        YDB_LOG_DEBUG_CTX(ctx, "TTxAlterTenant complete",
-            {"name", name});
+        YDB_LOG_DEBUG_CTX(ctx, "TTxAlterTenant Complete",
+            {"tenantName", name});
 
         ctx.Send(Event->Sender, TenantState.Release());
 

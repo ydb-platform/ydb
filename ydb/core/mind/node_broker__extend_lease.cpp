@@ -28,9 +28,9 @@ public:
     {
         auto nodeId = Event->Get()->Record.GetNodeId();
 
-        YDB_LOG_ERROR_CTX(ctx, "Cannot extend lease",
-            {"node", nodeId},
-            {"code", code},
+        YDB_LOG_ERROR_CTX(ctx, "TTxExtendLease: cannot extend lease",
+            {"nodeId", nodeId},
+            {"statusCode", code},
             {"reason", reason});
 
         Response->Record.MutableStatus()->SetCode(code);
@@ -44,7 +44,7 @@ public:
         auto nodeId = Event->Get()->Record.GetNodeId();
 
         YDB_LOG_DEBUG_CTX(ctx, "TTxExtendLease Execute",
-            {"node", nodeId});
+            {"nodeId", nodeId});
 
         Response = new TEvNodeBroker::TEvExtendLeaseResponse;
         Response->Record.SetNodeId(nodeId);
@@ -82,8 +82,8 @@ public:
         YDB_LOG_DEBUG_CTX(ctx, "TTxExtendLease Complete");
 
         Y_ABORT_UNLESS(Response);
-        YDB_LOG_TRACE_CTX(ctx, "TTxExtendLease reply",
-            {"with", Response->ToString()});
+        YDB_LOG_TRACE_CTX(ctx, "TTxExtendLease: reply",
+            {"response", Response->ToString()});
         ctx.Send(Event->Sender, Response.Release());
 
         if (Update) {

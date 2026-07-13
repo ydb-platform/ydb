@@ -51,8 +51,8 @@ private:
                 ythrow yexception() << "file does not exist: " << filePath;
             }
         } catch (const yexception& ex) {
-            YDB_LOG_ERROR_CTX(Ctx(), "Failed to get NetData file",
-                {"stats", ex.what()});
+            YDB_LOG_ERROR_CTX(Ctx(), "TNetClassifier::GetNetDataFileModTimestamp: failed to get NetData file stats",
+                {"error", ex.what()});
         }
 
         return Nothing();
@@ -133,7 +133,7 @@ private:
     }
 
     void HandleWhileIniting(TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse::TPtr&) {
-        YDB_LOG_INFO_CTX(Ctx(), "Subscribed to ConfigsDispatcher for NetData updates");
+        YDB_LOG_INFO_CTX(Ctx(), "TNetClassifier::SubscribeForConfig: subscribed to ConfigsDispatcher for NetData updates");
 
         // Subscription is set but the console tablet may still be unavailable hence it's a good idea to schedule a timeout event
         Schedule(TDuration::Seconds(Cfg().GetCmsConfigTimeoutSeconds()), new TEvents::TEvWakeup);
@@ -145,8 +145,8 @@ private:
 
     // Case 1: GetConfig request timed out
     void HandleWhileIniting(TEvents::TEvWakeup::TPtr&) {
-        YDB_LOG_WARN_CTX(Ctx(), "TIMEOUT: failed to get distributable config, fall back",
-            {"toFile", MaybeNetDataFilePath});
+        YDB_LOG_WARN_CTX(Ctx(), "TNetClassifier::HandleWakeup: timed out waiting for distributable config, falling back to file",
+            {"netDataFilePath", MaybeNetDataFilePath});
         InitFromFile();
     }
 
@@ -175,41 +175,41 @@ private:
     // Case 2: GetConfig request succeeded
     void HandleWhileIniting(TEvConfigsDispatcher::TEvGetConfigResponse::TPtr& ev) {
         if (ShouldUseDistributableConfigOnInit(ev->Get()->Config)) {
-            YDB_LOG_INFO_CTX(Ctx(), "Will initialize from distributable config");
+            YDB_LOG_INFO_CTX(Ctx(), "TNetClassifier::Handle TEvConfigsDispatcher::TEvGetConfigResponse: initializing from distributable config");
 
             if (UpdateFromDistributableConfig(ev->Get()->Config->GetNetClassifierDistributableConfig())) {
                 ReportGoodConfig();
                 UpdateNetDataSource(ENetDataSourceType::DistributableConfig);
 
-                YDB_LOG_INFO_CTX(Ctx(), "Successfully initialized from distributable config");
+                YDB_LOG_INFO_CTX(Ctx(), "TNetClassifier::Handle TEvConfigsDispatcher::TEvGetConfigResponse: successfully initialized from distributable config");
 
                 CompleteInitialization();
                 return;
             } else {
-                YDB_LOG_WARN_CTX(Ctx(), "Failed to initialize from distributed config");
+                YDB_LOG_WARN_CTX(Ctx(), "TNetClassifier::Handle TEvConfigsDispatcher::TEvGetConfigResponse: failed to initialize from distributable config");
             }
         }
 
         ReportBadConfig();
-        YDB_LOG_WARN_CTX(Ctx(), "Distributable config is empty, broken or outdated, will use",
-            {"file", MaybeNetDataFilePath});
+        YDB_LOG_WARN_CTX(Ctx(), "TNetClassifier::Handle TEvConfigsDispatcher::TEvGetConfigResponse: distributable config is empty, broken or outdated, falling back to file",
+            {"netDataFilePath", MaybeNetDataFilePath});
         InitFromFile();
     }
 
     void InitFromFile() {
         // NetData file may be outdated hence warning log level is used
-        YDB_LOG_WARN_CTX(Ctx(), "Will try to initialize",
-            {"fromFile", MaybeNetDataFilePath});
+        YDB_LOG_WARN_CTX(Ctx(), "TNetClassifier::InitFromFile: initializing from NetData file",
+            {"netDataFilePath", MaybeNetDataFilePath});
         LabeledAddressClassifier = TryReadNetDataFromFile();
         if (LabeledAddressClassifier) {
             NetDataUpdateTimestamp = MaybeNetDataFileModTs;
             UpdateNetDataSource(ENetDataSourceType::File);
 
-            YDB_LOG_WARN_CTX(Ctx(), "Successfully initialized",
-                {"fromFile", MaybeNetDataFilePath});
+            YDB_LOG_WARN_CTX(Ctx(), "TNetClassifier::InitFromFile: successfully initialized from NetData file",
+                {"netDataFilePath", MaybeNetDataFilePath});
         } else {
-            YDB_LOG_WARN_CTX(Ctx(), "Failed to initialize",
-                {"fromFile", MaybeNetDataFilePath});
+            YDB_LOG_WARN_CTX(Ctx(), "TNetClassifier::InitFromFile: failed to initialize from NetData file",
+                {"netDataFilePath", MaybeNetDataFilePath});
         }
 
         CompleteInitialization();
@@ -221,8 +221,8 @@ private:
 
     bool UpdateFromDistributableConfig(const NKikimrNetClassifier::TNetClassifierDistributableConfig& config) {
         if (CheckDistributableConfig(config)) {
-            YDB_LOG_INFO_CTX(Ctx(), "Got new config with",
-                {"datetime", config.GetLastUpdateDatetimeUTC()});
+            YDB_LOG_INFO_CTX(Ctx(), "TNetClassifier::UpdateFromDistributableConfig: received new distributable config",
+                {"lastUpdateDatetime", config.GetLastUpdateDatetimeUTC()});
 
             auto labeledAddressClassifier = BuildNetClassifierFromPackedNetData(config.GetPackedNetData());
             if (labeledAddressClassifier) {
@@ -231,10 +231,10 @@ private:
 
                 return true;
             } else {
-                YDB_LOG_ERROR_CTX(Ctx(), "Failed to parse NetData from distributable configuration");
+                YDB_LOG_ERROR_CTX(Ctx(), "TNetClassifier::UpdateFromDistributableConfig: failed to parse NetData from distributable config");
             }
         } else {
-            YDB_LOG_ERROR_CTX(Ctx(), "Got bad distributable configuration");
+            YDB_LOG_ERROR_CTX(Ctx(), "TNetClassifier::UpdateFromDistributableConfig: received invalid distributable config");
         }
 
         return false;
@@ -334,13 +334,13 @@ private:
     TLabeledAddressClassifier::TConstPtr BuildNetClassifierFromPackedNetData(const TString& packedNetData) const {
         const TString serializedNetData = NNetClassifierUpdater::UnpackNetData(packedNetData);
         if (!serializedNetData) {
-            YDB_LOG_ERROR_CTX(Ctx(), "Empty packed networks");
+            YDB_LOG_ERROR_CTX(Ctx(), "TNetClassifier::BuildNetClassifierFromPackedNetData: empty packed networks data");
             return nullptr;
         }
 
         NKikimrNetClassifier::TNetData netData;
         if (!netData.ParseFromString(serializedNetData)) {
-            YDB_LOG_ERROR_CTX(Ctx(), "Can't deserialize networks data protobuf");
+            YDB_LOG_ERROR_CTX(Ctx(), "TNetClassifier::BuildNetClassifierFromPackedNetData: failed to deserialize networks protobuf");
             return nullptr;
         }
 
@@ -350,7 +350,7 @@ private:
     TLabeledAddressClassifier::TConstPtr BuildNetClassifierFromNetData(const NKikimrNetClassifier::TNetData& netData) const {
         auto labeledAddressClassifier = BuildLabeledAddressClassifierFromNetData(netData);
         if (!labeledAddressClassifier) {
-            YDB_LOG_ERROR_CTX(Ctx(), "Invalid NetData format");
+            YDB_LOG_ERROR_CTX(Ctx(), "TNetClassifier::BuildNetClassifierFromPackedNetData: invalid NetData format");
         }
 
         return labeledAddressClassifier;
@@ -361,8 +361,8 @@ private:
             try {
                 return ReadNetDataFromFile(*MaybeNetDataFilePath);
             } catch (const yexception& ex) {
-                YDB_LOG_ERROR_CTX(Ctx(), "Failed to read NetData",
-                    {"fromFile", ex.what()});
+                YDB_LOG_ERROR_CTX(Ctx(), "TNetClassifier::TryReadNetDataFromFile: failed to read NetData file",
+                    {"error", ex.what()});
             }
         }
 

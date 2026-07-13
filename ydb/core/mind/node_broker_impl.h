@@ -238,7 +238,7 @@ private:
                         const TString &reason,
                         const TActorContext &ctx)
     {
-        YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::NODE_BROKER, "Reply with",
+        YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::NODE_BROKER, "TNodeBroker::ReplyWithError: reply with error",
             {"statusCode", NKikimrNodeBroker::TStatus::ECode_Name(code).data()},
             {"reason", reason.data()});
 
@@ -250,8 +250,8 @@ private:
 
     STFUNC(StateInit)
     {
-        YDB_LOG_DEBUG_CTX_COMP(*TlsActivationContext, NKikimrServices::NODE_BROKER, "StateInit event",
-            {"type", ev->GetTypeRewrite()},
+        YDB_LOG_DEBUG_CTX_COMP(*TlsActivationContext, NKikimrServices::NODE_BROKER, "TNodeBroker::StateInit: event",
+            {"eventType", ev->GetTypeRewrite()},
             {"event", ev->ToString().data()});
         StateInitImpl(ev, SelfId());
     }

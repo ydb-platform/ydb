@@ -21,7 +21,7 @@ public:
         ui32 nodeId = Event->Sender.NodeId();
         auto &rec = Event->Get()->Record;
 
-        YDB_LOG_DEBUG_CTX(ctx, "TTxUpdatePoolStatus execute for node",
+        YDB_LOG_DEBUG_CTX(ctx, "TTxUpdatePoolStatus Execute: update for node",
             {"nodeId", nodeId});
 
         TString dc = ANY_DATA_CENTER;
@@ -41,7 +41,7 @@ public:
 
                 Self->AddSlot(slot, txc, ctx);
 
-                YDB_LOG_DEBUG_CTX(ctx, "New slot connected",
+                YDB_LOG_DEBUG_CTX(ctx, "TTxUpdatePoolStatus: new slot connected",
                     {"slotId", slot->IdString(true)});
 
                 if (slot->IsFree())
@@ -58,7 +58,7 @@ public:
                 Self->SlotConnected(slot);
                 slot->LastRequestId = 0;
 
-                YDB_LOG_DEBUG_CTX(ctx, "Reconnected",
+                YDB_LOG_DEBUG_CTX(ctx, "TTxUpdatePoolStatus: slot reconnected",
                     {"slotId", slot->IdString(true)});
 
                 if (slot->IsFree()) {
@@ -86,7 +86,7 @@ public:
     void Complete(const TActorContext &ctx) override
     {
         ui32 nodeId = Event->Sender.NodeId();
-        YDB_LOG_DEBUG_CTX(ctx, "TTxUpdatePoolStatus complete for node",
+        YDB_LOG_DEBUG_CTX(ctx, "TTxUpdatePoolStatus Complete: update for node",
             {"nodeId", nodeId});
 
         for (auto &slot : ToConfigure) {

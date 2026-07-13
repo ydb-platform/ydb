@@ -132,7 +132,7 @@ public:
             s == "room" ? 20 :
             s == "rack" ? 30 :
             s == "body" ? 40 :
-            s == "disk_scope" ? 51 : 0;
+            s == "disk_scope" ? 50 : 0;
         if (!level) {
             ythrow yexception() << "unknown distinction level provided: \"" << s << "\"";
         }
@@ -218,7 +218,7 @@ public:
             if (pdiskInfo.Type == DesiredPDiskType) {
                 pdisks.push_back(pdiskInfo);
 
-                std::optional<TString> diskScope = std::nullopt;
+                std::optional<TString> diskScope;
                 if (drive.HasDiskScope()) {
                     diskScope.emplace(drive.GetDiskScope());
                 }

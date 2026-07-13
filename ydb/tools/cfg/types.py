@@ -236,7 +236,7 @@ DistinctionLevels = {
     FailDomainType.Room: (10, 20, 10, 30),
     FailDomainType.Rack: (10, 20, 10, 40),
     FailDomainType.Body: (10, 20, 10, 50),
-    FailDomainType.Disk_Scope: (10, 20, 10, 51),
+    FailDomainType.Disk_Scope: (10, 20, 10, 60),
     FailDomainType.Disk: (10, 20, 10, 256),
 }
 

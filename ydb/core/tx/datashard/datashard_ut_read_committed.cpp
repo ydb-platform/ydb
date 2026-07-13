@@ -3,6 +3,7 @@
 #include <ydb/core/tx/datashard/ut_common/datashard_ut_common_tx.h>
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/testlib/actors/block_events.h>
+#include <ydb/core/testlib/tablet_helpers.h>
 #include <ydb/core/protos/query_stats.pb.h>
 
 namespace NKikimr {
@@ -42,7 +43,7 @@ struct TTestEnv {
 
         UNIT_ASSERT_VALUES_EQUAL(
             KqpSchemeExec(runtime, R"(
-                CREATE TABLE `/Root/table` (key int, value int, PRIMARY KEY (key));
+                CREATE TABLE `/Root/table` (key UInt32, value int, PRIMARY KEY (key));
             )"),
             "SUCCESS"
         );
@@ -145,8 +146,8 @@ Y_UNIT_TEST(PessimisticNoneModeWriteWrite) {
         KqpSimpleExec(runtime, R"(
             SELECT key, value FROM `/Root/table` ORDER BY key;
         )"),
-        "{ items { int32_value: 1 } items { int32_value: 100 } }, "
-        "{ items { int32_value: 2 } items { int32_value: 202 } }");
+        "{ items { uint32_value: 1 } items { int32_value: 100 } }, "
+        "{ items { uint32_value: 2 } items { int32_value: 202 } }");
 }
 
 Y_UNIT_TEST(PessimisticNoneModeWriteWriteUncommitted) {
@@ -198,8 +199,8 @@ Y_UNIT_TEST(PessimisticNoneModeWriteWriteUncommitted) {
         KqpSimpleExec(runtime, R"(
             SELECT key, value FROM `/Root/table` ORDER BY key;
         )"),
-        "{ items { int32_value: 1 } items { int32_value: 100 } }, "
-        "{ items { int32_value: 2 } items { int32_value: 202 } }");
+        "{ items { uint32_value: 1 } items { int32_value: 100 } }, "
+        "{ items { uint32_value: 2 } items { int32_value: 202 } }");
 }
 
 Y_UNIT_TEST(BlockedWritesAndConflicts) {
@@ -328,8 +329,84 @@ Y_UNIT_TEST(CommitAfterDeadlockResolution) {
         KqpSimpleExec(runtime, R"(
             SELECT key, value FROM `/Root/table` ORDER BY key;
         )"),
-        "{ items { int32_value: 1 } items { int32_value: 101 } }, "
-        "{ items { int32_value: 2 } items { int32_value: 201 } }");
+        "{ items { uint32_value: 1 } items { int32_value: 101 } }, "
+        "{ items { uint32_value: 2 } items { int32_value: 201 } }");
+}
+
+Y_UNIT_TEST(ReadAfterSplit) {
+    // Tests that a multi-page PESSIMISTIC_NONE range read that spans a split
+    // fails with "Read conflict with concurrent transaction".
+    //
+    // The split erases tx1's write lock (calling OnRemoved which marks it
+    // IsBroken=true).  When TTxReadContinue::ApplyLocks runs after the split,
+    // it sees the broken write lock and returns the error.
+    //
+    // The precise race: TTxReadContinue must run AFTER the TTxStartSplit that
+    // erases tx1's lock (setting IsBroken=true) but BEFORE the final
+    // TTxStartSplit that calls CancelReadIterators (when no locks remain).
+    //
+    // TTxStartSplit erases one persistent lock per execution and reschedules
+    // itself. The flat executor activates the next transaction by sending
+    // TEvActivateExecution. We use a second lock (tx0) so the sequence is:
+    //   TTxStartSplit #1: erase tx0's lock  → TEvActivateExecution captured
+    //   TTxStartSplit #2: erase tx1's lock (IsBroken=true) → TEvActivateExecution
+    //   TTxStartSplit #3: no locks → MakeSnapshot → CancelReadIterators
+    //
+    // By sending ReadAck while activation #1 is captured, TTxReadContinue gets
+    // queued; then unblocking activation #1 runs #2 (tx1 broken), and
+    // TTxReadContinue runs before #3 (CancelReadIterators), seeing the broken
+    // write lock and returning ABORTED.
+
+    TTestEnv env;
+    auto [server, runtime, sender, tableId, shards] = env.GetAll();
+
+    ExecSQL(server, sender, R"(
+        UPSERT INTO `/Root/table` (key, value) VALUES (1, 100), (10, 1000), (20, 2000);
+    )");
+
+    TTransactionState tx0(runtime, NKikimrDataEvents::PESSIMISTIC_NONE);
+    TTransactionState tx1(runtime, NKikimrDataEvents::PESSIMISTIC_NONE);
+
+    UNIT_ASSERT_VALUES_EQUAL(
+        tx0.Write(tableId, shards.at(0), TWriteOperation::Upsert(1, 101)),
+        "OK");
+
+    // tx1 writes key 5 to establish a write lock on the shard.
+    UNIT_ASSERT_VALUES_EQUAL(
+        tx1.Write(tableId, shards.at(0), TWriteOperation::Upsert(5, 500)),
+        "OK");
+
+    // Start a range read with MaxRows=1 so the quota is exhausted after the
+    // first row, blocking the shard (QuotaBlocked=true) until TEvReadAck.
+    // This keeps the read iterator and state.Lock alive across the split.
+    auto readPromise = tx1.SendReadRange(tableId, shards.at(0), 1, 20, /*maxRowsQuota=*/1);
+
+    // Receive first row (key=1). TReadOperation has run: state.Lock is set.
+    UNIT_ASSERT_VALUES_EQUAL(readPromise.NextString(), "1, 100\n");
+
+    TBlockEvents<TEvDataShard::TEvSplit> blockedSplit(runtime);
+
+    SetSplitMergePartCountLimit(&runtime, -1);
+    ui64 splitTxId = AsyncSplitTable(server, sender, "/Root/table", shards.at(0), 10);
+
+    runtime.WaitFor("TEvSplit", [&]{ return !blockedSplit.empty(); });
+
+    blockedSplit.Unblock().Stop();
+    TBlockEvents<IEventHandle> blockActivation(runtime, [](const IEventHandle::TPtr& ev) {
+        return ev.Get()->GetTypeName().Contains("TEvActivateExecution");
+    });
+
+    runtime.WaitFor("TEvActivateExecution", [&]{ return !blockActivation.empty(); });
+    // Send TEvReadAck to trigger TTxReadContinue.  ApplyLocks sees the broken
+    // write lock and returns ABORTED ("Read conflict with concurrent transaction").
+    readPromise.SendAck();
+    blockActivation.Unblock().Stop();
+
+    UNIT_ASSERT_VALUES_EQUAL(
+        readPromise.NextString(),
+        TStringBuilder() << "ERROR: ABORTED");
+
+    WaitTxNotification(server, sender, splitTxId);
 }
 
 } // Y_UNIT_TEST_SUITE(DataShardReadCommitted)

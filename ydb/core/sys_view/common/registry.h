@@ -778,6 +778,7 @@ struct Schema : NIceDb::Schema {
         struct HasAppName   : Column<6, NScheme::NTypeIds::Utf8> {};
         struct Action       : Column<7, NScheme::NTypeIds::Utf8> {};
         struct HasFullScan  : Column<8, NScheme::NTypeIds::Utf8> {};
+        struct HasPath      : Column<9, NScheme::NTypeIds::Utf8> {};
 
         using TKey = TableKey<Name>;
         using TColumns = TableColumns<
@@ -787,7 +788,8 @@ struct Schema : NIceDb::Schema {
             ResourcePool,
             HasAppName,
             Action,
-            HasFullScan>;
+            HasFullScan,
+            HasPath>;
     };
 
     struct ShowCreate : Table<21> {

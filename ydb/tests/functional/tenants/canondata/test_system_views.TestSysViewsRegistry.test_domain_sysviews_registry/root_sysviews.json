@@ -1023,6 +1023,10 @@
       {
         "name": "HasAppName",
         "type": "Utf8?"
+      },
+      {
+        "name": "HasPath",
+        "type": "Utf8?"
       }
     ],
     "primary_key": [

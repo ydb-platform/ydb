@@ -48,6 +48,10 @@ Y_UNIT_TEST_SUITE(ResourcePoolClassifierTest) {
         std::visit(TClassifierSettings::TParser{"/Root/db/orders_.*"}, propertiesMap["has_full_scan"]);
         UNIT_ASSERT(settings.HasFullScan.has_value());
         UNIT_ASSERT_VALUES_EQUAL(settings.HasFullScan->Pattern, "/Root/db/orders_.*");
+
+        std::visit(TClassifierSettings::TParser{"/Root/db/archive/.*"}, propertiesMap["has_path"]);
+        UNIT_ASSERT(settings.HasPath.has_value());
+        UNIT_ASSERT_VALUES_EQUAL(settings.HasPath->Pattern, "/Root/db/archive/.*");
     }
 
     Y_UNIT_TEST(RegexPredicateInvalidPattern) {
@@ -56,6 +60,7 @@ Y_UNIT_TEST_SUITE(ResourcePoolClassifierTest) {
 
         UNIT_ASSERT_EXCEPTION(std::visit(TClassifierSettings::TParser{"[invalid"}, propertiesMap["has_app_name"]), yexception);
         UNIT_ASSERT_EXCEPTION(std::visit(TClassifierSettings::TParser{"[invalid"}, propertiesMap["has_full_scan"]), yexception);
+        UNIT_ASSERT_EXCEPTION(std::visit(TClassifierSettings::TParser{"[invalid"}, propertiesMap["has_path"]), yexception);
     }
 
     Y_UNIT_TEST(SettingsExtracting) {
@@ -78,10 +83,12 @@ Y_UNIT_TEST_SUITE(ResourcePoolClassifierTest) {
         // Parse then extract — must round-trip the original pattern
         std::visit(TClassifierSettings::TParser{"ydb-.*"}, propertiesMap["has_app_name"]);
         std::visit(TClassifierSettings::TParser{"/Root/db/orders_.*"}, propertiesMap["has_full_scan"]);
+        std::visit(TClassifierSettings::TParser{"/Root/db/archive/.*"}, propertiesMap["has_path"]);
 
         TClassifierSettings::TExtractor extractor;
         UNIT_ASSERT_VALUES_EQUAL(std::visit(extractor, propertiesMap["has_app_name"]), "ydb-.*");
         UNIT_ASSERT_VALUES_EQUAL(std::visit(extractor, propertiesMap["has_full_scan"]), "/Root/db/orders_.*");
+        UNIT_ASSERT_VALUES_EQUAL(std::visit(extractor, propertiesMap["has_path"]), "/Root/db/archive/.*");
     }
 
     Y_UNIT_TEST(RegexPredicateExtractingEmpty) {
@@ -92,6 +99,7 @@ Y_UNIT_TEST_SUITE(ResourcePoolClassifierTest) {
         TClassifierSettings::TExtractor extractor;
         UNIT_ASSERT_VALUES_EQUAL(std::visit(extractor, propertiesMap["has_app_name"]), "");
         UNIT_ASSERT_VALUES_EQUAL(std::visit(extractor, propertiesMap["has_full_scan"]), "");
+        UNIT_ASSERT_VALUES_EQUAL(std::visit(extractor, propertiesMap["has_path"]), "");
     }
 
     Y_UNIT_TEST(ActionParsing) {

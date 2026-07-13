@@ -234,9 +234,9 @@ class Workload(object):
             self.analyze(table_path)
 
             count = self.statistics_count(table_statistics, path_id)
-            logger.info(f"[{trace_id}] number of single-column rows in statistics table '{table_statistics}' {count}")
+            logger.info(f"[{trace_id}] number of single-column (and tag-less) rows in statistics table '{table_statistics}' {count}")
             if count == 0:
-                raise Exception(f"[{trace_id}] statistics table '{table_statistics}' has no single-column stats")
+                raise Exception(f"[{trace_id}] statistics table '{table_statistics}' has no single-column (or tag-less) stats")
 
             multi_count = self.statistics_multi_count(table_statistics, path_id)
             logger.info(f"[{trace_id}] number of multi-column rows in statistics table '{table_statistics}' {multi_count}")

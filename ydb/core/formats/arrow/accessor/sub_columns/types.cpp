@@ -139,6 +139,7 @@ ui32 ArrayElementSize(const arrow::Array& array, const i64 index, const EValueTy
         case EValueType::Double:
             return sizeof(double);
         case EValueType::Bool:
+            // actually only 1 bit in arrow representation, not 1 byte, but let's not overcomplicate things
             return 1;
     }
 }

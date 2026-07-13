@@ -144,11 +144,11 @@ The list of supported codecs is explicitly specified in each topic. Attempting t
 
 {% if audience != "external" %}
 
-| | Compression using the [`lzop`](https://en.wikipedia.org/wiki/Lzop) algorithm. |
+| `lzop` | Compression using the [lzop](https://en.wikipedia.org/wiki/Lzop) algorithm. |
 
 {% endif %}
 
-| | Compression using the [`zstd`](https://en.wikipedia.org/wiki/Zstd) algorithm. |
+| `zstd` | Compression using the [zstd](https://en.wikipedia.org/wiki/Zstd) algorithm. |
 
 ## Reader {#consumer}
 

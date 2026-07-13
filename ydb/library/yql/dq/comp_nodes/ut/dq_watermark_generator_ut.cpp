@@ -26,6 +26,7 @@ struct TInputItem {
     TString Cluster;
     ui64 PartitionId;
     TInstant Timestamp;
+    TInstant WriteTime;
 };
 
 using TOutputItem = TMaybe<TInstant>;
@@ -47,10 +48,11 @@ public:
         }
 
         NUdf::TUnboxedValue* itemsPtr = nullptr;
-        result = Ctx_.HolderFactory.CreateDirectArrayHolder(3, itemsPtr);
+        result = Ctx_.HolderFactory.CreateDirectArrayHolder(4, itemsPtr);
         itemsPtr[0] = MakeString(Items_[Index_].Cluster);
         itemsPtr[1] = NUdf::TUnboxedValuePod(Items_[Index_].PartitionId);
         itemsPtr[2] = NUdf::TUnboxedValuePod(Items_[Index_].Timestamp.MicroSeconds());
+        itemsPtr[3] = NUdf::TUnboxedValuePod(Items_[Index_].WriteTime.MicroSeconds());
         ++Index_;
         return NUdf::EFetchStatus::Ok;
     }
@@ -69,6 +71,7 @@ THolder<IComputationGraph> BuildGraph(TDqSetup<false>& setup, const std::vector<
         {"cluster", stringType},
         {"partition_id", ui64Type},
         {"timestamp", ui64Type},
+        {"write_time", ui64Type},
     });
     auto sourceNodeType = pgmBuilder.NewStreamType(structType);
     auto sourceNode = TCallableBuilder(pgmBuilder.GetTypeEnvironment(), "ExternalNode", sourceNodeType).Build();
@@ -76,20 +79,30 @@ THolder<IComputationGraph> BuildGraph(TDqSetup<false>& setup, const std::vector<
     auto partitionsNodeType = pgmBuilder.NewListType(stringType);
     auto partitionsNode = TCallableBuilder(pgmBuilder.GetTypeEnvironment(), "ExternalNode", partitionsNodeType).Build();
 
+    const auto watermarkExtractor = [&](TRuntimeNode item) {
+        return pgmBuilder.Member(item, "timestamp");
+    };
+    const auto partitionKeyExtractor = [&](TRuntimeNode item) {
+        return pgmBuilder.NewStruct({
+            {"cluster", pgmBuilder.Member(item, "cluster")},
+            {"partition_id", pgmBuilder.Member(item, "partition_id")},
+        });
+    };
+    const auto writeTimeExtractor = [&](TRuntimeNode item) {
+        return pgmBuilder.Member(item, "write_time");
+    };
+    const auto watermarkSettings = std::vector<std::pair<std::string, std::string>>{
+        {"WatermarksGranularityUs", "1000000"},
+        {"WatermarksLateArrivalDelayUs", "5000000"},
+        {"WatermarksIdleTimeoutUs", "100000000"},
+    };
+
     auto pgm = pgmBuilder.DqWatermarkGenerator(
         TRuntimeNode(sourceNode, false),
-        [&](TRuntimeNode item) { return pgmBuilder.Member(item, "timestamp"); },
-        [&](TRuntimeNode item) {
-            return pgmBuilder.NewStruct({
-                {"cluster", pgmBuilder.Member(item, "cluster")},
-                {"partition_id", pgmBuilder.Member(item, "partition_id")},
-            });
-        },
-        TConstArrayRef<std::pair<std::string, std::string>>({
-            {"WatermarksGranularityUs", "1000000"},
-            {"WatermarksLateArrivalDelayUs", "0"},
-            {"WatermarksIdleTimeoutUs", "100000000"},
-        }),
+        watermarkExtractor,
+        partitionKeyExtractor,
+        writeTimeExtractor,
+        watermarkSettings,
         TRuntimeNode(partitionsNode, false)
     );
 
@@ -108,7 +121,8 @@ THolder<IComputationGraph> BuildGraph(TDqSetup<false>& setup, const std::vector<
 void TestImpl(
     const std::vector<TInputItem>& input,
     const std::vector<std::string>& partitions,
-    const std::vector<TOutputItem>& expected
+    const std::vector<TInputItem>& expectedOutput,
+    const std::vector<TOutputItem>& expectedWatermarks
 ) {
     TWatermark watermark;
     NYql::NDq::TDqWatermarkGeneratorTracker watermarkTracker("Test ");
@@ -128,18 +142,18 @@ void TestImpl(
 
     auto root = graph->GetValue();
 
-    std::vector<TOutputItem> actual;
-    for (const auto& source : input) {
+    std::vector<TOutputItem> actualWatermarks;
+    for (const auto& source : expectedOutput) {
         NUdf::TUnboxedValue result;
         UNIT_ASSERT_VALUES_EQUAL(NUdf::EFetchStatus::Ok, root.Fetch(result));
-        NUdf::AssertUnboxedValueElementEqual(result, std::make_tuple(source.Cluster, source.PartitionId, source.Timestamp.MicroSeconds()));
-        actual.push_back(watermark.WatermarkIn);
+        NUdf::AssertUnboxedValueElementEqual(result, std::make_tuple(source.Cluster, source.PartitionId, source.Timestamp.MicroSeconds(), source.WriteTime.MicroSeconds()));
+        actualWatermarks.push_back(watermark.WatermarkIn);
     }
 
     NUdf::TUnboxedValue result;
     UNIT_ASSERT_VALUES_EQUAL(NUdf::EFetchStatus::Finish, root.Fetch(result));
 
-    UNIT_ASSERT_VALUES_EQUAL(expected, actual);
+    UNIT_ASSERT_VALUES_EQUAL(expectedWatermarks, actualWatermarks);
 }
 
 } // anonymous namespace
@@ -148,11 +162,16 @@ Y_UNIT_TEST_SUITE(TDqWatermarkGeneratorTest) {
     Y_UNIT_TEST(TestSinglePartitionProgressesOnEachEvent) {
         TestImpl(
             {
-                {Cluster, 0, TInstant::Seconds(1)},
-                {Cluster, 0, TInstant::Seconds(2)},
-                {Cluster, 0, TInstant::Seconds(3)},
+                {Cluster, 0, TInstant::Seconds(1), TInstant::Zero()},
+                {Cluster, 0, TInstant::Seconds(2), TInstant::Zero()},
+                {Cluster, 0, TInstant::Seconds(3), TInstant::Zero()},
             },
             {"0@cluster"},
+            {
+                {Cluster, 0, TInstant::Seconds(1), TInstant::Zero()},
+                {Cluster, 0, TInstant::Seconds(2), TInstant::Zero()},
+                {Cluster, 0, TInstant::Seconds(3), TInstant::Zero()},
+            },
             {
                 TInstant::Seconds(1),
                 TInstant::Seconds(2),
@@ -164,11 +183,16 @@ Y_UNIT_TEST_SUITE(TDqWatermarkGeneratorTest) {
     Y_UNIT_TEST(TestMissingPartitionBlocksWatermarkUntilSeen) {
         TestImpl(
             {
-                {Cluster, 0, TInstant::Seconds(1)},
-                {Cluster, 0, TInstant::Seconds(3)},
-                {Cluster, 1, TInstant::Seconds(2)},
+                {Cluster, 0, TInstant::Seconds(1), TInstant::Zero()},
+                {Cluster, 0, TInstant::Seconds(3), TInstant::Zero()},
+                {Cluster, 1, TInstant::Seconds(2), TInstant::Zero()},
             },
             {"0@cluster", "1@cluster"},
+            {
+                {Cluster, 0, TInstant::Seconds(1), TInstant::Zero()},
+                {Cluster, 0, TInstant::Seconds(3), TInstant::Zero()},
+                {Cluster, 1, TInstant::Seconds(2), TInstant::Zero()},
+            },
             {
                 Nothing(),
                 Nothing(),
@@ -180,15 +204,58 @@ Y_UNIT_TEST_SUITE(TDqWatermarkGeneratorTest) {
     Y_UNIT_TEST(TestSinglePartitionDataDoesNotAdvanceIncompleteSet) {
         TestImpl(
             {
-                {Cluster, 0, TInstant::Seconds(1)},
-                {Cluster, 0, TInstant::Seconds(2)},
-                {Cluster, 0, TInstant::Seconds(3)},
+                {Cluster, 0, TInstant::Seconds(1), TInstant::Zero()},
+                {Cluster, 0, TInstant::Seconds(2), TInstant::Zero()},
+                {Cluster, 0, TInstant::Seconds(3), TInstant::Zero()},
             },
             {"0@cluster", "1@cluster"},
+            {
+                {Cluster, 0, TInstant::Seconds(1), TInstant::Zero()},
+                {Cluster, 0, TInstant::Seconds(2), TInstant::Zero()},
+                {Cluster, 0, TInstant::Seconds(3), TInstant::Zero()},
+            },
             {
                 Nothing(),
                 Nothing(),
                 Nothing(),
+            }
+        );
+    }
+
+    Y_UNIT_TEST(TestEarlyEventIsDroppedAndDoesNotAdvanceWatermark) {
+        TestImpl(
+            {
+                {Cluster, 0, TInstant::Seconds(1), TInstant::Seconds(1)},
+                {Cluster, 0, TInstant::Minutes(10), TInstant::Seconds(2)},
+                {Cluster, 0, TInstant::Seconds(3), TInstant::Seconds(3)},
+            },
+            {"0@cluster"},
+            {
+                {Cluster, 0, TInstant::Seconds(1), TInstant::Seconds(1)},
+                {Cluster, 0, TInstant::Seconds(3), TInstant::Seconds(3)},
+            },
+            {
+                TInstant::Seconds(1),
+                TInstant::Seconds(3),
+            }
+        );
+    }
+
+    Y_UNIT_TEST(TestStrictLateDrop) {
+        TestImpl(
+            {
+                {Cluster, 0, TInstant::Seconds(10), TInstant::Seconds(10)},
+                {Cluster, 0, TInstant::Seconds(4), TInstant::Seconds(9)},
+                {Cluster, 0, TInstant::Seconds(11), TInstant::Seconds(11)},
+            },
+            {"0@cluster"},
+            {
+                {Cluster, 0, TInstant::Seconds(10), TInstant::Seconds(10)},
+                {Cluster, 0, TInstant::Seconds(11), TInstant::Seconds(11)},
+            },
+            {
+                TInstant::Seconds(10),
+                TInstant::Seconds(11),
             }
         );
     }

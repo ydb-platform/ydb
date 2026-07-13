@@ -191,6 +191,7 @@ TRuntimeNode TDqProgramBuilder::DqWatermarkGenerator(
     TRuntimeNode input,
     const TUnaryLambda& watermarkExtractor,
     const TUnaryLambda& partitionKeyExtractor,
+    const TUnaryLambda& writeTimeExtractor,
     TConstArrayRef<std::pair<std::string, std::string>> watermarkSettings,
     TRuntimeNode partitionKeys
 ) {
@@ -200,6 +201,7 @@ TRuntimeNode TDqProgramBuilder::DqWatermarkGenerator(
     const auto itemArg = Arg(itemType);
     const auto watermark = watermarkExtractor(itemArg);
     const auto partitionKey = partitionKeyExtractor(itemArg);
+    const auto writeTime = writeTimeExtractor(itemArg);
 
     TRuntimeNode::TList watermarkSettingItems;
     for (const auto& [name, value] : watermarkSettings) {
@@ -213,6 +215,7 @@ TRuntimeNode TDqProgramBuilder::DqWatermarkGenerator(
     callableBuilder.Add(itemArg);
     callableBuilder.Add(watermark);
     callableBuilder.Add(partitionKey);
+    callableBuilder.Add(writeTime);
     callableBuilder.Add(watermarkSettingsNode);
     callableBuilder.Add(partitionKeys);
 

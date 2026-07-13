@@ -240,7 +240,7 @@ public:
             schema->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>(),
             [this](TStringBuf fieldName) {
                 return GetPqMetaFieldDescriptorBySysColumn(
-                    TString(fieldName), 
+                    TString(fieldName),
                     State_->EnableUserAttributesInTopicQuery
                 ).has_value();
             },
@@ -587,7 +587,9 @@ public:
         const auto descriptor = GetPqMetaFieldDescriptorByKey(
             metadataKey,
             State_->AddTransparentPrefixToTransparentSystemColumns,
-            State_->EnableUserAttributesInTopicQuery);
+            State_->EnableUserAttributesInTopicQuery,
+            State_->ForbidYqlSysColumnsAndSystemMetadata
+        );
         if (!descriptor) {
             ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), TStringBuilder()
                 << "Metadata key " << metadataKey << " wasn't found"));

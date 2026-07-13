@@ -10,8 +10,6 @@
 #include <yt/cpp/mapreduce/interface/error_codes.h>
 #include <yt/cpp/mapreduce/interface/raw_client.h>
 
-#include <yt/yt/core/actions/future.h>
-
 #include <util/datetime/base.h>
 
 #include <util/generic/scope.h>
@@ -168,11 +166,11 @@ void TPingableTransaction::Stop(EStopAction action)
                 });
             break;
         case EStopAction::Abort:
-            // Aborting transaction can be called from destructor while unwinding exception stack.
-            // We can't call WaitFor in such conditions (and internally we do it).
-            // So we offload aborting to separate thread.
-            Pinger_->AsyncAbortTransaction(TransactionId_)
-                .BlockingGet();
+        NDetail::RequestWithRetry<void>(
+                ClientRetryPolicy_->CreatePolicyForGenericRequest(),
+                [this] (TMutationId& mutationId) {
+                    RawClient_->AbortTransaction(mutationId, TransactionId_);
+                });
             break;
         case EStopAction::Detach:
             // Do nothing.

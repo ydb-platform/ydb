@@ -14,7 +14,6 @@ SRCS(
     drop_table.cpp
     drop_table_with_local_indexes.cpp
     move_local_index.cpp
-    prepare_index_validation.cpp
     read_only_copy_table.cpp
 )
 

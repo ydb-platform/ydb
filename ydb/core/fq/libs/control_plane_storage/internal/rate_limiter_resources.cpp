@@ -12,6 +12,8 @@
 
 #include <google/protobuf/util/time_util.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT ::NKikimrServices::YQ_CONTROL_PLANE_STORAGE
+
 namespace NFq {
 
 namespace {
@@ -37,7 +39,10 @@ public:
         const TString& tenant = request.tenant();
 
         if (NYql::TIssues issues = ValidateCreateOrDeleteRateLimiterResource(QueryId, scope, tenant, OwnerId)) {
-            CPS_LOG_W(TDerived::RequestTypeName << "Request: {" << request.DebugString() << "} validation FAILED: " << issues.ToOneLineString());
+            YDB_LOG_WARN("Request: validation",
+                {"requestType", TDerived::RequestTypeName},
+                {"request", request.DebugString()},
+                {"FAILED", issues.ToOneLineString()});
             ReplyWithError(issues);
             return;
         }
@@ -71,7 +76,9 @@ public:
 
     void Handle(TEvControlPlaneStorageInternal::TEvDbRequestResult::TPtr& ev) {
         const auto& status = ev->Get()->Status.GetValueSync();
-        CPS_LOG_D(TDerived::RequestTypeName << "Request. Got response from database: " << status.GetStatus());
+        YDB_LOG_DEBUG("Request. Got response",
+            {"requestType", TDerived::RequestTypeName},
+            {"fromDatabase", status.GetStatus()});
         if (!status.IsSuccess()) {
             ReplyWithError(NYdb::NAdapters::ToYqlIssues(status.GetIssues()));
             return;
@@ -109,7 +116,8 @@ public:
             if (!internal.ParseFromString(*parser.ColumnParser(INTERNAL_COLUMN_NAME).GetOptionalString())) {
                 this->RequestCounters.Common->ParseProtobufError->Inc();
                 const TString error{"Error parsing proto message for query internal. Please contact internal support"};
-                CPS_LOG_E(error);
+                YDB_LOG_ERROR("",
+                    {"error", error});
                 ReplyWithError(error);
                 return;
             }
@@ -120,7 +128,8 @@ public:
                 if (!query.ParseFromString(*parser.ColumnParser(QUERY_COLUMN_NAME).GetOptionalString())) {
                     this->RequestCounters.Common->ParseProtobufError->Inc();
                     const TString error{"Error parsing proto message for query. Please contact internal support"};
-                    CPS_LOG_E(error);
+                    YDB_LOG_ERROR("",
+                        {"error", error});
                     ReplyWithError(error);
                     return;
                 }
@@ -177,7 +186,7 @@ public:
     using TCreateRequestActorBase::Handle;
 
     void Handle(TEvRateLimiter::TEvCreateResourceResponse::TPtr& ev) {
-        CPS_LOG_D("Got create response from rate limiter service");
+        YDB_LOG_DEBUG("Got create response from rate limiter service");
         if (ev->Get()->Success) {
             Fq::Private::CreateRateLimiterResourceResult proto;
             proto.set_rate_limiter(ev->Get()->RateLimiterPath);
@@ -216,7 +225,7 @@ public:
     using TDeleteRequestActorBase::Handle;
 
     void Handle(TEvRateLimiter::TEvDeleteResourceResponse::TPtr& ev) {
-        CPS_LOG_D("Got delete response from rate limiter service");
+        YDB_LOG_DEBUG("Got delete response from rate limiter service");
         if (ev->Get()->Success) {
             Fq::Private::DeleteRateLimiterResourceResult proto;
             Reply(proto);

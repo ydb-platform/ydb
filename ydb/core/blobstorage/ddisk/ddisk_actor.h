@@ -32,8 +32,8 @@
 
 #include <util/generic/hash_set.h>
 
-#include <library/cpp/containers/absl_flat_hash/flat_hash_map.h>
-#include <library/cpp/containers/absl_flat_hash/flat_hash_set.h>
+#include <library/cpp/containers/absl/flat_hash_map.h>
+#include <library/cpp/containers/absl/flat_hash_set.h>
 
 namespace NKikimrBlobStorage::NDDisk::NInternal {
     class TChunkMapLogRecord;
@@ -241,9 +241,27 @@ namespace NKikimr::NDDisk {
                 EvReadPersistentBufferPart,
                 EvInternalSyncWriteResult,
                 EvIssuePersistentBufferChunkAllocation,
+                EvDeallocatePersistentBufferChunk,
+                EvDeallocatePersistentBufferChunkResult,
             };
 
             struct TEvIssuePersistentBufferChunkAllocation : TEventLocal<TEvIssuePersistentBufferChunkAllocation, EvIssuePersistentBufferChunkAllocation> {
+            };
+
+            struct TEvDeallocatePersistentBufferChunk : TEventLocal<TEvDeallocatePersistentBufferChunk, EvDeallocatePersistentBufferChunk> {
+                ui32 ChunkIdx;
+
+                TEvDeallocatePersistentBufferChunk(ui32 chunkIdx)
+                    : ChunkIdx(chunkIdx)
+                {}
+            };
+
+            struct TEvDeallocatePersistentBufferChunkResult : TEventLocal<TEvDeallocatePersistentBufferChunkResult, EvDeallocatePersistentBufferChunkResult> {
+                ui32 ChunkIdx;
+
+                TEvDeallocatePersistentBufferChunkResult(ui32 chunkIdx)
+                    : ChunkIdx(chunkIdx)
+                {}
             };
 
             struct TEvHandleEventForChunk : TEventLocal<TEvHandleEventForChunk, EvHandleEventForChunk> {
@@ -333,6 +351,7 @@ namespace NKikimr::NDDisk {
             WakeupUpdateFreeSpaceInfo = 2,
             WakeupCollectPbStats = 3,
             WakeupProcessPersistentBufferBatchWrite = 4,
+            WakeupProcessDeallocatePersistentBufferChunk = 5,
         };
 
         struct TPbOpSnapshot {
@@ -781,6 +800,7 @@ namespace NKikimr::NDDisk {
         void CreatePersistentBuffer();
         void InitPersistentBuffer();
         void IssuePersistentBufferChunkAllocation();
+        void ProcessDeallocatePersistentBufferChunk(bool forceToNextChunk = false);
         void ProcessPersistentBufferQueue();
         std::vector<std::tuple<ui32, ui32, TRope>> SlicePersistentBuffer(ui64 tabletId, ui32 generation, ui64 vchunkIndex, ui64 lsn, ui32 offsetInBytes, ui32 size, TRcBuf&& payloadWithHeader, std::vector<TPersistentBufferSectorInfo>& sectors);
         std::vector<std::tuple<ui32, ui32, TRope>> SlicePersistentBufferData(TRope& data, std::vector<TPersistentBufferSectorInfo>& sectors);
@@ -809,6 +829,8 @@ namespace NKikimr::NDDisk {
         void Handle(TEvents::TEvUndelivered::TPtr ev);
         void Handle(TEvListPersistentBuffer::TPtr ev);
         void Handle(TEvPrivate::TEvIssuePersistentBufferChunkAllocation::TPtr ev);
+        void Handle(TEvPrivate::TEvDeallocatePersistentBufferChunk::TPtr ev);
+        void Handle(TEvPrivate::TEvDeallocatePersistentBufferChunkResult::TPtr ev);
         void Handle(TEvGetPersistentBufferInfo::TPtr ev);
 
         void Handle(TEvWritePersistentBuffers::TPtr ev);

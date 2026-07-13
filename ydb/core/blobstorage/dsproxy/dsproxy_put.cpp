@@ -8,7 +8,6 @@
 
 #include <ydb/core/blobstorage/lwtrace_probes/blobstorage_probes.h>
 #include <ydb/core/util/stlog.h>
-
 #include <ydb/library/actors/retro_tracing/collector/retro_collector.h>
 
 #include <util/generic/ymath.h>
@@ -474,16 +473,22 @@ class TBlobStorageGroupPutRequest : public TBlobStorageGroupRequestActor {
             SendReply(std::move(result), blobIdx);
         }
 
-        if ((TActivationContext::Monotonic() - RequestStartTime >= LongRequestThreshold) && PopAllowToken(HandleClass)) {
-            // NRetroTracing::DemandTrace(Span.GetTraceId());
-            YDB_LOG_WARN("Long TEvPut request detected",
-                {"marker", "BPP71"},
-                {"longRequestThreshold", LongRequestThreshold},
-                {"groupId", Info->GroupID},
-                {"handleClass", NKikimrBlobStorage::EPutHandleClass_Name(HandleClass)},
-                {"tactic", TEvBlobStorage::TEvPut::TacticName(Tactic)},
-                {"restartCounter", RestartCounter},
-                {"history", PutImpl.PrintHistory()});
+        if (TActivationContext::Monotonic() - RequestStartTime >= LongRequestThreshold) {
+            if (PopAllowToken(HandleClass)) {
+                YDB_LOG_WARN("Long TEvPut request detected",
+                    {"marker", "BPP71"},
+                    {"longRequestThreshold", LongRequestThreshold},
+                    {"groupId", Info->GroupID},
+                    {"handleClass", NKikimrBlobStorage::EPutHandleClass_Name(HandleClass)},
+                    {"tactic", TEvBlobStorage::TEvPut::TacticName(Tactic)},
+                    {"restartCounter", RestartCounter},
+                    {"history", PutImpl.PrintHistory()});
+            }
+            if (ResponsesSent == PutImpl.Blobs.size() && EnableStorageRetroTraceCollectionSlowRequests) {
+                if (TNamedSpan* retroSpan = Span.GetRetroSpanPtr()) {
+                    retroSpan->DemandTraceOnEnd();
+                }
+            }
         }
 
         if (ResponsesSent == PutImpl.Blobs.size() && IS_LOG_PRIORITY_ENABLED(PutImpl.ResultPriority, LogCtx.LogComponent) && PopAllowToken(HandleClass)) {
@@ -743,7 +748,9 @@ public:
             Y_DEBUG_ABORT_UNLESS(nodeId != SelfId().NodeId());
 
             bool isConnected = false;
-            vdisk->Queues.ForEachQueue([&](auto& queue) { isConnected |= queue.IsConnected; });
+            vdisk->Queues.ForEachQueue([&](auto& queue) {
+                isConnected |= queue.IsConnected.load(std::memory_order_acquire);
+            });
             if (isConnected) {
                 options.push_back(nodeId);
             }

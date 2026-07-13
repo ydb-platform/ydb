@@ -371,6 +371,13 @@ public:
     void InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) override;
 };
 
+class TTopicDeferredPublishRegistryInitializer : public IKikimrServicesInitializer {
+public:
+    TTopicDeferredPublishRegistryInitializer(const TKikimrRunConfig& runConfig);
+
+    void InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) override;
+};
+
 class TMemProfMonitorInitializer : public IKikimrServicesInitializer {
     TIntrusiveConstPtr<NMemory::IProcessMemoryInfoProvider> ProcessMemoryInfoProvider;
 public:
@@ -625,13 +632,6 @@ private:
 class TReplicationServiceInitializer : public IKikimrServicesInitializer {
 public:
     TReplicationServiceInitializer(const TKikimrRunConfig& runConfig);
-
-    void InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) override;
-};
-
-class TLocalPgWireServiceInitializer : public IKikimrServicesInitializer {
-public:
-    TLocalPgWireServiceInitializer(const TKikimrRunConfig& runConfig);
 
     void InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) override;
 };

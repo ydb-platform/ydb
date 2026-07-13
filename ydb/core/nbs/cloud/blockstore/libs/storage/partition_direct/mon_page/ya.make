@@ -5,6 +5,7 @@ SRCS(
 )
 
 PEERDIR(
+    ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model
     library/cpp/monlib/service/pages
 )
 

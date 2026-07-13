@@ -119,6 +119,7 @@ public:
     bool IsPQGroup() const;
     bool IsDomainRoot() const;
     bool IsSubDomainRoot() const;
+    bool IsPlainSubDomainRoot() const;
     bool IsExternalSubDomainRoot() const;
     bool IsRtmrVolume() const;
     bool IsBlockStoreVolume() const;
@@ -144,6 +145,7 @@ public:
     bool IsBackupCollection() const;
     bool IsSecret() const;
     bool IsStreamingQuery() const;
+    bool IsTestShardSet() const;
     TVirtualTimestamp GetCreateTS() const;
     TVirtualTimestamp GetDropTS() const;
     void SetDropped(TStepId step, TTxId txId);

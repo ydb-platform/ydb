@@ -10,8 +10,72 @@ NYql::NDq::TStageId MakeStageId(ui32 txId, ui32 stageId) {
     return NYql::NDq::TStageId(txId, stageId);
 }
 
-TMaxTasksGraph InitGraph(size_t maxChannelsCount, size_t snapshotSize) {
-    TMaxTasksGraph graph(maxChannelsCount);
+// A dummy TPhysicalTxData that only binds the reference member of TStageInfoMeta. Skeleton creation
+// (TTask ctor) reads only stageInfo.Id / InputsCount / OutputsCount and never dereferences it.
+const IKqpGateway::TPhysicalTxData& DummyTx() {
+    static const IKqpGateway::TPhysicalTxData tx(TKqpPhyTxHolder::TConstPtr{}, TQueryData::TPtr{});
+    return tx;
+}
+
+TStageInfo MakeStageInfo(const NYql::NDq::TStageId& id) {
+    return TStageInfo(id, /* inputsCount */ 0, /* outputsCount */ 0, TStageInfoMeta(DummyTx()));
+}
+
+// Builds a stand-in, graph-owned task with a unique Id. TMaxTasksGraph only stores the Id, so the task object itself
+// is a throwaway: this exercises the counting/Shrink algorithm without a real TKqpTasksGraph behind it.
+TTask MakeTask(const NYql::NDq::TStageId& stage) {
+    static ui64 nextId = 0;
+    TTask task(MakeStageInfo(stage));
+    task.Id = ++nextId;
+    return task;
+}
+
+// Thin wrapper that owns the TStageInfo objects referenced by TMaxTasksGraph::AddStage. The unit tests exercise the
+// counting/Shrink algorithm without a real TKqpTasksGraph, so we keep the per-stage infos alive here (std::list gives
+// stable addresses for the stored TStageInfo*).
+class TTestGraph {
+public:
+    explicit TTestGraph(size_t maxChannelsCount) : Graph(maxChannelsCount) {}
+
+    void AddNodes(const TVector<NKikimrKqp::TKqpNodeResources>& snapshot) { Graph.AddNodes(snapshot); }
+
+    void AddStage(const NYql::NDq::TStageId& stage, TMaxTasksGraph::EStageType type,
+        const std::list<NYql::NDq::TStageId>& inputs, std::optional<NYql::NDq::TStageId> copyInput = std::nullopt)
+    {
+        auto& info = StageInfos.emplace_back(MakeStageInfo(stage));
+        Graph.AddStage(info, type, inputs, copyInput);
+    }
+
+    void AddTask(const TTask& task, std::optional<ui64> node) { Graph.AddTask(task, node); }
+
+    void Distribute() { Graph.DistributeTasksToNodes(); }
+    void Shrink() { Graph.Shrink(); }
+
+    size_t GetStageTasksCount(const NYql::NDq::TStageId& stage, ui64 node) const { return Graph.GetStageTasksCount(stage, node); }
+    size_t GetStageTasksCount(const NYql::NDq::TStageId& stage) const { return Graph.GetStageTasksCount(stage); }
+
+private:
+    TMaxTasksGraph Graph;
+    std::list<TStageInfo> StageInfos;
+};
+
+// Helpers mirroring the former count-only API on top of the single AddTask entry point.
+void AddTasks(TTestGraph& graph, const NYql::NDq::TStageId& stage, ui64 node, size_t count) {
+    for (size_t i = 0; i < count; ++i) {
+        const auto task = MakeTask(stage);
+        graph.AddTask(task, node);
+    }
+}
+
+void AddTasks(TTestGraph& graph, const NYql::NDq::TStageId& stage, size_t count) {
+    for (size_t i = 0; i < count; ++i) {
+        const auto task = MakeTask(stage);
+        graph.AddTask(task, std::nullopt);
+    }
+}
+
+TTestGraph InitGraph(size_t maxChannelsCount, size_t snapshotSize) {
+    TTestGraph graph(maxChannelsCount);
     TVector<NKikimrKqp::TKqpNodeResources> snapshot(snapshotSize);
     for (size_t i = 0; i < snapshot.size(); ++i) {
         snapshot.at(i).SetNodeId(i);
@@ -31,7 +95,7 @@ Y_UNIT_TEST_SUITE(TMaxTasksGraphTest) {
 
         auto stage = MakeStageId(0, 0);
         graph.AddStage(stage, TMaxTasksGraph::ANY, {});
-        graph.AddTasks(stage, 0, 10);
+        AddTasks(graph, stage, 0, 10);
 
         graph.Shrink();
 
@@ -55,8 +119,8 @@ Y_UNIT_TEST_SUITE(TMaxTasksGraphTest) {
         graph.AddStage(stageA, TMaxTasksGraph::ANY, {});
         graph.AddStage(stageB, TMaxTasksGraph::ANY, {stageA});
 
-        graph.AddTasks(stageA, 0, 10);
-        graph.AddTasks(stageB, 0, 10);
+        AddTasks(graph, stageA, 0, 10);
+        AddTasks(graph, stageB, 0, 10);
 
         graph.Shrink();
 
@@ -77,8 +141,8 @@ Y_UNIT_TEST_SUITE(TMaxTasksGraphTest) {
         graph.AddStage(stageA, TMaxTasksGraph::ANY, {});
         graph.AddStage(stageB, TMaxTasksGraph::ANY, {stageA});
 
-        graph.AddTasks(stageA, 0, 10);
-        graph.AddTasks(stageB, 0, 10);
+        AddTasks(graph, stageA, 0, 10);
+        AddTasks(graph, stageB, 0, 10);
 
         graph.Shrink();
 
@@ -105,8 +169,8 @@ Y_UNIT_TEST_SUITE(TMaxTasksGraphTest) {
         graph.AddStage(stageA, TMaxTasksGraph::FIXED, {});
         graph.AddStage(stageB, TMaxTasksGraph::ANY, {stageA});
 
-        graph.AddTasks(stageA, 0, 10);
-        graph.AddTasks(stageB, 0, 10);
+        AddTasks(graph, stageA, 0, 10);
+        AddTasks(graph, stageB, 0, 10);
 
         graph.Shrink();
 
@@ -130,9 +194,9 @@ Y_UNIT_TEST_SUITE(TMaxTasksGraphTest) {
         graph.AddStage(stageB, TMaxTasksGraph::COPY, {stageA}, stageA);
         graph.AddStage(stageC, TMaxTasksGraph::ANY, {stageB});
 
-        graph.AddTasks(stageA, 0, 20);
-        graph.AddTasks(stageB, 0, 20);
-        graph.AddTasks(stageC, 0, 20);
+        AddTasks(graph, stageA, 0, 20);
+        AddTasks(graph, stageB, 0, 20);
+        AddTasks(graph, stageC, 0, 20);
 
         graph.Shrink();
 
@@ -154,9 +218,9 @@ Y_UNIT_TEST_SUITE(TMaxTasksGraphTest) {
         graph.AddStage(stageB, TMaxTasksGraph::COPY, {stageA}, stageA);
         graph.AddStage(stageC, TMaxTasksGraph::ANY, {stageB});
 
-        graph.AddTasks(stageA, 0, 5);
-        graph.AddTasks(stageB, 0, 5);
-        graph.AddTasks(stageC, 0, 10);
+        AddTasks(graph, stageA, 0, 5);
+        AddTasks(graph, stageB, 0, 5);
+        AddTasks(graph, stageC, 0, 10);
 
         graph.Shrink();
 
@@ -174,12 +238,12 @@ Y_UNIT_TEST_SUITE(TMaxTasksGraphTest) {
         graph.AddStage(stageA, TMaxTasksGraph::ANY, {});
         graph.AddStage(stageB, TMaxTasksGraph::ANY, {stageA});
 
-        graph.AddTasks(stageA, 0, 5);
-        graph.AddTasks(stageA, 1, 5);
-        graph.AddTasks(stageA, 2, 5);
-        graph.AddTasks(stageB, 0, 5);
-        graph.AddTasks(stageB, 1, 5);
-        graph.AddTasks(stageB, 2, 5);
+        AddTasks(graph, stageA, 0, 5);
+        AddTasks(graph, stageA, 1, 5);
+        AddTasks(graph, stageA, 2, 5);
+        AddTasks(graph, stageB, 0, 5);
+        AddTasks(graph, stageB, 1, 5);
+        AddTasks(graph, stageB, 2, 5);
 
         graph.Shrink();
 
@@ -197,7 +261,8 @@ Y_UNIT_TEST_SUITE(TMaxTasksGraphTest) {
 
         auto stage = MakeStageId(0, 0);
         graph.AddStage(stage, TMaxTasksGraph::ANY, {});
-        graph.AddTasks(stage, 7); // 7 задач на 3 узла round-robin: 3,2,2 или 3,3,1?
+        AddTasks(graph, stage, 7); // 7 задач на 3 узла round-robin: 3,2,2 или 3,3,1?
+        graph.Distribute();
 
         // Round robin: 0,1,2,0,1,2,0 => node0=3, node1=2, node2=2
         UNIT_ASSERT_VALUES_EQUAL(graph.GetStageTasksCount(stage, 0), 3);
@@ -227,8 +292,8 @@ Y_UNIT_TEST_SUITE(TMaxTasksGraphTest) {
         graph.AddStage(stageA, TMaxTasksGraph::ANY, {});
         graph.AddStage(stageB, TMaxTasksGraph::ANY, {stageA});
 
-        graph.AddTasks(stageA, 0, 5);
-        graph.AddTasks(stageB, 0, 5);
+        AddTasks(graph, stageA, 0, 5);
+        AddTasks(graph, stageB, 0, 5);
 
         // Не крашится, просто оставляет как есть (или ничего не делает)
         graph.Shrink();
@@ -243,8 +308,8 @@ Y_UNIT_TEST_SUITE(TMaxTasksGraphTest) {
         graph.AddStage(stageA, TMaxTasksGraph::ANY, {});
         graph.AddStage(stageB, TMaxTasksGraph::ANY, {stageA});
 
-        graph.AddTasks(stageA, 0, 3);
-        graph.AddTasks(stageB, 0, 4);
+        AddTasks(graph, stageA, 0, 3);
+        AddTasks(graph, stageB, 0, 4);
 
         graph.Shrink();
 
@@ -270,9 +335,9 @@ Y_UNIT_TEST_SUITE(TMaxTasksGraphTest) {
         graph.AddStage(stageB, TMaxTasksGraph::COPY, {stageA}, stageA);
         graph.AddStage(stageC, TMaxTasksGraph::ANY, {stageB});
 
-        graph.AddTasks(stageA, 0, 10);
-        graph.AddTasks(stageB, 0, 10);
-        graph.AddTasks(stageC, 0, 10);
+        AddTasks(graph, stageA, 0, 10);
+        AddTasks(graph, stageB, 0, 10);
+        AddTasks(graph, stageC, 0, 10);
 
         // Должно быть ровно feasible
         graph.Shrink();
@@ -294,9 +359,9 @@ Y_UNIT_TEST_SUITE(TMaxTasksGraphTest) {
         graph.AddStage(stageB, TMaxTasksGraph::COPY, {stageA}, stageA);
         graph.AddStage(stageC, TMaxTasksGraph::ANY, {stageB});
 
-        graph.AddTasks(stageA, 0, 10);
-        graph.AddTasks(stageB, 0, 10);
-        graph.AddTasks(stageC, 0, 10);
+        AddTasks(graph, stageA, 0, 10);
+        AddTasks(graph, stageB, 0, 10);
+        AddTasks(graph, stageC, 0, 10);
 
         graph.Shrink();
 
@@ -335,9 +400,9 @@ Y_UNIT_TEST_SUITE(TMaxTasksGraphTest) {
         graph.AddStage(stageB, TMaxTasksGraph::ANY, {});
         graph.AddStage(stageC, TMaxTasksGraph::ANY, {stageA, stageB});
 
-        graph.AddTasks(stageA, 0, 5);
-        graph.AddTasks(stageB, 0, 5);
-        graph.AddTasks(stageC, 0, 5);
+        AddTasks(graph, stageA, 0, 5);
+        AddTasks(graph, stageB, 0, 5);
+        AddTasks(graph, stageC, 0, 5);
 
         graph.Shrink();
 
@@ -366,9 +431,9 @@ Y_UNIT_TEST_SUITE(TMaxTasksGraphTest) {
         graph.AddStage(stageB, TMaxTasksGraph::ANY, {stageA});
         graph.AddStage(stageC, TMaxTasksGraph::ANY, {stageB});
 
-        graph.AddTasks(stageA, 0, 10);
-        graph.AddTasks(stageB, 0, 10);
-        graph.AddTasks(stageC, 0, 10);
+        AddTasks(graph, stageA, 0, 10);
+        AddTasks(graph, stageB, 0, 10);
+        AddTasks(graph, stageC, 0, 10);
 
         graph.Shrink();
 
@@ -402,10 +467,10 @@ Y_UNIT_TEST_SUITE(TMaxTasksGraphTest) {
         graph.AddStage(stageA, TMaxTasksGraph::ANY, {});
         graph.AddStage(stageB, TMaxTasksGraph::ANY, {stageA});
 
-        graph.AddTasks(stageA, 0, 8);
-        graph.AddTasks(stageA, 1, 2);
-        graph.AddTasks(stageB, 0, 6);
-        graph.AddTasks(stageB, 1, 4);
+        AddTasks(graph, stageA, 0, 8);
+        AddTasks(graph, stageA, 1, 2);
+        AddTasks(graph, stageB, 0, 6);
+        AddTasks(graph, stageB, 1, 4);
 
         graph.Shrink();
 
@@ -425,10 +490,10 @@ Y_UNIT_TEST_SUITE(TMaxTasksGraphTest) {
         graph.AddStage(stageA, TMaxTasksGraph::ANY, {});
         graph.AddStage(stageB, TMaxTasksGraph::ANY, {stageA});
 
-        graph.AddTasks(stageA, 0, 8);
-        graph.AddTasks(stageA, 1, 2);
-        graph.AddTasks(stageB, 0, 6);
-        graph.AddTasks(stageB, 1, 4);
+        AddTasks(graph, stageA, 0, 8);
+        AddTasks(graph, stageA, 1, 2);
+        AddTasks(graph, stageB, 0, 6);
+        AddTasks(graph, stageB, 1, 4);
 
         graph.Shrink();
 
@@ -456,8 +521,8 @@ Y_UNIT_TEST_SUITE(TMaxTasksGraphTest) {
         graph.AddStage(stageA, TMaxTasksGraph::ANY, {});
         graph.AddStage(stageB, TMaxTasksGraph::ANY, {stageA});
 
-        graph.AddTasks(stageA, 0, 100);
-        graph.AddTasks(stageB, 0, 100);
+        AddTasks(graph, stageA, 0, 100);
+        AddTasks(graph, stageB, 0, 100);
 
         graph.Shrink();
 
@@ -481,10 +546,10 @@ Y_UNIT_TEST_SUITE(TMaxTasksGraphTest) {
         graph.AddStage(stageC, TMaxTasksGraph::ANY, {stageA});
         graph.AddStage(stageD, TMaxTasksGraph::ANY, {stageB, stageC});
 
-        graph.AddTasks(stageA, 0, 10);
-        graph.AddTasks(stageB, 0, 10);
-        graph.AddTasks(stageC, 0, 10);
-        graph.AddTasks(stageD, 0, 10);
+        AddTasks(graph, stageA, 0, 10);
+        AddTasks(graph, stageB, 0, 10);
+        AddTasks(graph, stageC, 0, 10);
+        AddTasks(graph, stageD, 0, 10);
 
         graph.Shrink();
 
@@ -502,9 +567,9 @@ Y_UNIT_TEST_SUITE(TMaxTasksGraphTest) {
         auto stage = MakeStageId(0, 0);
         graph.AddStage(stage, TMaxTasksGraph::ANY, {});
 
-        graph.AddTasks(stage, 0, 3);
-        graph.AddTasks(stage, 1, 5);
-        graph.AddTasks(stage, 2, 7);
+        AddTasks(graph, stage, 0, 3);
+        AddTasks(graph, stage, 1, 5);
+        AddTasks(graph, stage, 2, 7);
 
         UNIT_ASSERT_VALUES_EQUAL(graph.GetStageTasksCount(stage), 15);
         UNIT_ASSERT_VALUES_EQUAL(graph.GetStageTasksCount(stage, 0), 3);
@@ -517,7 +582,7 @@ Y_UNIT_TEST_SUITE(TMaxTasksGraphTest) {
 
         auto stage = MakeStageId(0, 0);
         graph.AddStage(stage, TMaxTasksGraph::ANY, {});
-        graph.AddTasks(stage, 0, 100);
+        AddTasks(graph, stage, 0, 100);
 
         // 0 каналов (нет входов/выходов) => feasible даже при лимите 0
         graph.Shrink();
@@ -540,10 +605,10 @@ Y_UNIT_TEST_SUITE(TMaxTasksGraphTest) {
         graph.AddStage(stageC, TMaxTasksGraph::COPY, {stageB}, stageB);
         graph.AddStage(stageD, TMaxTasksGraph::ANY, {stageC});
 
-        graph.AddTasks(stageA, 0, 20);
-        graph.AddTasks(stageB, 0, 20);
-        graph.AddTasks(stageC, 0, 20);
-        graph.AddTasks(stageD, 0, 20);
+        AddTasks(graph, stageA, 0, 20);
+        AddTasks(graph, stageB, 0, 20);
+        AddTasks(graph, stageC, 0, 20);
+        AddTasks(graph, stageD, 0, 20);
 
         graph.Shrink();
 
@@ -576,9 +641,10 @@ Y_UNIT_TEST_SUITE(TMaxTasksGraphTest) {
             }
 
             graph.AddStage(stage, TMaxTasksGraph::ANY, inputs);
-            graph.AddTasks(stage, tasksPerStage); // round-robin
+            AddTasks(graph, stage, tasksPerStage); // round-robin
         }
 
+        graph.Distribute();
         graph.Shrink();
 
         for (const auto& stage : stages) {
@@ -607,10 +673,10 @@ Y_UNIT_TEST_SUITE(TMaxTasksGraphTest) {
         graph.AddStage(stageA, TMaxTasksGraph::ANY, {});
         graph.AddStage(stageB, TMaxTasksGraph::ANY, {stageA});
 
-        graph.AddTasks(stageA, 0, 15);
-        graph.AddTasks(stageA, 1, 1);
-        graph.AddTasks(stageB, 0, 15);
-        graph.AddTasks(stageB, 1, 1);
+        AddTasks(graph, stageA, 0, 15);
+        AddTasks(graph, stageA, 1, 1);
+        AddTasks(graph, stageB, 0, 15);
+        AddTasks(graph, stageB, 1, 1);
 
         graph.Shrink();
 
@@ -651,8 +717,8 @@ Y_UNIT_TEST_SUITE(TMaxTasksGraphTest) {
         graph.AddStage(stageA, TMaxTasksGraph::FIXED, {});
         graph.AddStage(stageB, TMaxTasksGraph::ANY, {stageA});
 
-        graph.AddTasks(stageA, 0, 100);
-        graph.AddTasks(stageB, 0, 100);
+        AddTasks(graph, stageA, 0, 100);
+        AddTasks(graph, stageB, 0, 100);
 
         // Shrink не крашится, но может не найти feasible решение
         graph.Shrink();
@@ -683,11 +749,11 @@ Y_UNIT_TEST_SUITE(TMaxTasksGraphTest) {
         graph.AddStage(stageD, TMaxTasksGraph::COPY, {stageC}, stageC);
         graph.AddStage(stageE, TMaxTasksGraph::ANY, {stageB, stageD});
 
-        graph.AddTasks(stageA, 0, 10);
-        graph.AddTasks(stageB, 0, 10);
-        graph.AddTasks(stageC, 0, 20);
-        graph.AddTasks(stageD, 0, 20);
-        graph.AddTasks(stageE, 0, 5);
+        AddTasks(graph, stageA, 0, 10);
+        AddTasks(graph, stageB, 0, 10);
+        AddTasks(graph, stageC, 0, 20);
+        AddTasks(graph, stageD, 0, 20);
+        AddTasks(graph, stageE, 0, 5);
 
         graph.Shrink();
 
@@ -714,8 +780,8 @@ Y_UNIT_TEST_SUITE(TMaxTasksGraphTest) {
         graph.AddStage(stageA, TMaxTasksGraph::ANY, {});
         graph.AddStage(stageB, TMaxTasksGraph::ANY, {stageA});
 
-        graph.AddTasks(stageA, 0, 10);
-        graph.AddTasks(stageB, 0, 10);
+        AddTasks(graph, stageA, 0, 10);
+        AddTasks(graph, stageB, 0, 10);
 
         graph.Shrink();
 
@@ -737,8 +803,8 @@ Y_UNIT_TEST_SUITE(TMaxTasksGraphTest) {
         graph.AddStage(stageA, TMaxTasksGraph::FIXED, {});
         graph.AddStage(stageB, TMaxTasksGraph::FIXED, {stageA});
 
-        graph.AddTasks(stageA, 0, 50);
-        graph.AddTasks(stageB, 0, 50);
+        AddTasks(graph, stageA, 0, 50);
+        AddTasks(graph, stageB, 0, 50);
 
         // Каналы = 2*50*50 = 5000 >> 10, но обе FIXED => alpha=0 даёт те же задачи
         // IsFeasible(0) тоже false => shrink сдаётся, ничего не меняет
@@ -757,12 +823,13 @@ Y_UNIT_TEST_SUITE(TMaxTasksGraphTest) {
         graph.AddStage(stageA, TMaxTasksGraph::ANY, {});
         graph.AddStage(stageB, TMaxTasksGraph::ANY, {stageA});
 
-        graph.AddTasks(stageA, 12); // round-robin: 4,4,4
-        graph.AddTasks(stageB, 12); // round-robin: 4,4,4
+        AddTasks(graph, stageA, 12); // round-robin: 4,4,4
+        AddTasks(graph, stageB, 12); // round-robin: 4,4,4
 
         // Каналы per node: 4*12 + 4*12 = 96 (total = 12 для обоих)
         // Лимит 30 => нужно шринкать
 
+        graph.Distribute();
         graph.Shrink();
 
         auto totalA = graph.GetStageTasksCount(stageA);
@@ -799,10 +866,10 @@ Y_UNIT_TEST_SUITE(TMaxTasksGraphTest) {
         graph.AddStage(stageC, TMaxTasksGraph::ANY, {stageA});
         graph.AddStage(stageD, TMaxTasksGraph::ANY, {stageA});
 
-        graph.AddTasks(stageA, 0, 10);
-        graph.AddTasks(stageB, 0, 10);
-        graph.AddTasks(stageC, 0, 10);
-        graph.AddTasks(stageD, 0, 10);
+        AddTasks(graph, stageA, 0, 10);
+        AddTasks(graph, stageB, 0, 10);
+        AddTasks(graph, stageC, 0, 10);
+        AddTasks(graph, stageD, 0, 10);
 
         graph.Shrink();
 
@@ -831,8 +898,8 @@ Y_UNIT_TEST_SUITE(TMaxTasksGraphTest) {
         graph.AddStage(stageA, TMaxTasksGraph::ANY, {});
         graph.AddStage(stageB, TMaxTasksGraph::ANY, {});
 
-        graph.AddTasks(stageA, 0, 100);
-        graph.AddTasks(stageB, 0, 100);
+        AddTasks(graph, stageA, 0, 100);
+        AddTasks(graph, stageB, 0, 100);
 
         // Лимит 0, но каналов тоже 0 => feasible
         graph.Shrink();
@@ -852,14 +919,14 @@ Y_UNIT_TEST_SUITE(TMaxTasksGraphTest) {
         graph.AddStage(stageA, TMaxTasksGraph::ANY, {});
         graph.AddStage(stageB, TMaxTasksGraph::ANY, {stageA});
 
-        graph.AddTasks(stageA, 0, 10);
-        graph.AddTasks(stageA, 1, 5);
-        graph.AddTasks(stageA, 2, 3);
-        graph.AddTasks(stageA, 3, 2);
-        graph.AddTasks(stageB, 0, 8);
-        graph.AddTasks(stageB, 1, 6);
-        graph.AddTasks(stageB, 2, 4);
-        graph.AddTasks(stageB, 3, 2);
+        AddTasks(graph, stageA, 0, 10);
+        AddTasks(graph, stageA, 1, 5);
+        AddTasks(graph, stageA, 2, 3);
+        AddTasks(graph, stageA, 3, 2);
+        AddTasks(graph, stageB, 0, 8);
+        AddTasks(graph, stageB, 1, 6);
+        AddTasks(graph, stageB, 2, 4);
+        AddTasks(graph, stageB, 3, 2);
 
         graph.Shrink();
 
@@ -892,11 +959,11 @@ Y_UNIT_TEST_SUITE(TMaxTasksGraphTest) {
         graph.AddStage(stageA, TMaxTasksGraph::ANY, {});
         graph.AddStage(stageB, TMaxTasksGraph::ANY, {stageA});
 
-        graph.AddTasks(stageA, 0, 10);
-        graph.AddTasks(stageA, 1, 10);
+        AddTasks(graph, stageA, 0, 10);
+        AddTasks(graph, stageA, 1, 10);
         // node2: 0 задач для stageA
-        graph.AddTasks(stageB, 0, 10);
-        graph.AddTasks(stageB, 1, 10);
+        AddTasks(graph, stageB, 0, 10);
+        AddTasks(graph, stageB, 1, 10);
 
         graph.Shrink();
 
@@ -913,8 +980,8 @@ Y_UNIT_TEST_SUITE(TMaxTasksGraphTest) {
         graph.AddStage(stageA, TMaxTasksGraph::ANY, {});
         graph.AddStage(stageB, TMaxTasksGraph::ANY, {stageA});
 
-        graph.AddTasks(stageA, 0, 1);
-        graph.AddTasks(stageB, 0, 100);
+        AddTasks(graph, stageA, 0, 1);
+        AddTasks(graph, stageB, 0, 100);
 
         graph.Shrink();
 

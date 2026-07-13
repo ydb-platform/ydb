@@ -106,5 +106,6 @@ RECURSE(
     test_meta
     wardens
     sqs
+    sqs_topic
 )
 RECURSE_FOR_TESTS(ut)

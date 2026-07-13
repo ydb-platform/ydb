@@ -3,7 +3,6 @@
 // For the sake of sane code completion.
 #include "logger.h"
 #endif
-#undef LOGGER_INL_H_
 
 #include <library/cpp/yt/yson_string/convert.h>
 #include <library/cpp/yt/yson_string/string.h>
@@ -22,9 +21,9 @@ inline bool TLogger::IsAnchorUpToDate(const TLoggingAnchor& anchor) const
 }
 
 template <class... TArgs>
-void TLogger::AddTag(const char* format, TArgs&&... args)
+void TLogger::AddTag(TFormatString<TArgs...> format, TArgs&&... args)
 {
-    AddRawTag(Format(TRuntimeFormat{format}, std::forward<TArgs>(args)...));
+    AddRawTag(Format(format, std::forward<TArgs>(args)...));
 }
 
 template <class TType>
@@ -35,7 +34,7 @@ void TLogger::AddStructuredTag(TStringBuf key, TType value)
 }
 
 template <class... TArgs>
-TLogger TLogger::WithTag(const char* format, TArgs&&... args) const &
+TLogger TLogger::WithTag(TFormatString<TArgs...> format, TArgs&&... args) const &
 {
     auto result = *this;
     result.AddTag(format, std::forward<TArgs>(args)...);
@@ -43,7 +42,7 @@ TLogger TLogger::WithTag(const char* format, TArgs&&... args) const &
 }
 
 template <class... TArgs>
-TLogger TLogger::WithTag(const char* format, TArgs&&... args) &&
+TLogger TLogger::WithTag(TFormatString<TArgs...> format, TArgs&&... args) &&
 {
     AddTag(format, std::forward<TArgs>(args)...);
     return std::move(*this);

@@ -76,6 +76,12 @@ public:
     NThreading::TFuture<void> Run();
     NThreading::TFuture<void> Stop();
 
+    [[nodiscard]] const TVector<IDirectBlockGroupPtr>&
+    GetDirectBlockGroups() const
+    {
+        return DirectBlockGroups;
+    }
+
     // IStorage implementation
     NThreading::TFuture<TReadBlocksLocalResponse> ReadBlocksLocal(
         TCallContextPtr callContext,
@@ -102,10 +108,16 @@ public:
 
     void UpdateVChunkConfig(const TVChunkConfig& cfg) override;
 
+    void RequestAddHost(size_t directBlockGroupId) override;
+
     ui64 GenerateLsn() override;
 
     // Read-only info for the monitoring UI.
     [[nodiscard]] TFastPathServiceInfo GetMonInfo() const;
+
+    // Gathers per-DBG monitoring snapshots: one if dbgIndex is set, else all.
+    [[nodiscard]] NThreading::TFuture<TVector<TDbgSnapshot>> GatherMonSnapshots(
+        std::optional<size_t> dbgIndex) const;
 
 private:
     void ScheduleDirtyMapDebugPrint();

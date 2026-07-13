@@ -340,10 +340,13 @@ message TFeatureFlags {
     optional bool EnableExportInParquet = 293 [default = false];
     optional bool EnableCutHistory = 294 [default = false];
     optional bool DisableOldSecretCreation = 295 [default = false];
+    optional bool EnableColumnshardInterval = 296 [default = false];
+    optional bool EnableColumnshardUuid = 297 [default = false];
+    optional bool EnableColumnshardDyNumber = 298 [default = false];
     // Disables accumulating the SSD-system component of FileStore (filesystem) space into the
     // owning domain's allocated counter. FileStore shards are resized to the final filesystem
     // size (up to petabytes), with thousands of shards the per-domain ui64 counter can overflow.
     // RequireRestart: the in-memory counter is rebuilt from all FileStores at SchemeShard start,
     // the counter can be re-enabled, which requires restarting the SchemeShard tablet.
-    optional bool DisableFileStoreSSDSystemSpaceAccounting = 296 [default = false, (RequireRestart) = true];
+    optional bool DisableFileStoreSSDSystemSpaceAccounting = 299 [default = false, (RequireRestart) = true];
 }

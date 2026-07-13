@@ -1039,7 +1039,6 @@ TNodeBroker::TDbChanges TNodeBroker::TDirtyState::DbLoadState(TTransactionContex
 
         YDB_LOG_DEBUG_CTX(ctx, "Loaded",
             {"dbLogPrefix", DbLogPrefix()},
-            {"config", Endl},
             {"configDebugString", config.DebugString()});
     } else {
         YDB_LOG_DEBUG_CTX(ctx, "Using default config",

@@ -56,7 +56,6 @@ public:
             Self->LoadConfigFromProto(config);
 
             YDB_LOG_DEBUG_CTX(ctx, "Loaded",
-                {"config", Endl},
                 {"configDebugString", config.DebugString()});
         } else {
             Self->LoadConfigFromProto(NKikimrTenantSlotBroker::TConfig());

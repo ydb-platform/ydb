@@ -586,9 +586,10 @@ public:
             for (ui32 failDomain = 0; failDomain < geom.GetNumFailDomainsPerFailRealm(); ++failDomain) {
                 for (ui32 vdisk = 0; vdisk < geom.GetNumVDisksPerFailDomain(); ++vdisk) {
                     const auto pdiskId = group[failRealm][failDomain][vdisk];
+                    const TPDiskRecord& record = PDisks.at(pdisk);
                     pdisks[pdiskId] = NLayoutChecker::TPDiskLayoutPosition(domainMapper,
-                            PDisks.at(pdiskId).GetLocation(),
-                            PDisks.at(pdiskId).DiskScope,
+                            record.GetLocation(),
+                            record.DiskScope,
                             pdiskId,
                             geom
                     );

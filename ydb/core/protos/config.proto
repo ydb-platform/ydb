@@ -414,6 +414,7 @@ message TBlobStorageFormatConfig {
         optional uint64 RoomId = 9;
         optional uint64 BodyId = 10;
         optional NKikimrBlobStorage.TPDiskConfig PDiskConfig = 11;
+        optional string DiskScope = 12;
     }
 
     repeated TDrive Drive = 1;

@@ -8,7 +8,7 @@ The {{ ydb-short-name }} topic has the following properties:
 
 * At-least-once guarantees when reading messages by subscribers.
 * Exactly-once guarantees when publishing messages (message deduplication).
-* Guarantees of sequential message processing ( [FIFO](https://en.wikipedia.org/wiki/Message_queue)) for messages published with the same [source identifier](#producer-id).
+* Guarantees of sequential message processing ([FIFO](https://en.wikipedia.org/wiki/Message_queue)) for messages published with the same [source identifier](#producer-id).
 * Scaling of message throughput for messages published with different sequence identifiers.
 
 ## Messages {#message}

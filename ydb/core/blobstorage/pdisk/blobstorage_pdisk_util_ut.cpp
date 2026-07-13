@@ -245,6 +245,42 @@ Y_UNIT_TEST_SUITE(TPDiskUtil) {
         UNIT_ASSERT_EQUAL(state->Val(), 0);
     }
 
+    Y_UNIT_TEST(BackpressureLightMergesOverlappingStalls) {
+        // Mirrors the L7 usage in TCompletionThreadsPool: every stalled thread
+        // increments the counter on entry and decrements it on exit inside Set
+        // callbacks, so the light must burn until the last thread leaves
+        TLight l;
+        TIntrusivePtr<::NMonitoring::TDynamicCounters> c(new ::NMonitoring::TDynamicCounters());
+        l.Initialize(c, TLightCounterConfig::WithDefaultLightSet("l7"));
+        auto state = c->GetCounter("l7_state"); // 1 = backpressure
+        auto count = c->GetCounter("l7_count"); // number of backpressure periods
+
+        ui64 stalled = 0;
+        auto enter = [&] { ++stalled; return true; };
+        auto leave = [&] { return --stalled > 0; };
+
+        l.Set(enter); // thread A hits the full queue
+        UNIT_ASSERT_EQUAL(state->Val(), 1);
+        UNIT_ASSERT_EQUAL(count->Val(), 1);
+        l.Set(enter); // thread B hits it too
+        UNIT_ASSERT_EQUAL(state->Val(), 1);
+        UNIT_ASSERT_EQUAL(count->Val(), 1);
+        l.Set(leave); // A wakes up and leaves, B is still stalled
+        UNIT_ASSERT_EQUAL(state->Val(), 1); // no blink off
+        UNIT_ASSERT_EQUAL(count->Val(), 1);
+        l.Set(leave); // B leaves
+        UNIT_ASSERT_EQUAL(state->Val(), 0); // the single merged period is over
+        UNIT_ASSERT_EQUAL(count->Val(), 1);
+
+        // A later stall opens a distinct period
+        l.Set(enter);
+        UNIT_ASSERT_EQUAL(state->Val(), 1);
+        UNIT_ASSERT_EQUAL(count->Val(), 2);
+        l.Set(leave);
+        UNIT_ASSERT_EQUAL(state->Val(), 0);
+        UNIT_ASSERT_EQUAL(count->Val(), 2);
+    }
+
     Y_UNIT_TEST(DriveEstimator) {
         TTempFileHandle file;
         file.Resize(1 << 30);

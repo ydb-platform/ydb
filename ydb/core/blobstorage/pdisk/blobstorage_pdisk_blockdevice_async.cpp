@@ -156,9 +156,9 @@ class TRealBlockDevice : public IBlockDevice {
                 if (totalSize >= MaxQueuedActions) {
                     // We have a risk to run out of buffers from BufferPool, so MaxQueuedActions is expected
                     // to counter that
-                    Device.Mon.L7.Set(true);
+                    Device.Mon.L7.Set([this] { ++StalledSchedulers; return true; });
                     Sleep(TDuration::MilliSeconds(1));
-                    Device.Mon.L7.Set(false);
+                    Device.Mon.L7.Set([this] { return --StalledSchedulers > 0; });
                     continue;
                 }
 
@@ -217,6 +217,7 @@ class TRealBlockDevice : public IBlockDevice {
     private:
         TRealBlockDevice &Device;
         const size_t MaxQueuedActions;
+        ui64 StalledSchedulers = 0; // Threads sleeping in backpressure; only accessed from L7 Set callbacks
     };
 
     class TSubmitThreadBase : public TThread {

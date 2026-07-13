@@ -285,6 +285,7 @@ namespace NKikimr::NStorage {
         TIntrusivePtr<TPDiskConfig> CreatePDiskConfig(const NKikimrBlobStorage::TNodeWardenServiceSet::TPDisk& pdisk);
         void UpdateStorageActorPoolMap();
         ui32 GetStorageActorPoolId(ui32 pdiskId);
+        void ApplyStorageActorPoolAffinity(const TIntrusivePtr<TPDiskConfig>& pdiskConfig, ui32 storageActorPoolId);
         void StartLocalPDisk(const NKikimrBlobStorage::TNodeWardenServiceSet::TPDisk& pdisk, bool temporary);
         void AskBSCToRestartPDisk(ui32 pdiskId, bool ignoreDegradedGroups, ui64 requestCookie);
         void OnPDiskRestartFinished(ui32 pdiskId, NKikimrProto::EReplyStatus status);

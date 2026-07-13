@@ -55,7 +55,7 @@ namespace NActors {
             }
             Pools[poolId].Guards.reset(new std::unique_ptr<TAffinityGuard>[pids.size()]);
             for (ui32 threadIdx = 0; threadIdx < pids.size(); ++threadIdx) {
-                Pools[poolId].Guards[threadIdx].reset(new TAffinityGuard(nullptr, pids[threadIdx]));
+                Pools[poolId].Guards[threadIdx].reset(new TAffinityGuard(static_cast<const TAffinity*>(nullptr), pids[threadIdx]));
             }
         }
 

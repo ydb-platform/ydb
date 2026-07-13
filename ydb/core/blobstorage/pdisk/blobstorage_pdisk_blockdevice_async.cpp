@@ -14,6 +14,7 @@
 #include <ydb/core/blobstorage/lwtrace_probes/blobstorage_probes.h>
 #include <ydb/library/services/services.pb.h>
 #include <ydb/library/yverify_stream/yverify_stream.h>
+#include <ydb/library/actors/util/affinity.h>
 #include <ydb/library/pdisk_io/aio.h>
 #include <ydb/library/pdisk_io/spdk_state.h>
 #include <ydb/library/pdisk_io/wcache.h>
@@ -29,6 +30,9 @@
 #include <util/system/sanitizers.h>
 #include <util/system/spinlock.h>
 #include <util/system/thread.h>
+
+#include <optional>
+#include <utility>
 
 namespace NKikimr {
 namespace NPDisk {
@@ -53,6 +57,7 @@ class TRealBlockDevice : public IBlockDevice {
 
         void *ThreadProc() override {
             SetCurrentThreadName(Name.data());
+            TAffinityGuard affinityGuard(Device.ThreadAffinity ? &*Device.ThreadAffinity : nullptr);
             auto prevCycleEnd = HPNow();
             bool isWorking = true;
             bool stateError = false;
@@ -284,7 +289,9 @@ class TRealBlockDevice : public IBlockDevice {
 
         static void* ThreadProc(void* _this) {
             SetCurrentThreadName("PdSbmEv");
-            static_cast<TSubmitThread*>(_this)->Exec();
+            auto *thread = static_cast<TSubmitThread*>(_this);
+            TAffinityGuard affinityGuard(thread->Device.ThreadAffinity ? &*thread->Device.ThreadAffinity : nullptr);
+            thread->Exec();
             return nullptr;
         }
 
@@ -390,7 +397,9 @@ class TRealBlockDevice : public IBlockDevice {
 
         static void* ThreadProc(void* _this) {
             SetCurrentThreadName("PdGetEv");
-            static_cast<TGetThread*>(_this)->Exec();
+            auto *thread = static_cast<TGetThread*>(_this);
+            TAffinityGuard affinityGuard(thread->Device.ThreadAffinity ? &*thread->Device.ThreadAffinity : nullptr);
+            thread->Exec();
             return nullptr;
         }
 
@@ -588,7 +597,9 @@ class TRealBlockDevice : public IBlockDevice {
 
         static int ThreadProcSpdk(void* _this) {
             SetCurrentThreadName("PdSbmGet");
-            static_cast<TSubmitGetThread*>(_this)->Exec();
+            auto *thread = static_cast<TSubmitGetThread*>(_this);
+            TAffinityGuard affinityGuard(thread->Device.ThreadAffinity ? &*thread->Device.ThreadAffinity : nullptr);
+            thread->Exec();
             return 0;
         }
 
@@ -745,7 +756,9 @@ class TRealBlockDevice : public IBlockDevice {
 
         static void* ThreadProc(void* _this) {
             SetCurrentThreadName("PdTrim");
-            static_cast<TTrimThread*>(_this)->Exec();
+            auto *thread = static_cast<TTrimThread*>(_this);
+            TAffinityGuard affinityGuard(thread->Device.ThreadAffinity ? &*thread->Device.ThreadAffinity : nullptr);
+            thread->Exec();
             return nullptr;
         }
 
@@ -837,6 +850,7 @@ private:
     TAtomicBlockCounter QuitCounter;
     TString LastWarning;
     bool ReadOnly;
+    std::optional<TCpuMask> ThreadAffinity;
     TDeque<IAsyncIoOperation*> Trash;
     TMutex TrashMutex;
 
@@ -845,7 +859,8 @@ private:
 public:
     TRealBlockDevice(const TString &path, TPDiskMon &mon, ui64 reorderingCycles,
             ui64 seekCostNs, ui64 deviceInFlight, TDeviceMode::TFlags flags, ui32 maxQueuedCompletionActions,
-            ui32 completionThreadsCount, TIntrusivePtr<TSectorMap> sectorMap, bool readOnly)
+            ui32 completionThreadsCount, TIntrusivePtr<TSectorMap> sectorMap, bool readOnly,
+            std::optional<TCpuMask> threadAffinity = std::nullopt)
         : Mon(mon)
         , Path(path)
         , CompletionThreads(nullptr)
@@ -867,6 +882,7 @@ public:
         , FlightControl(CountTrailingZeroBits(DeviceInFlight))
         , LastWarning(IsPowerOf2(deviceInFlight) ? "" : "Device inflight must be a power of 2")
         , ReadOnly(readOnly)
+        , ThreadAffinity(std::move(threadAffinity))
     {
         if (sectorMap) {
             DriveData = TDriveData();
@@ -1357,9 +1373,10 @@ class TCachedBlockDevice : public TRealBlockDevice {
 public:
     TCachedBlockDevice(const TString &path, TPDiskMon &mon, ui64 reorderingCycles,
             ui64 seekCostNs, ui64 deviceInFlight, TDeviceMode::TFlags flags, ui32 maxQueuedCompletionActions,
-            ui32 completionThreadsCount, TIntrusivePtr<TSectorMap> sectorMap, TPDisk * const pdisk, bool readOnly)
+            ui32 completionThreadsCount, TIntrusivePtr<TSectorMap> sectorMap, TPDisk * const pdisk, bool readOnly,
+            std::optional<TCpuMask> threadAffinity = std::nullopt)
         : TRealBlockDevice(path, mon, reorderingCycles, seekCostNs, deviceInFlight, flags,
-                maxQueuedCompletionActions, completionThreadsCount, sectorMap, readOnly)
+                maxQueuedCompletionActions, completionThreadsCount, sectorMap, readOnly, std::move(threadAffinity))
         , ReadsInFly(0)
         , PDisk(pdisk)
     {}
@@ -1495,14 +1512,17 @@ public:
 
 IBlockDevice* CreateRealBlockDevice(const TString &path, TPDiskMon &mon, ui64 reorderingCycles,
         ui64 seekCostNs, ui64 deviceInFlight, TDeviceMode::TFlags flags, ui32 maxQueuedCompletionActions,
-        ui32 completionThreadsCount, TIntrusivePtr<TSectorMap> sectorMap, TPDisk * const pdisk, bool readOnly) {
+        ui32 completionThreadsCount, TIntrusivePtr<TSectorMap> sectorMap, TPDisk * const pdisk, bool readOnly,
+        std::optional<TCpuMask> threadAffinity) {
     return new TCachedBlockDevice(path, mon, reorderingCycles, seekCostNs, deviceInFlight, flags,
-            maxQueuedCompletionActions, completionThreadsCount, sectorMap, pdisk, readOnly);
+            maxQueuedCompletionActions, completionThreadsCount, sectorMap, pdisk, readOnly, std::move(threadAffinity));
 }
 
 IBlockDevice* CreateRealBlockDeviceWithDefaults(const TString &path, TPDiskMon &mon, TDeviceMode::TFlags flags,
-        TIntrusivePtr<TSectorMap> sectorMap, TActorSystem *actorSystem, TPDisk * const pdisk, bool readOnly) {
-    IBlockDevice *device = CreateRealBlockDevice(path, mon, 0, 0, 4, flags, 8, 1, sectorMap, pdisk, readOnly);
+        TIntrusivePtr<TSectorMap> sectorMap, TActorSystem *actorSystem, TPDisk * const pdisk, bool readOnly,
+        std::optional<TCpuMask> threadAffinity) {
+    IBlockDevice *device = CreateRealBlockDevice(path, mon, 0, 0, 4, flags, 8, 1, sectorMap, pdisk, readOnly,
+        std::move(threadAffinity));
     device->Initialize(std::make_shared<TPDiskCtx>(actorSystem));
     return device;
 }

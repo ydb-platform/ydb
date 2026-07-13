@@ -10,6 +10,9 @@
 #include <util/string/builder.h>
 #include <util/string/split.h>
 
+#include <optional>
+#include <utility>
+
 namespace NKikimr::NStorage {
     static const std::unordered_map<NPDisk::EDeviceType, ui64> DefaultSpeedLimit{
         {NPDisk::DEVICE_TYPE_ROT, 100000000},
@@ -66,6 +69,24 @@ namespace NKikimr::NStorage {
         Y_ABORT_UNLESS(it != StorageActorPoolByPDiskId.end(), "No storage actor pool allocated for PDiskId# %u",
             static_cast<unsigned>(pdiskId));
         return it->second;
+    }
+
+    void TNodeWarden::ApplyStorageActorPoolAffinity(const TIntrusivePtr<TPDiskConfig>& pdiskConfig, ui32 storageActorPoolId) {
+        bool isStoragePool = false;
+        for (const ui32 poolId : AppData()->StoragePools) {
+            if (poolId == storageActorPoolId) {
+                isStoragePool = true;
+                break;
+            }
+        }
+        if (!isStoragePool) {
+            return;
+        }
+
+        std::optional<TCpuMask> affinity = ActorContext().ActorSystem()->GetExecutorPoolAffinity(storageActorPoolId);
+        if (affinity) {
+            pdiskConfig->StoragePoolAffinity = std::move(*affinity);
+        }
     }
 
     TIntrusivePtr<TPDiskConfig> TNodeWarden::CreatePDiskConfig(const NKikimrBlobStorage::TNodeWardenServiceSet::TPDisk& pdisk)  {
@@ -253,6 +274,8 @@ namespace NKikimr::NStorage {
         auto pdiskConfig = CreatePDiskConfig(pdisk);
         if (temporary) {
             pdiskConfig->MetadataOnly = true;
+        } else {
+            ApplyStorageActorPoolAffinity(pdiskConfig, storageActorPoolId);
         }
 
         const ui64 pdiskGuid = pdisk.GetPDiskGuid();
@@ -448,6 +471,7 @@ namespace NKikimr::NStorage {
         const TActorId actorId = MakeBlobStoragePDiskID(LocalNodeId, pdiskId);
 
         TIntrusivePtr<TPDiskConfig> pdiskConfig = CreatePDiskConfig(it->second.Record);
+        ApplyStorageActorPoolAffinity(pdiskConfig, GetStorageActorPoolId(pdiskId));
 
         Cfg->PDiskKey.Initialize();
         Send(actorId, new TEvBlobStorage::TEvAskWardenRestartPDiskResult(pdiskId, Cfg->PDiskKey, true, pdiskConfig));

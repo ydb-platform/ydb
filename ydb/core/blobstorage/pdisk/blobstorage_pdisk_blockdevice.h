@@ -10,6 +10,9 @@
 #include <ydb/library/pdisk_io/aio.h>
 #include <ydb/library/pdisk_io/drivedata.h>
 #include <ydb/library/pdisk_io/sector_map.h>
+#include <ydb/library/actors/util/cpumask.h>
+
+#include <optional>
 
 namespace NKikimr {
 
@@ -65,9 +68,10 @@ class TPDisk;
 IBlockDevice* CreateRealBlockDevice(const TString &path, TPDiskMon &mon,
         ui64 reorderingCycles, ui64 seekCostNs, ui64 deviceInFlight, TDeviceMode::TFlags flags,
         ui32 maxQueuedCompletionActions, ui32 completionThreadsCount, TIntrusivePtr<TSectorMap> sectorMap,
-        TPDisk * const pdisk = nullptr, bool readOnly = false);
+        TPDisk * const pdisk = nullptr, bool readOnly = false, std::optional<TCpuMask> threadAffinity = std::nullopt);
 IBlockDevice* CreateRealBlockDeviceWithDefaults(const TString &path, TPDiskMon &mon, TDeviceMode::TFlags flags,
-        TIntrusivePtr<TSectorMap> sectorMap, TActorSystem *actorSystem, TPDisk * const pdisk = nullptr, bool readOnly = false);
+        TIntrusivePtr<TSectorMap> sectorMap, TActorSystem *actorSystem, TPDisk * const pdisk = nullptr, bool readOnly = false,
+        std::optional<TCpuMask> threadAffinity = std::nullopt);
 
 } // NPDisk
 } // NKikimr

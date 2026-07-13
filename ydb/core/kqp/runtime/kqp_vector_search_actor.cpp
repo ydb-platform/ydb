@@ -292,9 +292,8 @@ private:
     }
 
     void FlushPendingMainKeys() {
-        TVector<TString> batch;
+        TVector<TSerializedCellVec> batch;
         batch.swap(PendingMainKeys);
-        PendingMainKeys.reserve(batch.size());
         LaunchMainReadFor(std::move(batch));
     }
 
@@ -703,7 +702,7 @@ private:
     // batch the posting scan yields. Each batch pushes its own top-K down; the global K
     // nearest are necessarily among the per-batch top-Ks, which the actor merges in
     // FinalizeResults.
-    void LaunchMainReadFor(TVector<TString> keys) {
+    void LaunchMainReadFor(TVector<TSerializedCellVec> keys) {
         if (keys.empty()) {
             return;
         }
@@ -715,17 +714,12 @@ private:
         // The read actor consumes point lookups in the given order, matching them
         // against partition ranges in lockstep; so the points must be globally
         // sorted ascending by typed key comparison. The posting scan collects PKs
-        // per leaf cluster, so they are not globally ordered yet.
+        // per leaf cluster, so they are not globally ordered yet. The keys arrive
+        // with their cells already parsed (built straight from the posting row's
+        // cells, see MakePostingPk), so the sort compares without re-parsing.
         const auto* keyTypes = MainKeyTypeInfos.data();
         const ui32 keyCount = MainKeyTypeInfos.size();
-        // Parse each key once up front, then sort the parsed cell vecs, instead of
-        // re-deserializing both operands on every comparison.
-        TVector<TSerializedCellVec> sortedKeys;
-        sortedKeys.reserve(keys.size());
-        for (auto& key : keys) {
-            sortedKeys.emplace_back(std::move(key));
-        }
-        std::sort(sortedKeys.begin(), sortedKeys.end(), [keyTypes, keyCount](const TSerializedCellVec& a, const TSerializedCellVec& b) {
+        std::sort(keys.begin(), keys.end(), [keyTypes, keyCount](const TSerializedCellVec& a, const TSerializedCellVec& b) {
             return CompareTypedCellVectors(a.GetCells().data(), b.GetCells().data(), keyTypes, keyCount) < 0;
         });
 
@@ -740,7 +734,7 @@ private:
 
         // The point lookups are handed to the read actor pre-parsed instead of going
         // through the settings proto, which would copy and re-parse every key.
-        LaunchRead(src, arena, EReadKind::Main, std::move(sortedKeys));
+        LaunchRead(src, arena, EReadKind::Main, std::move(keys));
     }
 
     // Launch one inner read for a phase over all its ranges. The standard read actor
@@ -846,6 +840,9 @@ private:
                 bool finished = false;
                 NKikimr::NMiniKQL::TUnboxedValueBatch rows;
                 ar.Read->GetAsyncInputData(rows, watermark, finished, freeSpace);
+                if (ar.Kind == EReadKind::Posting && !PostingCovers && rows.RowCount() > 0) {
+                    PendingMainKeys.reserve(PendingMainKeys.size() + rows.RowCount());
+                }
                 rows.ForEachRow([&](NUdf::TUnboxedValue& value) {
                     ProcessReadRow(value, ar.Kind);
                 });
@@ -943,8 +940,8 @@ private:
                 // otherwise the read row is just the PK columns.
                 if (PostingCovers) {
                     if (OverlapClusters > 1) {
-                        TString serialized = SerializePostingPk(value);
-                        if (SeenKeys.insert(serialized).second) {
+                        TString serialized = TSerializedCellVec::Serialize(PostingPkCells(value));
+                        if (SeenKeys.insert(std::move(serialized)).second) {
                             AddCandidate(value);
                         }
                     } else {
@@ -953,13 +950,9 @@ private:
                 } else {
                     // Buffer the PK for a pipelined main read (dispatched as the
                     // posting scan streams rows in; see MaybeFlushPendingMainKeys).
-                    TString serialized = SerializePostingPk(value);
-                    if (OverlapClusters > 1) {
-                        if (SeenKeys.insert(serialized).second) {
-                            PendingMainKeys.push_back(std::move(serialized));
-                        }
-                    } else {
-                        PendingMainKeys.push_back(std::move(serialized));
+                    TSerializedCellVec pk = MakePostingPk(value);
+                    if (OverlapClusters <= 1 || SeenKeys.insert(pk.GetBuffer()).second) {
+                        PendingMainKeys.push_back(std::move(pk));
                     }
                 }
                 break;
@@ -971,17 +964,26 @@ private:
         }
     }
 
-    // Serialize the PK cell vec of a posting row: used as the dedup key and, in
-    // the non-covered path, as the buffered main-read key. The PK columns are
-    // read at CoveredPkPositions in the covered path, else at positions 0..N-1.
-    TString SerializePostingPk(NUdf::TUnboxedValue& value) {
+    // Extract the PK cells of a posting row (into PkCellsScratch): used for the
+    // dedup key and, in the non-covered path, the buffered main-read key. The PK
+    // columns are read at CoveredPkPositions in the covered path, else at
+    // positions 0..N-1. The cells reference the row's memory, so they are only
+    // valid until the row is released.
+    TConstArrayRef<TCell> PostingPkCells(NUdf::TUnboxedValue& value) {
         const ui32 n = MainKeyTypeInfos.size();
         PkCellsScratch.resize(n);
         for (ui32 i = 0; i < n; ++i) {
             const ui32 pos = PostingCovers ? CoveredPkPositions[i] : i;
             PkCellsScratch[i] = NMiniKQL::MakeCell(MainKeyTypeInfos[i], value.GetElement(pos), TypeEnv, /* copy */ false);
         }
-        return TSerializedCellVec::Serialize(PkCellsScratch);
+        return PkCellsScratch;
+    }
+
+    // Build the buffered main-read key for a posting row. Constructing the cell
+    // vec straight from the cells fills the buffer and the parsed cells in one
+    // pass, so LaunchMainReadFor sorts the keys without re-parsing the buffers.
+    TSerializedCellVec MakePostingPk(NUdf::TUnboxedValue& value) {
+        return TSerializedCellVec(PostingPkCells(value));
     }
 
     // Build a candidate (output row + distance to the target) from a read row
@@ -1145,8 +1147,8 @@ private:
     TVector<NScheme::TTypeInfo> OutputColumnTypeInfos;
     std::unique_ptr<NKikimr::NKMeans::IClusters> RankClusters;
 
-    // Reusable scratch for serializing a posting row's PK (dedup key, and the
-    // main-read key in the non-covered path).
+    // Reusable scratch for extracting a posting row's PK cells (dedup key, and
+    // the main-read key in the non-covered path). See PostingPkCells.
     TVector<TCell> PkCellsScratch;
 
     // Covered-index posting read: the read row holds the output columns at
@@ -1183,11 +1185,15 @@ private:
     // are gathered here and inserted into the shared cache when the read finishes.
     THashMap<TClusterId, TOwnedCellVecBatch> CachingLevelBatches;
 
-    // Non-covered posting rows produce candidate PKs (serialized cell vecs) buffered
-    // here and streamed into pipelined main reads as the posting scan delivers them
-    // (see MaybeFlushPendingMainKeys). SeenKeys dedups PKs that recur across overlapping
-    // clusters, across all posting shards of the query.
-    TVector<TString> PendingMainKeys;
+    // Non-covered posting rows produce candidate PKs (cell vecs with the buffer and
+    // the parsed cells built in one pass, see MakePostingPk) buffered here and
+    // streamed into pipelined main reads as the posting scan delivers them
+    // (see MaybeFlushPendingMainKeys). Growth never relocates: PollActiveReads
+    // reserves each posting batch's row count up front, which matters because
+    // relocating a TSerializedCellVec is a deep copy (its move constructor is not
+    // noexcept). SeenKeys dedups PKs that recur across overlapping clusters,
+    // across all posting shards of the query.
+    TVector<TSerializedCellVec> PendingMainKeys;
     THashSet<TString> SeenKeys;
 
     // Bounded max-heap (by distance, worst at the front) of the TopK nearest result

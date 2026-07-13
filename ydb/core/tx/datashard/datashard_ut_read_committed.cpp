@@ -334,8 +334,12 @@ Y_UNIT_TEST(CommitAfterDeadlockResolution) {
 }
 
 Y_UNIT_TEST(ReadAfterSplit) {
+    // Reproducer for https://st.yandex-team.ru/KIKIMR-25995
+    //
     // Tests that a multi-page PESSIMISTIC_NONE range read that spans a split
-    // fails with "Read conflict with concurrent transaction".
+    // fails with OVERLOADED instead of ABORTED ("Read conflict with concurrent transaction").
+    //
+    // Previously, the following race was possible:
     //
     // The split erases tx1's write lock (calling OnRemoved which marks it
     // IsBroken=true).  When TTxReadContinue::ApplyLocks runs after the split,
@@ -402,9 +406,10 @@ Y_UNIT_TEST(ReadAfterSplit) {
     readPromise.SendAck();
     blockActivation.Unblock().Stop();
 
+    // Check that the shard responds with the OVERLOADED error (instead of ABORTED).
     UNIT_ASSERT_VALUES_EQUAL(
         readPromise.NextString(),
-        TStringBuilder() << "ERROR: ABORTED");
+        TStringBuilder() << "ERROR: OVERLOADED");
 
     WaitTxNotification(server, sender, splitTxId);
 }

@@ -2837,6 +2837,9 @@ private:
     TLoanReturnTracker LoanReturnTracker;
     TFollowerState FollowerState;
 
+    // Non-persistent flag that is set just after we waited for all pending transactions to finish
+    // and are starting the split.
+    bool SplitStarted = false;
     bool SplitSnapshotStarted;      // Non-persistent flag that is used to restart snapshot in case of datashard restart
     TSplitSrcSnapshotSender SplitSrcSnapshotSender;
     // TODO: make this persitent

@@ -143,6 +143,7 @@ namespace NKikimr::NStorage {
         NKikimrBlobStorage::TNodeWardenServiceSet DynamicServices; // these are controlled by BSC
 
         std::map<TPDiskKey, TPDiskRecord> LocalPDisks;
+        THashMap<ui32, ui32> StorageActorPoolByPDiskId;
         TIntrusiveList<TPDiskRecord, TUnreportedMetricTag> PDisksWithUnreportedMetrics;
         std::map<ui64, ui32> PDiskRestartRequests;
         ui64 LastShredCookie = 0;
@@ -343,6 +344,9 @@ namespace NKikimr::NStorage {
             TString *configWarning = nullptr);
         static void InferPDiskSlotCount(TIntrusivePtr<TPDiskConfig> pdiskConfig, ui64 driveSize,
             ui64 unitSizeInBytes, ui32 maxSlots);
+        void UpdateStorageActorPoolMap();
+        ui32 GetStorageActorPoolId(ui32 pdiskId);
+        void ApplyStorageActorPoolAffinity(const TIntrusivePtr<TPDiskConfig>& pdiskConfig, ui32 storageActorPoolId);
         void StartLocalPDisk(const NKikimrBlobStorage::TNodeWardenServiceSet::TPDisk& pdisk, bool temporary);
         void AskBSCToRestartPDisk(ui32 pdiskId, bool ignoreDegradedGroups, ui64 requestCookie);
         void OnPDiskRestartFinished(ui32 pdiskId, NKikimrProto::EReplyStatus status);
@@ -352,10 +356,8 @@ namespace NKikimr::NStorage {
         void OnUnableToRestartPDisk(ui32 pdiskId, TString error);
         void ApplyServiceSetPDisks(const NKikimrBlobStorage::TNodeWardenServiceSet& serviceSet);
 
-        using TServiceSetPDisk = NKikimrBlobStorage::TNodeWardenServiceSet::TPDisk;
-
         void MergeServiceSetPDisks(NProtoBuf::RepeatedPtrField<TServiceSetPDisk> *to,
-            const NProtoBuf::RepeatedPtrField<TServiceSetPDisk>& from);
+            const NProtoBuf::RepeatedPtrField<TServiceSetPDisk>& from, TVector<TServiceSetPDisk>& pdisksToRestart);
 
         void ApplyServiceSetPDisks();
 
@@ -429,7 +431,7 @@ namespace NKikimr::NStorage {
 
         void ReportLatencies();
         void Handle(TEvGroupStatReport::TPtr ev);
-        void StartAggregator(const TActorId& vdiskServiceId, ui32 groupId);
+        void StartAggregator(const TActorId& vdiskServiceId, ui32 groupId, ui32 actorPoolId);
         void StopAggregator(const TActorId& vdiskServiceId);
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////

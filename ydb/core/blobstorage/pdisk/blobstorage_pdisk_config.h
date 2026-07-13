@@ -16,6 +16,9 @@
 #include <ydb/library/pdisk_io/file_params.h>
 #include <ydb/library/pdisk_io/sector_map.h>
 #include <ydb/library/pdisk_io/wcache.h>
+#include <ydb/library/actors/util/cpumask.h>
+
+#include <optional>
 
 namespace NKikimr {
 
@@ -191,6 +194,7 @@ struct TPDiskConfig : public TThrRefBase {
 
     // used for tests only
     std::optional<ui64> NonceRandNum;
+    std::optional<TCpuMask> StoragePoolAffinity;
 
     TPDiskConfig(ui64 pDiskGuid, ui32 pdiskId, ui64 pDiskCategory)
         : TPDiskConfig({}, pDiskGuid, pdiskId, pDiskCategory)
@@ -360,6 +364,9 @@ struct TPDiskConfig : public TThrRefBase {
         str << " UseBytesFlightControl# " << (UseBytesFlightControl ? "true" : "false") << x;
         str << " PlainDataChunks# " << PlainDataChunks << x;
         str << " SeparateHugePriorities# " << SeparateHugePriorities << x;
+        if (StoragePoolAffinity) {
+            str << " StoragePoolAffinityCpuCount# " << StoragePoolAffinity->CpuCount() << x;
+        }
         str << "}";
         return str.Str();
     }

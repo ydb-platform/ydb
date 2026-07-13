@@ -682,9 +682,7 @@ namespace Tests {
         }
 
         TCpuManagerConfig cpuManager;
-        for (int poolId = 0; poolId < actorSystemConfig.GetExecutor().size(); poolId++) {
-            NActorSystemConfigHelpers::AddExecutorPool(cpuManager, actorSystemConfig.GetExecutor(poolId), actorSystemConfig, poolId, nullptr);
-        }
+        NActorSystemConfigHelpers::AddExecutorPools(cpuManager, actorSystemConfig, nullptr);
 
         const NAutoConfigInitializer::TASPools pools = NAutoConfigInitializer::GetASPools(actorSystemConfig, useAutoConfig);
 
@@ -694,7 +692,8 @@ namespace Tests {
             .MonitorStuckActors = actorSystemConfig.GetMonitorStuckActors()
         }, TTestActorRuntime::TActorSystemPools{
             pools.SystemPoolId, pools.UserPoolId, pools.IOPoolId, pools.BatchPoolId,
-            NAutoConfigInitializer::GetServicePools(actorSystemConfig, useAutoConfig)
+            NAutoConfigInitializer::GetServicePools(actorSystemConfig, useAutoConfig),
+            NActorSystemConfigHelpers::GetStoragePoolIds(actorSystemConfig)
         });
     }
 

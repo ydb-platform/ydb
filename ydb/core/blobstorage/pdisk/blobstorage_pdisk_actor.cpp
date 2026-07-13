@@ -439,6 +439,8 @@ public:
                     auto [cfg, mainKey, actorSystem, pDiskActor, metadata] = std::move(*params);
                     delete params;
 
+                    TAffinityGuard affinityGuard(cfg->StoragePoolAffinity ? &*cfg->StoragePoolAffinity : nullptr);
+
                     if (cfg->ReadOnly) {
                         TString readOnlyError = "PDisk is in read-only mode";
                         YDB_LOG_ERROR_CTX(*actorSystem, "Formatting error",
@@ -507,6 +509,8 @@ public:
                 TIntrusivePtr<TPDiskConfig> cfg = std::get<2>(*params);
                 const TIntrusivePtr<::NMonitoring::TDynamicCounters> counters(new ::NMonitoring::TDynamicCounters);
                 std::shared_ptr<TPDiskCtx> pCtx = std::get<3>(*params);
+
+                TAffinityGuard affinityGuard(cfg->StoragePoolAffinity ? &*cfg->StoragePoolAffinity : nullptr);
 
                 if (cfg->ReadOnly) {
                     TString readOnlyError = "PDisk is in read-only mode";

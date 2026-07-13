@@ -1,15 +1,13 @@
 -- Issues on a daily timeline: for each date, which issues are open at end of day and which were closed that day.
--- Open/closed state and SLA start come from info.open_periods (close/reopen intervals from GitHub export; literal JSON paths by index).
+-- Open/closed state and SLA start from github_data/issue_open_periods (exported with issues).
 -- RECENT DAYS: updates only the last $recent_days days (31 by default). Use with data_mart_executor for quick refresh.
 -- Dates come from tests_monitor (date_window), no ListFromRange/FLATTEN BY for the date spine.
 -- In BI: filter by date, owner_team; for issue list per day — filter by date; for counts — GROUP BY date, SUM(is_open_at_end_of_day), SUM(closed_on_this_day).
 --
 $timeline_days = 365;
 $recent_days = 31;  -- only these days are selected (today and $recent_days-1 days back)
-$max_open_periods = 50;
 
 -- Owner by area (prefix match): area/cs/analytics -> area/cs in mapping. Return matched_area (om.area) for output.
--- Distinct areas from source github_data/issues. New areas get owner/area from fallback in output.
 $owner_mapping = (
     SELECT area AS area, owner_team AS owner_team, matched_area AS matched_area
     FROM (
@@ -25,134 +23,13 @@ $owner_mapping = (
     WHERE rn = 1
 );
 
-$json_period_start = ($info, $idx) -> {
-    RETURN CASE $idx
-        WHEN 0 THEN JSON_VALUE($info, '$.open_periods[0].start')
-        WHEN 1 THEN JSON_VALUE($info, '$.open_periods[1].start')
-        WHEN 2 THEN JSON_VALUE($info, '$.open_periods[2].start')
-        WHEN 3 THEN JSON_VALUE($info, '$.open_periods[3].start')
-        WHEN 4 THEN JSON_VALUE($info, '$.open_periods[4].start')
-        WHEN 5 THEN JSON_VALUE($info, '$.open_periods[5].start')
-        WHEN 6 THEN JSON_VALUE($info, '$.open_periods[6].start')
-        WHEN 7 THEN JSON_VALUE($info, '$.open_periods[7].start')
-        WHEN 8 THEN JSON_VALUE($info, '$.open_periods[8].start')
-        WHEN 9 THEN JSON_VALUE($info, '$.open_periods[9].start')
-        WHEN 10 THEN JSON_VALUE($info, '$.open_periods[10].start')
-        WHEN 11 THEN JSON_VALUE($info, '$.open_periods[11].start')
-        WHEN 12 THEN JSON_VALUE($info, '$.open_periods[12].start')
-        WHEN 13 THEN JSON_VALUE($info, '$.open_periods[13].start')
-        WHEN 14 THEN JSON_VALUE($info, '$.open_periods[14].start')
-        WHEN 15 THEN JSON_VALUE($info, '$.open_periods[15].start')
-        WHEN 16 THEN JSON_VALUE($info, '$.open_periods[16].start')
-        WHEN 17 THEN JSON_VALUE($info, '$.open_periods[17].start')
-        WHEN 18 THEN JSON_VALUE($info, '$.open_periods[18].start')
-        WHEN 19 THEN JSON_VALUE($info, '$.open_periods[19].start')
-        WHEN 20 THEN JSON_VALUE($info, '$.open_periods[20].start')
-        WHEN 21 THEN JSON_VALUE($info, '$.open_periods[21].start')
-        WHEN 22 THEN JSON_VALUE($info, '$.open_periods[22].start')
-        WHEN 23 THEN JSON_VALUE($info, '$.open_periods[23].start')
-        WHEN 24 THEN JSON_VALUE($info, '$.open_periods[24].start')
-        WHEN 25 THEN JSON_VALUE($info, '$.open_periods[25].start')
-        WHEN 26 THEN JSON_VALUE($info, '$.open_periods[26].start')
-        WHEN 27 THEN JSON_VALUE($info, '$.open_periods[27].start')
-        WHEN 28 THEN JSON_VALUE($info, '$.open_periods[28].start')
-        WHEN 29 THEN JSON_VALUE($info, '$.open_periods[29].start')
-        WHEN 30 THEN JSON_VALUE($info, '$.open_periods[30].start')
-        WHEN 31 THEN JSON_VALUE($info, '$.open_periods[31].start')
-        WHEN 32 THEN JSON_VALUE($info, '$.open_periods[32].start')
-        WHEN 33 THEN JSON_VALUE($info, '$.open_periods[33].start')
-        WHEN 34 THEN JSON_VALUE($info, '$.open_periods[34].start')
-        WHEN 35 THEN JSON_VALUE($info, '$.open_periods[35].start')
-        WHEN 36 THEN JSON_VALUE($info, '$.open_periods[36].start')
-        WHEN 37 THEN JSON_VALUE($info, '$.open_periods[37].start')
-        WHEN 38 THEN JSON_VALUE($info, '$.open_periods[38].start')
-        WHEN 39 THEN JSON_VALUE($info, '$.open_periods[39].start')
-        WHEN 40 THEN JSON_VALUE($info, '$.open_periods[40].start')
-        WHEN 41 THEN JSON_VALUE($info, '$.open_periods[41].start')
-        WHEN 42 THEN JSON_VALUE($info, '$.open_periods[42].start')
-        WHEN 43 THEN JSON_VALUE($info, '$.open_periods[43].start')
-        WHEN 44 THEN JSON_VALUE($info, '$.open_periods[44].start')
-        WHEN 45 THEN JSON_VALUE($info, '$.open_periods[45].start')
-        WHEN 46 THEN JSON_VALUE($info, '$.open_periods[46].start')
-        WHEN 47 THEN JSON_VALUE($info, '$.open_periods[47].start')
-        WHEN 48 THEN JSON_VALUE($info, '$.open_periods[48].start')
-        WHEN 49 THEN JSON_VALUE($info, '$.open_periods[49].start')
-        ELSE NULL
-    END
-};
-
-$json_period_end = ($info, $idx) -> {
-    RETURN CASE $idx
-        WHEN 0 THEN JSON_VALUE($info, '$.open_periods[0].end')
-        WHEN 1 THEN JSON_VALUE($info, '$.open_periods[1].end')
-        WHEN 2 THEN JSON_VALUE($info, '$.open_periods[2].end')
-        WHEN 3 THEN JSON_VALUE($info, '$.open_periods[3].end')
-        WHEN 4 THEN JSON_VALUE($info, '$.open_periods[4].end')
-        WHEN 5 THEN JSON_VALUE($info, '$.open_periods[5].end')
-        WHEN 6 THEN JSON_VALUE($info, '$.open_periods[6].end')
-        WHEN 7 THEN JSON_VALUE($info, '$.open_periods[7].end')
-        WHEN 8 THEN JSON_VALUE($info, '$.open_periods[8].end')
-        WHEN 9 THEN JSON_VALUE($info, '$.open_periods[9].end')
-        WHEN 10 THEN JSON_VALUE($info, '$.open_periods[10].end')
-        WHEN 11 THEN JSON_VALUE($info, '$.open_periods[11].end')
-        WHEN 12 THEN JSON_VALUE($info, '$.open_periods[12].end')
-        WHEN 13 THEN JSON_VALUE($info, '$.open_periods[13].end')
-        WHEN 14 THEN JSON_VALUE($info, '$.open_periods[14].end')
-        WHEN 15 THEN JSON_VALUE($info, '$.open_periods[15].end')
-        WHEN 16 THEN JSON_VALUE($info, '$.open_periods[16].end')
-        WHEN 17 THEN JSON_VALUE($info, '$.open_periods[17].end')
-        WHEN 18 THEN JSON_VALUE($info, '$.open_periods[18].end')
-        WHEN 19 THEN JSON_VALUE($info, '$.open_periods[19].end')
-        WHEN 20 THEN JSON_VALUE($info, '$.open_periods[20].end')
-        WHEN 21 THEN JSON_VALUE($info, '$.open_periods[21].end')
-        WHEN 22 THEN JSON_VALUE($info, '$.open_periods[22].end')
-        WHEN 23 THEN JSON_VALUE($info, '$.open_periods[23].end')
-        WHEN 24 THEN JSON_VALUE($info, '$.open_periods[24].end')
-        WHEN 25 THEN JSON_VALUE($info, '$.open_periods[25].end')
-        WHEN 26 THEN JSON_VALUE($info, '$.open_periods[26].end')
-        WHEN 27 THEN JSON_VALUE($info, '$.open_periods[27].end')
-        WHEN 28 THEN JSON_VALUE($info, '$.open_periods[28].end')
-        WHEN 29 THEN JSON_VALUE($info, '$.open_periods[29].end')
-        WHEN 30 THEN JSON_VALUE($info, '$.open_periods[30].end')
-        WHEN 31 THEN JSON_VALUE($info, '$.open_periods[31].end')
-        WHEN 32 THEN JSON_VALUE($info, '$.open_periods[32].end')
-        WHEN 33 THEN JSON_VALUE($info, '$.open_periods[33].end')
-        WHEN 34 THEN JSON_VALUE($info, '$.open_periods[34].end')
-        WHEN 35 THEN JSON_VALUE($info, '$.open_periods[35].end')
-        WHEN 36 THEN JSON_VALUE($info, '$.open_periods[36].end')
-        WHEN 37 THEN JSON_VALUE($info, '$.open_periods[37].end')
-        WHEN 38 THEN JSON_VALUE($info, '$.open_periods[38].end')
-        WHEN 39 THEN JSON_VALUE($info, '$.open_periods[39].end')
-        WHEN 40 THEN JSON_VALUE($info, '$.open_periods[40].end')
-        WHEN 41 THEN JSON_VALUE($info, '$.open_periods[41].end')
-        WHEN 42 THEN JSON_VALUE($info, '$.open_periods[42].end')
-        WHEN 43 THEN JSON_VALUE($info, '$.open_periods[43].end')
-        WHEN 44 THEN JSON_VALUE($info, '$.open_periods[44].end')
-        WHEN 45 THEN JSON_VALUE($info, '$.open_periods[45].end')
-        WHEN 46 THEN JSON_VALUE($info, '$.open_periods[46].end')
-        WHEN 47 THEN JSON_VALUE($info, '$.open_periods[47].end')
-        WHEN 48 THEN JSON_VALUE($info, '$.open_periods[48].end')
-        WHEN 49 THEN JSON_VALUE($info, '$.open_periods[49].end')
-        ELSE NULL
-    END
-};
-
-$period_indices = (
-    SELECT idx AS idx
-    FROM (SELECT ListFromRange(0, $max_open_periods) AS idxs) AS src
-    FLATTEN LIST BY idxs AS idx
-);
-
 $issue_periods = (
     SELECT
-        t.project_item_id AS project_item_id,
-        t.issue_number AS issue_number,
-        Cast($json_period_start(t.info, pi.idx) AS Date) AS period_start,
-        Cast($json_period_end(t.info, pi.idx) AS Date) AS period_end
-    FROM `github_data/issues` AS t
-    CROSS JOIN $period_indices AS pi
-    WHERE JSON_VALUE(t.info, '$.open_periods[0].start') IS NOT NULL
-      AND $json_period_start(t.info, pi.idx) IS NOT NULL
+        p.project_item_id AS project_item_id,
+        p.issue_number AS issue_number,
+        p.period_start AS period_start,
+        p.period_end AS period_end
+    FROM `github_data/issue_open_periods` AS p
     UNION ALL
     SELECT
         t.project_item_id AS project_item_id,
@@ -160,7 +37,12 @@ $issue_periods = (
         t.created_date AS period_start,
         Cast(t.closed_at AS Date) AS period_end
     FROM `github_data/issues` AS t
-    WHERE JSON_VALUE(t.info, '$.open_periods[0].start') IS NULL
+    WHERE NOT EXISTS (
+        SELECT 1
+        FROM `github_data/issue_open_periods` AS p
+        WHERE p.issue_number = t.issue_number
+          AND p.project_item_id = t.project_item_id
+    )
 );
 
 $issues_in_window = (
@@ -171,6 +53,7 @@ $issues_in_window = (
     WHERE ip.period_start <= CurrentUtcDate()
       AND (ip.period_end IS NULL OR ip.period_end >= CurrentUtcDate() - $timeline_days * Interval("P1D"))
 );
+
 $date_spine = (
     SELECT DISTINCT date_window AS d
     FROM `test_results/analytics/tests_monitor`
@@ -197,7 +80,6 @@ $closed_on_day = (
     FROM $issue_periods AS ip
     WHERE ip.period_end IS NOT NULL
 );
-
 
 SELECT
     dt.d AS date,

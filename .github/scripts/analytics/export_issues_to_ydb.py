@@ -8,7 +8,7 @@ import json
 import argparse
 from datetime import datetime, timezone, timedelta
 import requests
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Tuple
 from ydb_wrapper import YDBWrapper
 
 ORG_NAME = 'ydb-platform'
@@ -582,6 +582,31 @@ def build_open_periods(
     return periods
 
 
+def open_period_rows_for_issue(
+    issue_number: int,
+    project_item_id: str,
+    open_periods: List[Dict[str, Optional[str]]],
+    exported_at: datetime,
+) -> List[Dict[str, Any]]:
+    rows = []
+    for idx, period in enumerate(open_periods):
+        period_start = datetime.fromisoformat(period['start']).date()
+        period_end = (
+            datetime.fromisoformat(period['end']).date()
+            if period.get('end')
+            else None
+        )
+        rows.append({
+            'issue_number': issue_number,
+            'project_item_id': project_item_id,
+            'period_index': idx,
+            'period_start': period_start,
+            'period_end': period_end,
+            'exported_at': exported_at,
+        })
+    return rows
+
+
 def projects_for_info_json(issue: Dict[str, Any]) -> List[Dict[str, Any]]:
     """Projects (v2) that contain this issue — id/title from GraphQL ``projectItems``."""
     out = []
@@ -640,8 +665,11 @@ def get_max_branch(branch_labels):
     return best
 
 
-def transform_issues_for_ydb(issues: List[Dict[str, Any]], project_fields: Optional[Dict[int, Dict[str, Any]]] = None) -> List[Dict[str, Any]]:
-    """Transform GitHub issues data for YDB storage"""
+def transform_issues_for_ydb(issues: List[Dict[str, Any]], project_fields: Optional[Dict[int, Dict[str, Any]]] = None) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
+    """Transform GitHub issues data for YDB storage.
+
+    Returns (issue_records, open_period_rows) for github_data/issues and github_data/issue_open_periods.
+    """
     print("Transforming issues data for YDB...")
     start_time = time.time()
     
@@ -649,6 +677,7 @@ def transform_issues_for_ydb(issues: List[Dict[str, Any]], project_fields: Optio
         project_fields = {}
     
     transformed_issues = []
+    open_period_rows: List[Dict[str, Any]] = []
     
     for issue in issues:
         # Get project fields for this issue if available
@@ -751,8 +780,6 @@ def transform_issues_for_ydb(issues: List[Dict[str, Any]], project_fields: Optio
             info['closed_at_iso'] = closed_at.isoformat()
 
         open_periods = build_open_periods(issue, created_at, closed_at)
-        if open_periods:
-            info['open_periods'] = open_periods
 
         now = datetime.now(timezone.utc)
         
@@ -770,7 +797,6 @@ def transform_issues_for_ydb(issues: List[Dict[str, Any]], project_fields: Optio
         if closed_at and created_at:
             time_to_close_hours = int((closed_at - created_at).total_seconds() / 3600)
         
-        # Build the record
         issue_record = {
             # Primary identifiers
             'project_item_id': f"repo-{issue.get('number', 0)}",
@@ -825,10 +851,18 @@ def transform_issues_for_ydb(issues: List[Dict[str, Any]], project_fields: Optio
         }
         
         transformed_issues.append(issue_record)
+        open_period_rows.extend(
+            open_period_rows_for_issue(
+                issue_record['issue_number'],
+                issue_record['project_item_id'],
+                open_periods,
+                now,
+            )
+        )
     
     elapsed = time.time() - start_time
-    print(f"Transformed {len(transformed_issues)} issues (took {elapsed:.2f}s)")
-    return transformed_issues
+    print(f"Transformed {len(transformed_issues)} issues, {len(open_period_rows)} open periods (took {elapsed:.2f}s)")
+    return transformed_issues, open_period_rows
 
 def create_issues_table(ydb_wrapper: YDBWrapper, table_path: str):
     """Create issues table in YDB optimized for BI"""
@@ -905,6 +939,75 @@ def create_issues_table(ydb_wrapper: YDBWrapper, table_path: str):
     elapsed = time.time() - start_time
     print(f"BI-optimized table created successfully (took {elapsed:.2f}s)")
 
+
+def create_issue_open_periods_table(ydb_wrapper: YDBWrapper, table_path: str):
+    """Open/close intervals per issue for timeline and SLA."""
+    print(f"Creating issue open periods table: {table_path}")
+    create_sql = f"""
+        CREATE TABLE IF NOT EXISTS `{table_path}` (
+            `issue_number` Uint64 NOT NULL,
+            `project_item_id` Utf8 NOT NULL,
+            `period_index` Uint32 NOT NULL,
+            `period_start` Date NOT NULL,
+            `period_end` Date,
+            `exported_at` Timestamp NOT NULL,
+            PRIMARY KEY (`issue_number`, `project_item_id`, `period_index`)
+        )
+        PARTITION BY HASH(`issue_number`)
+        WITH (
+            STORE = COLUMN,
+            AUTO_PARTITIONING_BY_SIZE = ENABLED,
+            AUTO_PARTITIONING_PARTITION_SIZE_MB = 2048,
+            AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 4
+        )
+    """
+    ydb_wrapper.create_table(table_path, create_sql)
+
+
+def delete_issue_open_periods(ydb_wrapper: YDBWrapper, table_path: str, issue_numbers: List[int]) -> None:
+    if not issue_numbers:
+        return
+    for issue_number in issue_numbers:
+        query = f"""
+            DECLARE $issue_number AS Uint64;
+            DELETE FROM `{table_path}` WHERE issue_number = $issue_number;
+        """
+        ydb_wrapper.execute_dml(
+            query,
+            {'$issue_number': issue_number},
+            query_name='delete_issue_open_periods',
+        )
+
+
+def upload_issue_open_periods(
+    ydb_wrapper: YDBWrapper,
+    table_path: str,
+    period_rows: List[Dict[str, Any]],
+    issue_numbers: List[int],
+    batch_size: int = 500,
+) -> None:
+    create_issue_open_periods_table(ydb_wrapper, table_path)
+    delete_issue_open_periods(ydb_wrapper, table_path, issue_numbers)
+    if not period_rows:
+        return
+    column_types = (
+        ydb.BulkUpsertColumns()
+        .add_column("issue_number", ydb.OptionalType(ydb.PrimitiveType.Uint64))
+        .add_column("project_item_id", ydb.OptionalType(ydb.PrimitiveType.Utf8))
+        .add_column("period_index", ydb.OptionalType(ydb.PrimitiveType.Uint32))
+        .add_column("period_start", ydb.OptionalType(ydb.PrimitiveType.Date))
+        .add_column("period_end", ydb.OptionalType(ydb.PrimitiveType.Date))
+        .add_column("exported_at", ydb.OptionalType(ydb.PrimitiveType.Timestamp))
+    )
+    ydb_wrapper.bulk_upsert_batches(
+        table_path,
+        period_rows,
+        column_types,
+        batch_size,
+        query_name='issue_open_periods',
+    )
+    print(f"Uploaded {len(period_rows)} rows to {table_path}")
+
 def main():
     """Main function to export GitHub issues to YDB"""
     parser = argparse.ArgumentParser(description='Export GitHub issues to YDB')
@@ -931,6 +1034,7 @@ def main():
         
         # Get table path from config
         table_path = ydb_wrapper.get_table_path("issues")
+        periods_table_path = ydb_wrapper.get_table_path("issue_open_periods")
         batch_size = 100
         
         try:
@@ -990,7 +1094,7 @@ def main():
                     project_fields = get_project_fields_for_issues(ORG_NAME, PROJECT_ID, issue_numbers)
             
             # Transform issues for YDB
-            transformed_issues = transform_issues_for_ydb(issues, project_fields)
+            transformed_issues, open_period_rows = transform_issues_for_ydb(issues, project_fields)
             
             # Upsert issues in batches using bulk_upsert_batches
             print(f"Uploading {len(transformed_issues)} issues in batches of {batch_size}")
@@ -1078,6 +1182,15 @@ def main():
             )
             
             ydb_wrapper.bulk_upsert_batches(table_path, transformed_issues, column_types, batch_size)
+
+            issue_numbers = [row['issue_number'] for row in transformed_issues]
+            upload_issue_open_periods(
+                ydb_wrapper,
+                periods_table_path,
+                open_period_rows,
+                issue_numbers,
+                batch_size=500,
+            )
             
             script_elapsed = time.time() - script_start_time
             print(f"Script completed successfully (total time: {script_elapsed:.2f}s)")

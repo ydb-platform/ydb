@@ -1004,7 +1004,7 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
 
         if (expectedRelativeError > 0) {
             UNIT_ASSERT_LE_C(abs(unitSizeRelativeError), expectedRelativeError,
-                TStringBuilder() << "abs(" << unitSizeRelativeError << ") < " << expectedRelativeError
+                TStringBuilder() << "abs(" << unitSizeRelativeError << ") <= " << expectedRelativeError
             );
         }
     }
@@ -1019,6 +1019,10 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
         TestInferPDiskSlotCount(50000, 1000, 16, 13, 4u, 0.039);
         TestInferPDiskSlotCount(50000, 100, 16, 16, 32u, 0.024);
         TestInferPDiskSlotCount(18000, 200, 16, 11, 8u, 0.023);
+        TestInferPDiskSlotCount(200, 1000, 16, 1, 1u, 0.8);
+        TestInferPDiskSlotCount(999, 1000, 16, 1, 1u, 0.001);
+        TestInferPDiskSlotCount(1499, 1000, 16, 1, 1u, 0.499);
+        TestInferPDiskSlotCount(1500, 1000, 16, 2, 1u, 0.25);
 
         for (ui32 maxSlots = 1; maxSlots <= 24; maxSlots++) {
             for (ui64 i = 1; i <= 1024; i++) {

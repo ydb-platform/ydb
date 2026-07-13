@@ -28,7 +28,7 @@ namespace NKikimr::NStorage {
             slotSizeInUnits *= 2;
         }
 
-        pdiskConfig->ExpectedSlotCount = lround(slotCount/slotSizeInUnits);
+        pdiskConfig->ExpectedSlotCount = Max(1u, (ui32)lround(slotCount/slotSizeInUnits));
         pdiskConfig->SlotSizeInUnits = slotSizeInUnits;
     }
 

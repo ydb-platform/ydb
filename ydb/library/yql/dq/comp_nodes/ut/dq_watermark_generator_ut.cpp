@@ -162,15 +162,15 @@ Y_UNIT_TEST_SUITE(TDqWatermarkGeneratorTest) {
     Y_UNIT_TEST(TestSinglePartitionProgressesOnEachEvent) {
         TestImpl(
             {
-                {Cluster, 0, TInstant::Seconds(1), TInstant::Zero()},
-                {Cluster, 0, TInstant::Seconds(2), TInstant::Zero()},
-                {Cluster, 0, TInstant::Seconds(3), TInstant::Zero()},
+                {Cluster, 0, TInstant::Seconds(6), TInstant::Zero()},
+                {Cluster, 0, TInstant::Seconds(7), TInstant::Zero()},
+                {Cluster, 0, TInstant::Seconds(8), TInstant::Zero()},
             },
             {"0@cluster"},
             {
-                {Cluster, 0, TInstant::Seconds(1), TInstant::Zero()},
-                {Cluster, 0, TInstant::Seconds(2), TInstant::Zero()},
-                {Cluster, 0, TInstant::Seconds(3), TInstant::Zero()},
+                {Cluster, 0, TInstant::Seconds(6), TInstant::Zero()},
+                {Cluster, 0, TInstant::Seconds(7), TInstant::Zero()},
+                {Cluster, 0, TInstant::Seconds(8), TInstant::Zero()},
             },
             {
                 TInstant::Seconds(1),
@@ -183,15 +183,15 @@ Y_UNIT_TEST_SUITE(TDqWatermarkGeneratorTest) {
     Y_UNIT_TEST(TestMissingPartitionBlocksWatermarkUntilSeen) {
         TestImpl(
             {
-                {Cluster, 0, TInstant::Seconds(1), TInstant::Zero()},
-                {Cluster, 0, TInstant::Seconds(3), TInstant::Zero()},
-                {Cluster, 1, TInstant::Seconds(2), TInstant::Zero()},
+                {Cluster, 0, TInstant::Seconds(6), TInstant::Zero()},
+                {Cluster, 0, TInstant::Seconds(8), TInstant::Zero()},
+                {Cluster, 1, TInstant::Seconds(7), TInstant::Zero()},
             },
             {"0@cluster", "1@cluster"},
             {
-                {Cluster, 0, TInstant::Seconds(1), TInstant::Zero()},
-                {Cluster, 0, TInstant::Seconds(3), TInstant::Zero()},
-                {Cluster, 1, TInstant::Seconds(2), TInstant::Zero()},
+                {Cluster, 0, TInstant::Seconds(6), TInstant::Zero()},
+                {Cluster, 0, TInstant::Seconds(8), TInstant::Zero()},
+                {Cluster, 1, TInstant::Seconds(7), TInstant::Zero()},
             },
             {
                 Nothing(),
@@ -204,15 +204,15 @@ Y_UNIT_TEST_SUITE(TDqWatermarkGeneratorTest) {
     Y_UNIT_TEST(TestSinglePartitionDataDoesNotAdvanceIncompleteSet) {
         TestImpl(
             {
-                {Cluster, 0, TInstant::Seconds(1), TInstant::Zero()},
-                {Cluster, 0, TInstant::Seconds(2), TInstant::Zero()},
-                {Cluster, 0, TInstant::Seconds(3), TInstant::Zero()},
+                {Cluster, 0, TInstant::Seconds(6), TInstant::Zero()},
+                {Cluster, 0, TInstant::Seconds(7), TInstant::Zero()},
+                {Cluster, 0, TInstant::Seconds(8), TInstant::Zero()},
             },
             {"0@cluster", "1@cluster"},
             {
-                {Cluster, 0, TInstant::Seconds(1), TInstant::Zero()},
-                {Cluster, 0, TInstant::Seconds(2), TInstant::Zero()},
-                {Cluster, 0, TInstant::Seconds(3), TInstant::Zero()},
+                {Cluster, 0, TInstant::Seconds(6), TInstant::Zero()},
+                {Cluster, 0, TInstant::Seconds(7), TInstant::Zero()},
+                {Cluster, 0, TInstant::Seconds(8), TInstant::Zero()},
             },
             {
                 Nothing(),
@@ -225,14 +225,14 @@ Y_UNIT_TEST_SUITE(TDqWatermarkGeneratorTest) {
     Y_UNIT_TEST(TestEarlyEventIsDroppedAndDoesNotAdvanceWatermark) {
         TestImpl(
             {
-                {Cluster, 0, TInstant::Seconds(1), TInstant::Seconds(1)},
+                {Cluster, 0, TInstant::Seconds(6), TInstant::Seconds(6)},
                 {Cluster, 0, TInstant::Minutes(10), TInstant::Seconds(2)},
-                {Cluster, 0, TInstant::Seconds(3), TInstant::Seconds(3)},
+                {Cluster, 0, TInstant::Seconds(8), TInstant::Seconds(8)},
             },
             {"0@cluster"},
             {
-                {Cluster, 0, TInstant::Seconds(1), TInstant::Seconds(1)},
-                {Cluster, 0, TInstant::Seconds(3), TInstant::Seconds(3)},
+                {Cluster, 0, TInstant::Seconds(6), TInstant::Seconds(6)},
+                {Cluster, 0, TInstant::Seconds(8), TInstant::Seconds(8)},
             },
             {
                 TInstant::Seconds(1),
@@ -241,7 +241,7 @@ Y_UNIT_TEST_SUITE(TDqWatermarkGeneratorTest) {
         );
     }
 
-    Y_UNIT_TEST(TestStrictLateDrop) {
+    Y_UNIT_TEST(TestLateEventIsForwardedAndDoesNotRegressWatermark) {
         TestImpl(
             {
                 {Cluster, 0, TInstant::Seconds(10), TInstant::Seconds(10)},
@@ -251,11 +251,31 @@ Y_UNIT_TEST_SUITE(TDqWatermarkGeneratorTest) {
             {"0@cluster"},
             {
                 {Cluster, 0, TInstant::Seconds(10), TInstant::Seconds(10)},
+                {Cluster, 0, TInstant::Seconds(4), TInstant::Seconds(9)},
                 {Cluster, 0, TInstant::Seconds(11), TInstant::Seconds(11)},
             },
             {
-                TInstant::Seconds(10),
-                TInstant::Seconds(11),
+                TInstant::Seconds(5),
+                TInstant::Seconds(5),
+                TInstant::Seconds(6),
+            }
+        );
+    }
+
+    Y_UNIT_TEST(TestWatermarkIsRoundedToGranularity) {
+        TestImpl(
+            {
+                {Cluster, 0, TInstant::MilliSeconds(6500), TInstant::Zero()},
+                {Cluster, 0, TInstant::MilliSeconds(7500), TInstant::Zero()},
+            },
+            {"0@cluster"},
+            {
+                {Cluster, 0, TInstant::MilliSeconds(6500), TInstant::Zero()},
+                {Cluster, 0, TInstant::MilliSeconds(7500), TInstant::Zero()},
+            },
+            {
+                TInstant::Seconds(1),
+                TInstant::Seconds(2),
             }
         );
     }

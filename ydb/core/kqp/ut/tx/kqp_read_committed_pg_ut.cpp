@@ -653,18 +653,7 @@ Y_UNIT_TEST_SUITE(KqpReadCommittedPg) {
             // Now Tx B can proceed — the key already exists (committed by Tx A),
             // so the INSERT fails with PRECONDITION_FAILED
             auto resultB = runtime.WaitFuture(futureB);
-            UNIT_ASSERT_C(resultB.GetStatus() == EStatus::SUCCESS, resultB.GetIssues().ToString()); // TODO: FIX IT: must be EStatus::PRECONDITION_FAILED
-            auto txB = resultB.GetTransaction();
-            UNIT_ASSERT(txB);
-            UNIT_ASSERT(txB->IsActive());
-
-
-            // Commit Tx A — releases the lock
-            {
-                auto commitB = Kikimr->RunInThreadPool([&] { return txB->Commit().ExtractValueSync(); });
-                auto commitResult = runtime.WaitFuture(commitB);
-                UNIT_ASSERT_VALUES_EQUAL_C(commitResult.GetStatus(), EStatus::SUCCESS, commitResult.GetIssues().ToString()); // TODO: FIX IT: that's bug
-            }
+            UNIT_ASSERT_C(resultB.GetStatus() == EStatus::PRECONDITION_FAILED, resultB.GetIssues().ToString());
         }
     };
 

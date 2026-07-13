@@ -1200,6 +1200,150 @@ Y_UNIT_TEST_SUITE(KqpReadCommittedPg) {
         tester.Execute();
     }
 
+    // =========================================================================
+    // Test 19: UPDATE ON locks a missing key (unlike UPDATE WHERE)
+    // =========================================================================
+    class TUpdateOnLocksMissingKey : public TTableDataModificationTester {
+    protected:
+        void DoExecute() override {
+            auto& runtime = *Kikimr->GetTestServer().GetRuntime();
+            auto client = Kikimr->GetQueryClient();
+            auto session1 = Kikimr->RunCall([&] { return client.GetSession().GetValueSync().GetSession(); });
+            auto session2 = Kikimr->RunCall([&] { return client.GetSession().GetValueSync().GetSession(); });
+
+            // Tx A: UPDATE ON a missing key — succeeds (0 rows affected), but
+            // still takes a PESSIMISTIC_EXCLUSIVE lock on the key.
+            auto futureA = Kikimr->RunInThreadPool([&] {
+                return session1.ExecuteQuery(Q_(R"(
+                    UPDATE `/Root/Test` ON (Group, Name, Comment) VALUES (999u, "Missing", "TxA");
+                )"), TTxControl::BeginTx(TTxSettings::ReadCommittedRW())).ExtractValueSync();
+            });
+
+            auto resultA = runtime.WaitFuture(futureA);
+            UNIT_ASSERT_VALUES_EQUAL_C(resultA.GetStatus(), EStatus::SUCCESS, resultA.GetIssues().ToString());
+            auto txA = resultA.GetTransaction();
+            UNIT_ASSERT(txA);
+            UNIT_ASSERT(txA->IsActive());
+
+            // Tx B: INSERT the same missing key — should block on Tx A's lock
+            auto futureB = Kikimr->RunInThreadPool([&] {
+                return session2.ExecuteQuery(Q_(R"(
+                    INSERT INTO `/Root/Test` (Group, Name, Comment) VALUES (999u, "Missing", "TxB");
+                )"), TTxControl::BeginTx(TTxSettings::ReadCommittedRW()).CommitTx()).ExtractValueSync();
+            });
+
+            {
+                TDispatchOptions opts;
+                opts.CustomFinalCondition = [&]() {
+                    return futureB.HasValue() || futureB.HasException();
+                };
+                opts.FinalEvents.emplace_back([](IEventHandle&) { return false; });
+                runtime.DispatchEvents(opts, TDuration::Seconds(2));
+                UNIT_ASSERT_C(!futureB.HasValue() && !futureB.HasException(),
+                    "Tx B INSERT should be blocked waiting for Tx A's lock on missing key");
+            }
+
+            // Commit Tx A — releases the lock. Tx A wrote nothing (row was missing).
+            {
+                auto commitA = Kikimr->RunInThreadPool([&] { return txA->Commit().ExtractValueSync(); });
+                auto commitResult = runtime.WaitFuture(commitA);
+                UNIT_ASSERT_VALUES_EQUAL_C(commitResult.GetStatus(), EStatus::SUCCESS, commitResult.GetIssues().ToString());
+            }
+
+            // Now Tx B can proceed — INSERT succeeds
+            auto resultB = runtime.WaitFuture(futureB);
+            UNIT_ASSERT_VALUES_EQUAL_C(resultB.GetStatus(), EStatus::SUCCESS, resultB.GetIssues().ToString());
+
+            // Verify: row exists with Tx B's value (Tx A wrote nothing)
+            auto verify = Kikimr->RunCall([&] {
+                return session1.ExecuteQuery(Q_(R"(
+                    SELECT Comment FROM `/Root/Test` WHERE Group = 999u AND Name = "Missing";
+                )"), TTxControl::BeginTx(TTxSettings::SnapshotRW()).CommitTx()).ExtractValueSync();
+            });
+            UNIT_ASSERT_VALUES_EQUAL_C(verify.GetStatus(), EStatus::SUCCESS, verify.GetIssues().ToString());
+            CompareYson(R"([[["TxB"]]])", FormatResultSetYson(verify.GetResultSet(0)));
+        }
+    };
+
+    Y_UNIT_TEST(TUpdateOnLocksMissingKey) {
+        TUpdateOnLocksMissingKey tester;
+        tester.SetIsOlap(false);
+        tester.SetUseRealThreads(false);
+        tester.Execute();
+    }
+
+    // =========================================================================
+    // Test 20: DELETE ON locks a missing key (unlike DELETE WHERE)
+    // =========================================================================
+    class TDeleteOnLocksMissingKey : public TTableDataModificationTester {
+    protected:
+        void DoExecute() override {
+            auto& runtime = *Kikimr->GetTestServer().GetRuntime();
+            auto client = Kikimr->GetQueryClient();
+            auto session1 = Kikimr->RunCall([&] { return client.GetSession().GetValueSync().GetSession(); });
+            auto session2 = Kikimr->RunCall([&] { return client.GetSession().GetValueSync().GetSession(); });
+
+            // Tx A: DELETE ON a missing key — succeeds (0 rows affected), but
+            // still takes a PESSIMISTIC_EXCLUSIVE lock on the key.
+            auto futureA = Kikimr->RunInThreadPool([&] {
+                return session1.ExecuteQuery(Q_(R"(
+                    DELETE FROM `/Root/Test` ON (Group, Name) VALUES (999u, "Missing");
+                )"), TTxControl::BeginTx(TTxSettings::ReadCommittedRW())).ExtractValueSync();
+            });
+
+            auto resultA = runtime.WaitFuture(futureA);
+            UNIT_ASSERT_VALUES_EQUAL_C(resultA.GetStatus(), EStatus::SUCCESS, resultA.GetIssues().ToString());
+            auto txA = resultA.GetTransaction();
+            UNIT_ASSERT(txA);
+            UNIT_ASSERT(txA->IsActive());
+
+            // Tx B: INSERT the same missing key — should block on Tx A's lock
+            auto futureB = Kikimr->RunInThreadPool([&] {
+                return session2.ExecuteQuery(Q_(R"(
+                    INSERT INTO `/Root/Test` (Group, Name, Comment) VALUES (999u, "Missing", "TxB");
+                )"), TTxControl::BeginTx(TTxSettings::ReadCommittedRW()).CommitTx()).ExtractValueSync();
+            });
+
+            {
+                TDispatchOptions opts;
+                opts.CustomFinalCondition = [&]() {
+                    return futureB.HasValue() || futureB.HasException();
+                };
+                opts.FinalEvents.emplace_back([](IEventHandle&) { return false; });
+                runtime.DispatchEvents(opts, TDuration::Seconds(2));
+                UNIT_ASSERT_C(!futureB.HasValue() && !futureB.HasException(),
+                    "Tx B INSERT should be blocked waiting for Tx A's lock on missing key");
+            }
+
+            // Commit Tx A — releases the lock. Tx A erased nothing (row was missing).
+            {
+                auto commitA = Kikimr->RunInThreadPool([&] { return txA->Commit().ExtractValueSync(); });
+                auto commitResult = runtime.WaitFuture(commitA);
+                UNIT_ASSERT_VALUES_EQUAL_C(commitResult.GetStatus(), EStatus::SUCCESS, commitResult.GetIssues().ToString());
+            }
+
+            // Now Tx B can proceed — INSERT succeeds
+            auto resultB = runtime.WaitFuture(futureB);
+            UNIT_ASSERT_VALUES_EQUAL_C(resultB.GetStatus(), EStatus::SUCCESS, resultB.GetIssues().ToString());
+
+            // Verify: row exists with Tx B's value (Tx A erased nothing)
+            auto verify = Kikimr->RunCall([&] {
+                return session1.ExecuteQuery(Q_(R"(
+                    SELECT Comment FROM `/Root/Test` WHERE Group = 999u AND Name = "Missing";
+                )"), TTxControl::BeginTx(TTxSettings::SnapshotRW()).CommitTx()).ExtractValueSync();
+            });
+            UNIT_ASSERT_VALUES_EQUAL_C(verify.GetStatus(), EStatus::SUCCESS, verify.GetIssues().ToString());
+            CompareYson(R"([[["TxB"]]])", FormatResultSetYson(verify.GetResultSet(0)));
+        }
+    };
+
+    Y_UNIT_TEST(TDeleteOnLocksMissingKey) {
+        TDeleteOnLocksMissingKey tester;
+        tester.SetIsOlap(false);
+        tester.SetUseRealThreads(false);
+        tester.Execute();
+    }
+
 } // Y_UNIT_TEST_SUITE(KqpReadCommittedPg)
 
 } // namespace NKqp

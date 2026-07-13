@@ -7,6 +7,7 @@
 
 #include <ydb/public/lib/ydb_cli/dump/util/query_utils.h>
 
+#include <util/string/cast.h>
 #include <util/string/subst.h>
 
 namespace NKikimr {
@@ -731,6 +732,88 @@ Y_UNIT_TEST(TableDefaultLiteral) {
                 Value Decimal(35, 10) DEFAULT CAST("110.111" AS Decimal(35, 10)),
                 PRIMARY KEY (Key)
             );
+        )", "test_show_create"
+    );
+}
+
+Y_UNIT_TEST(TableWithMultiColumnStatistics) {
+    TTestEnv env(1, 4, {.StoragePools = 3, .ShowCreateTable = true});
+
+    TShowCreateChecker checker(env);
+
+    // Exact-output check for a row table.
+    checker.CheckShowCreateTable(
+        R"(
+            CREATE TABLE test_show_create (
+                Key Uint64,
+                a Uint64,
+                b Utf8,
+                PRIMARY KEY (Key),
+                STATISTICS s ON (a, b) WITH (COUNT_MIN_SKETCH)
+            );
+        )", "test_show_create",
+        R"(
+            CREATE TABLE `test_show_create` (
+                `Key` Uint64,
+                `a` Uint64,
+                `b` Utf8,
+                STATISTICS `s` ON (`a`, `b`) WITH (COUNT_MIN_SKETCH),
+                PRIMARY KEY (`Key`)
+            );
+        )"
+    );
+
+    // Round-trip check (create -> SHOW CREATE -> recreate -> compare) for a column table.
+    checker.CheckShowCreateTable(
+        R"(
+            CREATE TABLE test_show_create (
+                Key Uint64 NOT NULL,
+                a Uint64,
+                b Utf8,
+                PRIMARY KEY (Key),
+                STATISTICS s ON (a, b) WITH (COUNT_MIN_SKETCH)
+            )
+            WITH (STORE = COLUMN);
+        )", "test_show_create"
+    );
+}
+
+Y_UNIT_TEST(TableWithMultiColumnStatisticsWithoutWith) {
+    TTestEnv env(1, 4, {.StoragePools = 3, .ShowCreateTable = true});
+
+    TShowCreateChecker checker(env);
+
+    checker.CheckShowCreateTable(
+        R"(
+            CREATE TABLE test_show_create (
+                Key Uint64,
+                a Uint64,
+                b Utf8,
+                PRIMARY KEY (Key),
+                STATISTICS s ON (a, b)
+            );
+        )", "test_show_create",
+        R"(
+            CREATE TABLE `test_show_create` (
+                `Key` Uint64,
+                `a` Uint64,
+                `b` Utf8,
+                STATISTICS `s` ON (`a`, `b`),
+                PRIMARY KEY (`Key`)
+            );
+        )"
+    );
+
+    checker.CheckShowCreateTable(
+        R"(
+            CREATE TABLE test_show_create (
+                Key Uint64 NOT NULL,
+                a Uint64,
+                b Utf8,
+                PRIMARY KEY (Key),
+                STATISTICS s ON (a, b)
+            )
+            WITH (STORE = COLUMN);
         )", "test_show_create"
     );
 }
@@ -1964,7 +2047,7 @@ Y_UNIT_TEST(TablePartitionPolicyIndexTable) {
     );
 }
 
-Y_UNIT_TEST(TableColumnAlterColumn) {
+void CheckAlterColumnShowCreate(double dictionaryUniqueFraction, bool enableNativeColumns) {
     TTestEnv env(1, 4, {.StoragePools = 3, .ShowCreateTable = true, .AlterObjectEnabled = true, .EnableSparsedColumns = true, .EnableOlapCompression = true, .EnableCsDictionaryEncoding = true});
 
     env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_EXECUTER, NActors::NLog::PRI_DEBUG);
@@ -1974,8 +2057,10 @@ Y_UNIT_TEST(TableColumnAlterColumn) {
 
     TShowCreateChecker checker(env);
 
-    checker.CheckShowCreateTable(
-        R"(
+    const TString fractionStr = ToString(dictionaryUniqueFraction);
+    const TString nativeColumnsStr = enableNativeColumns ? "true" : "false";
+
+    const TString query = Sprintf(R"(
             CREATE TABLE `/Root/test_show_create` (
                 Col1 Uint64 NOT NULL,
                 Col2 JsonDocument,
@@ -1986,15 +2071,16 @@ Y_UNIT_TEST(TableColumnAlterColumn) {
             )
             PARTITION BY HASH(Col1)
             WITH (STORE = COLUMN, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 2);
-            ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=Col2, `FORCE_SIMD_PARSING`=`true`, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`SUB_COLUMNS`, `OTHERS_ALLOWED_FRACTION`=`0.5`);
+            ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=Col2, `FORCE_SIMD_PARSING`=`true`, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`SUB_COLUMNS`, `OTHERS_ALLOWED_FRACTION`=`0.5`, `DICTIONARY_UNIQUE_FRACTION`=`%s`, `ENABLE_NATIVE_COLUMNS`=`%s`);
             ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=Col3, `DEFAULT_VALUE`=`5`);
             ALTER TABLE `/Root/test_show_create` ALTER COLUMN Col2 SET COMPRESSION (algorithm=zstd, level=4);
             ALTER TABLE `/Root/test_show_create` ALTER COLUMN Col3 SET ENCODING (DICT);
             ALTER TABLE `/Root/test_show_create` ALTER COLUMN Col4 SET ENCODING ();
             ALTER TABLE `/Root/test_show_create` ALTER COLUMN Col4 SET COMPRESSION ();
             ALTER TABLE `/Root/test_show_create` ALTER COLUMN Col5 SET ENCODING (OFF);
-        )", "test_show_create",
-        R"(
+        )", fractionStr.c_str(), nativeColumnsStr.c_str());
+
+    const TString expected = Sprintf(R"(
             CREATE TABLE `test_show_create` (
                 `Col1` Uint64 NOT NULL,
                 `Col2` JsonDocument COMPRESSION (algorithm = zstd, level = 4),
@@ -2009,11 +2095,20 @@ Y_UNIT_TEST(TableColumnAlterColumn) {
                 AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 2
             );
 
-            ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION = ALTER_COLUMN, NAME = Col2, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME` = `SUB_COLUMNS`, `SPARSED_DETECTOR_KFF` = `20`, `COLUMNS_LIMIT` = `1024`, `MEM_LIMIT_CHUNK` = `52428800`, `OTHERS_ALLOWED_FRACTION` = `0.5`, `DATA_EXTRACTOR_CLASS_NAME` = `JSON_SCANNER`, `SCAN_FIRST_LEVEL_ONLY` = `false`, `FORCE_SIMD_PARSING` = `true`);
+            ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION = ALTER_COLUMN, NAME = Col2, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME` = `SUB_COLUMNS`, `SPARSED_DETECTOR_KFF` = `20`, `COLUMNS_LIMIT` = `1024`, `MEM_LIMIT_CHUNK` = `52428800`, `OTHERS_ALLOWED_FRACTION` = `0.5`, `DICTIONARY_UNIQUE_FRACTION` = `%s`, `ENABLE_NATIVE_COLUMNS` = `%s`, `DATA_EXTRACTOR_CLASS_NAME` = `JSON_SCANNER`, `SCAN_FIRST_LEVEL_ONLY` = `false`, `FORCE_SIMD_PARSING` = `true`);
 
             ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION = ALTER_COLUMN, NAME = Col3, `DEFAULT_VALUE` = `5`);
-        )"
-    );
+        )", fractionStr.c_str(), nativeColumnsStr.c_str());
+
+    checker.CheckShowCreateTable(query.c_str(), "test_show_create", expected);
+}
+
+Y_UNIT_TEST(TableColumnAlterColumn) {
+    CheckAlterColumnShowCreate(0.5, true);
+}
+
+Y_UNIT_TEST(TableColumnAlterColumnExplicitlyUnsetValues) {
+    CheckAlterColumnShowCreate(0, false);
 }
 
 Y_UNIT_TEST(TableColumnUpsertOptions) {
@@ -2456,9 +2551,9 @@ Y_UNIT_TEST(TableSystemTableWithEmptyKeyColumnIds) {
     // When trying to SHOW CREATE TABLE on a system table that has empty key column IDs,
     // the formatter crashes at line 347 with: Y_ENSURE(!tableDesc.GetKeyColumnIds().empty())
     //
-    // The issue specifically mentions `.sys/tables` as causing the crash.
-    // This test verifies that SHOW CREATE TABLE on system tables either succeeds
-    // or returns a proper error status, but does not crash the server.
+    // The issue was triggered by system tables with empty key column IDs (e.g. some
+    // `.sys/*` views). This test verifies that SHOW CREATE TABLE on representative
+    // system tables either succeeds or returns a proper error status, but does not crash.
 
     TTestEnv env(1, 4, {.StoragePools = 3, .ShowCreateTable = true});
 
@@ -2469,10 +2564,9 @@ Y_UNIT_TEST(TableSystemTableWithEmptyKeyColumnIds) {
     NQuery::TQueryClient queryClient(env.GetDriver());
     auto session = queryClient.GetSession().GetValueSync().GetSession();
 
-    // The issue specifically mentions .sys/tables as the problematic table
-    // We test this and a few other system tables to ensure robustness
+    // We test a few representative system tables to ensure SHOW CREATE TABLE is robust
     TVector<TString> systemTablesToTest = {
-        "/Root/.sys/tables",  // The specific table mentioned in issue #30332
+        "/Root/.sys/query_sessions",
         "/Root/.sys/partition_stats",
         "/Root/.sys/nodes"
     };

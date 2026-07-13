@@ -21,7 +21,7 @@ TICStorageTransportTestAdapter::TICStorageTransportTestAdapter(
           // Register the real transport actor inside the runtime and address
           // it directly from the TICStorageTransport base.
           runtime->Register(
-              std::make_unique<TICStorageTransportActor>().release(),
+              std::make_unique<TICStorageTransportActor>("disk", 0).release(),
               0))
 {}
 

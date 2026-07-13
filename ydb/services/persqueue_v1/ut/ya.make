@@ -56,6 +56,8 @@ PEERDIR(
     ydb/public/sdk/cpp/src/client/persqueue_public
     ydb/public/sdk/cpp/src/client/table
     ydb/public/sdk/cpp/src/client/topic
+    ydb/public/sdk/cpp/src/client/coordination
+    ydb/public/sdk/cpp/src/client/rate_limiter
     ydb/public/sdk/cpp/src/client/proto
     ydb/services/persqueue_v1
 )

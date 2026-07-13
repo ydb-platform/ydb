@@ -42,7 +42,7 @@
                                                 "TopSortBy": "[Arg.J2_TBL.i,Arg.J1_TBL.j,Arg.J1_TBL.t,Arg.J2_TBL.k]"
                                             },
                                             {
-                                                "Condition": "J1_TBL.i = J2_TBL.i",
+                                                "Condition": "J2_TBL.i = J1_TBL.i",
                                                 "Inputs": [
                                                     {
                                                         "ExternalPlanNodeId": 6

@@ -1,6 +1,7 @@
 LIBRARY()
 
 SRCS(
+    kqp_query_classifier_ut_common.h
     kqp_workload_service_ut_common.cpp
 )
 

@@ -27,6 +27,23 @@ enum class EHostHealth
     Offline,
 };
 
+struct TOracleHostStat
+{
+    TOracleHostStat(
+        THostIndex index,
+        const THostState& state,
+        EHostHealth health,
+        const THostStat& hostStat,
+        TInstant now);
+
+    THostIndex Index;
+    EHostState State;
+    EHostHealth Health;
+    TInflightByOperation InflightByOperation;
+    THostStat::TErrorsInfo Errors;
+    ui64 PBufferUsedSize;
+};
+
 ////////////////////////////////////////////////////////////////////////////////
 
 class IOracle
@@ -66,14 +83,19 @@ public:
         THostIndex host,
         EDataLocation dataLocation) const = 0;
     [[nodiscard]] virtual TDuration GetReadRequestTimeout() const = 0;
+
+    [[nodiscard]] virtual EWriteMode GetWriteMode() const = 0;
     [[nodiscard]] virtual TDuration GetWriteHedgingDelay(
         THostMask hosts,
         bool indirect) const = 0;
     [[nodiscard]] virtual TDuration GetWriteRequestTimeout() const = 0;
     [[nodiscard]] virtual TDuration GetIndirectWriteReplyTimeout() const = 0;
+
+    [[nodiscard]] virtual TDuration GetFlushRequestCooldown(
+        THostMask hosts) const = 0;
     [[nodiscard]] virtual TDuration GetFlushRequestTimeout() const = 0;
+
     [[nodiscard]] virtual TDuration GetEraseRequestTimeout() const = 0;
-    [[nodiscard]] virtual EWriteMode GetWriteMode() const = 0;
 
     [[nodiscard]] virtual const THostStat& GetHostStatistics(
         THostIndex hostIndex) const = 0;
@@ -92,6 +114,7 @@ public:
 
     void Think(TInstant now);
 
+    // IOracle implementation
     void OnRequestStarted(
         THostIndex hostIndex,
         EOperation operation,
@@ -115,6 +138,10 @@ public:
     [[nodiscard]] TDuration GetDDiskReconnectDelay(
         THostIndex hostIndex) override;
 
+    void OnHostAdded();
+
+    [[nodiscard]] size_t GetHostCount() const;
+
     [[nodiscard]] THostIndex SelectBestPBufferHost(
         THostMask hosts,
         EOperation operation) const override;
@@ -123,18 +150,25 @@ public:
         THostIndex host,
         EDataLocation dataLocation) const override;
     [[nodiscard]] TDuration GetReadRequestTimeout() const override;
+
+    [[nodiscard]] EWriteMode GetWriteMode() const override;
     [[nodiscard]] TDuration GetWriteHedgingDelay(
         THostMask hosts,
         bool indirect) const override;
     [[nodiscard]] TDuration GetWriteRequestTimeout() const override;
     [[nodiscard]] TDuration GetIndirectWriteReplyTimeout() const override;
+
+    [[nodiscard]] TDuration GetFlushRequestCooldown(
+        THostMask hosts) const override;
     [[nodiscard]] TDuration GetFlushRequestTimeout() const override;
+
     [[nodiscard]] TDuration GetEraseRequestTimeout() const override;
-    [[nodiscard]] EWriteMode GetWriteMode() const override;
 
     [[nodiscard]] const THostStat& GetHostStatistics(
         THostIndex hostIndex) const override;
     [[nodiscard]] TString Dump() const override;
+
+    [[nodiscard]] TVector<TOracleHostStat> BuildHostStats(TInstant now) const;
 
 private:
     [[nodiscard]] TTimePredictor& AccessTimePredictor(EOperation operation);

@@ -941,6 +941,10 @@ void TPartition::DestroyActor(const TActorContext& ctx)
         UsersInfoStorage->Clear(ctx);
     }
 
+    for (auto& [_, mlpConsumerInfo] : MLPConsumers) {
+        Send(mlpConsumerInfo.ActorId, new TEvents::TEvPoisonPill());
+    }
+
     if (ReadQuotaTrackerActor) {
         Send(ReadQuotaTrackerActor, new TEvents::TEvPoisonPill());
     }
@@ -2163,7 +2167,7 @@ void TPartition::Handle(TEvPQ::TEvConsumerBatchProcessorMetrics::TPtr& ev, const
         return;
     }
 
-    userInfo->ConsumerBatchProcessorCPUUsage += event->CPUUsage;
+    userInfo->ConsumerBatchRecompressionCpuElapsedMicrosec += event->CPUUsage;
 }
 
 void TPartition::Handle(NBatching::TEvProcessBatchKeysResult::TPtr& ev, const TActorContext& ctx) {
@@ -2254,10 +2258,10 @@ bool TPartition::UpdateCounters(const TActorContext& ctx, bool force) {
         }
         bool haveChanges = false;
 
-        if (userInfo.ConsumerBatchProcessorCPUUsage) {
+        if (userInfo.ConsumerBatchRecompressionCpuElapsedMicrosec) {
             auto& counter = userInfo.LabeledCounters->GetCounters()[METRIC_CONSUMER_BATCH_PROCESSOR_CPU_USAGE];
-            counter.Set(counter.Get() + userInfo.ConsumerBatchProcessorCPUUsage);
-            userInfo.ConsumerBatchProcessorCPUUsage = 0;
+            counter.Set(counter.Get() + userInfo.ConsumerBatchRecompressionCpuElapsedMicrosec);
+            userInfo.ConsumerBatchRecompressionCpuElapsedMicrosec = 0;
             haveChanges = true;
         }
 

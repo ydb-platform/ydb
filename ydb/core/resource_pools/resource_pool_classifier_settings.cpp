@@ -24,6 +24,14 @@ void TClassifierSettings::TParser::operator()(std::optional<TString>* setting) c
     *setting = Value;
 }
 
+void TClassifierSettings::TParser::operator()(std::optional<TRegexPredicate>* setting) const {
+    if (Value.empty()) {
+        setting->reset();
+    } else {
+        *setting = TRegexPredicate::Compile(Value);
+    }
+}
+
 //// TClassifierSettings::TExtractor
 
 TString TClassifierSettings::TExtractor::operator()(i64* setting) const {
@@ -38,13 +46,21 @@ TString TClassifierSettings::TExtractor::operator()(std::optional<TString>* sett
     return setting->value_or(TString{});
 }
 
-//// TPoolSettings
+TString TClassifierSettings::TExtractor::operator()(std::optional<TRegexPredicate>* setting) const {
+    if (*setting) {
+        return (*setting)->Pattern;
+    }
+    return TString{};
+}
+
+//// TClassifierSettings
 
 std::unordered_map<TString, TClassifierSettings::TProperty> TClassifierSettings::GetPropertiesMap() {
     std::unordered_map<TString, TProperty> properties = {
         {"rank", &Rank},
         {"resource_pool", &ResourcePool},
-        {"member_name", &MemberName}
+        {"member_name", &MemberName},
+        {"has_app_name", &HasAppName}
     };
     return properties;
 }

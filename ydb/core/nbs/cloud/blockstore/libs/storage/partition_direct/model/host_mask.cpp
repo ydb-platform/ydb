@@ -36,6 +36,15 @@ THostMask THostMask::MakeAll(size_t hostCount)
     return THostMask((ui32(1) << hostCount) - 1);
 }
 
+// static
+THostMask THostMask::MakeFromRoute(const THostRoute& route)
+{
+    THostMask result;
+    result.Set(route.SourceHostIndex);
+    result.Set(route.DestinationHostIndex);
+    return result;
+}
+
 void THostMask::Set(THostIndex host)
 {
     Y_ABORT_UNLESS(host < MaxHostCount);

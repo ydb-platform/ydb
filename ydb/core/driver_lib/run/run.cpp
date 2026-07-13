@@ -1193,7 +1193,7 @@ TGRpcServers TKikimrRunner::CreateGRpcServers(const TKikimrRunConfig& runConfig)
         }
 
         if (hasTestShard) {
-            server.AddService(new NGRpcService::TTestShardGRpcService(ActorSystem.Get(), Counters, grpcRequestProxies[0]));
+            server.AddService(new NGRpcService::TTestShardSetGRpcService(ActorSystem.Get(), Counters, grpcRequestProxies[0]));
         }
 #if defined(YDB_EMBEDDED_NBS_ENABLED)
         if (hasNbs) {
@@ -2231,10 +2231,6 @@ TIntrusivePtr<TServiceInitializersList> TKikimrRunner::CreateServiceInitializers
         sil->AddServiceInitializer(new TReplicationServiceInitializer(runConfig));
     }
 
-    if (serviceMask.EnableLocalPgWire) {
-        sil->AddServiceInitializer(new TLocalPgWireServiceInitializer(runConfig));
-    }
-
     if (serviceMask.EnableKafkaProxy) {
         sil->AddServiceInitializer(new TKafkaProxyServiceInitializer(runConfig));
     }
@@ -2262,6 +2258,10 @@ TIntrusivePtr<TServiceInitializersList> TKikimrRunner::CreateServiceInitializers
         sil->AddServiceInitializer(new TNbsServiceInitializer(runConfig));
     }
 #endif
+
+    if (serviceMask.EnableUdfStore) {
+        sil->AddServiceInitializer(new TUdfStoreInitializer(runConfig, FunctionRegistry));
+    }
 
     return sil;
 }

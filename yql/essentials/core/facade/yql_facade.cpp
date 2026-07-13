@@ -134,16 +134,26 @@ std::function<TString(const TString&, const TString&)> BuildCompositeTokenResolv
 }
 
 TGatewaySQLFlags SQLFlagsFromYson(const NYT::TNode& node) {
-    const auto& list = node["SqlFlags"].AsList();
+    TGatewaySQLFlags flags;
 
-    THashSet<TString> flags(list.size());
-    for (const auto& f : list) {
-        flags.insert(f.AsString());
+    for (const auto& f : node["SqlFlags"].AsList()) {
+        if (f.IsString()) {
+            flags.Set(f.AsString());
+            continue;
+        }
+
+        const auto& name = f["name"].AsString();
+
+        const auto& argList = f["args"].AsList();
+        TVector<TString> args(Reserve(argList.size()));
+        for (const auto& arg : argList) {
+            args.emplace_back(arg.AsString());
+        }
+
+        flags.Set(name, std::move(args));
     }
 
-    return {
-        .Unconditional = std::move(flags),
-    };
+    return flags;
 }
 
 } // namespace
@@ -303,10 +313,6 @@ TProgramPtr TProgramFactory::Create(
         udfResolver = NCommon::CreateUdfResolverDecoratorWithLogger(FunctionRegistry_, udfResolver, *UdfResolverLogfile_, sessionId);
     }
 
-    if (udfIndex) {
-        udfResolver = NCommon::CreateUdfResolverWithIndex(udfIndex, udfResolver, FileStorage_);
-    }
-
     // make UserDataTable_ copy here
     return new TProgram(IssueReportTarget_, FunctionRegistry_, randomProvider, timeProvider, NextUniqueId_, DataProvidersInit_,
                         LangVer_, MaxLangVer_, VolatileResults_, UserDataTable_, Credentials_, moduleResolver, urlListerManager,
@@ -364,6 +370,7 @@ TProgram::TProgram(
     , UdfIndex_(udfIndex)
     , UdfIndexPackageSet_(std::move(udfIndexPackageSet))
     , FileStorage_(fileStorage)
+    , UrlPreprocessing_(urlPreprocessing)
     , SavedUserDataTable_(std::move(userDataTable))
     , GatewaysConfig_(gatewaysConfig)
     , Filename_(std::move(filename))
@@ -456,7 +463,6 @@ TProgram::TProgram(
         if (UrlListerManager_) {
             UrlListerManager_ = NCommon::WrapUrlListerManagerWithQContext(UrlListerManager_, qContext);
         }
-        UdfResolver_ = NCommon::WrapUdfResolverWithQContext(UdfResolver_, QContext_);
         if (QContext_.CanWrite() && GatewaysConfig_) {
             auto data = GatewaysConfig_->SerializeAsString();
             QContext_.GetWriter()->Put({.Component = FacadeComponent, .Label = GatewaysLabel}, data).GetValueSync();
@@ -2196,6 +2202,19 @@ TTypeAnnotationContextPtr TProgram::BuildTypeAnnotationContext(const TString& us
     auto tokenResolver = BuildCompositeTokenResolver(std::move(tokenResolvers));
 
     typeAnnotationContext->UserDataStorage->SetTokenResolver(tokenResolver);
+
+    if (UdfIndex_) {
+        typeAnnotationContext->UdfResolver = NCommon::CreateUdfResolverWithIndex(
+            UdfIndex_,
+            typeAnnotationContext->UdfResolver,
+            FileStorage_,
+            UrlPreprocessing_,
+            tokenResolver);
+    }
+
+    if (QContext_) {
+        typeAnnotationContext->UdfResolver = NCommon::WrapUdfResolverWithQContext(typeAnnotationContext->UdfResolver, QContext_);
+    }
 
     if (auto* urlListerManager = typeAnnotationContext->UrlListerManager.Get()) {
         urlListerManager->SetTokenResolver(std::move(tokenResolver));

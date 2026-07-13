@@ -3,22 +3,30 @@
 #include <yql/essentials/providers/common/proto/gateways_config.pb.h>
 #include <yql/essentials/providers/common/provider/yql_provider_names.h>
 
+#include <util/generic/maybe.h>
+
 namespace NYql {
 
-void TGatewaySQLFlags::CollectAllTo(THashSet<TString>& target) const {
-    target.insert(begin(Unconditional), end(Unconditional));
-    target.insert(begin(Activated), end(Activated));
-}
-
-THashSet<TString> TGatewaySQLFlags::All() const {
-    THashSet<TString> all(Unconditional.size() + Activated.size());
-    CollectAllTo(all);
-    return all;
+void TGatewaySQLFlags::Set(const TString& flag, TVector<TString> args) {
+    All_[flag] = std::move(args);
 }
 
 void TGatewaySQLFlags::ExtendWith(const TGatewaySQLFlags& flags) {
-    Unconditional.insert(begin(flags.Unconditional), end(flags.Unconditional));
-    Activated.insert(begin(flags.Activated), end(flags.Activated));
+    Activated_.insert(begin(flags.Activated_), end(flags.Activated_));
+    All_.insert(begin(flags.All_), end(flags.All_));
+}
+
+NSQLTranslation::TExtendedSqlFlags TGatewaySQLFlags::ToMap(
+    NSQLTranslation::TExtendedSqlFlags map,
+    bool areOnlyActivated) const {
+    for (const auto& [flag, values] : All_) {
+        if (areOnlyActivated && !Activated_.contains(flag)) {
+            continue;
+        }
+
+        map[flag] = values;
+    }
+    return map;
 }
 
 TGatewaySQLFlags TGatewaySQLFlags::From(const TGatewaysConfig& config, const TActivator& isActive) {
@@ -30,18 +38,28 @@ TGatewaySQLFlags TGatewaySQLFlags::From(const TGatewaysConfig& config, const TAc
 
     {
         const auto& simple = config.GetSqlCore().GetTranslationFlags();
-        flags.Unconditional.insert(begin(simple), end(simple));
+        for (const auto& flag : simple) {
+            flags.Set(flag);
+        }
     }
 
     for (const auto& flag : config.GetSqlCore().GetExtendedTranslationFlags()) {
         const auto& name = flag.GetName();
-        YQL_ENSURE(flag.GetArgs().empty(), "Expected an empty SQL flag args");
 
         if (!flag.HasActivation()) {
-            flags.Unconditional.emplace(name);
+            // Unconditionally enable
         } else if (isActive(flag.GetActivation())) {
-            flags.Activated.emplace(name);
+            flags.Activated_.emplace(name);
+        } else {
+            continue;
         }
+
+        TVector<TString> args(Reserve(flag.GetArgs().size()));
+        for (const auto& arg : flag.GetArgs()) {
+            args.emplace_back(arg);
+        }
+
+        flags.Set(name, std::move(args));
     }
 
     return flags;

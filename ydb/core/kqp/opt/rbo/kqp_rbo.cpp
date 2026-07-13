@@ -31,9 +31,10 @@ TRuleBasedStage::TRuleBasedStage(TString&& stageName, TVector<std::unique_ptr<IR
     }
 }
 
-namespace {
-
 void EnsureRequiredProps(TOpRoot& root, ui32 props, ui32& computedProps, TRBOContext& ctx, const TString& stageName) {
+    // Output IUs are always required by optimizer rules.
+    root.ComputeOutputIUsSubtree();
+
     if ((props & ERuleProperties::RequireParents) && !(computedProps & ERuleProperties::RequireParents)) {
         root.ComputeParents();
         computedProps |= ERuleProperties::RequireParents;
@@ -76,8 +77,6 @@ void EnsureRequiredProps(TOpRoot& root, ui32 props, ui32& computedProps, TRBOCon
     }
 }
 
-} // anonymous namespace
-
 void ComputeRequiredProps(TOpRoot& root, ui32 props, TRBOContext& ctx, TString stageName) {
     ui32 computedProps = 0;
     EnsureRequiredProps(root, props, computedProps, ctx, stageName);
@@ -101,7 +100,7 @@ void TRuleBasedStage::RunStage(TOpRoot& root, TRBOContext& ctx) {
     while (fired && numMatches < maxNumOfMatches) {
         fired = false;
 
-        for (auto iter : root) {
+        for (const auto& iter : root) {
             for (const auto& rule : Rules) {
                 auto op = iter.Current;
                 if (!rule->QuickMatch(op)) {

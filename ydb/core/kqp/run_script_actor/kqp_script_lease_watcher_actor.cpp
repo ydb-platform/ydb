@@ -101,14 +101,10 @@ private:
 
     void ScheduleLeaseUpdate(const TInstant currentDeadline) {
         LeaseUpdateScheduleTime = TInstant::Now();
-        const auto leaseUpdateTime = currentDeadline - Ctx->LeaseDuration / LEASE_UPDATE_FREQUENCY;
+        const auto leaseUpdateTime = std::max(currentDeadline - Ctx->LeaseDuration / LEASE_UPDATE_FREQUENCY, TInstant::Now() + TDuration::Seconds(1));
         LOG_D("Scheduling lease update on " << leaseUpdateTime);
 
-        if (TInstant::Now() >= leaseUpdateTime) {
-            StartLeaseUpdate();
-        } else {
-            Schedule(leaseUpdateTime, new TEvents::TEvWakeup());
-        }
+        Schedule(leaseUpdateTime, new TEvents::TEvWakeup());
     }
 
     void StartLeaseUpdate() {

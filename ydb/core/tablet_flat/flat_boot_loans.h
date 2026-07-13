@@ -76,6 +76,17 @@ namespace NBoot {
             TProtoBox<NKikimrExecutorFlat::TBorrowedPart> proto(body);
 
             Logic->Result().Loans->RestoreBorrowedInfo(label, proto);
+
+            if (Logic->Result().GcLogic) {
+                auto& historyCutter = Logic->Result().GcLogic->HistoryCutter;
+                historyCutter.SeenBlob(LogoBlobIDFromLogoBlobID(proto.GetMetaId()));
+                for (const auto& x : proto.GetBorrowKeepList()) {
+                    historyCutter.SeenBlob(LogoBlobIDFromLogoBlobID(x));
+                }
+                for (const auto& x : proto.GetLoanKeepList()) {
+                    historyCutter.SeenBlob(LogoBlobIDFromLogoBlobID(x));
+                }
+            }
         }
 
     private:

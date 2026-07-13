@@ -17,6 +17,7 @@ namespace {
 
         url.assign(to, Quote(to, TStringBuf(url), safe));
     }
+
 }
 
 namespace NYdb::inline Dev {
@@ -286,7 +287,8 @@ void TDbDriverState::PostToResponseQueue(TPostTaskCb&& f) {
 }
 
 NThreading::TFuture<void> TDbDriverStateTracker::SendNotification(
-    TDbDriverState::ENotifyType type
+    TDbDriverState::ENotifyType type,
+    TNotificationCbRunner cbRunner
 ) {
     std::vector<std::weak_ptr<TDbDriverState>> states;
     {
@@ -303,7 +305,7 @@ NThreading::TFuture<void> TDbDriverStateTracker::SendNotification(
             std::lock_guard lock(strong->NotifyCbsLock);
             for (auto& cb : strong->NotifyCbs[static_cast<size_t>(type)]) {
                 if (cb) {
-                    auto future = cb();
+                    auto future = cbRunner ? cbRunner(cb) : cb();
                     if (!future.HasException()) {
                         results.push_back(future);
                     }
@@ -311,6 +313,9 @@ NThreading::TFuture<void> TDbDriverStateTracker::SendNotification(
                 }
             }
         }
+    }
+    if (results.empty()) {
+        return NThreading::MakeFuture();
     }
     return NThreading::WaitExceptionOrAll(results);
 }

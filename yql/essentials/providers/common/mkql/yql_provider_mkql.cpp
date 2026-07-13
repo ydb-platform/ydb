@@ -1005,6 +1005,11 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
         return ctx.ProgramBuilder.BlockGuess(blockVariantValue, node.Child(1)->Content());
     });
 
+    AddCallable("BlockWay", [](const TExprNode& node, TMkqlBuildContext& ctx) {
+        const auto blockVariantValue = MkqlBuildExpr(*node.Child(0), ctx);
+        return ctx.ProgramBuilder.BlockWay(blockVariantValue);
+    });
+
     AddCallable("Visit", [](const TExprNode& node, TMkqlBuildContext& ctx) {
         const auto variantObj = MkqlBuildExpr(node.Head(), ctx);
         const auto type = node.Head().GetTypeAnn()->Cast<TVariantExprType>();
@@ -2142,7 +2147,7 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
                                                  [&](TRuntimeNode item, TRuntimeNode state) { return ctx.ProgramBuilder.Append(state, item); }),
                     makePartitions);
 
-                return ETypeAnnotationKind::Stream == kind ? MkqlBuildLambda(partition.ListHandlerLambda().Ref(), ctx, {sorted}) : ctx.ProgramBuilder.ToFlow(MkqlBuildLambda(partition.ListHandlerLambda().Ref(), ctx, {ctx.ProgramBuilder.FromFlow(sorted)}));
+                return ETypeAnnotationKind::Stream == kind ? MkqlBuildLambda(partition.ListHandlerLambda().Ref(), ctx, {sorted}) : ctx.ProgramBuilder.ToFlow(MkqlBuildLambda(partition.ListHandlerLambda().Ref(), ctx, {ctx.ProgramBuilder.FromFlow(sorted)}), {});
             }
             case ETypeAnnotationKind::List: {
                 const auto sorted = ctx.ProgramBuilder.Iterator(makePartitions(input), {});

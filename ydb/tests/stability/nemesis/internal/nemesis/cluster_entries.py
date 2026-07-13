@@ -63,6 +63,10 @@ from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.topology_fanout_p
 from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.rolling_restart_planner import (
     RollingRestartNemesisPlanner
 )
+from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.failure_model import (
+    GuardMode,
+    ImpactScope,
+)
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -137,11 +141,16 @@ def all_nemesis_type_entries() -> dict[str, dict[str, Any]]:
         "schedule": 200,
         "ui_group": "NetworkNemesis",
         "planner_cls": NetworkNemesisPlanner,
+        "impact_scope": ImpactScope.NETWORK,
+        "guard_mode": GuardMode.PREFILTER_ONLY,
     }
     out["KillNodeNemesis"] = {
         "runner": KillNodeNemesis(),
         "schedule": 200,
         "ui_group": "NodeNemesis",
+        "impact_scope": ImpactScope.NODE,
+        "guard_mode": GuardMode.FULL,
+        "auto_recovery_sec": 20,
     }
     # out["DnsNemesis"] = {
     #     "runner": DnsNemesis(),
@@ -157,6 +166,8 @@ def all_nemesis_type_entries() -> dict[str, dict[str, Any]]:
         "planner_factory": lambda nemesis_type_key, params=None: RollingRestartNemesisPlanner(
             **(params or {})
         ),
+        "impact_scope": ImpactScope.NODE,
+        "guard_mode": GuardMode.PREFILTER_ONLY,
         "params": [
             {
                 "name": "nodes_per_step",
@@ -188,6 +199,8 @@ def all_nemesis_type_entries() -> dict[str, dict[str, Any]]:
         "schedule": 400,
         "ui_group": "NetworkNemesis",
         "planner_cls": TimeSkewNemesisPlanner,
+        "impact_scope": ImpactScope.NETWORK,
+        "guard_mode": GuardMode.PREFILTER_ONLY,
     }
 
     # --- tablet kills -------------------------------------------------------
@@ -196,17 +209,23 @@ def all_nemesis_type_entries() -> dict[str, dict[str, Any]]:
             "runner": cls(),
             "schedule": sched,
             "ui_group": _TABLET_UI_GROUP,
+            "impact_scope": ImpactScope.NODE,
+            "guard_mode": GuardMode.FULL,
         }
 
     out["KickTabletsFromNodeNemesis"] = {
         "runner": ClusterKickTabletsFromNodeNemesis(),
         "schedule": 200,
         "ui_group": _TABLET_UI_GROUP,
+        "impact_scope": ImpactScope.NODE,
+        "guard_mode": GuardMode.FULL,
     }
     out["ReBalanceTabletsNemesis"] = {
         "runner": ClusterReBalanceTabletsNemesis(),
         "schedule": 120,
         "ui_group": _TABLET_UI_GROUP,
+        "impact_scope": ImpactScope.NODE,
+        "guard_mode": GuardMode.FULL,
     }
 
     # One scheduled type per tablet kind is enough (orchestrator picks hosts at random per tick).
@@ -215,23 +234,35 @@ def all_nemesis_type_entries() -> dict[str, dict[str, Any]]:
             "runner": ClusterChangeTabletGroupNemesis(tt, channels=()),
             "schedule": 120,
             "ui_group": _TABLET_UI_GROUP,
+            "impact_scope": ImpactScope.NODE,
+            "guard_mode": GuardMode.FULL,
         }
         out[f"BulkChangeTabletGroup_{tt.name}"] = {
             "runner": ClusterBulkChangeTabletGroupNemesis(tt, percent=None, channels=()),
             "schedule": 180,
             "ui_group": _TABLET_UI_GROUP,
+            "impact_scope": ImpactScope.NODE,
+            "guard_mode": GuardMode.FULL,
         }
 
     # --- daemon kills -------------------------------------------------------
+    # SIGKILL + no-op extract: systemd auto-restarts the daemon, so the guard releases the rack
+    # on a timer (auto_recovery_sec) covering restart + rejoin, not on an explicit extract.
     out["KillSlotDaemonNemesis"] = {
         "runner": ClusterKillSlotDaemonNemesis(),
         "schedule": 120,
         "ui_group": _UI_GROUP,
+        "impact_scope": ImpactScope.NODE,
+        "guard_mode": GuardMode.FULL,
+        "auto_recovery_sec": 90,
     }
     out["KillNodeDaemonNemesis"] = {
         "runner": ClusterKillNodeDaemonNemesis(),
         "schedule": 180,
         "ui_group": _UI_GROUP,
+        "impact_scope": ImpactScope.NODE,
+        "guard_mode": GuardMode.FULL,
+        "auto_recovery_sec": 90,
     }
 
     # --- serial kills -------------------------------------------------------
@@ -240,27 +271,33 @@ def all_nemesis_type_entries() -> dict[str, dict[str, Any]]:
         "schedule": 300,
         "ui_group": _UI_GROUP,
         "planner_factory": _serial_staggered_node_planner_factory,
+        "impact_scope": ImpactScope.NODE,
+        "guard_mode": GuardMode.PREFILTER_ONLY,
     }
     out["SerialKillSlotsNemesis"] = {
         "runner": ClusterSerialKillSlotsNemesis(),
         "schedule": 300,
         "ui_group": _UI_GROUP,
         "planner_factory": _serial_staggered_slot_planner_factory,
+        "impact_scope": ImpactScope.NODE,
+        "guard_mode": GuardMode.PREFILTER_ONLY,
     }
 
     # --- disk / rolling / stop-start / suspend ------------------------------
-    for wire, cls, sched in (
-        ("SafelyBreakDiskNemesis", ClusterSafelyBreakDiskNemesis, 400),
-        ("SafelyCleanupDisksNemesis", ClusterSafelyCleanupDisksNemesis, 400),
-        # ("RollingUpdateClusterNemesis", ClusterRollingUpdateNemesis, 120),
-        ("StopStartNodeNemesis", ClusterStopStartNodeNemesis, 400),
-        ("SuspendNodeNemesis", ClusterSuspendNodeNemesis, 800),
+    for wire, cls, sched, scope in (
+        ("SafelyBreakDiskNemesis", ClusterSafelyBreakDiskNemesis, 400, ImpactScope.DISK),
+        ("SafelyCleanupDisksNemesis", ClusterSafelyCleanupDisksNemesis, 400, ImpactScope.DISK),
+        # ("RollingUpdateClusterNemesis", ClusterRollingUpdateNemesis, 120, ImpactScope.NODE),
+        ("StopStartNodeNemesis", ClusterStopStartNodeNemesis, 400, ImpactScope.NODE),
+        ("SuspendNodeNemesis", ClusterSuspendNodeNemesis, 800, ImpactScope.NODE),
     ):
         out[wire] = {
             "runner": cls(),
             "schedule": sched,
             "ui_group": _UI_GROUP,
             "planner_factory": _pinned_planner_factory,
+            "impact_scope": scope,
+            "guard_mode": GuardMode.PREFILTER_ONLY,
         }
 
     # --- host reboot --------------------------------------------------------
@@ -324,6 +361,8 @@ def _topology_conditional_entries() -> dict[str, dict[str, Any]]:
                 "schedule": sched,
                 "ui_group": _BRIDGE_UI_GROUP,
                 "planner_factory": _bridge_pile_fanout_planner_factory,
+                "impact_scope": ImpactScope.PILE,
+                "guard_mode": GuardMode.BYPASS,
             }
 
     return extra

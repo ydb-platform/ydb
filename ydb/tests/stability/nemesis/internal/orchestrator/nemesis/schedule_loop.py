@@ -15,8 +15,14 @@ import requests
 
 from ydb.tests.stability.nemesis.routers.agent_router import create_process_helper
 from ydb.tests.stability.nemesis.internal.nemesis.chaos_dispatch import DispatchCommand
-from ydb.tests.stability.nemesis.internal.nemesis.catalog import NEMESIS_TYPES
+from ydb.tests.stability.nemesis.internal.nemesis.catalog import (
+    NEMESIS_TYPES,
+    guard_mode_for,
+    impact_scope_for,
+    recovery_sec_for,
+)
 from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.chaos_state import ChaosOrchestratorStore
+from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.failure_model import FailureModelGuard, GuardMode
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
@@ -38,6 +44,7 @@ class OrchestratorNemesisSchedule:
         is_local_host: Callable[[str], bool],
         get_app_port: Callable[[], int],
         history_limit: int = HISTORY_LIMIT,
+        failure_guard: FailureModelGuard | None = None,
     ) -> None:
         self._lock = threading.RLock()
         self._tasks: dict[str, dict] = {}
@@ -47,6 +54,7 @@ class OrchestratorNemesisSchedule:
         self._get_hosts = get_hosts
         self._is_local_host = is_local_host
         self._get_app_port = get_app_port
+        self._failure_guard = failure_guard
 
     @property
     def lock(self) -> threading.RLock:
@@ -228,6 +236,33 @@ class OrchestratorNemesisSchedule:
         for cmd in cmds:
             self.dispatch_command(cmd, track_history=True)
 
+    def _dispatch_guarded(self, cmd: DispatchCommand) -> None:
+        """Post-filter safety net (Variant A) used only by scheduled ticks.
+
+        For FULL-mode types: veto injects that would violate the failure model, and record
+        inject/extract impact. PREFILTER_ONLY / BYPASS types dispatch as-is (no veto, no record).
+        """
+        guard = self._failure_guard
+        if guard is None or not guard.enabled or guard_mode_for(cmd.nemesis_type) is not GuardMode.FULL:
+            self.dispatch_command(cmd, track_history=True)
+            return
+
+        scope = impact_scope_for(cmd.nemesis_type)
+        if cmd.action == "extract":
+            self.dispatch_command(cmd, track_history=True)
+            guard.record_extract(cmd.execution_id, cmd.host, scope)
+            return
+
+        if not guard.can_inject(cmd.host, scope):
+            logger.warning(
+                "VETOED by failure model: %s (%s) on %s", cmd.nemesis_type, scope.value, cmd.host
+            )
+            return
+        self.dispatch_command(cmd, track_history=True)
+        guard.record_inject(
+            cmd.execution_id, cmd.host, scope, recovery_sec=recovery_sec_for(cmd.nemesis_type)
+        )
+
     def _run_planned_tick(self, process_type: str) -> None:
         hosts = self._get_hosts()
         cmds = self._chaos_store.plan_scheduled_tick(process_type, hosts)
@@ -237,7 +272,7 @@ class OrchestratorNemesisSchedule:
         logger.info("Running %d dispatch(es) for %s", len(cmds), process_type)
         with ThreadPoolExecutor(max_workers=min(len(cmds), 10)) as executor:
             futures = [
-                executor.submit(self.dispatch_command, cmd, track_history=True)
+                executor.submit(self._dispatch_guarded, cmd)
                 for cmd in cmds
             ]
             for future in as_completed(futures):

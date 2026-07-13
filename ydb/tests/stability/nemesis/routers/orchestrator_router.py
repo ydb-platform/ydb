@@ -12,9 +12,13 @@ from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.schedule_loop imp
 from ydb.tests.stability.nemesis.internal.orchestrator.orchestrator_warden_checker import OrchestratorWardenChecker
 from ydb.tests.stability.nemesis.internal.nemesis.catalog import (
     NEMESIS_TYPES,
+    guard_mode_for,
+    impact_scope_for,
     nemesis_types_flat_for_api,
     nemesis_types_grouped_for_api,
+    recovery_sec_for,
 )
+from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.failure_model import FailureModelGuard, GuardMode
 import ydb.tests.stability.nemesis.routers.agent_router as agent_router
 
 
@@ -30,6 +34,7 @@ mon_port = 8765  # Default monitoring port
 orchestrator_warden_checker: OrchestratorWardenChecker | None = None
 nemesis_schedule: OrchestratorNemesisSchedule | None = None
 chaos_store: ChaosOrchestratorStore | None = None
+failure_guard: FailureModelGuard | None = None
 healthcheck_reporter: Any = None
 
 
@@ -117,6 +122,7 @@ def create_host_process():
     process_type = data.get("type")
     host = data.get("host")
     action = data.get("action", "inject")
+    force = bool(data.get("force", False))
 
     if not process_type:
         return jsonify({"status": "error", "message": "Missing type field"}), 400
@@ -143,13 +149,48 @@ def create_host_process():
             ), 400
         if chaos_store is None:
             return jsonify({"status": "error", "message": "Chaos store not initialized"}), 500
+        # Failure-model veto for manual inject of FULL-mode types (override with force=True).
+        if (
+            not force
+            and action == "inject"
+            and failure_guard is not None
+            and failure_guard.enabled
+            and guard_mode_for(process_type) is GuardMode.FULL
+        ):
+            scope = impact_scope_for(process_type)
+            if not failure_guard.can_inject(host, scope):
+                return jsonify(
+                    {
+                        "status": "error",
+                        "message": (
+                            f"VETOED by failure model: injecting {process_type} on {host} "
+                            f"would exceed the cluster's fault tolerance. Retry with force=true to override."
+                        ),
+                    }
+                ), 409
+
         cmds = chaos_store.plan_manual(process_type, host, action)
         if not cmds:
             return jsonify(
                 {"status": "error", "message": "Could not plan manual execution for this type/action"}
             ), 400
+        record_scope = impact_scope_for(process_type) if failure_guard is not None else None
         for cmd in cmds:
             nemesis_schedule.dispatch_command(cmd, track_history=False)
+            if (
+                failure_guard is not None
+                and failure_guard.enabled
+                and guard_mode_for(process_type) is GuardMode.FULL
+            ):
+                if cmd.action == "extract":
+                    failure_guard.record_extract(cmd.execution_id, cmd.host, record_scope)
+                elif cmd.action == "inject":
+                    failure_guard.record_inject(
+                        cmd.execution_id,
+                        cmd.host,
+                        record_scope,
+                        recovery_sec=recovery_sec_for(cmd.nemesis_type),
+                    )
         return jsonify(
             {
                 "status": "ok",

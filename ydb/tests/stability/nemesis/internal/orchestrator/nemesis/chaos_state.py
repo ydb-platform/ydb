@@ -5,16 +5,26 @@ Create one instance per app and pass it to OrchestratorNemesisSchedule / wire fr
 
 from __future__ import annotations
 
+import logging
 import threading
-from ydb.tests.stability.nemesis.internal.nemesis.catalog import build_all_planners, build_planner
+from ydb.tests.stability.nemesis.internal.nemesis.catalog import (
+    build_all_planners,
+    build_planner,
+    guard_mode_for,
+    impact_scope_for,
+)
 from ydb.tests.stability.nemesis.internal.nemesis.chaos_dispatch import DispatchCommand
+from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.failure_model import FailureModelGuard, GuardMode
 from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.nemesis_planner_base import NemesisPlannerBase
+
+logger = logging.getLogger(__name__)
 
 
 class ChaosOrchestratorStore:
-    def __init__(self) -> None:
+    def __init__(self, failure_guard: FailureModelGuard | None = None) -> None:
         self._lock = threading.Lock()
         self._planners: dict[str, NemesisPlannerBase] = build_all_planners()
+        self._failure_guard = failure_guard
 
     def rebuild_planner(self, nemesis_type: str, params: dict | None = None) -> bool:
         """Re-create a planner for ``nemesis_type`` with the supplied ``params``.
@@ -34,6 +44,20 @@ class ChaosOrchestratorStore:
         planner = self._planners.get(nemesis_type)
         if planner is None:
             return []
+        # Variant B (pre-filter): restrict the host list for FULL / PREFILTER_ONLY types.
+        if self._failure_guard is not None and self._failure_guard.enabled:
+            mode = guard_mode_for(nemesis_type)
+            if mode in (GuardMode.FULL, GuardMode.PREFILTER_ONLY):
+                scope = impact_scope_for(nemesis_type)
+                filtered = self._failure_guard.filter_safe_hosts(hosts, scope)
+                if len(filtered) != len(hosts):
+                    logger.info(
+                        "Failure model pre-filter: %s %d -> %d safe host(s)",
+                        nemesis_type,
+                        len(hosts),
+                        len(filtered),
+                    )
+                hosts = filtered
         return planner.scheduled_tick(hosts)
 
     def plan_disable_schedule(self, nemesis_type: str) -> list[DispatchCommand]:

@@ -21,6 +21,11 @@ from typing import Any, Type
 from ydb.tests.stability.nemesis.internal.nemesis.cluster_entries import all_nemesis_type_entries
 from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.default_planner import DefaultRandomHostPlanner
 from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.nemesis_planner_base import NemesisPlannerBase
+from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.failure_model import (
+    DEFAULT_RECOVERY_SEC,
+    GuardMode,
+    ImpactScope,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -107,6 +112,51 @@ def build_all_planners() -> dict[str, NemesisPlannerBase]:
 
 def get_all_nemesis_types() -> list[str]:
     return list(NEMESIS_TYPES.keys())
+
+
+def impact_scope_for(nemesis_type: str) -> ImpactScope:
+    """ImpactScope for ``nemesis_type`` (defaults to NODE when unannotated)."""
+    spec = NEMESIS_TYPES.get(nemesis_type)
+    if spec is None:
+        return ImpactScope.UNKNOWN
+    scope = spec.get("impact_scope")
+    return scope if isinstance(scope, ImpactScope) else ImpactScope.NODE
+
+
+def guard_mode_for(nemesis_type: str) -> GuardMode:
+    """GuardMode for ``nemesis_type``.
+
+    Default when unannotated: FULL for stateless types (no ``planner_cls`` /
+    ``planner_factory`` -> DefaultRandomHostPlanner), else BYPASS.
+    """
+    spec = NEMESIS_TYPES.get(nemesis_type)
+    if spec is None:
+        return GuardMode.BYPASS
+    mode = spec.get("guard_mode")
+    if isinstance(mode, GuardMode):
+        return mode
+    has_custom_planner = spec.get("planner_cls") is not None or spec.get("planner_factory") is not None
+    return GuardMode.BYPASS if has_custom_planner else GuardMode.FULL
+
+
+def recovery_sec_for(nemesis_type: str) -> float | None:
+    """Auto-recovery window (seconds) passed to ``record_inject`` as ``recovery_sec``.
+
+    Number -> impairment auto-expires after that many seconds; ``None`` -> held until an
+    explicit extract (toggle faults); unannotated -> :data:`DEFAULT_RECOVERY_SEC`.
+    """
+    spec = NEMESIS_TYPES.get(nemesis_type)
+    if spec is None:
+        return DEFAULT_RECOVERY_SEC
+    if "auto_recovery_sec" not in spec:
+        return DEFAULT_RECOVERY_SEC
+    val = spec.get("auto_recovery_sec")
+    if val is None:
+        return None
+    try:
+        return float(val)
+    except (TypeError, ValueError):
+        return DEFAULT_RECOVERY_SEC
 
 
 def nemesis_types_flat_for_api() -> list[dict[str, Any]]:

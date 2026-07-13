@@ -70,6 +70,7 @@ public:
     THashMap<std::pair<TString, NYql::EDatabaseType>, NYql::TDatabaseAuth> DatabaseIds;
     std::shared_ptr<NYql::IDatabaseAsyncResolver> DbResolver;
     NPq::NProto::StreamingDisposition Disposition;
+    TString WatermarkLateEventsPolicy;
     std::vector<std::pair<TString, TString>> TaskSensorLabels;
     std::vector<ui64> NodeIds;
 };

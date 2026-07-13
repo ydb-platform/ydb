@@ -130,6 +130,7 @@ public:
         , PhysicalGraph(std::move(settings.PhysicalGraph))
         , StreamingQueryPath(settings.StreamingQueryPath)
         , CustomerSuppliedId(std::move(settings.CustomerSuppliedId))
+        , WatermarkLateEventsPolicy(std::move(settings.WatermarkLateEventsPolicy))
         , StreamingDisposition(std::move(settings.StreamingDisposition))
         , Counters(settings.Counters)
     {}
@@ -149,12 +150,15 @@ public:
         UserRequestContext->IsStreamingQuery = SaveQueryPhysicalGraph;
         UserRequestContext->CheckpointId = CheckpointId;
         UserRequestContext->StreamingQueryPath = StreamingQueryPath;
+        UserRequestContext->WatermarkLateEventsPolicy = WatermarkLateEventsPolicy;
         UserRequestContext->StreamingDisposition = StreamingDisposition;
 
         LOG_I("Bootstrap "
             << "StreamingQueryPath: " << StreamingQueryPath
             << ", CheckpointId: " << CheckpointId
-            << ", StreamingDisposition: " << (StreamingDisposition ? StreamingDisposition->DebugString() : "null"));
+            << ", WatermarkLateEventsPolicy: " << WatermarkLateEventsPolicy
+            << ", StreamingDisposition: " << (StreamingDisposition ? StreamingDisposition->DebugString() : "null")
+        );
 
         Become(&TRunScriptActor::StateFunc);
     }
@@ -569,7 +573,7 @@ private:
         if (SaveResultMetaInflight) {
             PendingResultMeta = true;
             return;
-        } 
+        }
         SaveResultMetaInflight++;
 
         NJson::TJsonValue resultSetMetas;
@@ -1001,6 +1005,7 @@ private:
     std::optional<NKikimrKqp::TQueryPhysicalGraph> PhysicalGraph;
     const TString StreamingQueryPath;
     const TString CustomerSuppliedId;
+    TString WatermarkLateEventsPolicy;
     const std::shared_ptr<NYql::NPq::NProto::StreamingDisposition> StreamingDisposition;
     std::optional<TActorId> PhysicalGraphSender;
     TIntrusivePtr<TKqpCounters> Counters;

@@ -546,6 +546,10 @@ TIntrusivePtr<IMkqlCallableCompiler> CreateKqlCompiler(const TKqlCompileContext&
             return MkqlBuildLambda(*wg.PartitionKeyExtractor().Raw(), ctx, {item});
         };
 
+        const auto writeTimeExtractor = [&](TRuntimeNode item) {
+            return MkqlBuildLambda(*wg.WriteTimeExtractor().Raw(), ctx, {item});
+        };
+
         std::vector<std::pair<std::string, std::string>> watermarkSettings;
         watermarkSettings.reserve(wg.WatermarkSettings().Size());
         for (const auto& nameValue : wg.WatermarkSettings()) {
@@ -571,7 +575,7 @@ TIntrusivePtr<IMkqlCallableCompiler> CreateKqlCompiler(const TKqlCompileContext&
 
         const auto partitionKeys = pgmBuilder.NewVoid();
 
-        return pgmBuilder.DqWatermarkGenerator(input, watermarkExtractor, partitionKeyExtractor, watermarkSettings, partitionKeys);
+        return pgmBuilder.DqWatermarkGenerator(input, watermarkExtractor, partitionKeyExtractor, writeTimeExtractor, watermarkSettings, partitionKeys);
     });
 
     compiler->AddCallable("FulltextAnalyze",

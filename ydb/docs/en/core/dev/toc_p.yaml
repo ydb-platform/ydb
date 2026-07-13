@@ -6,16 +6,16 @@ items:
   include:
     mode: link
     path: streaming-query/toc_p.yaml
-- name: YQL tutorial
-  href: yql-tutorial/index.md
-  include:
-    mode: link
-    path: yql-tutorial/toc_p.yaml
 - name: Example applications
   href: example-app/index.md
   include:
     mode: link
     path: example-app/toc_p.yaml
+- name: YQL tutorial
+  href: yql-tutorial/index.md
+  include:
+    mode: link
+    path: yql-tutorial/toc_p.yaml
 - name: Primary keys
   href: primary-key/index.md
   include:
@@ -31,6 +31,8 @@ items:
   href: fulltext-indexes.md
 - name: Hybrid search
   href: hybrid-search.md
+- name: JSON indexes
+  href: json-indexes.md
 - name: Local indexes
   href: local-indexes/index.md
   include:
@@ -41,8 +43,6 @@ items:
   include:
     mode: link
     path: query-execution-optimization/toc_p.yaml
-- name: Resource consumption management
-  href: resource-consumption-management.md
 - name: Batch upload
   href: batch-upload.md
 - name: Paging
@@ -53,7 +53,11 @@ items:
   href: system-views.md
 - name: Change Data Capture
   href: cdc.md
+- name: Architecture and limitations of a shared topic reader
+  href: shared-consumer-internals.md
 - name: Terraform
   href: terraform.md
 - name: Custom attributes
   href: custom-attributes.md
+- name: Resource consumption management
+  href: resource-consumption-management.md

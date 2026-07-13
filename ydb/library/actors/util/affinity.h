@@ -34,6 +34,14 @@ public:
         SetAffinity(affinity);
     }
 
+    TAffinityGuard(const TCpuMask* cpuMask, ui64 pid = 0)
+        : PId(pid)
+    {
+        if (cpuMask) {
+            SetCpuMask(*cpuMask);
+        }
+    }
+
     TAffinityGuard(ui64 pid = 0)
         : PId(pid)
     {

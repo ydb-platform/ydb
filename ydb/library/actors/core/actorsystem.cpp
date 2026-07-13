@@ -311,7 +311,10 @@ namespace NActors {
 
     THarmonizerStats TActorSystem::GetHarmonizerStats() const {
         return CpuManager->GetHarmonizerStats();
+    }
 
+    std::optional<TCpuMask> TActorSystem::GetExecutorPoolAffinity(ui32 poolId) const {
+        return CpuManager->GetExecutorPoolAffinity(poolId);
     }
 
     void TActorSystem::Start() {

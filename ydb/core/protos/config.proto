@@ -71,10 +71,13 @@ message TActorSystemConfig {
         enum EType {
             BASIC = 1;
             IO = 2;
+            NUMA = 3; // Basic executor expanded into NUMA placement groups.
         };
 
         optional EType Type = 1;
         optional uint32 Threads = 2;
+        optional uint32 PlacementGroups = 24; // For NUMA executor; alternative to Threads.
+        optional uint32 PlacementGroupThreads = 25; // For NUMA executor; per placement group thread count, defaults to CPU count.
         optional uint64 SpinThreshold = 3;
         optional TAffinity Affinity = 4;
         optional uint32 InjectMadSquirrels = 5; // Obsolete, no more mad squirrels anymore

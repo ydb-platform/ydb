@@ -41,6 +41,8 @@ namespace NActors {
             return Executors[poolId].Get();
         }
 
+        std::optional<TCpuMask> GetExecutorPoolAffinity(ui32 poolId) const;
+
         void GetPoolStats(ui32 poolId, TExecutorPoolStats& poolStats, TVector<TExecutorThreadStats>& statsCopy) const {
             if (poolId < ExecutorPoolCount) {
                 Executors[poolId]->GetCurrentStats(poolStats, statsCopy);

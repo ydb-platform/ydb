@@ -65,6 +65,7 @@ namespace NActors {
             ui32 IOPoolId = 2;
             ui32 BatchPoolId = 3;
             TMap<TString, ui32> ServicePools = {};
+            TVector<ui32> StoragePools = {};
         };
 
         TTestActorRuntime(THeSingleSystemEnv d);

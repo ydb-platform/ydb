@@ -1,4 +1,4 @@
-#include <ydb/public/api/grpc/ydb_topic_deferred_publish_v1.grpc.pb.h>
+#include <ydb/public/api/grpc/draft/ydb_topic_deferred_publish_v1.grpc.pb.h>
 #include <ydb/public/api/grpc/ydb_topic_v1.grpc.pb.h>
 
 #include <ydb/core/cms/console/console.h>

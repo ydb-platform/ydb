@@ -17,6 +17,7 @@ for _p in (_tests_dir, _scripts_dir, os.path.join(_scripts_dir, 'analytics')):
     if _p not in sys.path:
         sys.path.insert(0, _p)
 
+from mute.branch_bootstrap import apply_branch_bootstrap_grace, load_inherited_muted_lines
 from mute.mute_check import YaMuteCheck
 from mute.update_mute_issues import (
     ORG_NAME,
@@ -711,6 +712,8 @@ def apply_and_add_mutes(
     ydb_wrapper=None,
     branch=None,
     build_type=None,
+    inherited_muted_ya_path=None,
+    repo_root=None,
 ):
     output_path = os.path.join(output_path, 'mute_update')
     logging.info(f"Creating mute files in directory: {output_path}")
@@ -872,12 +875,39 @@ def apply_and_add_mutes(
         to_delete = sorted(list(set(to_delete) | set(manual_fast_delete_lines)))
         to_delete_debug = sorted(list(set(to_delete_debug) | set(manual_fast_delete_debug)))
 
-        write_file_set(os.path.join(output_path, 'to_delete.txt'), to_delete, to_delete_debug)
-        
         # 4. muted_ya (all currently muted tests).
         all_muted_ya, all_muted_ya_debug = create_file_set(
             all_data, lambda test: mute_check(test.get('suite_folder'), test.get('test_name')) if mute_check else True, use_wildcards=True, resolution='muted_ya'
         )
+        all_muted_ya_before_bootstrap = list(all_muted_ya)
+
+        if branch and inherited_muted_ya_path:
+            all_muted_ya, to_delete, grace_active, grace_added = apply_branch_bootstrap_grace(
+                branch=branch,
+                inherited_muted_ya_path=inherited_muted_ya_path,
+                all_muted_ya=all_muted_ya,
+                to_delete=to_delete,
+                repo_root=repo_root,
+            )
+            if grace_active:
+                inherited = load_inherited_muted_lines(inherited_muted_ya_path)
+                if inherited:
+                    kept_delete = set(to_delete)
+                    to_delete_debug = [
+                        debug
+                        for debug in to_delete_debug
+                        if debug.split(' #', 1)[0] in kept_delete
+                        or debug.split(':', 1)[0] in kept_delete
+                    ]
+                    before_set = set(all_muted_ya_before_bootstrap)
+                    for line in all_muted_ya:
+                        if line in before_set:
+                            continue
+                        all_muted_ya_debug.append(
+                            f'{line} # [bootstrap-grace since {grace_added}] inherited from muted_ya'
+                        )
+
+        write_file_set(os.path.join(output_path, 'to_delete.txt'), to_delete, to_delete_debug)
         write_file_set(os.path.join(output_path, 'muted_ya.txt'), all_muted_ya, all_muted_ya_debug)
         to_mute_set = set(to_mute)
         to_unmute_set = set(to_unmute)
@@ -1554,6 +1584,8 @@ def mute_worker(args):
                 ydb_wrapper=ydb_wrapper,
                 branch=args.branch,
                 build_type=build_type,
+                inherited_muted_ya_path=input_muted_ya_path,
+                repo_root=repo_path.rstrip(os.sep),
             )
 
         elif args.mode == 'sync_fast_unmute_grace':

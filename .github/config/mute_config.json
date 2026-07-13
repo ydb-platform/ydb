@@ -5,6 +5,7 @@
   "mute_window_days": 4,
   "unmute_window_days": 7,
   "delete_window_days": 7,
+  "branch_bootstrap_grace_days": 7,
   "manual_unmute_issue_closed_lookback_days": 7,
   "manual_unmute_currently_muted_lookback_days": 14,
   "default_muted_ya_path": ".github/config/muted_ya.txt",

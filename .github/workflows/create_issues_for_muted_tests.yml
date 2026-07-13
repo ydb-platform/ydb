@@ -29,11 +29,7 @@ env:
 
 jobs:
   resolve-build-types:
-    if: |
-      github.event_name == 'workflow_dispatch' ||
-      (github.event_name == 'pull_request' &&
-       github.event.pull_request.merged == true &&
-       contains(github.event.pull_request.labels.*.name, 'mute-unmute'))
+    if: github.event_name == 'workflow_dispatch' || github.event.pull_request.merged == true
     runs-on: [ self-hosted, auto-provisioned, build-preset-analytic-node]
     outputs:
       base_branch: ${{ steps.resolve.outputs.base_branch }}
@@ -106,10 +102,9 @@ jobs:
     needs: resolve-build-types
     runs-on: [ self-hosted, auto-provisioned, build-preset-analytic-node]
     if: |
-      github.event_name == 'workflow_dispatch' ||
-      (github.event_name == 'pull_request' &&
-       github.event.pull_request.merged == true &&
-       contains(github.event.pull_request.labels.*.name, 'mute-unmute'))
+      ((github.event_name == 'pull_request' &&
+        contains(github.event.pull_request.labels.*.name, 'mute-unmute')) ||
+       github.event_name == 'workflow_dispatch')
     strategy:
       fail-fast: false
       matrix:
@@ -196,10 +191,9 @@ jobs:
     needs: [resolve-build-types, create-issues-for-muted-tests]
     runs-on: [ self-hosted, auto-provisioned, build-preset-analytic-node]
     if: |
-      github.event_name == 'workflow_dispatch' ||
-      (github.event_name == 'pull_request' &&
-       github.event.pull_request.merged == true &&
-       contains(github.event.pull_request.labels.*.name, 'mute-unmute'))
+      ((github.event_name == 'pull_request' &&
+        contains(github.event.pull_request.labels.*.name, 'mute-unmute')) ||
+       github.event_name == 'workflow_dispatch')
     steps:
       - name: Set environment variables for branches
         run: |

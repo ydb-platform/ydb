@@ -988,7 +988,7 @@ std::optional<TString> TNodeOpsBase::Tag(fy_node* node) const {
 void TNodeOpsBase::SetTag(fy_node* node, const TString& tag) {
     ENSURE_NODE_NOT_EMPTY(node);
     auto* str = new TString(std::move(tag));
-    auto* data = new TUserDataHolder(UserData(node), str);
+    auto* data = new TUserDataHolder(str);
     SetUserData(node, data);
     RethrowOnError(fy_node_set_tag(node, str->c_str(), str->length()), node);
 }
@@ -1007,7 +1007,7 @@ bool TNodeOpsBase::HasAnchor(fy_node* node) const {
 
 void TNodeOpsBase::SetAnchor(fy_node* node, const TString& anchor) {
     auto* str = new TString(anchor);
-    auto* data = new TUserDataHolder(UserData(node), str);
+    auto* data = new TUserDataHolder(str);
     SetUserData(node, data);
     RethrowOnError(fy_node_set_anchor(node, str->c_str(), str->length()), node);
 }

@@ -73,6 +73,8 @@
   -rw-rw-r-- 1 164 ydbd-storage.yml
   ```
 
+  Проверка доступности узлов — по HTTPS; см. [Метрики в формате Prometheus](#web-metrics-prometheus).
+
 - Вручную без TLS
 
   Скопируйте файлы из каталога [ydb/deploy/prometheus](https://github.com/ydb-platform/ydb/tree/main/ydb/deploy/prometheus) репозитория {{ ydb-short-name }}.
@@ -80,6 +82,8 @@
   Заполните секции `targets` в [`ydbd-storage.yml`](https://github.com/ydb-platform/ydb/tree/main/ydb/deploy/prometheus/ydbd-storage.yml) и [`ydbd-database.yml`](https://github.com/ydb-platform/ydb/tree/main/ydb/deploy/prometheus/ydbd-database.yml): укажите хосты и порты мониторинга (`--mon-port`) всех узлов хранения и динамических узлов баз данных, с которых нужно собирать метрики (как определить порт, см. [Как определить порт мониторинга](#web-metrics-mon-port)).
 
   В [`prometheus_ydb.yml`](https://github.com/ydb-platform/ydb/tree/main/ydb/deploy/prometheus/prometheus_ydb.yml) для задач сбора метрик задайте `scheme: http` и отключите или удалите параметры `tls_config`.
+
+  Проверка доступности узлов — по HTTP; см. [Метрики в формате Prometheus](#web-metrics-prometheus).
 
 - Вручную с TLS
 
@@ -95,7 +99,7 @@
       ca_file: '<ydb-ca-file>'
   ```
 
-  Файл CA (например, `ca.crt`) должен быть доступен Prometheus по указанному пути. Все файлы в `tls_config` должны быть читаемы пользователем, под которым запущен Prometheus.
+  Убедитесь, что все пути в `tls_config` указывают на существующие файлы и что пользователь, под которым запущен Prometheus, имеет права на их чтение.
 
   Если в вашей конфигурации используются клиентский сертификат и ключ, добавьте их в `tls_config`:
 
@@ -106,11 +110,15 @@
       key_file: '<ydb-client-key-file>'
   ```
 
+  Проверка доступности узлов — по HTTPS (`curl` с `https://`, см. [Метрики в формате Prometheus](#web-metrics-prometheus)). Укажите в `curl` флаг `--cacert` с тем же путём, что в `ca_file`.
+
 - Локальный однонодовый кластер (быстрый старт)
 
   Если {{ ydb-short-name }} запущен локально в конфигурации «один узел» и мониторинг слушает на одном порту (часто `8765`), в обоих файлах — `ydbd-storage.yml` и `ydbd-database.yml` — в секции `targets` укажите один и тот же адрес, например `localhost:8765` или `<hostname>:8765`.
 
 {% endlist %}
+
+Независимо от выбранного способа подготовки конфигурации шаги запуска и проверки Prometheus ниже одинаковы.
 
 ### Запуск Prometheus с подготовленной конфигурацией {#prometheus-start}
 
@@ -222,6 +230,8 @@ http://<ydb-server-address>:<ydb-port>/counters/counters=<servicename>/
 
 - `<servicename>` — имя группы (подсистемы), как в списке на главной странице.
 
+Используйте `http` или `https` в соответствии с настройкой TLS кластера (как в [Метриках в формате Prometheus](#web-metrics-prometheus)).
+
 Например, метрики утилизации ресурсов сервера — в группе `utils`:
 
 ```text
@@ -230,19 +240,37 @@ http://<ydb-server-address>:<ydb-port>/counters/counters=utils
 
 ### Метрики в формате Prometheus {#web-metrics-prometheus}
 
-Тот же узел отдает метрики в [формате Prometheus](https://prometheus.io/docs/instrumenting/exposition_formats/) — по URL с суффиксом `/prometheus`. Именно эти адреса опрашивает Prometheus (параметр `metrics_path` в `scrape_configs`):
+Тот же узел отдает метрики в [формате Prometheus](https://prometheus.io/docs/instrumenting/exposition_formats/) — по URL с суффиксом `/prometheus`. Именно эти адреса опрашивает Prometheus (параметр `metrics_path` в `scrape_configs`).
 
-```text
-http://<ydb-server-address>:<ydb-port>/counters/counters=<servicename>/prometheus
-```
+{% list tabs %}
 
-Проверить доступность эндпоинта:
+- Без TLS
 
-```bash
-curl "http://<ydb-server-address>:<ydb-port>/counters/counters=<servicename>/prometheus"
-```
+  ```text
+  http://<ydb-server-address>:<ydb-port>/counters/counters=<servicename>/prometheus
+  ```
 
-Для TLS — `https://`; при самоподписанном сертификате для диагностики добавьте флаг `-k`.
+  Проверить доступность эндпоинта:
+
+  ```bash
+  curl "http://<ydb-server-address>:<ydb-port>/counters/counters=<servicename>/prometheus"
+  ```
+
+- С TLS
+
+  ```text
+  https://<ydb-server-address>:<ydb-port>/counters/counters=<servicename>/prometheus
+  ```
+
+  Проверить доступность эндпоинта:
+
+  ```bash
+  curl --cacert <path-to-ca.crt> "https://<ydb-server-address>:<ydb-port>/counters/counters=<servicename>/prometheus"
+  ```
+
+  Укажите в `--cacert` тот же путь, что в `ca_file` в `tls_config` (см. [подготовку конфигурации](#prometheus-grafana)). При самоподписанном сертификате для диагностики можно добавить флаг `-k`.
+
+{% endlist %}
 
 ### Связь с конфигурацией Prometheus {#web-metrics-prom-config}
 

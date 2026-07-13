@@ -36,7 +36,7 @@ namespace NTabletPipe {
         }
 
         void Bootstrap(const TActorContext& ctx) {
-            YDB_LOG_DEBUG_CTX(ctx, "TClient bootstrap",
+            YDB_LOG_DEBUG_CTX(ctx, "TClient::Bootstrap: client bootstrap",
                 {"tabletId", TabletId},
                 {"selfId", ctx.SelfID});
 
@@ -250,7 +250,7 @@ namespace NTabletPipe {
                 return;
             }
 
-            YDB_LOG_DEBUG_CTX(ctx, "TClient remote node disonnected while connecting, check retry",
+            YDB_LOG_DEBUG_CTX(ctx, "TClient remote node disconnected while connecting, check retry",
                 {"tabletId", TabletId},
                 {"selfId", ctx.SelfID});
             if (InterconnectSessionId) {
@@ -268,7 +268,7 @@ namespace NTabletPipe {
                 return;
             }
 
-            YDB_LOG_DEBUG_CTX(ctx, "TClient remote node disonnected while connecting, check retry",
+            YDB_LOG_DEBUG_CTX(ctx, "TClient remote node disconnected while connecting, check retry",
                 {"tabletId", TabletId},
                 {"selfId", ctx.SelfID});
             if (InterconnectSessionId) {
@@ -546,7 +546,7 @@ namespace NTabletPipe {
             Y_UNUSED(ctx);
 
             if (HiveUidFromTabletID(TabletId) == 0)
-                YDB_LOG_ERROR_CTX(ctx, "TClient trying to check aliveness of hand-made tablet! would definitely fail",
+            YDB_LOG_ERROR_CTX(ctx, "TClient::CheckAliveness: checking aliveness of hand-made tablet will fail",
                     {"tabletId", TabletId},
                     {"selfId", ctx.SelfID});
 
@@ -579,7 +579,7 @@ namespace NTabletPipe {
                     {"selfId", ctx.SelfID});
 
                 if (!Config.RetryPolicy)
-                    YDB_LOG_ERROR_CTX(ctx, "TClient check aliveness w/o retry policy, possible perfomance hit",
+                    YDB_LOG_ERROR_CTX(ctx, "TClient::CheckAliveness: checking aliveness without retry policy, possible performance hit",
                         {"tabletId", TabletId},
                         {"selfId", ctx.SelfID});
 

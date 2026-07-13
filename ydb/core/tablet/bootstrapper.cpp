@@ -191,9 +191,9 @@ private:
     void BeginNewCycle() {
         ++RoundCounter;
 
-        YDB_LOG_DEBUG("Begin new cycle (lookup in state storage)",
-            {"tablet", TabletInfo->TabletID},
-            {"type", GetTabletTypeName()});
+        YDB_LOG_DEBUG("TBootstrapper::StartLookup: beginning lookup cycle in state storage",
+            {"tabletId", TabletInfo->TabletID},
+            {"tabletType", GetTabletTypeName()});
 
         if (AppData()->BridgeModeEnabled && !AppData()->SuppressBridgeModeBootstrapperLogic) {
             Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()), new TEvNodeWardenQueryStorageConfig(false));
@@ -230,11 +230,11 @@ private:
     void HandleLookup(TEvStateStorage::TEvInfo::TPtr& ev) {
         auto* msg = ev->Get();
 
-        YDB_LOG_DEBUG("Dump tablet, type, lookup, leader",
-            {"tablet", TabletInfo->TabletID},
-            {"type", GetTabletTypeName()},
-            {"lookup", msg->Status},
-            {"leader", msg->CurrentLeader});
+        YDB_LOG_DEBUG("TBootstrapper::HandleLookupResult: state storage lookup result",
+            {"tabletId", TabletInfo->TabletID},
+            {"tabletType", GetTabletTypeName()},
+            {"lookupStatus", msg->Status},
+            {"leaderNodeId", msg->CurrentLeader});
 
         switch (msg->Status) {
             case NKikimrProto::OK: {
@@ -259,9 +259,9 @@ private:
             default: {
                 // We have unavailable storage storage, sleep and retry
                 auto sleepDuration = GetSleepDuration();
-                YDB_LOG_DEBUG("State storage unavailable, sleeping",
-                    {"tablet", TabletInfo->TabletID},
-                    {"type", GetTabletTypeName()},
+                YDB_LOG_DEBUG("TBootstrapper::HandleLookupResult: state storage unavailable, sleeping",
+                    {"tabletId", TabletInfo->TabletID},
+                    {"tabletType", GetTabletTypeName()},
                     {"sleepDuration", sleepDuration});
                 Schedule(sleepDuration, new TEvents::TEvWakeup(RoundCounter));
                 return;
@@ -284,10 +284,10 @@ private:
 
         auto* msg = ev->Get();
 
-        YDB_LOG_DEBUG("Dump tablet, type, connect",
-            {"tablet", TabletInfo->TabletID},
-            {"type", GetTabletTypeName()},
-            {"connect", msg->Status});
+        YDB_LOG_DEBUG("TBootstrapper::HandleConnectResult: connect to leader result",
+            {"tabletId", TabletInfo->TabletID},
+            {"tabletType", GetTabletTypeName()},
+            {"connectStatus", msg->Status});
 
         if (msg->Status != NKikimrProto::OK) {
             // Current leader unavailable, begin new round
@@ -296,9 +296,9 @@ private:
             return;
         }
 
-        YDB_LOG_INFO("Connected to leader, waiting",
-            {"tablet", TabletInfo->TabletID},
-            {"type", GetTabletTypeName()});
+        YDB_LOG_INFO("TBootstrapper::HandleConnectResult: connected to leader, waiting",
+            {"tabletId", TabletInfo->TabletID},
+            {"tabletType", GetTabletTypeName()});
 
         // We have connected to leader, wait until it disconnects
         WatchedBy.emplace();
@@ -322,9 +322,9 @@ private:
             return;
         }
 
-        YDB_LOG_DEBUG("Disconnected",
-            {"tablet", TabletInfo->TabletID},
-            {"type", GetTabletTypeName()});
+        YDB_LOG_DEBUG("TBootstrapper::HandleDisconnect: disconnected from leader",
+            {"tabletId", TabletInfo->TabletID},
+            {"tabletType", GetTabletTypeName()});
 
         KnownLeaderPipe = {};
         NotifyWatchers();
@@ -349,9 +349,9 @@ private:
         }
 
         SelfSeed = GenerateSeed();
-        YDB_LOG_INFO("Begin new round",
-            {"tablet", TabletInfo->TabletID},
-            {"type", GetTabletTypeName()},
+        YDB_LOG_INFO("TBootstrapper::StartRound: beginning new round",
+            {"tabletId", TabletInfo->TabletID},
+            {"tabletType", GetTabletTypeName()},
             {"seed", SelfSeed});
 
         const ui64 tabletId = TabletInfo->TabletID;
@@ -407,9 +407,9 @@ private:
 
     void HandleFree(TEvents::TEvUndelivered::TPtr& ev) {
         const ui64 round = ev->Cookie;
-        YDB_LOG_DEBUG("Undelivered from round",
-            {"tablet", TabletInfo->TabletID},
-            {"type", GetTabletTypeName()},
+        YDB_LOG_DEBUG("TBootstrapper::HandleUndelivered: undelivered message from round",
+            {"tabletId", TabletInfo->TabletID},
+            {"tabletType", GetTabletTypeName()},
             {"sender", ev->Sender},
             {"round", round});
 
@@ -425,10 +425,10 @@ private:
     void HandleFree(TEvInterconnect::TEvNodeDisconnected::TPtr& ev) {
         const ui32 node = ev->Get()->NodeId;
         const ui64 round = ev->Cookie;
-        YDB_LOG_DEBUG("Disconnected from round",
-            {"tablet", TabletInfo->TabletID},
-            {"type", GetTabletTypeName()},
-            {"node", node},
+        YDB_LOG_DEBUG("TBootstrapper::HandleNodeDisconnected: node disconnected from round",
+            {"tabletId", TabletInfo->TabletID},
+            {"tabletType", GetTabletTypeName()},
+            {"nodeId", node},
             {"round", round});
 
         if (round != RoundCounter)
@@ -452,9 +452,9 @@ private:
             return true;
         }
 
-        YDB_LOG_DEBUG("Apply alien",
-            {"tablet", TabletInfo->TabletID},
-            {"type", GetTabletTypeName()},
+        YDB_LOG_DEBUG("TBootstrapper::ApplyAlien: applying alien tablet state",
+            {"tabletId", TabletInfo->TabletID},
+            {"tabletType", GetTabletTypeName()},
             {"nodeId", alien.NodeId()},
             {"state", GetStateName(state)});
 
@@ -525,9 +525,9 @@ private:
 
         if (winner != SelfId().NodeId()) {
             auto sleepDuration = GetSleepDuration();
-            YDB_LOG_DEBUG("Lost round, wait",
-                {"tablet", TabletInfo->TabletID},
-                {"type", GetTabletTypeName()},
+            YDB_LOG_DEBUG("TBootstrapper::HandleRoundLost: lost round, waiting",
+                {"tabletId", TabletInfo->TabletID},
+                {"tabletType", GetTabletTypeName()},
                 {"sleepDuration", sleepDuration});
 
             Round.reset();
@@ -578,12 +578,12 @@ private:
         }
 
         auto sleepDuration = Min(GetSleepDuration(), BootDelayedUntil - now);
-        YDB_LOG_DEBUG("Dump tablet, type, online, total, quorum, sleepDuration",
-            {"tablet", TabletInfo->TabletID},
-            {"type", GetTabletTypeName()},
-            {"online", online},
-            {"total", total},
-            {"quorum", quorum},
+        YDB_LOG_DEBUG("TBootstrapper::HandleRoundResult: round result summary",
+            {"tabletId", TabletInfo->TabletID},
+            {"tabletType", GetTabletTypeName()},
+            {"onlineCount", online},
+            {"totalCount", total},
+            {"quorumCount", quorum},
             {"sleepDuration", sleepDuration});
 
         Round.reset();
@@ -601,11 +601,11 @@ private:
      * - Begins a new cycle when notified or disconnected
      */
     void BecomeWatch(const TActorId& watchOn, bool owner) {
-        YDB_LOG_INFO("Become watch on node",
-            {"tablet", TabletInfo->TabletID},
-            {"type", GetTabletTypeName()},
+        YDB_LOG_INFO("TBootstrapper::BecomeWatch: watching node",
+            {"tabletId", TabletInfo->TabletID},
+            {"tabletType", GetTabletTypeName()},
             {"watchNodeId", watchOn.NodeId()},
-            {"owner", (owner ? " (owner)" : "")});
+            {"isOwner", (owner ? true : false)});
 
         Watching.emplace(watchOn, owner);
         WatchedBy.emplace();
@@ -633,9 +633,9 @@ private:
 
     void BootFollower() {
         if (BootstrapperInfo->StartFollowers && !FollowerActorID) {
-            YDB_LOG_NOTICE("Boot follower",
-                {"tablet", TabletInfo->TabletID},
-                {"type", GetTabletTypeName()});
+            YDB_LOG_NOTICE("TBootstrapper::BootFollower: booting follower tablet",
+                {"tabletId", TabletInfo->TabletID},
+                {"tabletType", GetTabletTypeName()});
             TTabletSetupInfo* x = BootstrapperInfo->SetupInfo.Get();
             FollowerActorID = x->Follower(TabletInfo.Get(),
                 SelfId(), TActivationContext::ActorContextFor(SelfId()),
@@ -675,10 +675,10 @@ private:
     void HandleWatch(TEvInterconnect::TEvNodeDisconnected::TPtr& ev) {
         const ui32 node = ev->Get()->NodeId;
         const ui64 round = ev->Cookie;
-        YDB_LOG_DEBUG("Disconnected from round",
-            {"tablet", TabletInfo->TabletID},
-            {"type", GetTabletTypeName()},
-            {"node", node},
+        YDB_LOG_DEBUG("TBootstrapper::HandleNodeDisconnected: node disconnected from round",
+            {"tabletId", TabletInfo->TabletID},
+            {"tabletType", GetTabletTypeName()},
+            {"nodeId", node},
             {"round", round});
 
         if (round != RoundCounter)
@@ -714,9 +714,9 @@ private:
     void Boot() {
         Y_ABORT_UNLESS(!LookOnActorID);
 
-        YDB_LOG_NOTICE("Boot",
-            {"tablet", TabletInfo->TabletID},
-            {"type", GetTabletTypeName()});
+        YDB_LOG_NOTICE("TBootstrapper::Boot: booting tablet",
+            {"tabletId", TabletInfo->TabletID},
+            {"tabletType", GetTabletTypeName()});
 
         if (FollowerActorID) {
             LookOnActorID = FollowerActorID;
@@ -749,9 +749,9 @@ private:
 
     void Handle(TEvTablet::TEvTabletDead::TPtr& ev) {
         if (ev->Sender == LookOnActorID) {
-            YDB_LOG_INFO("Tablet dead",
-                {"tablet", TabletInfo->TabletID},
-                {"type", GetTabletTypeName()});
+            YDB_LOG_INFO("TBootstrapper::HandleTabletDead: tablet dead",
+                {"tabletId", TabletInfo->TabletID},
+                {"tabletType", GetTabletTypeName()});
 
             LookOnActorID = {};
             NotifyWatchers();

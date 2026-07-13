@@ -54,7 +54,7 @@ class TTabletReqFindLatestLogEntry : public TActorBootstrapped<TTabletReqFindLat
         case NKikimrProto::TIMEOUT:
         case NKikimrProto::NO_GROUP:
         case NKikimrProto::BLOCKED:
-            YDB_LOG_ERROR("Handle::TEvDiscoverResult, result status",
+            YDB_LOG_ERROR("TTabletReqFindLatestLogEntry::HandleDiscoverResult: discover failed",
                 {"status", NKikimrProto::EReplyStatus_Name(msg->Status)});
             return ReplyAndDie(msg->Status, msg->ErrorReason);
         default:

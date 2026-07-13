@@ -276,8 +276,8 @@ public:
 
     void QueryLabeledCounters(const NKikimrLabeledCounters::TEvTabletLabeledCountersRequest& request, NKikimrLabeledCounters::TEvTabletLabeledCountersResponse& response, const TActorContext& ctx) {
 
-        YDB_LOG_INFO_CTX(ctx, "Got request v",
-            {"version", request.GetVersion()});
+        YDB_LOG_INFO_CTX(ctx, "TTabletLabeledCountersStorage::QueryLabeledCounters: received labeled counters request",
+            {"requestVersion", request.GetVersion()});
 
         TString group = request.HasGroup() ? request.GetGroup() : "";
         TTabletTypes::EType tabletType = request.GetTabletType();
@@ -311,7 +311,7 @@ public:
                 ++cc;
             }
         }
-        YDB_LOG_INFO_CTX(ctx, "Request processed",
+        YDB_LOG_INFO_CTX(ctx, "TTabletLabeledCountersStorage::QueryLabeledCounters: request processed",
             {"groupsProcessed", cc});
     }
 
@@ -1295,21 +1295,21 @@ TTabletCountersAggregatorActor::HandleWork(TEvTabletCounters::TEvTabletAddCounte
 void
 TTabletCountersAggregatorActor::HandleWork(TEvTabletCounters::TEvTabletAddLabeledCounters::TPtr &ev, const TActorContext &ctx) {
     TEvTabletCounters::TEvTabletAddLabeledCounters* msg = ev->Get();
-    YDB_LOG_DEBUG_CTX(ctx, "Got labeledCounters",
+    YDB_LOG_DEBUG_CTX(ctx, "TTabletCountersAggregatorActor::HandleWork: received labeled counters",
         {"databasePath", msg->LabeledCounters.Get()->GetDatabasePath()},
         {"group", msg->LabeledCounters.Get()->GetGroup()},
-        {"tabletTypeLabel", (msg->TabletType == TTabletTypes::PersQueue ? "PQ" : "different")});
+        {"tabletTypeLabel", (msg->TabletType == TTabletTypes::PersQueue ? "PQ" : "other")});
     if (msg->LabeledCounters.Get()->GetDatabasePath()) {
         if (msg->TabletType == TTabletTypes::PersQueue) {
-            YDB_LOG_DEBUG_CTX(ctx, "Got labeledCounters",
-                {"fromDb", msg->LabeledCounters.Get()->GetDatabasePath()},
-                {"tablet", msg->TabletID});
+            YDB_LOG_DEBUG_CTX(ctx, "TTabletCountersAggregatorActor::HandleWork: applying labeled counters from database",
+                {"databasePath", msg->LabeledCounters.Get()->GetDatabasePath()},
+                {"tabletId", msg->TabletID});
             TabletMon->ApplyLabeledDbCounters(msg->LabeledCounters.Get()->GetDatabasePath().GetRef(), msg->TabletID, msg->LabeledCounters.Get(), ctx);
         } else {
-            YDB_LOG_ERROR_CTX(ctx, "Got labeledCounters from unknown tablet type",
-                {"type", msg->TabletType},
-                {"db", msg->LabeledCounters.Get()->GetDatabasePath()},
-                {"tablet", msg->TabletID});
+            YDB_LOG_ERROR_CTX(ctx, "TTabletCountersAggregatorActor::HandleWork: labeled counters from unsupported tablet type",
+                {"tabletType", msg->TabletType},
+                {"databasePath", msg->LabeledCounters.Get()->GetDatabasePath()},
+                {"tabletId", msg->TabletID});
             return;
         }
     } else {
@@ -1678,7 +1678,7 @@ public:
             flags |= IEventHandle::FlagSubscribeOnSession;
         }
         ctx.Send(aggregatorServiceId, request.Release(), flags, nodeId);
-        YDB_LOG_INFO_CTX(ctx, "Aggregator actor request to node",
+        YDB_LOG_INFO_CTX(ctx, "TClusterLabeledCountersAggregatorActorV1::SendRequest: sent request to node",
             {"nodeId", nodeId},
             {"selfId", ctx.SelfID});
         ++NodesRequested;
@@ -1691,12 +1691,12 @@ public:
             ctx.Send(nameserviceId, new TEvInterconnect::TEvListNodes());
             TBase::Become(&TThis::StateRequestedBrowse);
             ctx.Schedule(TDuration::Seconds(AGGREGATOR_TIMEOUT_SECONDS), new TEvents::TEvWakeup());
-            YDB_LOG_INFO_CTX(ctx, "Aggregator new request V1 Initiator",
+            YDB_LOG_INFO_CTX(ctx, "TClusterLabeledCountersAggregatorActorV1::Bootstrap: started cluster aggregation request",
                 {"initiator", Initiator},
                 {"selfId", ctx.SelfID},
                 {"workerId", WorkerId});
         } else {
-            YDB_LOG_INFO_CTX(ctx, "Aggregator new request V1",
+            YDB_LOG_INFO_CTX(ctx, "TClusterLabeledCountersAggregatorActorV1::Bootstrap: spawning worker actors",
                 {"selfId", ctx.SelfID});
             for (ui32 i = 0; i < WorkerId; ++i) {
                 ctx.Register(new TClusterLabeledCountersAggregatorActorV1(ctx.SelfID, TabletType, WorkerId, i));
@@ -1742,7 +1742,7 @@ public:
 
     void Undelivered(TEvents::TEvUndelivered::TPtr &ev, const TActorContext &ctx) {
         ui32 nodeId = ev.Get()->Cookie;
-        YDB_LOG_INFO_CTX(ctx, "Aggregator actor undelivered node",
+        YDB_LOG_INFO_CTX(ctx, "TClusterLabeledCountersAggregatorActorV1::Undelivered: request undelivered to node",
             {"nodeId", nodeId},
             {"selfId", ctx.SelfID});
         if (SessionSubscriptions->IsSubscribed(nodeId)) {
@@ -1759,7 +1759,7 @@ public:
 
     void Disconnected(TEvInterconnect::TEvNodeDisconnected::TPtr &ev, const TActorContext &ctx) {
         ui32 nodeId = ev->Get()->NodeId;
-        YDB_LOG_INFO_CTX(ctx, "Aggregator actor disconnected node",
+        YDB_LOG_INFO_CTX(ctx, "TClusterLabeledCountersAggregatorActorV1::Disconnected: node disconnected",
             {"nodeId", nodeId},
             {"selfId", ctx.SelfID});
         SessionSubscriptions->Handle(ev);
@@ -1770,7 +1770,7 @@ public:
 
     void HandleResponse(TEvTabletCounters::TEvTabletLabeledCountersResponse::TPtr &ev, const TActorContext &ctx) {
         ui64 nodeId = ev.Get()->Cookie;
-        YDB_LOG_INFO_CTX(ctx, "Aggregator actor got response node",
+        YDB_LOG_INFO_CTX(ctx, "TClusterLabeledCountersAggregatorActorV1::HandleResponse: received response from node",
             {"nodeId", nodeId},
             {"selfId", ctx.SelfID});
         if (SessionSubscriptions->IsSubscribed(nodeId)) {
@@ -1789,14 +1789,14 @@ public:
     }
 
     void HandleTimeout(const TActorContext &ctx) {
-        YDB_LOG_DEBUG_CTX(ctx, "Aggregator actor got TIMEOUT");
+        YDB_LOG_DEBUG_CTX(ctx, "TClusterLabeledCountersAggregatorActorV1::HandleTimeout: aggregation request timed out");
         ReplyAndDie(ctx);
     }
 
     void ReplyAndDie(const TActorContext& ctx) {
         TAutoPtr<TEvTabletCounters::TEvTabletLabeledCountersResponse> response(new TEvTabletCounters::TEvTabletLabeledCountersResponse);
 
-        YDB_LOG_INFO_CTX(ctx, "Aggregator all answers received - replying",
+        YDB_LOG_INFO_CTX(ctx, "TClusterLabeledCountersAggregatorActorV1::ReplyAndDie: all node responses received, sending reply",
             {"selfId", ctx.SelfID});
 
         TVector<ui8> types;
@@ -1923,7 +1923,7 @@ public:
                 labeledCounter.SetName(g.second->GetCounterName(i));
             }
         }
-        YDB_LOG_INFO_CTX(ctx, "Aggregator request processed - got groups and counters initiator",
+        YDB_LOG_INFO_CTX(ctx, "TClusterLabeledCountersAggregatorActorV1::ReplyAndDie: request processed",
             {"numGroups", numGroups},
             {"numCounters", numCounters},
             {"selfId", ctx.SelfID},
@@ -1986,7 +1986,7 @@ public:
             flags |= IEventHandle::FlagSubscribeOnSession;
         }
         ctx.Send(aggregatorServiceId, request.Release(), flags, nodeId);
-        YDB_LOG_INFO_CTX(ctx, "Aggregator actor request to node",
+        YDB_LOG_INFO_CTX(ctx, "TClusterLabeledCountersAggregatorActorV2::SendRequest: sent request to node",
             {"nodeId", nodeId},
             {"selfId", ctx.SelfID});
         ++NodesRequested;
@@ -1999,12 +1999,12 @@ public:
             ctx.Send(nameserviceId, new TEvInterconnect::TEvListNodes());
             TBase::Become(&TThis::StateRequestedBrowse);
             ctx.Schedule(TDuration::Seconds(AGGREGATOR_TIMEOUT_SECONDS), new TEvents::TEvWakeup());
-            YDB_LOG_INFO_CTX(ctx, "Aggregator new request V2 Initiator",
+            YDB_LOG_INFO_CTX(ctx, "TClusterLabeledCountersAggregatorActorV2::Bootstrap: started cluster aggregation request",
                 {"initiator", Initiator},
                 {"selfId", ctx.SelfID},
                 {"workerId", WorkerId});
         } else {
-            YDB_LOG_INFO_CTX(ctx, "Aggregator new request V2",
+            YDB_LOG_INFO_CTX(ctx, "TClusterLabeledCountersAggregatorActorV2::Bootstrap: spawning worker actors",
                 {"selfId", ctx.SelfID});
             for (ui32 i = 0; i < WorkerId; ++i) {
                 ctx.Register(new TClusterLabeledCountersAggregatorActorV2(ctx.SelfID, TabletType, Group, WorkerId, i));
@@ -2050,7 +2050,7 @@ public:
 
     void Undelivered(TEvents::TEvUndelivered::TPtr &ev, const TActorContext &ctx) {
         ui32 nodeId = ev.Get()->Cookie;
-        YDB_LOG_INFO_CTX(ctx, "Aggregator actor undelivered node",
+        YDB_LOG_INFO_CTX(ctx, "TClusterLabeledCountersAggregatorActorV2::Undelivered: request undelivered to node",
             {"nodeId", nodeId},
             {"selfId", ctx.SelfID});
         if (SessionSubscriptions->IsSubscribed(nodeId)) {
@@ -2067,7 +2067,7 @@ public:
 
     void Disconnected(TEvInterconnect::TEvNodeDisconnected::TPtr &ev, const TActorContext &ctx) {
         ui32 nodeId = ev->Get()->NodeId;
-        YDB_LOG_INFO_CTX(ctx, "Aggregator actor disconnected node",
+        YDB_LOG_INFO_CTX(ctx, "TClusterLabeledCountersAggregatorActorV2::Disconnected: node disconnected",
             {"nodeId", nodeId},
             {"selfId", ctx.SelfID});
         SessionSubscriptions->Handle(ev);
@@ -2078,7 +2078,7 @@ public:
 
     void HandleResponse(TEvTabletCounters::TEvTabletLabeledCountersResponse::TPtr &ev, const TActorContext &ctx) {
         ui64 nodeId = ev.Get()->Cookie;
-        YDB_LOG_INFO_CTX(ctx, "Aggregator actor got response node",
+        YDB_LOG_INFO_CTX(ctx, "TClusterLabeledCountersAggregatorActorV2::HandleResponse: received response from node",
             {"nodeId", nodeId},
             {"selfId", ctx.SelfID});
         if (SessionSubscriptions->IsSubscribed(nodeId)) {
@@ -2087,7 +2087,7 @@ public:
         PreProcessResponse(ev->Get());
 
         auto [it, emplaced] = PerNodeResponse.emplace(nodeId, ev->Release().Release());
-        YDB_LOG_INFO_CTX(ctx, "Aggregator actor merged response node",
+        YDB_LOG_INFO_CTX(ctx, "TClusterLabeledCountersAggregatorActorV2::HandleResponse: merged response from node",
             {"nodeId", nodeId},
             {"selfId", ctx.SelfID});
 
@@ -2105,12 +2105,12 @@ public:
     }
 
     void HandleTimeout(const TActorContext &ctx) {
-        YDB_LOG_DEBUG_CTX(ctx, "Aggregator actor got TIMEOUT");
+        YDB_LOG_DEBUG_CTX(ctx, "TClusterLabeledCountersAggregatorActorV2::HandleTimeout: aggregation request timed out");
         ReplyAndDie(ctx);
     }
 
     virtual void ReplyAndDie(const TActorContext& ctx) {
-        YDB_LOG_INFO_CTX(ctx, "Aggregator request processed",
+        YDB_LOG_INFO_CTX(ctx, "TClusterLabeledCountersAggregatorActorV2::ReplyAndDie: request processed",
             {"selfId", ctx.SelfID},
             {"initiator", Initiator});
         ui64 cookie = NumWorkers ? WorkerId : 0;
@@ -2127,7 +2127,7 @@ public:
     {}
 
     void ReplyAndDie(const TActorContext& ctx) override {
-        YDB_LOG_INFO_CTX(ctx, "Aggregator request processed",
+        YDB_LOG_INFO_CTX(ctx, "TClusterLabeledCountersAggregatorActorV3::ReplyAndDie: request processed",
             {"selfId", ctx.SelfID},
             {"initiator", Initiator});
         ui64 cookie = NumWorkers ? WorkerId : 0;

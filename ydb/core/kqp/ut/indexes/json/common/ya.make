@@ -3,7 +3,6 @@ LIBRARY()
 SRCS(
     kqp_indexes_json_ut_common.cpp
     kqp_indexes_json_corpus.cpp
-    kqp_indexes_json_predicate.cpp
 )
 
 PEERDIR(

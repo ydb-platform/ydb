@@ -14,6 +14,7 @@ ydb/library/workload/
 ├── benchmark_base/     # Base classes for TPC-style benchmark workloads
 ├── clickbench/         # ClickBench benchmark
 ├── fulltext/           # Full-text search workload
+├── json/               # Json index workload
 ├── kv/                 # Key-Value workload
 ├── log/                # Log workload (append-heavy time-series)
 ├── mixed/              # Mixed read/write workload

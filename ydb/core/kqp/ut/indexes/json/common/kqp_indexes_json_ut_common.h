@@ -2,9 +2,9 @@
 
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <ydb/core/kqp/ut/indexes/json/common/kqp_indexes_json_corpus.h>
-#include <ydb/core/kqp/ut/indexes/json/common/kqp_indexes_json_predicate.h>
 
 #include <ydb/library/json_index/json_index.h>
+#include <ydb/library/json_index/json_predicate.h>
 
 #include <functional>
 #include <optional>
@@ -12,6 +12,10 @@
 #include <vector>
 
 namespace NKikimr::NKqp {
+
+using NKikimr::NJsonIndex::TPredicateBuilderOptions;
+using NKikimr::NJsonIndex::TPredicateBuilder;
+using NKikimr::NJsonIndex::TBuiltPredicate;
 
 inline std::string strSuffix(const std::string& s) {
     return std::string("\0\3", 2) + s;

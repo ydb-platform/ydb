@@ -1,8 +1,13 @@
 #pragma once
 
-#include <ydb/core/kqp/ut/indexes/json/common/kqp_indexes_json_corpus.h>
+#include <ydb/library/json_index/json_corpus.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/params/params.h>
 
-namespace NKikimr::NKqp {
+#include <optional>
+#include <vector>
+#include <string>
+
+namespace NKikimr::NJsonIndex {
 
 // Controls which predicate families TPredicateBuilder generates
 struct TPredicateBuilderOptions {
@@ -58,11 +63,9 @@ struct TBuiltPredicate {
 };
 
 // Produces a batch of SQL JSON_* predicates
-class TPredicateBuilder {
-public:
+struct TPredicateBuilder {
     std::vector<TBuiltPredicate> BuildBatch(const TJsonCorpus& corpus, bool isStrict,
-        size_t maxCount, ui64 seed,
-        const TPredicateBuilderOptions& opts = {}) const;
+        size_t maxCount, ui64 seed, const TPredicateBuilderOptions& opts = {}) const;
 };
 
-} // namespace NKikimr::NKqp
+} // namespace NKikimr::NJsonIndex

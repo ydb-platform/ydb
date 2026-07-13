@@ -4,6 +4,7 @@ PEERDIR(
     ydb/library/workload/abstract
     ydb/library/workload/clickbench
     ydb/library/workload/fulltext
+    ydb/library/workload/json
     ydb/library/workload/kv
     ydb/library/workload/log
     ydb/library/workload/mixed
@@ -22,6 +23,7 @@ RECURSE(
     benchmark_base
     clickbench
     fulltext
+    json
     kv
     log
     mixed

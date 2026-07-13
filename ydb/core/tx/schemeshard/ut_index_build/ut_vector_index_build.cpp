@@ -1929,11 +1929,12 @@ Y_UNIT_TEST_SUITE(VectorIndexBuildTest) {
 
     }
 
-    Y_UNIT_TEST(BuildTableWithEmptyShard) {
+    Y_UNIT_TEST_FLAG(BuildTableWithEmptyShard, AlwaysSetSystemOwner) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         ui64 txId = 100;
 
+        runtime.GetAppData().AlwaysSetSystemOwner = AlwaysSetSystemOwner;
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
         runtime.SetLogPriority(NKikimrServices::BUILD_INDEX, NLog::PRI_TRACE);
 
@@ -1989,6 +1990,12 @@ Y_UNIT_TEST_SUITE(VectorIndexBuildTest) {
         {
             const char* buildTable = "/MyRoot/ServerLessDB/Table/index1/indexImplPostingTable1build";
             auto indexDesc = DescribePath(runtime, tenantSchemeShard, buildTable, true, true, true);
+            // When AlwaysSetSystemOwner is enabled the owner of the transient index build
+            // impl tables is the system user.
+            if (AlwaysSetSystemOwner) {
+                UNIT_ASSERT_VALUES_EQUAL(
+                    indexDesc.GetPathDescription().GetSelf().GetOwner(), BUILTIN_ACL_BASIC_OWNER);
+            }
             auto parts = indexDesc.GetPathDescription().GetTablePartitions();
             UNIT_ASSERT_EQUAL(parts.size(), 1);
             // There should be only 1 cluster because there are too little rows. So no clusters with ID > 1.

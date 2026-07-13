@@ -37,6 +37,35 @@ using TAccessServiceMock = TTicketParserAccessServiceMock;
 using TAccessServiceMockV2 = TTicketParserAccessServiceMockV2;
 using TNebiusAccessServiceMock = TTicketParserNebiusAccessServiceMock;
 
+// Precomputed argon2id + SCRAM-SHA-256 hashes from scram_ut.cpp
+// Password: "password1"
+static const TString PASSWORD1_HASHES = R"({
+    "version": 1,
+    "argon2id": "flbr3YnA9kG67qegwDTaYg==$wsTryyX+vdkLiZ4PfYabvgVwHf8tbxBVVtDluhiz3fo=",
+    "scram-sha-256": "4096:s0QSrrFVkMTh3k2TTk860A==$LmCubRpIYV1zHMLucTtu7XjhB+PgWwH8ABCYGyVF1mo=:eUrie0C98tEFgygSOtom/fwPmgnMxeq53l7YTFfYncc="
+})";
+
+// The ServerKey of the SCRAM-SHA-256 hash above.
+static const TString PASSWORD1_SCRAM_SERVER_KEY = "eUrie0C98tEFgygSOtom/fwPmgnMxeq53l7YTFfYncc=";
+
+NLogin::TLoginProvider::TCreateUserRequest MakeCreateUserRequest(const TString& user) {
+    return {
+        .User = user,
+        .HashedPassword = Base64Encode(PASSWORD1_HASHES),
+    };
+}
+
+NLogin::TLoginProvider::TLoginUserRequest MakeLoginUserRequest(const TString& user) {
+    return {
+        .User = user,
+        .HashToValidate = NLogin::TLoginProvider::THashToValidate{
+            .AuthMech = NLoginProto::ESaslAuthMech::Plain,
+            .HashType = NLoginProto::EHashType::ScramSha256,
+            .Hash = PASSWORD1_SCRAM_SERVER_KEY,
+        },
+    };
+}
+
 template <class TAccessServiceMock>
 void SetUseAccessService(NKikimrProto::TAuthConfig& authConfig);
 
@@ -176,8 +205,8 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         TActorId sender = runtime->AllocateEdgeActor();
         runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvUpdateLoginSecurityState(provider.GetSecurityState())), 0);
 
-        provider.CreateUser({.User = "user1", .Password = "password1"});
-        auto loginResponse = provider.LoginUser({.User = "user1", .Password = "password1"});
+        provider.CreateUser(MakeCreateUserRequest("user1"));
+        auto loginResponse = provider.LoginUser(MakeLoginUserRequest("user1"));
 
         runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket(loginResponse.Token)), 0);
 
@@ -217,12 +246,12 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         TActorId sender = runtime->AllocateEdgeActor();
 
         provider.CreateGroup({.Group = "group1"});
-        provider.CreateUser({.User = "user1", .Password = "password1"});
+        provider.CreateUser(MakeCreateUserRequest("user1"));
         provider.AddGroupMembership({.Group = "group1", .Member = "user1"});
 
         runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvUpdateLoginSecurityState(provider.GetSecurityState())), 0);
 
-        auto loginResponse = provider.LoginUser({.User = "user1", .Password = "password1"});
+        auto loginResponse = provider.LoginUser(MakeLoginUserRequest("user1"));
 
         UNIT_ASSERT_VALUES_EQUAL(loginResponse.Error, "");
 
@@ -266,11 +295,11 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
             TActorId sender = runtime->AllocateEdgeActor();
 
             loginProviderDb1.CreateGroup({.Group = "group1"});
-            loginProviderDb1.CreateUser({.User = "user1", .Password = "password1"});
+            loginProviderDb1.CreateUser(MakeCreateUserRequest("user1"));
             loginProviderDb1.AddGroupMembership({.Group = "group1", .Member = "user1"});
 
 
-            auto loginResponse = loginProviderDb1.LoginUser({.User = "user1", .Password = "password1"});
+            auto loginResponse = loginProviderDb1.LoginUser(MakeLoginUserRequest("user1"));
 
             UNIT_ASSERT_VALUES_EQUAL(loginResponse.Error, "");
 
@@ -297,11 +326,11 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
             TActorId sender = runtime->AllocateEdgeActor();
 
             loginProviderDb2.CreateGroup({.Group = "group1"});
-            loginProviderDb2.CreateUser({.User = "user1", .Password = "password1"});
+            loginProviderDb2.CreateUser(MakeCreateUserRequest("user1"));
             loginProviderDb2.AddGroupMembership({.Group = "group1", .Member = "user1"});
 
 
-            auto loginResponse = loginProviderDb2.LoginUser({.User = "user1", .Password = "password1"});
+            auto loginResponse = loginProviderDb2.LoginUser(MakeLoginUserRequest("user1"));
 
             UNIT_ASSERT_VALUES_EQUAL(loginResponse.Error, "");
 
@@ -349,11 +378,11 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         TActorId sender = runtime->AllocateEdgeActor();
 
         loginProviderDb1.CreateGroup({.Group = "group1"});
-        loginProviderDb1.CreateUser({.User = "user1", .Password = "password1"});
+        loginProviderDb1.CreateUser(MakeCreateUserRequest("user1"));
         loginProviderDb1.AddGroupMembership({.Group = "group1", .Member = "user1"});
 
 
-        auto loginResponse = loginProviderDb1.LoginUser({.User = "user1", .Password = "password1"});
+        auto loginResponse = loginProviderDb1.LoginUser(MakeLoginUserRequest("user1"));
 
         UNIT_ASSERT_VALUES_EQUAL(loginResponse.Error, "");
 
@@ -438,12 +467,12 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         TActorId sender = runtime->AllocateEdgeActor();
 
         provider.CreateGroup({.Group = "group1"});
-        provider.CreateUser({.User = "user1", .Password = "password1"});
+        provider.CreateUser(MakeCreateUserRequest("user1"));
         provider.AddGroupMembership({.Group = "group1", .Member = "user1"});
 
         runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvUpdateLoginSecurityState(provider.GetSecurityState())), 0);
 
-        auto loginResponse = provider.LoginUser({.User = "user1", .Password = "password1"});
+        auto loginResponse = provider.LoginUser(MakeLoginUserRequest("user1"));
 
         UNIT_ASSERT_VALUES_EQUAL(loginResponse.Error, "");
 
@@ -524,7 +553,7 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         TActorId sender = runtime->AllocateEdgeActor();
 
         provider.CreateGroup({.Group = "group1"});
-        provider.CreateUser({.User = "user1", .Password = "password1"});
+        provider.CreateUser(MakeCreateUserRequest("user1"));
         provider.AddGroupMembership({.Group = "group1", .Member = "user1"});
 
         NLogin::TLoginProvider emptyProvider;
@@ -532,7 +561,7 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
 
         runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvUpdateLoginSecurityState(emptyProvider.GetSecurityState())), 0);
 
-        auto loginResponse = provider.LoginUser({.User = "user1", .Password = "password1"});
+        auto loginResponse = provider.LoginUser(MakeLoginUserRequest("user1"));
 
         UNIT_ASSERT_VALUES_EQUAL(loginResponse.Error, "");
 
@@ -590,12 +619,12 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         TActorId sender = runtime->AllocateEdgeActor();
 
         provider.CreateGroup({.Group = "group1"});
-        provider.CreateUser({.User = "user1", .Password = "password1"});
+        provider.CreateUser(MakeCreateUserRequest("user1"));
         provider.AddGroupMembership({.Group = "group1", .Member = "user1"});
 
         runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvUpdateLoginSecurityState(provider.GetSecurityState())), 0);
 
-        auto loginResponse = provider.LoginUser({.User = "user1", .Password = "password1"});
+        auto loginResponse = provider.LoginUser(MakeLoginUserRequest("user1"));
 
         UNIT_ASSERT_VALUES_EQUAL(loginResponse.Error, "");
 
@@ -652,8 +681,8 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         TActorId sender = runtime->AllocateEdgeActor();
         runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvUpdateLoginSecurityState(provider.GetSecurityState())), 0);
 
-        provider.CreateUser({.User = "user1", .Password = "password1"});
-        auto loginResponse = provider.LoginUser({.User = "user1", .Password = "password1"});
+        provider.CreateUser(MakeCreateUserRequest("user1"));
+        auto loginResponse = provider.LoginUser(MakeLoginUserRequest("user1"));
 
         TString emptyUserToken = "";
 

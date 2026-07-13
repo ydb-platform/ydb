@@ -354,6 +354,7 @@ public:
         Table::Guid::Type Guid = 0;
         TMaybe<Table::SharedWithOs::Type> SharedWithOs; // null on old versions
         TMaybe<Table::ReadCentric::Type> ReadCentric; // null on old versions
+        std::optional<Table::DiskScope::Type> DiskScope; // null when not set in host config
         Table::NextVSlotId::Type NextVSlotId; // null on old versions
         Table::PDiskConfig::Type PDiskConfig;
         bool ShredComplete;
@@ -402,7 +403,8 @@ public:
                     Table::LastSeenPath,
                     Table::DecommitStatus,
                     Table::ShredComplete,
-                    Table::MaintenanceStatus
+                    Table::MaintenanceStatus,
+                    Table::DiskScope
                 > adapter(
                     &TPDiskInfo::Path,
                     &TPDiskInfo::Kind,
@@ -419,7 +421,8 @@ public:
                     &TPDiskInfo::LastSeenPath,
                     &TPDiskInfo::DecommitStatus,
                     &TPDiskInfo::ShredComplete,
-                    &TPDiskInfo::MaintenanceStatus
+                    &TPDiskInfo::MaintenanceStatus,
+                    &TPDiskInfo::DiskScope
                 );
             callback(&adapter);
         }
@@ -430,6 +433,7 @@ public:
                    Table::Guid::Type guid,
                    TMaybe<Table::SharedWithOs::Type> sharedWithOs,
                    TMaybe<Table::ReadCentric::Type> readCentric,
+                   std::optional<Table::DiskScope::Type> diskScope,
                    Table::NextVSlotId::Type nextVSlotId,
                    Table::PDiskConfig::Type pdiskConfig,
                    TBoxId boxId,
@@ -450,6 +454,7 @@ public:
             , Guid(guid)
             , SharedWithOs(sharedWithOs)
             , ReadCentric(readCentric)
+            , DiskScope(diskScope)
             , NextVSlotId(nextVSlotId)
             , PDiskConfig(std::move(pdiskConfig))
             , ShredComplete(shredComplete)
@@ -970,6 +975,7 @@ public:
             Table::ReadCentric::Type ReadCentric;
             Table::Kind::Type Kind;
             TMaybe<Table::PDiskConfig::Type> PDiskConfig;
+            std::optional<Table::DiskScope::Type> DiskScope;
 
             template<typename T>
             static void Apply(TBlobStorageController* /*controller*/, T&& callback) {
@@ -978,13 +984,15 @@ public:
                         Table::SharedWithOs,
                         Table::ReadCentric,
                         Table::Kind,
-                        Table::PDiskConfig
+                        Table::PDiskConfig,
+                        Table::DiskScope
                     > adapter(
                         &TDriveInfo::Type,
                         &TDriveInfo::SharedWithOs,
                         &TDriveInfo::ReadCentric,
                         &TDriveInfo::Kind,
-                        &TDriveInfo::PDiskConfig
+                        &TDriveInfo::PDiskConfig,
+                        &TDriveInfo::DiskScope
                     );
                 callback(&adapter);
             }
@@ -2540,6 +2548,7 @@ public:
         const TPDiskCategory Category;
         const Schema::PDisk::Guid::Type Guid;
         Schema::PDisk::PDiskConfig::Type PDiskConfig;
+        std::optional<Schema::PDisk::DiskScope::Type> DiskScope; // null when not set in host config
         ui32 ExpectedSlotCount = 0; // explicit
         ui32 SlotSizeInUnits = 0; // explicit
 
@@ -2562,6 +2571,9 @@ public:
                 Y_ABORT_UNLESS(success);
                 ExpectedSlotCount = cfg.GetExpectedSlotCount();
                 SlotSizeInUnits = cfg.GetSlotSizeInUnits();
+                if (pdisk.HasDiskScope()) {
+                    DiskScope = pdisk.GetDiskScope();
+                }
             }
 
             const TPDiskId pdiskId(NodeId, PDiskId);

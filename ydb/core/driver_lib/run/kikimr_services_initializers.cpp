@@ -226,6 +226,8 @@
 
 #include <ydb/core/backup/controller/tablet.h>
 
+#include <ydb/services/udf_store/service.h>
+
 #include <ydb/library/actors/protos/services_common.pb.h>
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
@@ -3365,5 +3367,24 @@ void TNbsServiceInitializer::InitializeServices(NActors::TActorSystemSetup *setu
 }
 
 #endif
+
+TUdfStoreInitializer::TUdfStoreInitializer(const TKikimrRunConfig& runConfig, TIntrusivePtr<NMiniKQL::IMutableFunctionRegistry> functionRegistry)
+    : IKikimrServicesInitializer(runConfig)
+    , FunctionRegistry(functionRegistry) {
+}
+
+void TUdfStoreInitializer::InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) {
+    if (!Config.HasUdfStoreConfig()) {
+        return;
+    }
+    auto service = NUdfStore::CreateService(Config.GetUdfStoreConfig(), FunctionRegistry);
+    if (!service) {
+        return;
+    }
+    setup->LocalServices.push_back(std::make_pair(
+        NUdfStore::MakeServiceId(NodeId),
+        TActorSetupCmd(service, TMailboxType::HTSwap, appData->UserPoolId)));
+}
+
 
 } // namespace NKikimr::NKikimrServicesInitializers

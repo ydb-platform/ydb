@@ -5,6 +5,8 @@
 #include <library/cpp/yt/error/error_attributes.h>
 #include <library/cpp/yt/error/origin_attributes.h>
 
+#include <library/cpp/yt/memory/leaky_singleton.h>
+
 #include <library/cpp/yt/string/string.h>
 
 #include <library/cpp/yt/system/proc.h>
@@ -29,8 +31,20 @@ void FormatValue(TStringBuilderBase* builder, TErrorCode code, TStringBuf spec)
 
 constexpr TStringBuf ErrorMessageTruncatedSuffix = "...<message truncated>";
 
-TError::TEnricher TError::Enricher_;
-TError::TFromExceptionEnricher TError::FromExceptionEnricher_;
+namespace {
+
+struct TEnricherStorage
+{
+    static TEnricherStorage* Get()
+    {
+        return LeakySingleton<TEnricherStorage>();
+    }
+
+    TError::TEnricher Enricher;
+    TError::TFromExceptionEnricher FromExceptionEnricher;
+};
+
+} // namespace
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -636,11 +650,12 @@ void TError::RegisterEnricher(TEnricher enricher)
 {
     // NB: This daisy-chaining strategy is optimal when there's O(1) callbacks. Convert to a vector
     // if the number grows.
-    if (!Enricher_) {
-        Enricher_ = std::move(enricher);
+    auto* storage = TEnricherStorage::Get();
+    if (!storage->Enricher) {
+        storage->Enricher = std::move(enricher);
         return;
     }
-    Enricher_ = [first = std::move(Enricher_), second = std::move(enricher)] (TError* error) {
+    storage->Enricher = [first = std::move(storage->Enricher), second = std::move(enricher)] (TError* error) {
         first(error);
         second(error);
     };
@@ -650,12 +665,13 @@ void TError::RegisterFromExceptionEnricher(TFromExceptionEnricher enricher)
 {
     // NB: This daisy-chaining strategy is optimal when there's O(1) callbacks. Convert to a vector
     // if the number grows.
-    if (!FromExceptionEnricher_) {
-        FromExceptionEnricher_ = std::move(enricher);
+    auto* storage = TEnricherStorage::Get();
+    if (!storage->FromExceptionEnricher) {
+        storage->FromExceptionEnricher = std::move(enricher);
         return;
     }
-    FromExceptionEnricher_ = [
-        first = std::move(FromExceptionEnricher_),
+    storage->FromExceptionEnricher = [
+        first = std::move(storage->FromExceptionEnricher),
         second = std::move(enricher)
     ] (TError* error, const std::exception& exception) {
         first(error, exception);
@@ -676,15 +692,15 @@ void TError::MakeMutable()
 
 void TError::Enrich()
 {
-    if (Enricher_) {
-        Enricher_(this);
+    if (const auto& enricher = TEnricherStorage::Get()->Enricher) {
+        enricher(this);
     }
 }
 
 void TError::EnrichFromException(const std::exception& exception)
 {
-    if (FromExceptionEnricher_) {
-        FromExceptionEnricher_(this, exception);
+    if (const auto& enricher = TEnricherStorage::Get()->FromExceptionEnricher) {
+        enricher(this, exception);
     }
 }
 

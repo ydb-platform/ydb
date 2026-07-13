@@ -19,4 +19,11 @@ void DispatchLoadStatisticsQuery(
 NActors::IActor* CreateDeleteStatisticsQuery(const NActors::TActorId& replyActorId, const TString& database,
     const TPathId& pathId);
 
+// Loads a multi-column statistic from the dedicated .metadata/_statistics_multi table,
+// keyed by the ordered column-tag set. Saving/deleting is handled by the single-column
+// CreateSaveStatisticsQuery / CreateDeleteStatisticsQuery, which route rows by column set.
+void DispatchLoadMultiColumnStatisticsQuery(
+    const NActors::TActorId& replyActorId, ui64 queryId,
+    const TString& database, const TPathId& pathId, EStatType statType, const std::vector<ui32>& columnTags);
+
 };

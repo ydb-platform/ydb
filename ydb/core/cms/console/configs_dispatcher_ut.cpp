@@ -21,6 +21,8 @@
 
 #include <ydb/core/protos/netclassifier.pb.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::CONFIGS_DISPATCHER
+
 namespace NKikimr {
 
 using namespace NConsole;
@@ -262,8 +264,8 @@ public:
     {
         while (!EventsQueue.empty()) {
             TAutoPtr<IEventHandle> &ev = EventsQueue.front();
-            LOG_DEBUG_S(ctx, NKikimrServices::CONFIGS_DISPATCHER,
-                        "Dequeue event type: " << ev->GetTypeRewrite());
+            YDB_LOG_DEBUG_CTX(ctx, "Dequeue event",
+                {"type", ev->GetTypeRewrite()});
             ctx.Send(ev.Release());
             EventsQueue.pop_front();
         }

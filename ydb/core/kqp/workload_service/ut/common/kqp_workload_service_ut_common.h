@@ -161,7 +161,9 @@ public:
 // Common classifier helpers
 
 void WaitForClassifierFail(TIntrusivePtr<IYdbSetup> ydb, const TQueryRunnerSettings& settings, const TString& poolId);
+void WaitForClassifierFail(TIntrusivePtr<IYdbSetup> ydb, const TString& query, const TQueryRunnerSettings& settings, const TString& poolId);
 void WaitForClassifierSuccess(TIntrusivePtr<IYdbSetup> ydb, const TQueryRunnerSettings& settings);
+void WaitForClassifierSuccess(TIntrusivePtr<IYdbSetup> ydb, const TString& query, const TQueryRunnerSettings& settings);
 
 // Test queries
 

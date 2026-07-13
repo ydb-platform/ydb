@@ -37,9 +37,6 @@ struct TScramSecret {
     TString ServerKey;
 };
 
-TMaybe<TString> ArgonHashToNewFormat(const TStringBuf oldArgonHash);
-TString HashedPasswordFromNewArgonHashFormat(const TString& argonHash);
-TMaybe<TString> ArgonHashToOldFormat(const TStringBuf newArgonHash);
 bool IsOldFormatHash(const TString& hash);
 TString ConvertOldFormatHash(const TString& oldFormatHash);
 

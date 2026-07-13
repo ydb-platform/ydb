@@ -21,7 +21,9 @@ inline TResourcePoolClassifierConfig MakeClassifierConfig(
     const TString& database, const TString& name, i64 rank,
     const TString& resourcePool,
     std::optional<TString> memberName = std::nullopt,
-    std::optional<TString> hasAppName = std::nullopt)
+    std::optional<TString> hasAppName = std::nullopt,
+    std::optional<TString> hasFullScan = std::nullopt,
+    std::optional<TString> action = std::nullopt)
 {
     NJson::TJsonValue json(NJson::JSON_MAP);
     json["resource_pool"] = resourcePool;
@@ -30,6 +32,12 @@ inline TResourcePoolClassifierConfig MakeClassifierConfig(
     }
     if (hasAppName) {
         json["has_app_name"] = *hasAppName;
+    }
+    if (hasFullScan) {
+        json["has_full_scan"] = *hasFullScan;
+    }
+    if (action) {
+        json["action"] = *action;
     }
 
     TResourcePoolClassifierConfig config;
@@ -79,6 +87,8 @@ struct TClassifyTestCase {
     i64 Rank = 100;
     std::optional<TString> ClassifierMemberName;
     std::optional<TString> ClassifierHasAppName;
+    std::optional<TString> ClassifierHasFullScan;
+    std::optional<TString> ClassifierAction;
 
     TString ContextAppName;
     TString ContextMemberName;
@@ -92,6 +102,8 @@ struct TClassifyTestCase {
         TString ResourcePool;
         std::optional<TString> MemberName;
         std::optional<TString> HasAppName;
+        std::optional<TString> HasFullScan;
+        std::optional<TString> Action;
     };
     std::vector<TExtraClassifier> ExtraClassifiers;
 
@@ -99,12 +111,12 @@ struct TClassifyTestCase {
         std::vector<TResourcePoolClassifierConfig> configs;
         configs.push_back(MakeClassifierConfig(
             TEST_DB, "c_main", Rank, ResourcePool,
-            ClassifierMemberName, ClassifierHasAppName));
+            ClassifierMemberName, ClassifierHasAppName, ClassifierHasFullScan, ClassifierAction));
 
         for (const auto& extra : ExtraClassifiers) {
             configs.push_back(MakeClassifierConfig(
                 TEST_DB, extra.Name, extra.Rank, extra.ResourcePool,
-                extra.MemberName, extra.HasAppName));
+                extra.MemberName, extra.HasAppName, extra.HasFullScan, extra.Action));
         }
 
         auto classifierSnap = MakeClassifierSnapshot(std::move(configs));
@@ -138,6 +150,34 @@ struct TClassifyTestCase {
     NWorkload::IQueryClassifier::TPreCompileClassifyResult RunPreClassify() const {
         auto classifier = BuildClassifier();
         return classifier->PreCompileClassify();
+    }
+
+    ///
+    /// Runs the full pre-compile + post-compile classification against a synthetic
+    /// TKqpPhyQuery holding one table op on `queryTablePath` that either performs
+    /// a full scan (`isFullScan=true`) or a bounded read.
+    ///
+    NWorkload::IQueryClassifier::TPostCompileClassifyResult RunPostClassify(
+        const TString& queryTablePath, bool isFullScan) const
+    {
+        auto classifier = BuildClassifier();
+        (void)classifier->PreCompileClassify();
+
+        auto proto = std::make_unique<NKikimrKqp::TPreparedQuery>();
+        auto* phyQuery = proto->MutablePhysicalQuery();
+        auto* tx = phyQuery->AddTransactions();
+        auto* stage = tx->AddStages();
+        auto* op = stage->AddTableOps();
+        op->MutableTable()->SetPath(queryTablePath);
+
+        if (isFullScan) {
+            op->MutableReadRange()->MutableKeyRange();
+        } else {
+            op->MutableReadRange()->MutableKeyRange()->MutableFrom()->AddValues();
+        }
+
+        TPreparedQueryHolder holder(proto.release(), nullptr, /*noFillTables=*/true);
+        return classifier->PostCompileClassify(holder);
     }
 };
 

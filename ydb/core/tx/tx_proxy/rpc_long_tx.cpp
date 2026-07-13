@@ -106,8 +106,6 @@ protected:
             return ReplyError(Ydb::StatusIds::OVERLOADED, "a lot of memory in flight");
         }
 
-        IndexReady = true;
-
         auto shardsSplitter = NEvWrite::IShardsSplitter::BuildSplitter(entry);
         if (!shardsSplitter) {
             return ReplyError(Ydb::StatusIds::BAD_REQUEST, "Shard splitter not implemented for table kind");
@@ -157,11 +155,7 @@ private:
         NWilson::TProfileSpan pSpan(0, ActorSpan.GetTraceId(), "ShardsWriteResult");
         const auto* msg = ev->Get();
         if (msg->Status == Ydb::StatusIds::SUCCESS) {
-            if (IndexReady) {
-                ReplySuccess();
-            } else {
-                ColumnShardReady = true;
-            }
+            ReplySuccess();
         } else {
             Y_ABORT_UNLESS(msg->Status != Ydb::StatusIds::SUCCESS);
             for (auto& issue : msg->Issues) {
@@ -183,11 +177,7 @@ private:
             }
             return ReplyError(msg->Record.GetStatus());
         }
-        if (IndexReady) {
-            ReplySuccess();
-        } else {
-            ColumnShardReady = true;
-        }
+        ReplySuccess();
     }
 
 protected:
@@ -207,8 +197,6 @@ private:
     std::optional<NACLib::TUserToken> UserToken;
     NWilson::TProfileSpan ActorSpan;
     NEvWrite::TWritersController::TPtr InternalController;
-    bool ColumnShardReady = false;
-    bool IndexReady = false;
     TIntrusivePtr<NACLib::TUserContext> UserCtx;
     std::shared_ptr<NEvWrite::TCSUploadCounters> Counters;
 };

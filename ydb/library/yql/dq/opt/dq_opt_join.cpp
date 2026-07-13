@@ -1390,7 +1390,7 @@ TExprBase DqBuildHashJoin(
     Y_UNUSED(blockHashJoinBuildSideLeft);
 
     const auto joinType = join.JoinType().Value();
-    const auto joinAlgo = FromString<EJoinAlgoType>(join.JoinAlgo().StringValue());
+    // const auto joinAlgo = FromString<EJoinAlgoType>(join.JoinAlgo().StringValue());
     YQL_ENSURE(joinType != "Cross"sv);
 
     useBlockHashJoin = useBlockHashJoin
@@ -1757,7 +1757,7 @@ TExprBase DqBuildHashJoin(
         case EHashJoinMode::Grace:
             if (useBlockHashJoin) {
                 TVector<TCoNameValueTuple> joinSettings;
-                if (joinAlgo == EJoinAlgoType::ReverseBlockJoin) {
+                if (joinType == "Left"sv) {
                     joinSettings.push_back(
                         Build<TCoNameValueTuple>(ctx, join.Pos())
                             .Name().Build("BuildSide")

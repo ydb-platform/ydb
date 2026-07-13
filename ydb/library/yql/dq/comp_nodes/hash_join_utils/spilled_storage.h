@@ -95,10 +95,11 @@ template <TSpillerSettings Settings> class TBucketsSpiller {
         , Layout_(layout)
     {}
 
-    void AddRow(TSingleTuple tuple) {
+    void AddRow(TSingleTuple tuple, TArrowRowRef ref) {
         int bucketIndex = Settings.BucketIndex(tuple);
         TBucket& thisBucket = Buckets_[bucketIndex];
         thisBucket.BuildingPage.AppendTuple(tuple, Layout_);
+        thisBucket.BuildingPageRefs.push_back(ref);
         thisBucket.DetatchBuildingPageIfLimitReached<Settings.BucketSizeBytes>();
     }
 
@@ -184,6 +185,9 @@ template <TSpillerSettings Settings> class TProbeSpiller {
                     for( TPackResult& page: thisBucket->SelectSide(side).DetatchPages()){
                         State_.InMemoryPages.push_back(TValueAndLocation<TPackResult>{.Val = std::move(page), .Side = side, .BucketIndex = index});
                     }
+                    // Discard parallel refs of pages: spilled buckets are reloaded
+                    // via Unpack-on-load with fresh synthetic chunk refs.
+                    thisBucket->SelectSide(side).DetatchPageRefs();
                 }
             }
         }
@@ -226,11 +230,20 @@ template <TSpillerSettings Settings> class TProbeSpiller {
         TSides<TBucket>* thisBucket = std::get_if<TSides<TBucket>>(&State_.Buckets[tuple.BucketIndex]);
         MKQL_ENSURE(thisBucket, "spilling row that should be looked up?");
         thisBucket->Probe.BuildingPage.AppendTuple(tuple.Val, Layout_);
+        // Spilled probe rows lose their original Arrow chunk reference: when they're
+        // reloaded from disk in JoinPairsOfPartitions, a fresh synthetic chunk is
+        // created via Unpack-on-load. We still push a placeholder ref to keep
+        // BuildingPageRefs parallel to BuildingPage rows (DetatchBuildingPage
+        // expects this invariant).
+        thisBucket->Probe.BuildingPageRefs.push_back(TArrowRowRef::Null());
         if (thisBucket->Probe.template DetatchBuildingPageIfLimitReached<Settings.BucketSizeBytes>()) {
             for( TPackResult& page: thisBucket->Probe.DetatchPages()){
                 State_.InMemoryPages.push_back(
                     {.Val = std::move(page), .Side = tuple.Side, .BucketIndex = tuple.BucketIndex});
             }
+            // Discard the parallel ref pages: they only hold placeholder Null markers
+            // for spilled probe rows (real refs are recovered via Unpack-on-load).
+            thisBucket->Probe.DetatchPageRefs();
         }
     }
 

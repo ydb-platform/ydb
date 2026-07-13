@@ -7,6 +7,27 @@
 
 namespace NKikimr::NMiniKQL {
 
+// Reference to a row in an original Arrow chunk retained alongside packed bytes.
+// Used by the indexed-output path of THybridHashJoin to avoid per-match deep copies
+// and assemble the final result via arrow::compute::Take instead of Unpack of a
+// freshly materialized packed buffer.
+struct TArrowRowRef {
+    ui32 ChunkId;
+    ui32 RowInChunk;
+
+    // Sentinel for "no source row" — used by Left join to emit a NULL row on the
+    // build side when the probe row didn't match anything.
+    static constexpr ui32 kNullChunk = 0xFFFFFFFFu;
+
+    static TArrowRowRef Null() {
+        return TArrowRowRef{.ChunkId = kNullChunk, .RowInChunk = 0};
+    }
+
+    bool IsNull() const {
+        return ChunkId == kNullChunk;
+    }
+};
+
 // Common types used by both IBlockLayoutConverter and IScalarLayoutConverter
 struct TPackResult {
     std::vector<ui8, TMKQLAllocator<ui8>> PackedTuples;

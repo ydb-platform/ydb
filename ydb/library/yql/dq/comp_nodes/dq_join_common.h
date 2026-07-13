@@ -276,7 +276,12 @@ template <typename Source> class TInMemoryHashJoin {
             FetchResult<IBlockLayoutConverter::TPackResult> var = Sources_.Build.FetchRow();
             switch (AsStatus(var)) {
             case NYql::NUdf::EFetchStatus::Finish: {
-                Table_.BuildWith(Flatten(std::move(BuildChunks_)));
+                // TInMemoryHashJoin keeps the old packed-bytes output path and does
+                // not consume row refs, so we feed BuildWith a vector of Null()
+                // refs that's parallel to the flattened build rows.
+                auto flat = Flatten(std::move(BuildChunks_));
+                TMKQLVector<TArrowRowRef> stubRefs(flat.NTuples, TArrowRowRef::Null());
+                Table_.BuildWith(std::move(flat), std::move(stubRefs));
                 break;
             }
             case NYql::NUdf::EFetchStatus::Yield: {
@@ -300,7 +305,7 @@ template <typename Source> class TInMemoryHashJoin {
                 if (idx++ < ResumeIndex_) {
                     continue;
                 }
-                Table_.Lookup(probeTuple, [&](TSingleTuple buildTuple) {
+                Table_.Lookup(probeTuple, [&](TSingleTuple buildTuple, TArrowRowRef /*buildRef*/) {
                     consumeOneOrTwoTuples(TSides<TSingleTuple>{.Build = buildTuple, .Probe = probeTuple});
                 });
                 if (isFull()) {
@@ -322,7 +327,7 @@ template <typename Source> class TInMemoryHashJoin {
                 ui32 idx = 0;
                 for (TSingleTuple probeTuple : *FetchedPack_) {
                     idx++;
-                    Table_.Lookup(probeTuple, [&](TSingleTuple buildTuple) {
+                    Table_.Lookup(probeTuple, [&](TSingleTuple buildTuple, TArrowRowRef /*buildRef*/) {
                         consumeOneOrTwoTuples(TSides<TSingleTuple>{.Build = buildTuple, .Probe = probeTuple});
                     });
                     if (isFull()) {
@@ -498,6 +503,23 @@ template <typename Source, TSpillerSettings Settings, EJoinKind Kind> class THyb
         return Layouts_.Build->Flatten(tuples);
     }
 
+    // Concatenates per-page row-ref vectors into a single vector parallel to the
+    // result of Flatten().
+    static TMKQLVector<TArrowRowRef> FlattenRefs(TMKQLVector<TMKQLVector<TArrowRowRef>> refsList) {
+        size_t total = 0;
+        for (const auto& v : refsList) {
+            total += v.size();
+        }
+        TMKQLVector<TArrowRowRef> result;
+        result.reserve(total);
+        for (auto& v : refsList) {
+            result.insert(result.end(),
+                          std::make_move_iterator(v.begin()),
+                          std::make_move_iterator(v.end()));
+        }
+        return result;
+    }
+
     EFetchResult WaitWhileSpilling() {
         return EFetchResult::Yield;
     }
@@ -517,12 +539,12 @@ template <typename Source, TSpillerSettings Settings, EJoinKind Kind> class THyb
             bool found = false;
             if constexpr (Kind == EJoinKind::Left) {
                 if (Settings_.LeftIsBuild()) {
-                    table.Lookup(tuple, [&](TSingleTuple tableMatch) {
+                    table.Lookup(tuple, [&](TSingleTuple tableMatch, TArrowRowRef /*matchRef*/) {
                         found = true;
                         consume(TSides<TSingleTuple>{.Build = tableMatch, .Probe = tuple});
                     });
                 } else {
-                    table.Lookup(tuple, [&](TSingleTuple tableMatch) {
+                    table.Lookup(tuple, [&](TSingleTuple tableMatch, TArrowRowRef /*matchRef*/) {
                         found = true;
                         consume(TSides<TSingleTuple>{.Build = tableMatch, .Probe = tuple});
                     });
@@ -531,7 +553,7 @@ template <typename Source, TSpillerSettings Settings, EJoinKind Kind> class THyb
                     }
                 }
             } else {
-                table.Lookup(tuple, [&](TSingleTuple tableMatch) {
+                table.Lookup(tuple, [&](TSingleTuple tableMatch, TArrowRowRef /*matchRef*/) {
                     found = true;
                     if constexpr (Kind == EJoinKind::Inner) {
                         consume(TSides<TSingleTuple>{.Build = tableMatch, .Probe = tuple});
@@ -576,8 +598,10 @@ template <typename Source, TSpillerSettings Settings, EJoinKind Kind> class THyb
                     break;
                 }
                 }
-                for (TSingleTuple tuple: *state.Pack) { 
-                    state.Spiller.AddRow(tuple); 
+                for (TSingleTuple tuple: *state.Pack) {
+                    // Placeholder ref; replaced with the real (chunk_id, row_in_chunk)
+                    // once TBlockPackedTupleSource starts forwarding arrow Datums.
+                    state.Spiller.AddRow(tuple, TArrowRowRef::Null());
                 }
                 state.Pack = std::nullopt;
             }
@@ -622,7 +646,9 @@ template <typename Source, TSpillerSettings Settings, EJoinKind Kind> class THyb
                 MKQL_ENSURE(table, "sanity check");
                 TBucket& buildBucket = state.Spiller.GetBuckets()[*smallestBucket];
 
-                table->BuildWith(Flatten(buildBucket.ReleaseInMemoryPages()));
+                auto flatPack = Flatten(buildBucket.ReleaseInMemoryPages());
+                auto flatRefs = FlattenRefs(buildBucket.ReleaseInMemoryPageRefs());
+                table->BuildWith(std::move(flatPack), std::move(flatRefs));
                 MKQL_ENSURE(state.Spiller.GetBuckets()[*smallestBucket].Empty(), "this bucket should be empty now");
             }
 
@@ -754,7 +780,12 @@ template <typename Source, TSpillerSettings Settings, EJoinKind Kind> class THyb
                         }
                         bool trackUsed = (Kind == EJoinKind::Left) && Settings_.LeftIsBuild();
                         NJoinTable::TNeumannJoinTable table{Layouts_.Build, trackUsed};
-                        table.BuildWith(Flatten(std::move(vec)));
+                        auto flatPack = Flatten(std::move(vec));
+                        // Spilled pages lost their original Arrow chunk refs.
+                        // For now we feed Null() refs; step `spill` (Unpack-on-load)
+                        // will replace this with synthetic-chunk refs.
+                        TMKQLVector<TArrowRowRef> stubRefs(flatPack.NTuples, TArrowRowRef::Null());
+                        table.BuildWith(std::move(flatPack), std::move(stubRefs));
                         state.SelectedPair->Table = TTableAndSomeData{.Table = std::move(table), .Futures = {}};
                     } else {
                         return WaitWhileSpilling();
@@ -784,7 +815,10 @@ template <typename Source, TSpillerSettings Settings, EJoinKind Kind> class THyb
                         MKQL_ENSURE(currentProbe.empty(), "sanity check");
                         if constexpr (Kind == EJoinKind::Left) {
                             if (Settings_.LeftIsBuild()) {
-                                table->Table.ForEachUnused(consume);
+                                table->Table.ForEachUnused(
+                                    [&consume](TSingleTuple t, TArrowRowRef /*ref*/) {
+                                        consume(t);
+                                    });
                             }
                         }
                         state.SelectedPair = std::nullopt;
@@ -815,7 +849,10 @@ template <typename Source, TSpillerSettings Settings, EJoinKind Kind> class THyb
             }
             TTable* table = std::get_if<TTable>(&spiller.GetState().Buckets[index]);
             if (table && !table->Empty()) {
-                table->ForEachUnused(std::forward<F>(consume));
+                table->ForEachUnused(
+                    [&consume](TSingleTuple t, TArrowRowRef /*ref*/) {
+                        consume(t);
+                    });
             }
         }
     }

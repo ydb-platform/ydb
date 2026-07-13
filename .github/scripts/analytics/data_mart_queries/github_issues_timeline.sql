@@ -6,7 +6,7 @@
 --
 $timeline_days = 365;
 $recent_days = 31;  -- only these days are selected (today and $recent_days-1 days back)
-$max_open_periods = 20;
+$max_open_periods = 50;
 
 -- Owner by area (prefix match): area/cs/analytics -> area/cs in mapping. Return matched_area (om.area) for output.
 -- Distinct areas from source github_data/issues. New areas get owner/area from fallback in output.
@@ -105,7 +105,7 @@ SELECT
         (p.period_start IS NOT NULL) AS Uint8
     ) AS is_open_at_end_of_day,
     CAST(
-        (p.period_end IS NOT NULL AND p.period_end = dt.d) AS Uint8
+        (c.period_end IS NOT NULL) AS Uint8
     ) AS closed_on_this_day
 FROM (
     SELECT DISTINCT date_window AS d
@@ -169,5 +169,9 @@ LEFT JOIN $issue_periods AS p
     AND p.issue_number = i.issue_number
     AND p.period_start <= dt.d
     AND (p.period_end IS NULL OR p.period_end > dt.d)
+LEFT JOIN $issue_periods AS c
+    ON c.project_item_id = i.project_item_id
+    AND c.issue_number = i.issue_number
+    AND c.period_end = dt.d
 WHERE i.created_date <= dt.d
   AND dt.d >= CurrentUtcDate() - $recent_days * Interval("P1D");

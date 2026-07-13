@@ -9,7 +9,7 @@
 -- Windows (change here or override via script):
 --   $timeline_days   — date dimension and "open in window": include issues with any open period overlapping [now - timeline_days, now].
 $timeline_days = 365;
-$max_open_periods = 20;
+$max_open_periods = 50;
 -- For by_month wrapper: script overwrites these to restrict to one month (avoids connection timeouts)
 $month_start = Date("1970-01-01");
 $month_end = Date("2100-01-01");
@@ -94,7 +94,7 @@ SELECT
         (p.period_start IS NOT NULL) AS Uint8
     ) AS is_open_at_end_of_day,
     CAST(
-        (p.period_end IS NOT NULL AND p.period_end = dt.d) AS Uint8
+        (c.period_end IS NOT NULL) AS Uint8
     ) AS closed_on_this_day
 FROM (
     SELECT DISTINCT date_window AS d
@@ -153,5 +153,9 @@ LEFT JOIN $issue_periods AS p
     AND p.issue_number = i.issue_number
     AND p.period_start <= dt.d
     AND (p.period_end IS NULL OR p.period_end > dt.d)
+LEFT JOIN $issue_periods AS c
+    ON c.project_item_id = i.project_item_id
+    AND c.issue_number = i.issue_number
+    AND c.period_end = dt.d
 WHERE i.created_date <= dt.d
   AND dt.d >= $month_start AND dt.d < $month_end;

@@ -3,6 +3,7 @@
 
 #include <util/digest/sequence.h>
 #include <functional>
+#include <stack>
 
 template <>
 struct THash<NKikimr::NYamlConfig::TLabel> {
@@ -401,23 +402,123 @@ void ApplySelectors(
     }
 }
 
-void DeepCopyTags(NFyaml::TNodeRef node) {
-    if (auto tag = node.Tag()) {
-        node.SetTag(*tag);
+void DeepCopyTags(NFyaml::TNodeRef rootNode) {
+    std::stack<NFyaml::TNodeRef> nodes;
+
+    nodes.push(rootNode);
+
+    while (!nodes.empty()) {
+        auto node = nodes.top();
+        nodes.pop();
+
+        if (!node) {
+            continue;
+        }
+
+        // Reassign tag
+        if (auto tag = node.Tag(); tag) {
+            node.SetTag(*tag);
+        }
+
+        // Go deep
+        switch (node.Type()) {
+            case NFyaml::ENodeType::Mapping:
+                for (auto& pair : node.Map()) {
+                    nodes.push(pair.Value());
+                }
+                break;
+            case NFyaml::ENodeType::Sequence:
+                for (auto& item : node.Sequence()) {
+                    nodes.push(item);
+                }
+                break;
+            default:
+                break;
+        }
     }
-    switch (node.Type()) {
-        case NFyaml::ENodeType::Mapping:
-            for (auto& pair : node.Map()) {
-                DeepCopyTags(pair.Value());
-            }
-            break;
-        case NFyaml::ENodeType::Sequence:
-            for (auto& item : node.Sequence()) {
-                DeepCopyTags(item);
-            }
-            break;
-        default:
-            break;
+}
+
+void SaveNodesTags(NFyaml::TNodeRef rootNode, TElementsTags& tags) {
+    std::stack<NFyaml::TNodeRef> nodes;
+
+    nodes.push(rootNode);
+
+    while (!nodes.empty()) {
+        auto node = nodes.top();
+        nodes.pop();
+
+        if (!node) {
+            continue;
+        }
+
+        // Save tag
+        if (auto tag = node.Tag(); tag) {
+            tags[node.Path()] = *tag;
+        }
+
+        // Go deep
+        switch (node.Type()) {
+            case NFyaml::ENodeType::Mapping:
+                for (auto& pair : node.Map()) {
+                    nodes.push(pair.Value());
+                }
+                break;
+            case NFyaml::ENodeType::Sequence:
+                for (auto& item : node.Sequence()) {
+                    // Sequence element's internals tags are non-functional
+                    // - never saved/restored (do not go deep).
+                    // Process sequence elements in-place
+                    if (auto tag = item.Tag(); tag) {
+                        tags[item.Path()] = *tag;
+                    }
+                }
+                break;
+            default:
+                break;
+        }
+    }
+}
+
+void RestoreNodesTags(NFyaml::TNodeRef rootNode, const TElementsTags& tags) {
+    std::stack<NFyaml::TNodeRef> nodes;
+
+    nodes.push(rootNode);
+
+    while (!nodes.empty()) {
+        auto node = nodes.top();
+        nodes.pop();
+
+        if (!node) {
+            continue;
+        }
+
+        // Restore tag
+        auto tag = tags.find(node.Path());
+        if (tag != tags.end()) {
+            node.SetTag(tag->second);
+        }
+
+        // Go deep
+        switch (node.Type()) {
+            case NFyaml::ENodeType::Mapping:
+                for (auto& pair : node.Map()) {
+                    nodes.push(pair.Value());
+                }
+                break;
+            case NFyaml::ENodeType::Sequence:
+                for (auto item : node.Sequence()) {
+                    // Sequence element's internals tags are non-functional
+                    // - never saved/restored (do not go deep).
+                    // Process sequence elements in-place
+                    auto tag = tags.find(item.Path());
+                    if (tag != tags.end()) {
+                        item.SetTag(tag->second);
+                    }
+                }
+                break;
+            default:
+                break;
+        }
     }
 }
 
@@ -1421,17 +1522,17 @@ void ResolveDatabaseConfig(NFyaml::TDocument& doc, const TSet<TNamedLabel>& labe
         return;
     }
 
-    // Save existing nodes tags to restore them later
-    std::map<TString, TString> savedTags; // [node path; tag]
-    for (auto it = doc.begin(); it != doc.end(); ++it) {
-        if (auto tag = it->Tag(); tag) {
-            savedTags[it->Path()] = *tag;
-        }
-    }
+    auto configNode = rootMap.at("config");
 
+    // Save existing nodes tags to restore them later
+    TElementsTags savedTags;
+    SaveNodesTags(configNode, savedTags);
 
     // Resolve
     ApplySelectors(doc, labels);
+
+    // Remove all tags
+    RemoveTags(doc);
 
     // Remove selectors and allowed_labels
     if (hasSelectors) {
@@ -1445,16 +1546,8 @@ void ResolveDatabaseConfig(NFyaml::TDocument& doc, const TSet<TNamedLabel>& labe
         }
     }
 
-    // Remove all tags
-    RemoveTags(doc);
-
     // Restore existed nodes tags
-    for (auto it = doc.begin(); it != doc.end(); ++it) {
-        auto tag = savedTags.find(it->Path());
-        if (tag != savedTags.end()) {
-            it->SetTag(tag->second);
-        }
-    }
+    RestoreNodesTags(configNode, savedTags);
 }
 
 ui64 GetVersion(const TString& config) {

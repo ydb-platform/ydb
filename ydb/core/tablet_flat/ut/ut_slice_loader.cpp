@@ -189,7 +189,7 @@ namespace {
                 for (auto& location : fetch.Pages) {
                     auto* page = part->Store->GetPage(0, location.Offset);
                     UNIT_ASSERT_C(page, "TLoader wants a missing page at offset " << location.Offset);
-                    env.Save({ location, NSharedCache::TSharedPageRef::MakePrivate(*page) });
+                    env.Save({ location.Offset, NSharedCache::TSharedPageRef::MakePrivate(*page) });
                 }
             } else {
                 UNIT_ASSERT_C(false, "TKeysLoader was stalled");

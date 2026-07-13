@@ -763,7 +763,7 @@ void TExecutor::TryActivateWaitingTransaction(TIntrusivePtr<NPageCollection::TPa
     if (pageCollection) {
         auto &pinnedCollection = transaction.Seat->Pinned[pageCollection->Id];
         for (auto& loaded : loadedPages) {
-            auto inserted = pinnedCollection.insert(std::make_pair(loaded.Location.Offset, TPrivatePageCache::TPinnedPage(std::move(loaded.Page))));
+            auto inserted = pinnedCollection.insert(std::make_pair(loaded.Offset, TPrivatePageCache::TPinnedPage(std::move(loaded.Page))));
             Y_ENSURE(inserted.second);
         }
     }
@@ -3245,7 +3245,7 @@ void TExecutor::Handle(NSharedCache::TEvResult::TPtr &ev) {
 
             if (requestType == ERequestTypeCookie::StickyPages) {
                 for (auto& loaded : msg->Pages) {
-                    PrivatePageCache->AddStickyPage(loaded.Location, std::move(loaded.Page), pageCollection);
+                    PrivatePageCache->AddStickyPage(loaded.Offset, std::move(loaded.Page), pageCollection);
                 }
 
                 // Re-drive any V2 B-tree sticky preload
@@ -3254,7 +3254,7 @@ void TExecutor::Handle(NSharedCache::TEvResult::TPtr &ev) {
                 }
             } else { // requestType == ERequestTypeCookie::Transaction or ERequestTypeCookie::TryKeepInMemPages
                 for (auto& loaded : msg->Pages) {
-                    PrivatePageCache->AddPage(loaded.Location, loaded.Page, pageCollection);
+                    PrivatePageCache->AddPage(loaded.Offset, loaded.Page, pageCollection);
                 }
                 if (requestType == ERequestTypeCookie::Transaction) {
                     TryActivateWaitingTransaction(std::move(msg->WaitPad), std::move(msg->Pages), pageCollection);

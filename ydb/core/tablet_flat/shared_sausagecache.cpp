@@ -469,7 +469,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
                 if (doTraceLog) {
                     pagesFromCacheTraceLog.push_back(location.Offset);
                 }
-                readyPages.emplace_back(location, TSharedPageRef::MakeUsed(page, SharedCachePages->GCList));
+                readyPages.emplace_back(location.Offset, TSharedPageRef::MakeUsed(page, SharedCachePages->GCList));
                 break;
             case PageStateNo:
                 ++pagesToRequestCount;
@@ -483,7 +483,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
                     Counters.CacheMissInMemoryPages->Inc();
                     Counters.CacheMissInMemoryBytes->Add(page->Size);
                 }
-                readyPages.emplace_back(location, TSharedPageRef());
+                readyPages.emplace_back(location.Offset, TSharedPageRef());
                 pendingPages.emplace_back(location.Offset, reqIdx);
                 break;
             case PageStateEvicted:
@@ -848,7 +848,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
             bool needNotifyOwners = fetchType == EBlockIOFetchTypeCookie::TryKeepInMemoryPreload && collection->InMemoryOwners;
             auto loadedPages = needNotifyOwners ? TVector<TPage*>(::Reserve(msg->Pages.size())) : TVector<TPage*>();
             for (auto &paged : msg->Pages) {
-                auto* page = collection->PageSet.FindPage(paged.Location.Offset);
+                auto* page = collection->PageSet.FindPage(paged.Offset);
                 if (!page || !page->HasMissingBody()) {
                     continue;
                 }
@@ -1052,7 +1052,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
             }
 
             auto &readyPage = request->ReadyPages[index];
-            Y_ENSURE(readyPage.Location.Offset == page->Offset);
+            Y_ENSURE(readyPage.Offset == page->Offset);
             readyPage.Page = TSharedPageRef::MakeUsed(page, SharedCachePages->GCList);
 
             if (--request->PendingBlocks == 0) {
@@ -1114,7 +1114,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
         for (auto* page : readyPages) {
             if (page->State == PageStateLoaded) { // page may be evicted before NotifyInMemOwner call
                 readyLoadedPages.emplace_back(
-                    TPageLocation(page->Offset, page->Size, page->Type, page->Crc32),
+                    page->Offset,
                     TSharedPageRef::MakeUsed(page, SharedCachePages->GCList));
             }
         }
@@ -1671,7 +1671,7 @@ template<> inline
 void Out<TVector<NKikimr::NSharedCache::TEvResult::TLoaded>>(IOutputStream& o, const TVector<NKikimr::NSharedCache::TEvResult::TLoaded> &vec) {
     o << "[ ";
     for (const auto &x : vec)
-        o << x.Location << ' ';
+        o << x.Offset << ' ';
     o << "]";
 }
 
@@ -1679,7 +1679,15 @@ template<> inline
 void Out<TVector<NKikimr::NPageCollection::TLoadedPage>>(IOutputStream& o, const TVector<NKikimr::NPageCollection::TLoadedPage> &vec) {
     o << "[ ";
     for (const auto &x : vec)
-        o << x.Location.Offset << ' ';
+        o << x.Location << ' ';
+    o << "]";
+}
+
+template<> inline
+void Out<TVector<NKikimr::NPageCollection::TLoadedPageData>>(IOutputStream& o, const TVector<NKikimr::NPageCollection::TLoadedPageData> &vec) {
+    o << "[ ";
+    for (const auto &x : vec)
+        o << x.Offset << ' ';
     o << "]";
 }
 

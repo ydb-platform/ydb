@@ -60,6 +60,7 @@ namespace NFwd {
 
         ui64 AddToQueue(TPageOffset offset, EPage type, ui64 size, ui32 crc32) override
         {
+            RequestedPageTypes[offset] = type;
             if (IsIndexPage(type)) {
                 return AddToQueue(offset, type, size, crc32, IndexPageCollection, IndexFetch);
             } else {
@@ -91,6 +92,7 @@ namespace NFwd {
         const TIntrusiveConstPtr<IPageCollection> GroupPageCollection;
         const THolder<IPageLoadingLogic> PageLoadingLogic;
         bool Grow = false;  /* Should call Forward(...) for preloading */
+        THashMap<TPageOffset, EPage> RequestedPageTypes;
         TFetch GroupFetch;
         TFetch IndexFetch;
     };
@@ -176,9 +178,11 @@ namespace NFwd {
             Pending -= pages.size();
 
             for (auto& page : pages) {
-                auto type = page.Location.Type;
+                auto typeIt = queue.RequestedPageTypes.find(page.Offset);
+                Y_ENSURE(typeIt != queue.RequestedPageTypes.end());
+                auto type = typeIt->second;
                 auto data = NSharedCache::TPinnedPageRef(page.Page).GetData();
-                NPageCollection::TLoadedPage loadedPage{ page.Location, std::move(data) };
+                NPageCollection::TLoadedPage loadedPage{ TPageLocation(page.Offset, data.size()), std::move(data) };
                 if (IsIndexPage(type)) {
                     Y_ENSURE(queue.IndexPageCollection->Label() == pageCollection->Label(), "TPart head storage doesn't match with fetch result");
                     queue->Fill(loadedPage, std::move(page.Page), type);

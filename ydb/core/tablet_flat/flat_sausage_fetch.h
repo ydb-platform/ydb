@@ -31,5 +31,24 @@ namespace NPageCollection {
         TSharedData Data;
     };
 
+    struct TLoadedPageData {
+        TLoadedPageData() = default;
+
+        TLoadedPageData(TPageOffset offset, TSharedData data)
+            : Offset(offset)
+            , Data(std::move(data))
+        {
+
+        }
+
+        explicit operator bool() const noexcept
+        {
+            return Data && bool(Offset);
+        }
+
+        TPageOffset Offset;
+        TSharedData Data;
+    };
+
 }
 }

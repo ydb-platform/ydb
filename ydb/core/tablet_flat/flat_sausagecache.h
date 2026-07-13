@@ -88,23 +88,22 @@ public:
         // Otherwise stat counters would be out of sync
 
         bool AddPage(TPageId pageId, TSharedPageRef sharedBody) {
-            auto location = PageCollection->GetLocation(pageId);
-            return AddPage(location, std::move(sharedBody));
+            return AddPage(PageCollection->GetLocation(pageId).Offset, std::move(sharedBody));
         }
 
-        bool AddPage(TPageLocation location, TSharedPageRef sharedBody) {
+        bool AddPage(TPageOffset offset, TSharedPageRef sharedBody) {
             return PageMap.emplace(MakeHolder<TPage>(
-                location.Offset, location.Size, std::move(sharedBody), this)).second;
+                offset, sharedBody.GetBodySize(), std::move(sharedBody), this)).second;
         }
 
         bool AddStickyPage(TPageId pageId, TSharedPageRef sharedBody) {
-            return AddStickyPage(PageCollection->GetLocation(pageId), std::move(sharedBody));
+            return AddStickyPage(PageCollection->GetLocation(pageId).Offset, std::move(sharedBody));
         }
 
-        bool AddStickyPage(TPageLocation location, TSharedPageRef sharedBody) {
+        bool AddStickyPage(TPageOffset offset, TSharedPageRef sharedBody) {
             Y_ENSURE(sharedBody.IsUsed());
-            AddPage(location, sharedBody);
-            return StickyPages.emplace(location.Offset, std::move(sharedBody)).second;
+            AddPage(offset, sharedBody);
+            return StickyPages.emplace(offset, std::move(sharedBody)).second;
         }
 
         bool DropPage(TPageId pageId) {
@@ -175,13 +174,13 @@ public:
     }
     void DropPage(TPageOffset offset, TPageCollection *pageCollection);
     void AddPage(TPageId pageId, TSharedPageRef sharedBody, TPageCollection *pageCollection) {
-        AddPage(pageCollection->PageCollection->GetLocation(pageId), std::move(sharedBody), pageCollection);
+        AddPage(pageCollection->PageCollection->GetLocation(pageId).Offset, std::move(sharedBody), pageCollection);
     }
-    void AddPage(TPageLocation location, TSharedPageRef sharedBody, TPageCollection *pageCollection);
+    void AddPage(TPageOffset offset, TSharedPageRef sharedBody, TPageCollection *pageCollection);
     void AddStickyPage(TPageId pageId, TSharedPageRef sharedBody, TPageCollection *pageCollection) {
-        AddStickyPage(pageCollection->PageCollection->GetLocation(pageId), std::move(sharedBody), pageCollection);
+        AddStickyPage(pageCollection->PageCollection->GetLocation(pageId).Offset, std::move(sharedBody), pageCollection);
     }
-    void AddStickyPage(TPageLocation location, TSharedPageRef sharedBody, TPageCollection *pageCollection);
+    void AddStickyPage(TPageOffset offset, TSharedPageRef sharedBody, TPageCollection *pageCollection);
     bool UpdateCacheMode(ECacheMode newCacheMode, TPageCollection *pageCollection);
 
     THashMap<TLogoBlobID, TIntrusivePtr<TPageCollection>> DetachPrivatePageCache();

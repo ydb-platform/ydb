@@ -54,6 +54,14 @@ public:
     }
 
     /**
+     * Returns the size of page data stored in the currently active buffer
+     */
+    size_t DataSize() const noexcept {
+        auto flags = Flags.load(std::memory_order_relaxed);
+        return Data[flags & DataIndexMask].size();
+    }
+
+    /**
      * Returns the number of currently active pins (no synchronization)
      */
     size_t PinCount() const noexcept {
@@ -399,6 +407,16 @@ public:
 
     bool IsUsed() const {
         return Used;
+    }
+
+    /**
+     * Returns the size of page data without pinning the page
+     */
+    size_t GetBodySize() const noexcept {
+        if (Handle) {
+            return Handle->DataSize();
+        }
+        return 0;
     }
 
     bool Use() noexcept {

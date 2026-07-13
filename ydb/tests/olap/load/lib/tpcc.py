@@ -122,6 +122,7 @@ class TpccSuiteBase(LoadSuiteBase):
 
     def test(self):
         assert len(self.get_users()) == 1, 'multiuser TPC-C not supported'
+        self.save_nodes_state()
         result = YdbCliHelper.run_tpcc(
             remote_cli_path=self._remote_cli_path,
             users=self.get_users(),
@@ -131,13 +132,16 @@ class TpccSuiteBase(LoadSuiteBase):
             threads=self.threads,
             tx_mode=self.tx_mode
         )[self.get_users()[0]]
+        end_time = time()
+        verify_errors = type(self).check_nodes_verifies_with_timing(result.start_time, end_time)
+        node_errors = type(self).check_nodes_diagnostics_with_timing(result, result.start_time, end_time)
         stats = result.get_stats('test')
         measure_start_time = stats.get('tpcc_json', {}).get('summary', {}).get('measure_start_ts', result.start_time)
         allure_table_strings = {
             'time_warmup': time_interval_str(result.start_time, measure_start_time),
             'time_measure': time_interval_str(measure_start_time, time())
         }
-        self.process_query_result(result, 'test', True, allure_table_strings=allure_table_strings)
+        self.process_query_result(result, 'test', True, allure_table_strings=allure_table_strings, node_errors=node_errors, verify_errors=verify_errors)
         if result.success and 'tpcc_json' in stats:
             run_type = f'ydb_cli_{str(self.tx_mode).replace("-rw", "")}_{getenv("TPCC_RUN_TYPE", "default")}'
             ResultsProcessor.upload_tpcc_results(stats['tpcc_json'], run_type, result.start_time)

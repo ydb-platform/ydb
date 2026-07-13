@@ -35,8 +35,11 @@ common:
     to: /concepts/glossary.md
   - from: /concepts/vector_index.md
     to: concepts/vector_search.md
+  # Redirects after PostgreSQL compatibility docs removal
   - from: /postgresql/pg-dump.md
-    to: /postgresql/import.md
+    to: /postgresql/intro.md
+  - from: /postgresql/(.*)$
+    to: /postgresql/intro.md
   - from: /concepts/column-table.md
     to: /concepts/datamodel/table.md
 
@@ -405,6 +408,8 @@ common:
 # Redirects for integrations
   - from: /integrations/grafana.md
     to: /integrations/visualization/grafana.md
+  - from: /integrations/visualization/finebi.md
+    to: /integrations/visualization/index.md
   - from: /integrations/ide/dbeaver.md
     to: /integrations/gui/dbeaver.md
   - from: /integrations/ide/datagrip.md
@@ -518,12 +523,8 @@ ru:
     to: /devops/backup-and-recovery/index.md
 
 ru:
-  - from: /postgresql/index.md
-    to: /postgresql/intro.md
   - from: /db/terraform.md
     to: /dev/terraform.md
-  - from: /postgresql/docker-connect.md
-    to: /postgresql/connect.md
   - from: /maintenance/manual/replacing_nodes.md
     to: /devops/configuration-management/configuration-v1/replacing-nodes.md
   - from: /maintenance/manual/cluster_expansion.md

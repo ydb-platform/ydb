@@ -738,7 +738,7 @@ TString TTxMonitoring::RenderMainPage() {
 
     html << "<h3><a href=\"app?page=compaction&TabletID=" << cgi.Get("TabletID") << "\"> Compaction </a></h3>";
     html << "<h3><a href=\"app?page=scan&TabletID=" << cgi.Get("TabletID") << "\"> Scan </a></h3>";
-    html << "<h3><a href=\"app?page=portions&TabletID=" << cgi.Get("TabletID") << "\"> Portions </a></h3>";
+    html << "<h3><a href=\"app?page=portions&TabletID=" << TEscapeHtml(cgi.Get("TabletID")) << "\"> Portions </a></h3>";
     html << "<h3>" << RenderLwTraceShardLinks("scan_traces", "YDB_CS_SCAN", "StartScan", Self->TabletID(), "Traces for all scans on shard")
          << "</h3>";
     html << "<h3><a href=\"" << TEscapeHtml(RenderLwTraceShardLogUrl("YDB_CS_DATA_SOURCE", "StartSourceProcessing", Self->TabletID()))
@@ -1173,8 +1173,10 @@ TString TTxMonitoring::RenderPortionsPage() {
 
             const status = document.getElementById('portions-status');
             if (data.error) {
-                status.innerHTML = '<span class="portions-error">' + data.error + '</span>';
+                status.className = 'portions-error';
+                status.textContent = data.error;
             } else if (data.portionsCount !== undefined) {
+                status.className = 'portions-info';
                 let msg = data.portionsCount + ' portions';
                 if (!data.portionsLimitAll && data.portionsAfterPlanStep !== undefined
                     && data.portionsAfterPlanStep > data.portionsCount) {

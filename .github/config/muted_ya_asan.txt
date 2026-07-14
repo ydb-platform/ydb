@@ -1082,6 +1082,7 @@ ydb/tests/stress/reconfig_state_storage_workload/tests test_scheme_board_workloa
 ydb/tests/stress/reconfig_state_storage_workload/tests test_state_storage_workload.py.TestReconfigStateStorageWorkload.test_state_storage
 ydb/tests/stress/simple_queue/tests py3test.sole chunk
 ydb/tests/stress/simple_queue/tests test_workload.py.TestYdbWorkload.test[light-column]
+ydb/tests/stress/statistics_workload/tests py3test.sole chunk
 ydb/tests/stress/testshard_workload/tests test_workload.py.TestYdbTestShardWorkload.test
 ydb/tests/stress/topic/tests test_workload_topic.py.TestYdbTopicWorkload.test_0
 ydb/tests/stress/topic/tests test_workload_topic.py.TestYdbTopicWorkload.test_1

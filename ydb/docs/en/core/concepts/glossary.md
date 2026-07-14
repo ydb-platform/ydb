@@ -26,13 +26,13 @@ Since {{ ydb-short-name }} uses a storage and compute separation approach, `ydbd
 
 #### Database node {#database-node}
 
-**Database nodes** (also known as **tenant nodes**, **compute nodes**, **database nodes**, **tenant nodes**, or **compute nodes**) process user queries addressed to a specific logical [database](#database). Their state is stored only in RAM and can be restored from the [distributed storage](#distributed-storage). The collection of database nodes in a given [cluster {{ ydb-short-name }}](topology.md) can be considered the compute layer of that cluster. Thus, adding database nodes and allocating additional resources (CPU and RAM) to them are the main ways to increase the database's compute resources.
+**Database nodes** (also known as **tenant nodes**, **compute nodes**, or **database nodes**) process user queries addressed to a specific logical [database](#database). Their state is stored only in RAM and can be restored from the [distributed storage](#distributed-storage). The collection of database nodes in a given [cluster {{ ydb-short-name }}](topology.md) can be considered the compute layer of that cluster. Thus, adding database nodes and allocating additional resources (CPU and RAM) to them are the main ways to increase the database's compute resources.
 
 The primary role of database nodes is to run various [tablets](#tablet) and [actors](#actor), as well as to receive incoming network requests.
 
 #### Storage node {#storage-node}
 
-**Storage nodes** (or **nodes storage**) are stateful nodes responsible for long-term storage of data fragments. The collection of storage nodes in a given [cluster {{ ydb-short-name }}](#cluster) is called [distributed storage](#distributed-storage) and can be viewed as the storage layer of that cluster. Thus, adding more storage nodes and disks is the main way to increase the cluster's storage capacity and I/O throughput.
+**Storage nodes** (or **storage nodes**) are stateful nodes responsible for long-term storage of data fragments. The collection of storage nodes in a given [cluster {{ ydb-short-name }}](#cluster) is called [distributed storage](#distributed-storage) and can be viewed as the storage layer of that cluster. Thus, adding more storage nodes and disks is the main way to increase the cluster's storage capacity and I/O throughput.
 
 #### Hybrid node {#hybrid-mode}
 
@@ -333,7 +333,7 @@ A **backup** is a copy of data at a specific point in time that can be used for 
 
 ### Resource pool {#resource-pool}
 
-**Resource pool** is a schema object that describes the limits imposed on resources (CPU, RAM, etc.) available for executing queries in this resource pool. A query is always executed in some resource pool. By `default`, all queries are executed in the resource pool named , which does not impose any limits. For more details on using resource pools, see [{#T}](../dev/resource-consumption-management.md).
+**Resource pool** is a schema object that describes the limits imposed on resources (CPU, RAM, etc.) available for executing queries in this resource pool. A query is always executed in some resource pool. By default, all queries are executed in the resource pool named `default`, which does not impose any limits. For more details on using resource pools, see [{#T}](../dev/resource-consumption-management.md).
 
 ### Resource pool classifier {#resource-pool-classifier}
 
@@ -393,7 +393,7 @@ For organizational convenience, schema objects form a hierarchy using [folders](
 
 ### Folder {#folder}
 
-As in file systems, a **folder**, **catalog**, **folder**, or **directory** is a container for [schema objects](#scheme-object).
+As in file systems, a **folder**, **catalog**, or **directory** is a container for [schema objects](#scheme-object).
 
 Folders can contain subfolders, and such nesting can be of arbitrary depth.
 
@@ -783,7 +783,7 @@ PDisk contains a scheduler that ensures shared use of the device bandwidth among
 
 #### Proxy {#ds-proxy}
 
-**Distributed storage proxy**, **DS-proxy**, **BS-proxy**, **distributed storage proxy**, **DS-proxy** or **BS-proxy** acts as a client library for performing operations with [distributed storage](#distributed-storage). The users of DS-proxy are [tablets](#tablet) that write to and read from distributed storage. DS-proxy hides the distributed nature of distributed storage from the user. The task of DS-proxy is to write to a quorum of [VDisk](#vdisk), perform retries when necessary, and control the write/read flow to prevent VDisk overload.
+**Proxy distributed storage**, **DS-proxy**, **BS-proxy**, **distributed storage proxy**, **DS-proxy** or **BS-proxy** acts as a client library for performing operations with [distributed storage](#distributed-storage). The users of DS-proxy are [tablets](#tablet) that write to and read from distributed storage. DS-proxy hides the distributed nature of distributed storage from the user. The task of DS-proxy is to write to a quorum of [VDisk](#vdisk), perform retries when necessary, and control the write/read flow to prevent VDisk overload.
 
 Technically, DS-proxy is implemented as an [actor service](#actor-service) launched by [node warden](#node-warden) on each node for each storage group, handling all requests to the group (writing, reading, and deleting [LogoBlob](#logoblob), group locking). When writing data, DS-proxy performs [error correction coding](#erasure-coding) of the data, splitting the LogoBlob into parts that are then sent to the corresponding VDisks. DS-proxy performs the reverse process when reading, receiving parts from VDisks and reconstructing the LogoBlob from them.
 
@@ -872,7 +872,7 @@ For read-only transactions, similar to "read uncommitted" in other database mana
 
 #### Mediator time {#mediator-time}
 
-During the execution of distributed transactions, **mediator time** or **mediator time** is the logical time up to which (inclusive) the participating shard must know the entire execution plan. It is used to advance time when there are no transactions on a particular shard, to determine whether it can read from a snapshot.
+During the execution of distributed transactions, **mediator time** is the logical time up to which (inclusive) the participating shard must know the entire execution plan. It is used to advance time when there are no transactions on a particular shard, to determine whether it can read from a snapshot.
 
 #### MiniKQL {#minikql}
 

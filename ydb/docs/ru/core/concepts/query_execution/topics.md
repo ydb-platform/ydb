@@ -37,7 +37,7 @@ SELECT * FROM ext_source.input_topic WITH (FORMAT = json_each_row, SCHEMA = (...
 
 ## Чтение из топика {#topic-read}
 
-Чтение из топика можно выполнять в [табличном](#table-read) и [потоковом](#streaming-read) режимах (не путать с [потоковыми запросами](../streaming-query.md)).
+Чтение из топика можно выполнять в [табличном](#table-read) и [потоковом](#streaming-read) режимах (не путать с [потоковыми запросами](../streaming-query/streaming-query.md)).
 
 ### Табличное чтение {#table-read}
 

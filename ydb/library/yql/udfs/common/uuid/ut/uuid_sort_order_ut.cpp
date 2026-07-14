@@ -115,8 +115,6 @@ Y_UNIT_TEST_SUITE(TUuidSortOrder) {
         SetRandomSeed(77);
         const auto v8FromBottomBits = MakeV8Bytes(expectedParam, epochSeconds, true);
         UNIT_ASSERT_VALUES_EQUAL(v8FromRaw, v8FromBottomBits);
-        // Было: small prefix 3 игнорировался (верхние 10 бит = 0).
-        // Стало: prefix=3 реально кодируется.
         SetRandomSeed(88);
         const auto v8WithSmallPrefix = MakeV8Bytes(kSmallPrefix, epochSeconds, true);
         SetRandomSeed(88);

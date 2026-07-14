@@ -23,12 +23,11 @@ namespace NYql::NUuidKeyGen {
 
 // Number of high bits in the MSB used as a partition-spread prefix (default 10 → ~1024 buckets).
 static constexpr ui32 PrefixBits = 10;
-static constexpr ui32 MaskPos = PrefixBits - 1;
-static constexpr ui64 PrefixMsbMask = 0xFFC0000000000000ULL;
-static constexpr ui64 PrefixParamMask = (1ULL << PrefixBits) - 1;  // 0x3FF
-static constexpr ui64 V8TimestampMask = 0x003FFFFFFF000000ULL;
 static constexpr ui32 V8TimestampBits = 30;
-static constexpr ui32 V8TimestampFieldLowBit = 33;
+static constexpr ui64 PrefixMsbMask = ((1ULL << PrefixBits) - 1) << (64 - PrefixBits);
+static constexpr ui64 PrefixParamMask = (1ULL << PrefixBits) - 1;
+static constexpr ui32 V8TimestampShift = 64 - PrefixBits - V8TimestampBits;
+static constexpr ui64 V8TimestampMask = ((1ULL << V8TimestampBits) - 1) << V8TimestampShift;
 
 inline ui64 ReadBe64(const ui8* data) {
     ui64 value = 0;
@@ -62,8 +61,7 @@ inline ui64 PrefixParamToMsb(ui64 prefix) {
 // the prefix in YDB internal byte order. Field position shifts with PrefixBits
 // so prefix and timestamp do not overlap.
 inline ui64 GetTimestampCode(ui64 epochSeconds) {
-    return (epochSeconds % (1ULL << V8TimestampBits))
-        << (V8TimestampFieldLowBit - MaskPos);
+    return (epochSeconds % (1ULL << V8TimestampBits)) << V8TimestampShift;
 }
 
 // Merge prefix and timestamp into random MSB bits; LSB stays fully random.

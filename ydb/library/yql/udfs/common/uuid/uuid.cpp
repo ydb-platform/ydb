@@ -13,6 +13,7 @@
 //   - newSharded: shard spread via random prefix + time locality within a prefix.
 //   - newV7: RFC 9562 UUID v7 for external interoperability (non-sortable in YDB);
 //   - newV7At: RFC 9562 UUID v7 with a fixed Timestamp/Timestamp64.
+//   - extractTs / extractTs64: read the embedded v7 timestamp (microseconds) or NULL.
 // Prefix variants accept Uint64 or Uuid as the first argument; the Uuid overload
 // reuses the top PrefixBits of the source value as the generated key prefix.
 // For plain random IDs without sort semantics, use RandomUuid() instead.
@@ -516,6 +517,72 @@ private:
     TSourcePosition Pos_;
 };
 
+template <bool Timestamp64>
+class TExtractTs: public TBoxedValue {
+public:
+    using TTypeAwareMarker = bool;
+
+    explicit TExtractTs(TSourcePosition pos)
+        : Pos_(pos)
+    {
+    }
+
+    static const TStringRef& Name() {
+        static auto name = Timestamp64
+            ? TStringRef::Of("extractTs64")
+            : TStringRef::Of("extractTs");
+        return name;
+    }
+
+    static bool DeclareSignature(
+        const TStringRef& name,
+        TType* userType,
+        IFunctionTypeInfoBuilder& builder,
+        bool typesOnly)
+    {
+        if (Name() != name) {
+            return false;
+        }
+
+        Y_UNUSED(userType);
+        if constexpr (Timestamp64) {
+            builder.Args(1)->Add<TUuid>().Done().Returns<TOptional<TTimestamp64>>();
+        } else {
+            builder.Args(1)->Add<TUuid>().Done().Returns<TOptional<TTimestamp>>();
+        }
+
+        if (!typesOnly) {
+            builder.Implementation(new TExtractTs(GetSourcePosition(builder)));
+        }
+        return true;
+    }
+
+private:
+    TUnboxedValue Run(const IValueBuilder* valueBuilder, const TUnboxedValuePod* args) const final {
+        Y_UNUSED(valueBuilder);
+        try {
+            const auto ref = args[0].AsStringRef();
+            if (ref.Size() != NKikimr::NUuid::UUID_LEN) {
+                throw std::runtime_error("Expected Uuid value of 16 bytes");
+            }
+            const auto micros = NUuidKeyGen::ExtractV7TimestampMicrosFromYdbBytes(
+                reinterpret_cast<const ui8*>(ref.Data()));
+            if (!micros) {
+                return TUnboxedValuePod();
+            }
+            if constexpr (Timestamp64) {
+                return TUnboxedValuePod(static_cast<i64>(*micros)).MakeOptional();
+            } else {
+                return TUnboxedValuePod(*micros).MakeOptional();
+            }
+        } catch (const std::exception& e) {
+            UdfTerminate((TStringBuilder() << valueBuilder->WithCalleePosition(Pos_) << " " << e.what()).data());
+        }
+    }
+
+    TSourcePosition Pos_;
+};
+
 class TUuidModule: public IUdfModule {
 public:
     TStringRef Name() const {
@@ -556,6 +623,9 @@ public:
         auto newV7At = sink.Add(TNewV7At<false>::Name());
         newV7At->SetTypeAwareness();
         newV7At->SetPolyArgs(TStringRef(newV7AtPolyArgs));
+
+        sink.Add(TExtractTs<false>::Name());
+        sink.Add(TExtractTs<true>::Name());
     }
 
     void BuildFunctionTypeInfo(
@@ -576,7 +646,9 @@ public:
                 || TNewUuid<true, true, true>::DeclareSignature(name, userType, builder, typesOnly)
                 || TNewV7::DeclareSignature(name, userType, builder, typesOnly)
                 || TNewV7At<false>::DeclareSignature(name, userType, builder, typesOnly)
-                || TNewV7At<true>::DeclareSignature(name, userType, builder, typesOnly);
+                || TNewV7At<true>::DeclareSignature(name, userType, builder, typesOnly)
+                || TExtractTs<false>::DeclareSignature(name, userType, builder, typesOnly)
+                || TExtractTs<true>::DeclareSignature(name, userType, builder, typesOnly);
             if (!found) {
                 builder.SetError(TStringBuilder() << "Unknown function: " << TStringBuf(name));
             }

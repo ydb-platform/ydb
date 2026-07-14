@@ -2,6 +2,7 @@
 
 #include <yql/essentials/types/uuid/uuid.h>
 
+#include <util/generic/maybe.h>
 #include <util/random/random.h>
 
 #include <algorithm>
@@ -209,6 +210,18 @@ inline std::array<ui8, NKikimr::NUuid::UUID_LEN> MakeRfcV7Bytes(ui64 timestampMs
 inline std::array<ui8, NKikimr::NUuid::UUID_LEN> MakeRfcV7YdbBytes(ui64 timestampMs) {
     const auto rfc = MakeRfcV7Bytes(timestampMs);
     return RfcUuidBytesToYdbInternal(rfc.data());
+}
+
+// Extract the 48-bit Unix timestamp (milliseconds) from an RFC 9562 UUID v7 stored
+// in YDB internal byte layout. Returns Nothing() when the version nibble is not 7.
+inline TMaybe<ui64> ExtractV7TimestampMicrosFromYdbBytes(const ui8* ydb) {
+    const ui64 msb = ReadBe64(ydb);
+    const ui64 rfcMsb = ReorderRfcMsbToYdb(msb);
+    if (((rfcMsb >> 12) & 0xF) != 7) {
+        return Nothing();
+    }
+    const ui64 timestampMs = (rfcMsb >> 16) & ((1ULL << 48) - 1);
+    return timestampMs * 1000;
 }
 
 } // namespace NYql::NUuidKeyGen

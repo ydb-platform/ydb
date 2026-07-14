@@ -8,6 +8,8 @@
 #include <ydb/library/yql/providers/pq/proto/dq_io.pb.h>
 #include <ydb/services/metadata/service.h>
 
+#include <yql/essentials/core/sql_types/hopping.h>
+
 #include <library/cpp/protobuf/interop/cast.h>
 
 namespace NKikimr::NKqp {
@@ -92,6 +94,24 @@ TYqlConclusion<std::optional<NYql::NPq::NProto::StreamingDisposition>> ParseStre
     return result;
 }
 
+TYqlConclusion<std::optional<TString>> ParseWatermarkLateEventsPolicy(NYql::TFeaturesExtractor& featuresExtractor) {
+    const auto& value = featuresExtractor.Extract(TStreamingQueryConfig::TProperties::WatermarkLateEventsPolicy);
+    if (!value) {
+        return std::nullopt;
+    }
+
+    const auto policy = to_lower(*value);
+
+    if (!TryFromString<NYql::NHoppingWindow::EPolicy>(policy)) {
+        return TYqlConclusionStatus::Fail(
+            NYql::TIssuesIds::KIKIMR_BAD_REQUEST,
+            TStringBuilder() << "Invalid value for watermark_late_events_policy: '" << *value << "'"
+        );
+    }
+
+    return std::optional<TString>(policy);
+}
+
 [[nodiscard]] TYqlConclusionStatus FillStreamingQueryDesc(NKikimrSchemeOp::TStreamingQueryDescription& streamingQueryDesc, const TString& name, const NYql::TObjectSettingsImpl& settings, TActorSystem* actorSystem) {
     streamingQueryDesc.SetName(name);
 
@@ -125,6 +145,14 @@ TYqlConclusion<std::optional<NYql::NPq::NProto::StreamingDisposition>> ParseStre
             return TYqlConclusionStatus::Fail(NYql::TIssuesIds::KIKIMR_INTERNAL_ERROR, "Streaming query disposition is disabled. Please contact your system administrator to enable it");
         }
         properties.emplace(TStreamingQueryConfig::TProperties::StreamingDisposition, streamingDisposition->SerializeAsString());
+    }
+
+    auto watermarkLateEventsPolicyStatus = ParseWatermarkLateEventsPolicy(featuresExtractor);
+    if (watermarkLateEventsPolicyStatus.IsFail()) {
+        return watermarkLateEventsPolicyStatus;
+    }
+    if (const auto watermarkLateEventsPolicy = watermarkLateEventsPolicyStatus.DetachResult()) {
+        properties.emplace(TStreamingQueryConfig::TProperties::WatermarkLateEventsPolicy, *watermarkLateEventsPolicy);
     }
 
     if (!featuresExtractor.IsFinished()) {
@@ -217,7 +245,7 @@ TAsyncStatus TStreamingQueryManager::DoModify(const NYql::TObjectSettingsImpl& s
 }
 
 TYqlConclusionStatus TStreamingQueryManager::DoPrepare(NKqpProto::TKqpSchemeOperation& schemeOperation, const NYql::TObjectSettingsImpl& settings, const NMetadata::IClassBehaviour::TPtr& manager, TInternalModificationContext& context) const {
-    Y_UNUSED(manager);    
+    Y_UNUSED(manager);
 
     try {
         switch (context.GetActivityType()) {

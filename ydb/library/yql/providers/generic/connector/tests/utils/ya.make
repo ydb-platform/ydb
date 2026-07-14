@@ -24,7 +24,6 @@ PEERDIR(
     yql/essentials/providers/common/proto
     ydb/library/yql/providers/generic/connector/tests/utils/types
     ydb/public/api/protos
-    yt/python/yt/yson
 )
 
 END()

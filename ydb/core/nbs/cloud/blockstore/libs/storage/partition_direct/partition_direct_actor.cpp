@@ -524,8 +524,9 @@ void TPartitionActor::HandleAddHostToDBG(
         LogTitle.GetWithTime().c_str(),
         dbgId);
 
-    // TEvAddHostToDBG is only sent by a running FastPathService, so it (and the
-    // allocated DBGs) is alive by the time we handle the request.
+    // TEvAddHostToDBG is only sent via a running FastPathService (by a DBG or
+    // by the mon page button), so it (and the allocated DBGs) is alive by the
+    // time we handle the request.
     Y_ABORT_UNLESS(FastPathService);
 
     if (!ValidateAddHostToDBGRequest(ctx, dbgId)) {

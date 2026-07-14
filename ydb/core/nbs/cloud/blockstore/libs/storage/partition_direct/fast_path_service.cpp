@@ -490,7 +490,9 @@ void TFastPathService::FinishPBufferCleanup()
 
     CleanupGather.Active.store(false);
 
-    if (!globalMin) {
+    if (!globalMin || *globalMin == 0) {
+        // 0 is the blocking bound: some vchunk has not finished restoring its
+        // dirty map, so its records are not accounted for yet. Skip the tick.
         return;
     }
 

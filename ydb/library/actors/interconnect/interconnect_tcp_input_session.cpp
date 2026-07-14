@@ -1232,7 +1232,12 @@ namespace NActors {
                 ev.reset();
             }
             if (ev) {
-                TActivationContext::Send(ev.release());
+                // Give the direct-session interface a chance to consume the event via a registered
+                // receiver; otherwise fall back to normal actor-system delivery.
+                TAutoPtr<IEventHandle> evPtr(ev.release());
+                if (!Context->DirectSession->DeliverIncoming(evPtr)) {
+                    TActivationContext::Send(evPtr.Release());
+                }
             }
         }
     }

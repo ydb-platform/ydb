@@ -295,7 +295,7 @@ void TSolomonExporter::HandleIndex(TStringBuf prefix, const IRequestPtr& req, co
 
     if (req->GetUrl().Path != prefix && req->GetUrl().Path != prefixWithSlash) {
         rsp->SetStatus(EStatusCode::NotFound);
-        WaitFor(rsp->WriteBody(TSharedRef::FromString("Not found")))
+        WaitFor(rsp->WriteBody(TSharedRef::FromString(std::string("Not found"))))
             .ThrowOnError();
         return;
     }

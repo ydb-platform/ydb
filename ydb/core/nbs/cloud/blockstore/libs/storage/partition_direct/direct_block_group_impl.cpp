@@ -80,12 +80,6 @@ THostSnapshot MakeHostSnapshot(const TOracleHostStat& stat)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-const TFuture<NProto::TError>&
-TDirectBlockGroup::TDDiskConnection::GetFuture() const
-{
-    return ConnectFuture;
-}
-
 void TDirectBlockGroup::TDDiskConnection::ResetSession()
 {
     if (!ConnectPromise.HasValue()) {
@@ -95,6 +89,27 @@ void TDirectBlockGroup::TDDiskConnection::ResetSession()
     ConnectPromise = NThreading::NewPromise<NProto::TError>();
     ConnectFuture = ConnectPromise.GetFuture();
     SessionState = EDDiskSessionState::NotLocked;
+}
+
+const TFuture<NProto::TError>&
+TDirectBlockGroup::TDDiskConnection::GetFuture() const
+{
+    return ConnectFuture;
+}
+
+TString TDirectBlockGroup::TDDiskConnection::DebugPrint() const
+{
+    TStringBuilder result;
+    result << HostConnection.DebugPrint();
+    auto f = GetFuture();
+    if (f.IsReady()) {
+        result << " c:" << FormatError(f.GetValue());
+    } else {
+        result << "c:<none>";
+    }
+    result << " s:" << ToString(SessionState);
+    result << " csn:" << ConfirmedSessionSeqNo;
+    return result;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -1777,6 +1792,14 @@ TDBGDumpResponse TDirectBlockGroup::DoDebugPrintDirtyMap()
 
     TStringBuilder sb;
     sb << "DBG[" << DirectBlockGroupIndex << "]\n";
+
+    for (const auto& conn: DDiskConnections) {
+        sb << " " << conn.DebugPrint() << "\n";
+    }
+    for (const auto& conn: PBufferConnections) {
+        sb << " " << conn.DebugPrint() << "\n";
+    }
+
     sb << Oracle.Dump();
 
     TDBGDumpResponse result;

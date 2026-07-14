@@ -50,14 +50,13 @@ TColumnPortionResult TSubColumnsMerger::DoExecute(const TChunkMergeContext& cont
         const auto startRecord = [&](const ui32 /*sourceRecordIndex*/) {
             builder.StartRecord();
         };
-        const auto addKV = [&](const ui32 sourceKeyIndex, const std::string_view value, const bool isColumnKey) {
+        const auto addKV = [&](const ui32 sourceKeyIndex, const NArrow::NAccessor::NSubColumns::TGeneralIterator& iter, const bool isColumnKey) {
             auto commonKeyInfo = RemapKeyIndex.RemapIndex(sourceIdx, sourceKeyIndex, isColumnKey);
             if (commonKeyInfo.GetIsColumnKey()) {
-                builder.AddColumnKV(commonKeyInfo.GetCommonKeyIndex(), value);
-                columnStats.Add(value.size());
+                columnStats.Add(builder.AddColumnKV(commonKeyInfo.GetCommonKeyIndex(), iter));
             } else {
-                builder.AddOtherKV(commonKeyInfo.GetCommonKeyIndex(), value);
-                otherStats.Add(value.size());
+                const auto bj = iter.GetValueAsBinaryJson();
+                otherStats.Add(builder.AddOtherKV(commonKeyInfo.GetCommonKeyIndex(), TStringBuf(bj.data(), bj.size())));
             }
         };
         const auto finishRecord = [&]() {

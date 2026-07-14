@@ -84,7 +84,7 @@ TLocalDbContents MakeLocalDbContents(const TTxPartition::TMonitoring& args)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TTabletInfo TPartitionActor::MakeMonTabletInfo()
+TTabletInfo TPartitionActor::MakeMonTabletInfo() const
 {
     return {
         .TabletId = TabletID(),

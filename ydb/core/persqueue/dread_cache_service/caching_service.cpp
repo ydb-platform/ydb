@@ -137,9 +137,9 @@ private:
             YDB_LOG_DEBUG_CTX(ctx, "Direct read cache: server session",
                 {"deregistered", key.SessionId});
         } else {
-            YDB_LOG_WARN_CTX(ctx, "Direct read cache: attempted to deregister unknown server with generation ignored",
-                {"session", key.SessionId},
-                {"sessionId", key.PartitionSessionId},
+            YDB_LOG_WARN_CTX(ctx, "Direct read cache: attempted to deregister unknown server session with generation ignored",
+                {"sessionId", key.SessionId},
+                {"partitionSessionId", key.PartitionSessionId},
                 {"Generation", ev->Get()->Generation});
             return;
         }
@@ -150,7 +150,7 @@ private:
         auto sessionKey = MakeSessionKey(ev->Get());
         auto sessionIter = ServerSessions.find(sessionKey);
         if (sessionIter.IsEnd()) {
-            YDB_LOG_ERROR_CTX(ctx, "Direct read cache: tried to stage direct read for unregistered",
+            YDB_LOG_ERROR_CTX(ctx, "Direct read cache: tried to stage direct read for unregistered session",
                 {"session", sessionKey.SessionId},
                 {"partitionSessionId", sessionKey.PartitionSessionId});
             return;
@@ -201,7 +201,7 @@ private:
         if (stagedIter == iter->second.StagedReads.end()) {
             YDB_LOG_ERROR_CTX(ctx, "Direct read cache: attempt to publish unknown read id ignored",
                 {"readId", readId},
-                {"fromSession", key.SessionId});
+                {"sessionId", key.SessionId});
             return;
         }
         auto inserted = iter->second.Reads.insert(std::make_pair(ev->Get()->ReadKey.ReadId, stagedIter->second)).second;
@@ -223,7 +223,7 @@ private:
         auto key = MakeSessionKey(ev->Get());
         auto iter = ServerSessions.find(key);
         if (iter.IsEnd()) {
-            YDB_LOG_DEBUG_CTX(ctx, "Direct read cache: attempt to forget read for unknown ignored",
+            YDB_LOG_DEBUG_CTX(ctx, "Direct read cache: attempt to forget read for unknown session ignored",
                 {"session", ev->Get()->ReadKey.SessionId});
             return;
         }
@@ -294,8 +294,8 @@ private:
         auto sessionsIter = ServerSessions.find(key);
         if (sessionsIter.IsEnd()) {
             YDB_LOG_DEBUG_CTX(ctx, "Direct read cache: registered server with generation",
-                {"session", key.SessionId},
-                {"sessionId", key.PartitionSessionId},
+                {"sessionId", key.SessionId},
+                {"partitionSessionId", key.PartitionSessionId},
                 {"generation", generation});
 
             ServerSessions.insert(std::make_pair(key, TCacheServiceData{generation}));
@@ -307,8 +307,8 @@ private:
 
         } else if (DestroyServerSession(sessionsIter, generation)) {
             YDB_LOG_DEBUG_CTX(ctx, "Direct read cache: registered server with generation killed existing session with older generation",
-                {"session", key.SessionId},
-                {"sessionId", key.PartitionSessionId},
+                {"sessionId", key.SessionId},
+                {"partitionSessionId", key.PartitionSessionId},
                 {"generation", generation});
             ServerSessions.insert(std::make_pair(key, TCacheServiceData{generation}));
         } else {
@@ -422,7 +422,7 @@ private:
         ctx.Send(
                 sessionIter->second.Client->ProxyId, new TEvPQProxy::TEvDirectReadDestroyPartitionSession(sessionIter->first, code, reason)
         );
-        YDB_LOG_DEBUG_CTX(ctx, "Direct read cache: DestroyPartitionSession,",
+        YDB_LOG_DEBUG_CTX(ctx, "Direct read cache: DestroyPartitionSession",
             {"sessionId", sessionIter->first.SessionId},
             {"proxy", sessionIter->second.Client->ProxyId});
         return true;

@@ -1,6 +1,7 @@
 #include "yql_dq_gateway_local.h"
 
 #include <ydb/library/yql/providers/dq/provider/yql_dq_gateway.h>
+#include <yt/yql/providers/dq/gateway/yql_dq_gateway_factory.h>
 #include <ydb/library/yql/providers/dq/task_runner/tasks_runner_local.h>
 
 #include <yt/yql/providers/dq/service/interconnect_helpers.h>

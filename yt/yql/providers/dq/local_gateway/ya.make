@@ -15,6 +15,7 @@ PEERDIR(
     ydb/library/yql/providers/dq/api/protos
     ydb/library/yql/providers/dq/task_runner
     ydb/library/yql/providers/dq/worker_manager
+    yt/yql/providers/dq/gateway
     yt/yql/providers/dq/service
     yt/yql/providers/dq/stats_collector
 )

@@ -1,4 +1,4 @@
-#include "yql_dq_gateway.h"
+#include <yt/yql/providers/dq/gateway/yql_dq_gateway_factory.h>
 
 #include <yql/essentials/providers/common/provider/yql_provider_names.h>
 #include <ydb/library/yql/providers/dq/api/grpc/api.grpc.pb.h>

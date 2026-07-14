@@ -113,6 +113,4 @@ public:
     virtual void Stop() { }
 };
 
-TIntrusivePtr<IDqGateway> CreateDqGateway(const TString& host, int port);
-
 } // namespace NYql

@@ -27,6 +27,7 @@
 #include <ydb/core/tx/tx.h>
 #include <ydb/core/tx/sequenceproxy/public/events.h>
 #include <ydb/core/persqueue/events/global.h>
+#include <ydb/core/persqueue/public/write_id.h>
 #include <ydb/library/aclib/user_context.h>
 #include <ydb/library/actors/core/actorsystem.h>
 #include <ydb/library/actors/core/interconnect.h>
@@ -4601,12 +4602,13 @@ public:
         if (TxManager->GetTopicOperations().HasWriteId()) {
             writeId = TxManager->GetTopicOperations().GetWriteId();
         }
-        bool kafkaTransaction = TxManager->GetTopicOperations().HasKafkaOperations();
+        const auto& topicOps = TxManager->GetTopicOperations();
+        const bool kafkaTransaction = topicOps.HasKafkaOperations();
+        const bool deferredPublication = topicOps.HasDeferredPublicationOperations();
 
         THashSet<ui64> topicTabletPeers;
         bool omitPeerTopicTablets = false;
         if (!isImmediateCommit) {
-            const auto& topicOps = TxManager->GetTopicOperations();
             omitPeerTopicTablets = topicOps.ShouldOmitPeerTopicTabletsForPredicateExchange();
             if (omitPeerTopicTablets) {
                 for (ui64 id : topicOps.GetReceivingTabletIds()) {
@@ -4623,15 +4625,19 @@ public:
 
             FillTopicsCommit(isImmediateCommit, transaction, TxManager, tabletId, omitPeerTopicTablets, topicTabletPeers);
 
-            if (t.hasWrite && writeId.Defined() && !kafkaTransaction) {
-                auto* w = transaction.MutableWriteId();
-                w->SetNodeId(SelfId().NodeId());
-                w->SetKeyId(*writeId);
+            if (t.hasWrite && deferredPublication) {
+                NKikimrPQ::TWriteId proto;
+                auto* deferred = proto.MutableDeferredPublicationApi();
+                deferred->SetIntPublicationId(topicOps.GetDeferredPublicationIntId());
+                const auto& extPublicationId = topicOps.GetDeferredPublicationExtId();
+                if (!extPublicationId.empty()) {
+                    deferred->SetExtPublicationId(extPublicationId);
+                }
+                NPQ::SetWriteId(transaction, NPQ::TWriteId{std::move(proto)});
+            } else if (t.hasWrite && writeId.Defined() && !kafkaTransaction) {
+                NPQ::SetWriteId(transaction, NPQ::TWriteId{SelfId().NodeId(), *writeId});
             } else if (t.hasWrite && kafkaTransaction) {
-                auto* w = transaction.MutableWriteId();
-                w->SetKafkaTransaction(true);
-                w->MutableKafkaProducerInstanceId()->SetId(TxManager->GetTopicOperations().GetKafkaProducerInstanceId().Id);
-                w->MutableKafkaProducerInstanceId()->SetEpoch(TxManager->GetTopicOperations().GetKafkaProducerInstanceId().Epoch);
+                NPQ::SetWriteId(transaction, NPQ::TWriteId{topicOps.GetKafkaProducerInstanceId()});
             }
             transaction.SetImmediate(isImmediateCommit);
 

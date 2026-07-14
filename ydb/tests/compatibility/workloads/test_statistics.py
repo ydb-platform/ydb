@@ -278,7 +278,8 @@ class TestAnalyzeRollingUpdate(RollingUpgradeAndDowngradeFixture):
                     key Int64 NOT NULL,
                     str_val Utf8 NOT NULL,
                     int_val Int64 NOT NULL,
-                    PRIMARY KEY (key)
+                    PRIMARY KEY (key),
+                    STATISTICS cms_multi ON (str_val, int_val) WITH (COUNT_MIN_SKETCH)
                 )"""
             if is_column:
                 ret += "WITH (STORE=COLUMN)"
@@ -319,6 +320,14 @@ class TestAnalyzeRollingUpdate(RollingUpgradeAndDowngradeFixture):
         rc = get_estimate(explain["Plan"])
         logger.debug(f"{table_name} planner selectivity estimate: {rc}")
         return rc
+
+    def multi_column_stats_present(self):
+        # Multi-column stats live in the unified statistics_v2 table; their column_tags key holds the
+        # comma-joined tuple, so a comma distinguishes them from single-column / tag-less rows.
+        query = "SELECT count(*) FROM `.metadata/statistics_v2` WHERE column_tags LIKE '%,%'"
+        count = self.driver.table_client.scan_query(query).next().result_set.rows[0][0]
+        logger.debug(f"multi-column statistics row count: {count}")
+        return count > 0
 
     def test(self):
         ROW_COUNT = 1000
@@ -366,12 +375,14 @@ class TestAnalyzeRollingUpdate(RollingUpgradeAndDowngradeFixture):
             # Check if any analyze operations are present - they should be in the list
             analyze_operations_found = False
             for op in operations:
-                if hasattr(op, 'metadata') and hasattr(op.metadata, 'state'):
-                    logger.info(f"Operation {op.id}: state={op.metadata.state}, progress={op.metadata.progress}")
-                    # Check if this is an analyze operation by looking at metadata structure
-                    if hasattr(op.metadata, 'paths') or hasattr(op.metadata, 'done_paths'):
+                if hasattr(op, 'metadata') and op.metadata.type_url:
+                    metadata = ydb._apis.ydb_table.AnalyzeMetadata()
+                    op.metadata.Unpack(metadata)
+                    state = ydb._apis.ydb_table.AnalyzeState.State.Name(metadata.state) if metadata.HasField('state') else "UNKNOWN"
+                    logger.info(f"Operation {op.id}: state={state}, progress={metadata.progress}")
+                    if metadata.paths or metadata.done_paths:
                         analyze_operations_found = True
-                        logger.info(f"Found ANALYZE operation {op.id} with state={op.metadata.state}")
+                        logger.info(f"Found ANALYZE operation {op.id} with state={state}")
 
             # Assert that ANALYZE operations are present in the background operations list
             assert analyze_operations_found, \
@@ -413,3 +424,5 @@ class TestAnalyzeRollingUpdate(RollingUpgradeAndDowngradeFixture):
             estimate = self.get_planner_selectivity_estimate(table)
             assert estimate <= expected_count * 1.5
             assert estimate >= expected_count * 0.5
+
+        assert self.multi_column_stats_present(), "multi-column statistics not found after ANALYZE"

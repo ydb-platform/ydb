@@ -4,6 +4,8 @@
 
 #include <library/cpp/yt/cpu_clock/clock.h>
 
+#include <library/cpp/yt/memory/leaky_singleton.h>
+
 #include <library/cpp/yt/system/thread_name.h>
 
 #include <util/system/compiler.h>
@@ -149,16 +151,34 @@ ELogLevel GetThreadMinLogLevel()
 
 ////////////////////////////////////////////////////////////////////////////////
 
-YT_DEFINE_THREAD_LOCAL(std::string, ThreadMessageTag);
+YT_DEFINE_THREAD_LOCAL(bool, ThreadMessageTagDestroyed, false);
+
+struct TThreadMessageTagStorage
+{
+    std::string Tag;
+
+    ~TThreadMessageTagStorage()
+    {
+        ThreadMessageTagDestroyed() = true;
+    }
+};
+
+YT_DEFINE_THREAD_LOCAL(TThreadMessageTagStorage, ThreadMessageTag);
 
 void SetThreadMessageTag(std::string messageTag)
 {
-    ThreadMessageTag() = std::move(messageTag);
+    if (Y_UNLIKELY(ThreadMessageTagDestroyed())) {
+        return;
+    }
+    ThreadMessageTag().Tag = std::move(messageTag);
 }
 
 std::string& GetThreadMessageTag()
 {
-    return ThreadMessageTag();
+    if (Y_UNLIKELY(ThreadMessageTagDestroyed())) {
+        return *LeakySingleton<std::string>();
+    }
+    return ThreadMessageTag().Tag;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

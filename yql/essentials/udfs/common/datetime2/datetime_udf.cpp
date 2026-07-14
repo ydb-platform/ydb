@@ -2940,7 +2940,17 @@ public:
         }
 
         size_t optionalArgs = 0;
-        if (builder.GetCurrentLangVer() >= NYql::MakeLangVersion(2025, 5)) {
+        NYql::TLangVersion WriteOffsetWithColonAvailableSince;
+        TStringRef WriteOffsetWithColonRuntimeSetting(builder.GetRuntimeSetting(TStringRef::Of("MakeWriteOffsetWithColonAvailableSince")));
+        if (WriteOffsetWithColonRuntimeSetting.empty()) {
+            WriteOffsetWithColonAvailableSince = NYql::MakeLangVersion(2025, 5);
+        } else {
+            if (!NYql::ParseLangVersion(WriteOffsetWithColonRuntimeSetting, WriteOffsetWithColonAvailableSince)) {
+                UdfTerminate((TStringBuilder() << "Runtime setting 'MakeWriteOffsetWithColonAvailableSince' is misconfigured").c_str());
+            }
+        }
+
+        if (builder.GetCurrentLangVer() >= WriteOffsetWithColonAvailableSince) {
             optionalArgs = 2;
             builder.OptionalArgs(optionalArgs).Args()->Add<char*>().Add<TOptional<bool>>().Name("AlwaysWriteFractionalSeconds").Add<TOptional<bool>>().Name("WriteOffsetWithColon");
         } else {

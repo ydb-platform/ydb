@@ -146,13 +146,11 @@ THolder<NEvents::TDataEvents::TEvLockRows> TKqpStreamLockWorker::BuildLockReques
     return lockRequest;
 }
 
-TKqpStreamLockWorker::TLockRequestList TKqpStreamLockWorker::BuildLockRequests(
+void TKqpStreamLockWorker::BuildLockRequests(
     const TPartitionInfo& partitioning, ui64& requestId)
 {
-    TLockRequestList requests;
-
     if (!partitioning || InputRows.empty()) {
-        return requests;
+        return;
     }
 
     const size_t keyColumnCount = KeyColumnTypes.size();
@@ -187,13 +185,18 @@ TKqpStreamLockWorker::TLockRequestList TKqpStreamLockWorker::BuildLockRequests(
     for (auto& [shardId, keys] : keysByShard) {
         AFL_ENSURE(!keys.empty());
 
-        ui64 currentRequestId = requestId++;
+        const size_t batchSize = keys.size();
+        size_t batchBytes = 0;
+        for (const auto& [rowIndex, keyCells] : keys) {
+            batchBytes += EstimateKeyBytes(keyCells);
+        }
 
-        size_t batchSize = keys.size();
+        ui64 currentRequestId = requestId++;
 
         TRowBatchInfo batchInfo;
         batchInfo.BatchSize = batchSize;
         batchInfo.ShardId = shardId;
+        batchInfo.Bytes = batchBytes;
         batchInfo.Rows.reserve(batchSize);
         batchInfo.Keys.reserve(batchSize);
         for (auto& [rowIndex, keyCells] : keys) {
@@ -206,33 +209,48 @@ TKqpStreamLockWorker::TLockRequestList TKqpStreamLockWorker::BuildLockRequests(
 
         BatchesByRequestId[currentRequestId] = std::move(batchInfo);
 
-        requests.emplace_back(shardId, std::move(lockRequest));
+        PendingLockRequests.emplace_back(shardId, std::move(lockRequest));
     }
 
     InputRows.clear();
-
-    return requests;
 }
 
-TKqpStreamLockWorker::TLockRequestList TKqpStreamLockWorker::RebuildLockRequest(
+size_t TKqpStreamLockWorker::EstimateKeyBytes(const TOwnedCellVec& key) {
+    size_t bytes = 0;
+    for (const auto& cell : key) {
+        // TCell::Size() returns the value size; add a small per-cell header
+        // overhead to approximate the serialized form.
+        bytes += cell.Size() + sizeof(TCell);
+    }
+    return bytes;
+}
+
+std::optional<size_t> TKqpStreamLockWorker::GetBatchBytes(ui64 requestId) const {
+    auto it = BatchesByRequestId.find(requestId);
+    if (it == BatchesByRequestId.end()) {
+        return std::nullopt;
+    }
+    return it->second.Bytes;
+}
+
+void TKqpStreamLockWorker::RebuildLockRequest(
     ui64 prevRequestId, ui64& newRequestId)
 {
-    TLockRequestList requests;
-
     auto batchIt = BatchesByRequestId.find(prevRequestId);
     if (batchIt == BatchesByRequestId.end()) {
-        return requests;
+        return;
     }
 
     auto& oldBatchInfo = batchIt->second;
     size_t batchSize = oldBatchInfo.BatchSize;
     ui64 shardId = oldBatchInfo.ShardId;
+    size_t batchBytes = oldBatchInfo.Bytes;
 
     const size_t keyColumnCount = KeyColumnTypes.size();
     auto allCells = SerializeKeysToCellVec(oldBatchInfo.Keys);
 
     if (allCells.empty()) {
-        return requests;
+        return;
     }
 
     ui64 currentRequestId = newRequestId++;
@@ -242,15 +260,24 @@ TKqpStreamLockWorker::TLockRequestList TKqpStreamLockWorker::RebuildLockRequest(
     TRowBatchInfo batchInfo;
     batchInfo.BatchSize = batchSize;
     batchInfo.ShardId = shardId;
+    batchInfo.Bytes = batchBytes;
     batchInfo.Rows = std::move(oldBatchInfo.Rows);
     batchInfo.Keys = std::move(oldBatchInfo.Keys);
     BatchesByRequestId[currentRequestId] = std::move(batchInfo);
 
     BatchesByRequestId.erase(prevRequestId);
 
-    requests.emplace_back(shardId, std::move(lockRequest));
+    PendingLockRequests.emplace_back(shardId, std::move(lockRequest));
+}
 
-    return requests;
+std::pair<ui64, THolder<NEvents::TDataEvents::TEvLockRows>> TKqpStreamLockWorker::PopNextLockRequest() {
+    if (PendingLockRequests.empty()) {
+        return {0, nullptr};
+    }
+
+    auto next = std::move(PendingLockRequests.front());
+    PendingLockRequests.pop_front();
+    return next;
 }
 
 void TKqpStreamLockWorker::AddLockResult(ui64 requestId, NEvents::TDataEvents::TEvLockRowsResult* result) {

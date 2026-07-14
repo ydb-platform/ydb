@@ -32,7 +32,7 @@ void FromProto(TUnfoldedColumns* original, const NProto::TUnfoldedColumns& seria
 
 ////////////////////////////////////////////////////////////////////////////////
 
-struct TIndexInfo final
+struct TIndexInfo
     : public NYTree::TYsonStructLite
 {
     NObjectClient::TObjectId IndexObjectId;
@@ -41,6 +41,8 @@ struct TIndexInfo final
     std::optional<TUnfoldedColumns> UnfoldedColumns;
     ETableToIndexCorrespondence Correspondence;
     NTableClient::TTableSchemaPtr EvaluatedColumnsSchema;
+    // Non-null for committed chaos secondary indices.
+    NTransactionClient::TTimestamp BackfillTimestamp = NTransactionClient::NullTimestamp;
 
     REGISTER_YSON_STRUCT_LITE(TIndexInfo);
 

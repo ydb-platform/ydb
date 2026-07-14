@@ -421,6 +421,55 @@ Y_UNIT_TEST_SUITE(TSchemeShardSecretTest) {
         }
     }
 
+    Y_UNIT_TEST_FLAG(CreateSecretDefaultInheritPermissions, AlwaysSetSystemOwner) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        runtime.GetAppData().AlwaysSetSystemOwner = AlwaysSetSystemOwner;
+
+        NACLib::TDiffACL diffACL;
+        diffACL.AddAccess(NACLib::EAccessType::Allow, NACLib::DescribeSchema, "user1");
+        diffACL.AddAccess(NACLib::EAccessType::Allow, NACLib::AlterSchema, "user1");
+        AsyncModifyACL(runtime, ++txId, "", "MyRoot", diffACL.SerializeAsString(), /* newOwner */ "");
+        env.TestWaitNotification(runtime, txId);
+
+        // create a secret without specifying InheritPermissions
+        TestCreateSecret(runtime, ++txId, "/MyRoot",
+            R"(
+                Name: "secret"
+                Value: "value"
+            )"
+        );
+        env.TestWaitNotification(runtime, txId);
+
+        const auto user1Token = NACLib::TUserToken(NACLib::TUserToken::TUserTokenInitFields{.UserSID = "user1"});
+        const auto describeSecret = DescribePath(runtime, "/MyRoot/secret").GetPathDescription().GetSelf();
+
+        if (AlwaysSetSystemOwner) {
+            const TSecurityObject secObjEffective(describeSecret.GetOwner(), describeSecret.GetEffectiveACL(),
+                /* isContainer */ false);
+            UNIT_ASSERT_C(secObjEffective.CheckAccess(NACLib::DescribeSchema, user1Token),
+                "user1 should have grant (inherited from root)");
+            UNIT_ASSERT_C(secObjEffective.CheckAccess(NACLib::AlterSchema, user1Token),
+                "user1 should have grant (inherited from root)");
+
+            const TSecurityObject secObjOwn(describeSecret.GetOwner(), describeSecret.GetACL(),
+                /* isContainer */ false);
+            UNIT_ASSERT_C(!secObjOwn.CheckAccess(NACLib::AlterSchema, user1Token),
+                "No aces on the created secret expected when inheritance is on");
+        } else {
+            UNIT_ASSERT_EQUAL_C(describeSecret.GetEffectiveACL(), describeSecret.GetACL(),
+                "ACL should be the same, since aces are set on the secret itself");
+
+            const TSecurityObject secObj(describeSecret.GetOwner(), describeSecret.GetACL(), /* isContainer */ false);
+            UNIT_ASSERT_C(secObj.CheckAccess(NACLib::DescribeSchema, user1Token),
+                "user1 should have the DescribeSchema grant (it is always inherited)");
+            UNIT_ASSERT_C(!secObj.CheckAccess(NACLib::AlterSchema, user1Token),
+                "user1 should have no AlterSchema grant (only DescribeSchema grant is inherited)");
+        }
+    }
+
     Y_UNIT_TEST(InheritPermissionsWithDifferentInheritanceTypes) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);

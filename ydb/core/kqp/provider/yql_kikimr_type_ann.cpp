@@ -1566,7 +1566,7 @@ private:
                             NKikimr::NOlap::NIndexes::NMinMax::IncorrectIndexColumnsErrorMessage(indexColums)));
                         return IGraphTransformer::TStatus::Error;
                     }
-                    
+
                     break;
                 }
             }
@@ -1585,6 +1585,36 @@ private:
             );
 
             meta->Indexes.push_back(indexDesc);
+        }
+
+        for (const auto& statistics : create.Statistics()) {
+            if (!SessionCtx->Config().FeatureFlags.GetEnableColumnStatistics()) {
+                ctx.AddError(TIssue(ctx.GetPosition(statistics.Pos()),
+                    "Multi-column statistics support is disabled"));
+                return TStatus::Error;
+            }
+
+            TMultiColumnStatisticsDescription statisticsDesc;
+            statisticsDesc.Name = TString(statistics.Name().Value());
+            for (const auto& column : statistics.Columns()) {
+                if (!meta->Columns.contains(TString(column.Value()))) {
+                    ctx.AddError(TIssue(ctx.GetPosition(column.Pos()), TStringBuilder()
+                        << "Statistics column: " << column.Value() << " was not found in the table"));
+                    return TStatus::Error;
+                }
+                statisticsDesc.Columns.push_back(TString(column.Value()));
+            }
+            for (const auto& type : statistics.Types()) {
+                const auto typeName = to_upper(TString(type.Value()));
+                if (typeName != "COUNT_MIN_SKETCH") {
+                    ctx.AddError(TIssue(ctx.GetPosition(type.Pos()), TStringBuilder()
+                        << "Unknown statistic type: " << TString(type.Value())));
+                    return TStatus::Error;
+                }
+                statisticsDesc.Types.push_back(typeName);
+            }
+
+            meta->MultiColumnStatistics.push_back(statisticsDesc);
         }
 
         for (const auto& changefeed : create.Changefeeds()) {
@@ -2238,6 +2268,8 @@ private:
                     && name != "dropChangefeed"
                     && name != "renameIndexTo"
                     && name != "alterIndex"
+                    && name != "addStatistics"
+                    && name != "dropStatistics"
                     && name != "compact")
             {
                 ctx.AddError(TIssue(ctx.GetPosition(action.Name().Pos()),

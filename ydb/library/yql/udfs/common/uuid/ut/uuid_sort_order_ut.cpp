@@ -352,7 +352,7 @@ Y_UNIT_TEST_SUITE(TUuidSortOrder) {
         UNIT_ASSERT_VALUES_UNEQUAL(rfcV7, chrono);
     }
 
-    Y_UNIT_TEST(ReorderRfcMsbMatchesJavaExample) {
+    Y_UNIT_TEST(ReorderRfcMsbMatchesExpectations) {
         const ui64 msb = ReadBe64(std::array<ui8, 8>{0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08}.data());
         const ui64 reordered = ReorderRfcMsbToYdb(msb);
         std::array<ui8, 8> bytes{};

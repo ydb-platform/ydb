@@ -66,120 +66,98 @@ def _grace_inherited_debug_line(line, branch, config_since, grace_until):
     )
 
 
-def _run_git(args, repo_root, context):
+def _git_branch_added_to_stable_config(branch, repo_root):
+    """Calendar date the branch first appeared in ``_STABLE_BRANCHES_CONFIG``.
+
+    ``-S<needle>`` (pickaxe) narrows ``git log`` to the commits that actually
+    changed the occurrence count of the exact JSON-quoted branch string —
+    normally just the one commit that added it — instead of every commit that
+    ever touched the config file. Without it this re-``git show``s the whole
+    file history on every scheduled ``update_muted_ya`` run, for every
+    branch/build_type in the matrix, forever.
+    """
+    if not branch or branch == 'main':
+        return None
     try:
         proc = subprocess.run(
-            ['git', *args],
+            [
+                'git', 'log', '--format=%H', '--reverse', '-S' + json.dumps(branch),
+                '--', _STABLE_BRANCHES_CONFIG,
+            ],
             cwd=repo_root,
             capture_output=True,
             text=True,
             check=False,
         )
     except OSError as exc:
-        logging.warning('stable branch grace: %s failed: %s', context, exc)
+        logging.warning(
+            'stable branch grace: git log failed for branch=%s: %s',
+            branch,
+            exc,
+        )
         return None
     if proc.returncode != 0:
         logging.warning(
-            'stable branch grace: %s exit %s: %s',
-            context,
+            'stable branch grace: git log exit %s for %s: %s',
             proc.returncode,
+            _STABLE_BRANCHES_CONFIG,
             (proc.stderr or '').strip(),
         )
         return None
-    return proc.stdout
-
-
-def _branch_present_in_config_blob(blob, branch):
-    try:
-        branches = json.loads(blob)
-    except (json.JSONDecodeError, TypeError):
-        return False
-    names = {str(b).strip() for b in branches if str(b).strip()}
-    return branch in names
-
-
-def _commit_author_date(commit, repo_root):
-    raw = _run_git(
-        ['log', '-1', '--format=%aI', commit],
-        repo_root,
-        f'git log -1 date for commit {commit}',
-    )
-    if raw is None:
-        return None
-    raw = raw.strip()
-    if raw.endswith('Z'):
-        raw = raw[:-1] + '+00:00'
-    try:
-        return datetime.datetime.fromisoformat(raw).astimezone(datetime.timezone.utc).date()
-    except ValueError:
-        logging.warning('stable branch grace: invalid author date for commit %s: %r', commit, raw)
-        return None
-
-
-def _git_branch_added_to_stable_config(branch, repo_root):
-    """Calendar date the branch first appeared in ``_STABLE_BRANCHES_CONFIG``.
-
-    Uses ``git log -S`` (pickaxe) on the exact JSON-quoted branch string to jump
-    straight to the (typically one) commit(s) that changed its occurrence count,
-    instead of walking and ``git show``-ing every commit that ever touched the
-    config file — the latter does not scale with the file's edit history since
-    it re-runs, unbounded, on every scheduled ``update_muted_ya`` invocation for
-    every branch/build_type in the matrix.
-    """
-    if not branch or branch == 'main':
-        return None
-    needle = '-S' + json.dumps(branch)
-    stdout = _run_git(
-        ['log', '--format=%H', '--reverse', needle, '--', _STABLE_BRANCHES_CONFIG],
-        repo_root,
-        f'git log -S for branch={branch}',
-    )
-    if stdout is None:
-        return None
-    candidates = [c.strip() for c in stdout.splitlines() if c.strip()]
-    if not candidates:
-        # Pickaxe found no add/remove edge for this exact string (e.g. shallow
-        # checkout, or the branch has always been present since the earliest
-        # commit in this history) — fall back to the full per-commit scan so we
-        # don't silently disable grace on an unexpected git quirk.
-        return _git_branch_added_to_stable_config_full_scan(branch, repo_root)
-    for commit in candidates:
-        blob = _run_git(
-            ['show', f'{commit}:{_STABLE_BRANCHES_CONFIG}'],
-            repo_root,
-            f'git show {commit}:{_STABLE_BRANCHES_CONFIG}',
-        )
-        if blob is None or not _branch_present_in_config_blob(blob, branch):
-            continue
-        added = _commit_author_date(commit, repo_root)
-        if added is not None:
-            return added
-    return None
-
-
-def _git_branch_added_to_stable_config_full_scan(branch, repo_root):
-    """Slow-path fallback: check every commit touching the config file in order."""
-    stdout = _run_git(
-        ['log', '--format=%H', '--reverse', '--', _STABLE_BRANCHES_CONFIG],
-        repo_root,
-        f'git log fallback scan for branch={branch}',
-    )
-    if stdout is None:
-        return None
-    for commit in stdout.splitlines():
+    for commit in proc.stdout.splitlines():
         commit = commit.strip()
         if not commit:
             continue
-        blob = _run_git(
-            ['show', f'{commit}:{_STABLE_BRANCHES_CONFIG}'],
-            repo_root,
-            f'git show {commit}:{_STABLE_BRANCHES_CONFIG}',
+        show = subprocess.run(
+            ['git', 'show', f'{commit}:{_STABLE_BRANCHES_CONFIG}'],
+            cwd=repo_root,
+            capture_output=True,
+            text=True,
+            check=False,
         )
-        if blob is None or not _branch_present_in_config_blob(blob, branch):
+        if show.returncode != 0:
+            logging.warning(
+                'stable branch grace: git show %s:%s failed with exit %s: %s',
+                commit,
+                _STABLE_BRANCHES_CONFIG,
+                show.returncode,
+                (show.stderr or '').strip(),
+            )
             continue
-        added = _commit_author_date(commit, repo_root)
-        if added is not None:
-            return added
+        try:
+            branches = json.loads(show.stdout)
+            names = {str(b).strip() for b in branches if str(b).strip()}
+        except (json.JSONDecodeError, TypeError):
+            continue
+        if branch not in names:
+            continue
+        dproc = subprocess.run(
+            ['git', 'log', '-1', '--format=%aI', commit],
+            cwd=repo_root,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if dproc.returncode != 0:
+            logging.warning(
+                'stable branch grace: git log -1 date for commit %s failed with exit %s: %s',
+                commit,
+                dproc.returncode,
+                (dproc.stderr or '').strip(),
+            )
+            continue
+        raw = dproc.stdout.strip()
+        if raw.endswith('Z'):
+            raw = raw[:-1] + '+00:00'
+        try:
+            return datetime.datetime.fromisoformat(raw).astimezone(datetime.timezone.utc).date()
+        except ValueError:
+            logging.warning(
+                'stable branch grace: invalid author date for commit %s: %r',
+                commit,
+                raw,
+            )
+            continue
     return None
 
 
@@ -241,13 +219,11 @@ def _apply_stable_branch_grace(
     )
 
     # muted_ya: add a synthetic debug line for every inherited entry that grace newly
-    # restores (i.e. was not already present — and therefore not already described).
+    # restores. all_muted_ya/all_muted_ya_debug are 1:1 going in, so anything not
+    # already in all_muted_ya cannot already have a debug line either.
     newly_added = inherited - set(all_muted_ya)
-    already_described = {_debug_line_test_string(d) for d in all_muted_ya_debug}
     grace_debug_lines = [
-        _grace_inherited_debug_line(line, branch, added, grace_until)
-        for line in sorted(newly_added)
-        if line not in already_described
+        _grace_inherited_debug_line(line, branch, added, grace_until) for line in sorted(newly_added)
     ]
     new_all_muted_ya = sorted(set(all_muted_ya) | inherited)
     new_all_muted_ya_debug = sorted(list(all_muted_ya_debug) + grace_debug_lines)

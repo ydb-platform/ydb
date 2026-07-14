@@ -2,8 +2,8 @@
 """Unit tests for the "new stable branch grace" feature in ``create_new_muted_ya.py``.
 
 Covers:
-- ``_git_branch_added_to_stable_config``: date derivation from git history (pickaxe
-  fast path + full-scan fallback), ``main`` exclusion, "branch never added" case.
+- ``_git_branch_added_to_stable_config``: date derivation from git history via
+  ``git log -S`` (pickaxe), ``main`` exclusion, "branch never added" case.
 - ``_apply_stable_branch_grace``: inherited-mute preservation during the grace
   window, expiry after the window, and — the actual bug this suite guards against —
   that the ``*_debug`` lists it returns stay 1:1 in sync with their raw counterparts
@@ -112,15 +112,6 @@ class GitBranchAddedToStableConfigTest(_GitConfigRepoMixin, unittest.TestCase):
             cnm._git_branch_added_to_stable_config('stable-25-4', str(self.root)),
             datetime.date(2026, 3, 1),
         )
-
-    def test_full_scan_fallback_agrees_with_pickaxe_path(self):
-        self._commit_config(['main'], '2026-01-01T00:00:00+00:00')
-        self._commit_config(['main', 'stable-26-3'], '2026-07-10T10:00:00+00:00')
-
-        fast = cnm._git_branch_added_to_stable_config('stable-26-3', str(self.root))
-        slow = cnm._git_branch_added_to_stable_config_full_scan('stable-26-3', str(self.root))
-        self.assertEqual(fast, slow)
-        self.assertEqual(fast, datetime.date(2026, 7, 10))
 
     def test_missing_repo_root_does_not_raise(self):
         # No git repo at all at this path: git will fail (non-zero exit), the function

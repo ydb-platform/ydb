@@ -65,7 +65,7 @@ class TestSetNotNullOperationCli(BaseCliTestWithDatabase):
 
         result = self.execute_ydb_cli_command(["operation", "list", "setnotnull"])
         assert result.exit_code == 0
-        assert table_path in result.stdout or "setnotnull" in result.stdout.lower() or len(result.stdout) > 0
+        assert table_path in result.stdout or "ydb://setnotnull" in result.stdout
 
     def test_get_set_not_null(self, tmp_path):
         table_path = self.root_dir + "/" + tmp_path.name
@@ -129,7 +129,7 @@ class TestSetNotNullOperationCli(BaseCliTestWithDatabase):
     def _extract_first_operation_id(list_output):
         for line in list_output.splitlines():
             line = line.strip()
-            if line.startswith("ydb://setnotnull") or "ydb://setnotnull" in line:
+            if "ydb://setnotnull" in line:
                 for token in line.split():
                     if token.startswith("ydb://setnotnull"):
                         return token.strip(',"')

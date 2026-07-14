@@ -1,5 +1,5 @@
 
-* Added support for the new setnotnull operation in the `ydb operation` subcommands.
+* Added support for the new `setnotnull` operation in the `ydb operation` subcommands.
 
 ## 2.33.0 ##
 

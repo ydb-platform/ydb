@@ -202,7 +202,7 @@ class TCancelOperationRPC: public TRpcOperationRequestActor<TCancelOperationRPC,
         Reply(record.GetStatus(), record.GetIssues());
     }
 
-    public:
+public:
     using TRpcOperationRequestActor::TRpcOperationRequestActor;
 
     void Bootstrap() {

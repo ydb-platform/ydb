@@ -696,6 +696,7 @@ ydb/public/sdk/cpp/tests/unit/client/table TableTest.AlterTableNoMetricsSettings
 ydb/public/sdk/cpp/tests/unit/client/table TableTest.AlterTableSetMetricsSettings
 ydb/public/sdk/cpp/tests/unit/client/table TableTest.CreateTableNoMetricsSettings
 ydb/public/sdk/cpp/tests/unit/client/table TableTest.CreateTableWithMetricsSettings
+ydb/services/metadata/secret/ut Secret.Simple
 ydb/services/persqueue_v1/ut TPersQueueTest.BillingRequestUnits
 ydb/services/persqueue_v1/ut TPersQueueTest.CheckDecompressionTasksWithoutSession
 ydb/services/persqueue_v1/ut/new_schemecache_ut TPersQueueNewSchemeCacheTest.TestWriteStat1stClassTopicAPI

@@ -8,6 +8,9 @@ namespace NKikimr::NKqp::NOpt {
 NYql::NNodes::TExprBase KqpEliminateWideMapPackUnpack(
     const NYql::NNodes::TExprBase& node, NYql::TExprContext& ctx,
     NYql::TTypeAnnotationContext& typesCtx);
+NYql::NNodes::TExprBase KqpEliminateBlockMemberOverBlockAsStruct(
+    const NYql::NNodes::TExprBase& node, NYql::TExprContext& ctx,
+    NYql::TTypeAnnotationContext& typesCtx);
 }
 
 namespace NKikimr::NKqp {
@@ -136,6 +139,67 @@ Y_UNIT_TEST_SUITE(KqpPeepholeRules) {
 
         UNIT_ASSERT_C(result.Ptr() == node,
             "Pack with projection (dropped column) should NOT be eliminated");
+    }
+
+    Y_UNIT_TEST(BlockMemberOverBlockAsStructIsFolded) {
+        NYql::TExprContext ctx;
+        NYql::TTypeAnnotationContext typesCtx;
+        auto pos = NYql::TPositionHandle();
+
+        auto valA = ctx.NewArgument(pos, "a");
+        auto valB = ctx.NewArgument(pos, "b");
+        auto bas = ctx.NewCallable(pos, "BlockAsStruct", {
+            ctx.NewList(pos, {ctx.NewAtom(pos, "c1"), valA}),
+            ctx.NewList(pos, {ctx.NewAtom(pos, "c2"), valB}),
+        });
+
+        auto member = ctx.NewCallable(pos, "BlockMember", {bas, ctx.NewAtom(pos, "c2")});
+        auto result = NOpt::KqpEliminateBlockMemberOverBlockAsStruct(NYql::NNodes::TExprBase(member), ctx, typesCtx);
+
+        UNIT_ASSERT_C(result.Ptr() == valB,
+            "BlockMember over freshly built BlockAsStruct should fold to the field value");
+    }
+
+    Y_UNIT_TEST(BlockMemberOverNonStructIsPreserved) {
+        NYql::TExprContext ctx;
+        NYql::TTypeAnnotationContext typesCtx;
+        auto pos = NYql::TPositionHandle();
+
+        auto opaque = ctx.NewCallable(pos, "SomeOtherCallable", {});
+        auto member = ctx.NewCallable(pos, "BlockMember", {opaque, ctx.NewAtom(pos, "c1")});
+        auto result = NOpt::KqpEliminateBlockMemberOverBlockAsStruct(NYql::NNodes::TExprBase(member), ctx, typesCtx);
+
+        UNIT_ASSERT_C(result.Ptr() == member,
+            "BlockMember over a non-BlockAsStruct input must be preserved");
+    }
+
+    Y_UNIT_TEST(BlockMemberPicksCorrectField) {
+        NYql::TExprContext ctx;
+        NYql::TTypeAnnotationContext typesCtx;
+        auto pos = NYql::TPositionHandle();
+
+        auto valA = ctx.NewArgument(pos, "a");
+        auto valB = ctx.NewArgument(pos, "b");
+        auto valC = ctx.NewArgument(pos, "c");
+        auto bas = ctx.NewCallable(pos, "BlockAsStruct", {
+            ctx.NewList(pos, {ctx.NewAtom(pos, "alpha"), valA}),
+            ctx.NewList(pos, {ctx.NewAtom(pos, "beta"), valB}),
+            ctx.NewList(pos, {ctx.NewAtom(pos, "gamma"), valC}),
+        });
+
+        auto memberA = ctx.NewCallable(pos, "BlockMember", {bas, ctx.NewAtom(pos, "alpha")});
+        auto memberB = ctx.NewCallable(pos, "BlockMember", {bas, ctx.NewAtom(pos, "beta")});
+        auto memberC = ctx.NewCallable(pos, "BlockMember", {bas, ctx.NewAtom(pos, "gamma")});
+
+        UNIT_ASSERT_C(
+            NOpt::KqpEliminateBlockMemberOverBlockAsStruct(NYql::NNodes::TExprBase(memberA), ctx, typesCtx).Ptr() == valA,
+            "BlockMember 'alpha' should fold to valA");
+        UNIT_ASSERT_C(
+            NOpt::KqpEliminateBlockMemberOverBlockAsStruct(NYql::NNodes::TExprBase(memberB), ctx, typesCtx).Ptr() == valB,
+            "BlockMember 'beta' should fold to valB");
+        UNIT_ASSERT_C(
+            NOpt::KqpEliminateBlockMemberOverBlockAsStruct(NYql::NNodes::TExprBase(memberC), ctx, typesCtx).Ptr() == valC,
+            "BlockMember 'gamma' should fold to valC");
     }
 }
 

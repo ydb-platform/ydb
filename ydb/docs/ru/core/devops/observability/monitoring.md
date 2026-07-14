@@ -228,7 +228,7 @@ ps aux | grep ydbd
 http://<ydb-server-address>:<ydb-port>/counters/counters=<servicename>/
 ```
 
-- `<servicename>` — имя группы (подсистемы), как в списке на главной странице.
+- `<servicename>` — имя группы (подсистемы). Доступные группы отображаются на главной странице веб-интерфейса мониторинга (см. [Группы метрик на главной странице](#web-metrics-groups)).
 
 Используйте `http` или `https` в соответствии с настройкой TLS кластера (как в [Метриках в формате Prometheus](#web-metrics-prometheus)).
 

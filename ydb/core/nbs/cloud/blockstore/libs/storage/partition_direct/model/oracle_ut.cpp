@@ -40,8 +40,10 @@ struct THostStateControllerMock: public IHostStateController
         return HostPBufferUsedSize;
     }
 
-    void QueryAddHost() override
-    {}
+    void QueryAddHost(THostIndex hostIndex) override
+    {
+        Y_UNUSED(hostIndex);
+    }
 };
 
 TStorageConfigPtr MakeStorageConfig()

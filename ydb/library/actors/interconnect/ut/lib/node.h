@@ -11,6 +11,7 @@
 #include <ydb/library/actors/interconnect/interconnect_tcp_server.h>
 #include <ydb/library/actors/interconnect/interconnect_tcp_proxy.h>
 #include <ydb/library/actors/interconnect/interconnect_proxy_wrapper.h>
+#include <ydb/library/actors/interconnect/interconnect_uring_engine.h>
 #include <ydb/library/actors/interconnect/poller/uring_poller_actor.h>
 #include <ydb/library/actors/interconnect/rdma/mem_pool.h>
 #include <ydb/library/actors/interconnect/rdma/cq_actor/cq_actor.h>
@@ -174,6 +175,9 @@ public:
         auto sp = MakeHolder<TActorSystemSetup>(std::move(setup));
         ActorSystem.Reset(new TActorSystem(sp, nullptr, loggerSettings));
         ActorSystem->Start();
+        // The v2 io_uring engine (shared, off-actor, with its own reaper threads) is created lazily on
+        // the first v2 session and stopped via the actor system's DeferPreStop hook -- no explicit
+        // wiring here or in production initializers is required.
     }
 
     ~TNode() {
@@ -183,6 +187,8 @@ public:
 
     void Stop() {
         if (ActorSystem) {
+            // The v2 engine (if created) is stopped via the actor system's DeferPreStop hook during
+            // Stop(), so its reaper threads are joined before the executors shut down.
             ActorSystem->Stop();
             ActorSystem.Reset();
         }

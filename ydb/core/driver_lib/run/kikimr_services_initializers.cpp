@@ -597,6 +597,14 @@ static TInterconnectSettings GetInterconnectSettings(const NKikimrConfig::TInter
         result.EnableUringSQPOLL = config.GetEnableUringSQPOLL();
     }
 
+    if (config.HasEnableInterconnectSessionV2()) {
+        result.EnableInterconnectSessionV2 = config.GetEnableInterconnectSessionV2();
+    }
+
+    if (config.HasChecksumInterconnectSessionV2()) {
+        result.ChecksumInterconnectSessionV2 = config.GetChecksumInterconnectSessionV2();
+    }
+
     return result;
 }
 

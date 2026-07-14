@@ -420,7 +420,7 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
         TTabletId tabletId(info->TabletID, record.GetFollowerId());
         YDB_LOG_DEBUG_CTX(ctx, "TLocalNodeRegistrar::Handle TEvLocal::TEvBootTablet",
             {"tabletId", tabletId},
-            {"bootModeSuffix", (record.HasBootMode() && record.GetBootMode() == NKikimrLocal::EBootMode::BOOT_MODE_FOLLOWER ? ".Follower" : ".Leader")},
+            {"bootMode", (record.HasBootMode() && record.GetBootMode() == NKikimrLocal::EBootMode::BOOT_MODE_FOLLOWER ? ".Follower" : ".Leader")},
             {"storage", info->ToString()});
         Y_ABORT_UNLESS(!info->Channels.empty() && !info->Channels[0].History.empty());
         auto tabletType = info->TabletType;
@@ -744,7 +744,7 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
         auto inbootIt = InbootTablets.find(tabletId);
         if (inbootIt == InbootTablets.end())
             return;
-        YDB_LOG_DEBUG_CTX(ctx, "TLocalNodeRegistrar: tablet marked as running at generation",
+        YDB_LOG_DEBUG_CTX(ctx, "TLocalNodeRegistrar: tablet marked as running",
             {"tabletId", tabletId},
             {"generation", generation});
         NTabletPipe::SendData(ctx, HivePipeClient, new TEvLocal::TEvTabletStatus(TEvLocal::TEvTabletStatus::StatusOk, tabletId, generation));
@@ -768,7 +768,7 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
         TEvTablet::TEvReady *msg = ev->Get();
 
         const auto tabletId = msg->TabletID;
-        YDB_LOG_DEBUG_CTX(ctx, "TLocalNodeRegistrar::Handle TEvTablet::TEvReady: tablet ready at generation",
+        YDB_LOG_DEBUG_CTX(ctx, "TLocalNodeRegistrar::Handle TEvTablet::TEvReady: tablet ready",
             {"tabletId", tabletId},
             {"generation", msg->Generation});
         auto inbootIt = std::find_if(InbootTablets.begin(), InbootTablets.end(), [&](const auto& pr) -> bool {
@@ -880,7 +880,7 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
     }
 
     void HandleDrainNodeResult(TEvHive::TEvDrainNodeResult::TPtr &ev, const TActorContext &ctx) {
-        YDB_LOG_NOTICE_CTX(ctx, "TLocalNodeRegistrar: drain node result received, online tablets",
+        YDB_LOG_NOTICE_CTX(ctx, "TLocalNodeRegistrar: drain node result received",
             {"onlineTabletCount", OnlineTablets.size()});
         Y_ABORT_UNLESS(SentDrainNode);
         Y_UNUSED(ev);
@@ -900,7 +900,7 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
     }
 
     void HandleDrainTimeout(TEvPrivate::TEvLocalDrainTimeout::TPtr &ev, const TActorContext& ctx) {
-        YDB_LOG_NOTICE_CTX(ctx, "TLocalNodeRegistrar: drain node result timed out, online tablets",
+        YDB_LOG_NOTICE_CTX(ctx, "TLocalNodeRegistrar: drain node result timed out",
             {"onlineTabletCount", OnlineTablets.size()});
         Y_ABORT_UNLESS(SentDrainNode);
         Y_UNUSED(ev);
@@ -912,7 +912,7 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
     }
 
     void SendDrain(const TActorContext &ctx) {
-        YDB_LOG_NOTICE_CTX(ctx, "TLocalNodeRegistrar: send drain node request, online tablets",
+        YDB_LOG_NOTICE_CTX(ctx, "TLocalNodeRegistrar: send drain node request",
             {"hiveId", HiveId},
             {"onlineTabletCount", OnlineTablets.size()});
         SentDrainNode = true;

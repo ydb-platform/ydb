@@ -1559,7 +1559,7 @@ void TNodeBroker::Handle(TEvConsole::TEvReplaceConfigSubscriptionsResponse::TPtr
 {
     auto &rec = ev->Get()->Record;
     if (rec.GetStatus().GetCode() != Ydb::StatusIds::SUCCESS) {
-        YDB_LOG_ERROR_CTX(ctx, "TNodeBroker::Handle TEvConsole::TEvReplaceConfigSubscriptionsResponse: cannot subscribe for config",
+        YDB_LOG_ERROR_CTX(ctx, "TNodeBroker::Handle TEvConsole::TEvReplaceConfigSubscriptionsResponse: cannot subscribe for config updates",
             {"statusCode", rec.GetStatus().GetCode()},
             {"statusReason", rec.GetStatus().GetReason()});
         return;

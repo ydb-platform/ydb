@@ -1424,7 +1424,7 @@ bool TTenantSlotBroker::AssignFreeSlotsForGroup(TTenant::TPtr tenant,
                                               currentSplit, 0);
 
     YDB_LOG_DEBUG_CTX(ctx, "TTenantSlotBroker::AssignFreeSlotsForGroup: current layout has penalty",
-        {"currentDataCenter", currentDC},
+        {"dataCenter", currentDC},
         {"penalty", bestPenalty});
 
     for (auto it = layouts.begin(); it != layouts.end(); ++it) {

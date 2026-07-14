@@ -5,6 +5,17 @@
 
 #include <util/system/datetime.h>
 
+// Uuid UDF: key-friendly UUID generators for row tables.
+//
+// Returned values are raw 16-byte YDB internal Uuid representation.
+// Use as primary keys when you want:
+//   - V7: chronological clustering by creation time;
+//   - V8: shard spread via random prefix + time locality within a prefix.
+// For plain random IDs without sort semantics, use RandomUuid() instead.
+//
+// Assemble bytes in YDB internal (Microsoft GUID) layout and return as Uuid.
+// No RFC↔YDB conversion: generators already write sort-order-aware bytes.
+
 using namespace NYql;
 using namespace NYql::NUdf;
 
@@ -145,6 +156,10 @@ TUnboxedValue MakeUuidValue(const IValueBuilder* valueBuilder, bool isV8, ui64 p
         bytes.size()));
 }
 
+// IsV8=true  → custom v8 (prefix + second timestamp), shard-friendly.
+// IsV8=false → RFC v7 variant with timestamp-first internal byte layout.
+// HasPrefix=true → caller supplies prefix (e.g. RandomNumber() once per batch);
+//                  keys target a single partition range.
 template <bool IsV8, bool HasPrefix>
 class TNewUuid: public TBoxedValue {
 public:

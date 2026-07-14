@@ -1,6 +1,6 @@
 # Authentication
 
-In the Open Source version of {{ ydb-short-name }}, working with topics via the Amazon SQS protocol is supported only without authentication.
+In the open-source version of {{ ydb-short-name }}, working with topics via the SQS protocol is supported only without authentication.
 
 ## Cluster setup
 

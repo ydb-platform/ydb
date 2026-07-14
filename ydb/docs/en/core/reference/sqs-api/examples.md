@@ -1,8 +1,8 @@
-# Examples of working with topics via Amazon SQS API
+# Examples of working with topics via SQS API
 
 <!-- markdownlint-disable blanks-around-fences -->
 
-This article provides examples of working with [topics](../../concepts/datamodel/topic.md) using the Amazon SQS API via [AWS CLI](https://docs.aws.amazon.com/cli/latest/userguide/cli-chap-welcome.html).
+This article provides examples of working with [topics](../../concepts/datamodel/topic.md) using the SQS API via [AWS CLI](https://docs.aws.amazon.com/cli/latest/userguide/cli-chap-welcome.html).
 
 {% include [x](_includes/limitations.md) %}
 
@@ -10,13 +10,13 @@ This article provides examples of working with [topics](../../concepts/datamodel
 
 ## Forming the endpoint for connection
 
-The endpoint for accessing the Amazon SQS API is formed as follows:
+The endpoint for accessing the SQS API is formed as follows:
 
 `https://{db-balancer}:{port}/{database}`
 
 Where:
 
-- `db-balancer` — DNS name of the HTTPS balancer whose backend includes the database compute nodes (or the address of the node/service where the HTTP Proxy is running).
+- `db-balancer` — DNS name of the HTTPS load balancer whose backend includes the database compute nodes (or the address of the node/service where the HTTP Proxy is running).
 - `port` — port on which the HTTP Proxy is available.
 - `database` — full path of the database where the topics are located.
 
@@ -24,9 +24,9 @@ This endpoint is specified in AWS CLI via the `--endpoint` parameter.
 
 {% note info %}
 
-The examples use the endpoint `https://my_db.balancer.example.com:8443/Root/my_db`. It includes:
+The examples use the endpoint `https://my_db.balancer.example.com:8443/Root/my_db`. It contains:
 
-- `my_db.balancer.example.com` — DNS name of the balancer through which the Amazon SQS protocol is available.
+- `my_db.balancer.example.com` — DNS name of the load balancer through which the SQS protocol is available.
 - `8443` — network port.
 - `/Root/my_db` — database name.
 
@@ -66,11 +66,11 @@ aws --endpoint "$ENDPOINT" \
 ```
 
 
-After executing the command, a [topic](../../concepts/datamodel/topic.md) named `my_topic.fifo` and a [shared (common) reader](../../concepts/datamodel/topic.md#shared-consumer) named `ydb-sqs-consumer` will be created, with message ordering preservation enabled.
+After executing the command, a [topic](../../concepts/datamodel/topic.md) named `my_topic.fifo` and a [shared (common) reader](../../concepts/datamodel/topic.md#shared-consumer) named `ydb-sqs-consumer` will be created, with message order preservation enabled.
 
 ## Getting a list of topics
 
-To get a list of topics that can be worked with via the Amazon SQS protocol, run the command:
+To get a list of topics that can be accessed via the SQS protocol, run the command:
 
 
 ```shell
@@ -80,36 +80,15 @@ aws --endpoint "$ENDPOINT" sqs list-queues
 ```
 
 
-### Getting the QueueUrl of a topic
-
-To get the `QueueUrl` of a topic, run the command:
-
-
-```shell
-ENDPOINT="https://my_db.balancer.example.com:8443/Root/my_db"
-
-aws --endpoint "$ENDPOINT" sqs get-queue-url \
-  --queue-name "my_topic@my_consumer"
-```
-
-
-Where:
-
-- `{queue_name}` — value of the `--queue-name` parameter, the Amazon SQS queue name in the format `{topic_name}@{consumer_name}`. If the [shared (common) reader](../../concepts/datamodel/topic.md#shared-consumer) has the name `ydb-sqs-consumer`, it is sufficient to specify only `{topic_name}`.
-- `{topic_name}` — topic name with the path from the root of the database where it was created, for example `production/order` (topic `order` in directory `production`).
-- `{consumer_name}` — name of the [shared (common) reader](../../concepts/datamodel/topic.md#shared-consumer) on the topic, for example `ydb-sqs-consumer`.
-
-In the example above, `my_topic` is `{topic_name}`, and `my_consumer` is `{consumer_name}`.
-
 ## Writing to a topic and reading from a topic
 
 For read and write operations, AWS CLI uses the `--queue-url` parameter. It can be obtained via `get-queue-url`.
 
 Below is an example:
 
-- getting `QueueUrl`.
-- writing a message.
-- reading a message.
+- obtaining `QueueUrl`
+- writing a message
+- reading a message
 
 
 ```shell

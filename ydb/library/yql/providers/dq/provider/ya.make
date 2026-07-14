@@ -1,8 +1,6 @@
 LIBRARY()
 
 SRCS(
-    yql_dq_control.cpp
-    yql_dq_control.h
     yql_dq_datasink_constraints.cpp
     yql_dq_datasink_type_ann.cpp
     yql_dq_datasink_type_ann.h
@@ -41,7 +39,6 @@ PEERDIR(
     ydb/library/yql/providers/dq/api/grpc
     ydb/library/yql/providers/dq/api/protos
     ydb/library/yql/providers/dq/common
-    yt/yql/providers/dq/config
     ydb/library/yql/providers/dq/expr_nodes
     ydb/library/yql/providers/dq/opt
     ydb/library/yql/providers/dq/planner
@@ -73,8 +70,4 @@ END()
 
 RECURSE(
     exec
-)
-
-RECURSE_FOR_TESTS(
-    ut
 )

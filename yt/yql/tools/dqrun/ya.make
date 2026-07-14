@@ -22,7 +22,7 @@ IF (NOT OS_WINDOWS)
     )
 
     PEERDIR(
-        ydb/library/yql/tools/dqrun/lib
+        yt/yql/tools/dqrun/lib
 
         yt/yql/providers/yt/codec/codegen
         yt/yql/providers/yt/comp_nodes/llvm16

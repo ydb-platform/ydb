@@ -1,6 +1,7 @@
 #include "yql_dq_control.h"
 
 #include <ydb/library/yql/providers/dq/api/grpc/api.grpc.pb.h>
+#include <ydb/library/yql/providers/dq/common/yql_dq_common.h>
 #include <yt/yql/providers/dq/config/config.pb.h>
 #include <yql/essentials/utils/log/log.h>
 #include <yql/essentials/minikql/mkql_function_registry.h>
@@ -18,8 +19,6 @@
 namespace NYql {
 
 using TFileResource = Yql::DqsProto::TFile;
-
-const TString DqStrippedSuffied = ".s";
 
 class TDqControl : public IDqControl {
 
@@ -147,7 +146,7 @@ private:
             fileLink = FileStorage->PutFileStripped(path, md5);
         }
 
-        return std::make_tuple(fileLink->GetPath(), objectId + DqStrippedSuffied);
+        return std::make_tuple(fileLink->GetPath(), objectId + DqStrippedSuffied());
     }
 
     int Threads;

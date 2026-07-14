@@ -7,7 +7,6 @@
 #include <yql/essentials/utils/backtrace/backtrace.h>
 #include <yql/essentials/utils/failure_injector/failure_injector.h>
 #include <yql/essentials/public/issue/yql_issue_message.h>
-#include <yt/yql/providers/dq/config/config.pb.h>
 #include <yql/essentials/utils/log/log.h>
 
 #include <ydb/public/lib/yson_value/ydb_yson_value.h>
@@ -789,14 +788,6 @@ private:
 
 TIntrusivePtr<IDqGateway> CreateDqGateway(const TString& host, int port) {
     return new TDqGateway(host, port, "", "");
-}
-
-TIntrusivePtr<IDqGateway> CreateDqGateway(const NProto::TDqConfig& config) {
-    return new TDqGateway("localhost", config.GetPort(),
-        config.GetYtBackends()[0].GetVanillaJobLite(),
-        config.GetYtBackends()[0].GetVanillaJobLiteMd5(),
-        TDuration::MilliSeconds(config.GetOpenSessionTimeoutMs()),
-        TDuration::MilliSeconds(config.GetRequestTimeoutMs()));
 }
 
 } // namespace NYql

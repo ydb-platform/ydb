@@ -1,4 +1,4 @@
-#include "yql_dq_statistics_json.h"
+#include <ydb/library/yql/providers/dq/provider/yql_dq_statistics_json.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 

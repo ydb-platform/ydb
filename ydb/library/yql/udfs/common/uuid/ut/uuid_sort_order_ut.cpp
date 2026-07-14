@@ -16,8 +16,8 @@ namespace {
 
 using TUuidBytes = std::array<ui8, NKikimr::NUuid::UUID_LEN>;
 
-constexpr ui64 kTestV7Prefix = 0x294ULL;
-constexpr ui64 kTestV8Prefix = 0x294ULL;
+constexpr ui64 kTestChronoPrefix = 0x294ULL;
+constexpr ui64 kTestShardedPrefix = 0x294ULL;
 constexpr ui64 kSmallPrefix = 3ULL;
 
 int CompareUuidBytes(const TUuidBytes& lhs, const TUuidBytes& rhs) {
@@ -36,10 +36,10 @@ void AssertUuidStringHasCanonicalDashes(TStringBuf uuidString) {
     UNIT_ASSERT_C(uuidString[23] == '-', "Expected dash at position 24, got: " << uuidString);
 }
 
-void AssertUuidStringFormat(TStringBuf uuidString, char versionDigit) {
+void AssertUuidStringFormat(TStringBuf uuidString) {
     AssertUuidStringHasCanonicalDashes(uuidString);
-    UNIT_ASSERT_C(uuidString[14] == versionDigit,
-        "Expected version digit '" << versionDigit << "' at position 15, got '" << uuidString[14]
+    UNIT_ASSERT_C(uuidString[14] == '8',
+        "Expected version digit '8' at position 15, got '" << uuidString[14]
         << "' in " << uuidString);
     const char variantDigit = uuidString[19];
     UNIT_ASSERT_C(variantDigit == '8' || variantDigit == '9' || variantDigit == 'a' || variantDigit == 'b',
@@ -77,141 +77,141 @@ void AssertAllDistinct(const TVector<TUuidBytes>& generated) {
     }
 }
 
-TUuidBytes GenerateV7WithFixedRandom(ui64 timestampMs) {
+TUuidBytes GenerateChronoWithFixedRandom(ui64 timestampMs) {
     SetRandomSeed(42);
-    return MakeV7Bytes(0, timestampMs, false);
+    return MakeChronoUuidBytes(0, timestampMs, false);
 }
 
-TUuidBytes GenerateV7WithPrefixAndFixedRandom(ui64 prefix, ui64 timestampMs) {
+TUuidBytes GenerateChronoWithPrefixAndFixedRandom(ui64 prefix, ui64 timestampMs) {
     SetRandomSeed(42);
-    return MakeV7Bytes(prefix, timestampMs, true);
+    return MakeChronoUuidBytes(prefix, timestampMs, true);
 }
 
-TUuidBytes GenerateV8WithFixedRandom(ui64 prefix, ui64 epochSeconds) {
+TUuidBytes GenerateShardedWithFixedRandom(ui64 prefix, ui64 epochSeconds) {
     SetRandomSeed(42);
-    return MakeV8Bytes(prefix, epochSeconds, true);
+    return MakeShardedUuidBytes(prefix, epochSeconds, true);
 }
 
 } // namespace
 
 Y_UNIT_TEST_SUITE(TUuidSortOrder) {
-    Y_UNIT_TEST(V7UsesBottom10PrefixBits) {
+    Y_UNIT_TEST(ChronoUsesBottom10PrefixBits) {
         const ui64 rawPrefix = 0xAABBCCDDEEFF0011ULL;
         const ui64 expectedParam = rawPrefix & PrefixParamMask;  // 0x11
         const ui64 timestampMs = 1'700'000'000'000ULL;
         SetRandomSeed(77);
-        const auto v7FromRaw = MakeV7Bytes(rawPrefix, timestampMs, true);
+        const auto chronoFromRaw = MakeChronoUuidBytes(rawPrefix, timestampMs, true);
         SetRandomSeed(77);
-        const auto v7FromBottomBits = MakeV7Bytes(expectedParam, timestampMs, true);
-        UNIT_ASSERT_VALUES_EQUAL(v7FromRaw, v7FromBottomBits);
+        const auto chronoFromBottomBits = MakeChronoUuidBytes(expectedParam, timestampMs, true);
+        UNIT_ASSERT_VALUES_EQUAL(chronoFromRaw, chronoFromBottomBits);
     }
 
-    Y_UNIT_TEST(V8UsesBottom10PrefixBits) {
+    Y_UNIT_TEST(ShardedUsesBottom10PrefixBits) {
         const ui64 rawPrefix = 0xAABBCCDDEEFF0011ULL;
         const ui64 expectedParam = rawPrefix & PrefixParamMask;  // 0x11
         const ui64 epochSeconds = 1'700'000'000ULL;
         SetRandomSeed(77);
-        const auto v8FromRaw = MakeV8Bytes(rawPrefix, epochSeconds, true);
+        const auto shardedFromRaw = MakeShardedUuidBytes(rawPrefix, epochSeconds, true);
         SetRandomSeed(77);
-        const auto v8FromBottomBits = MakeV8Bytes(expectedParam, epochSeconds, true);
-        UNIT_ASSERT_VALUES_EQUAL(v8FromRaw, v8FromBottomBits);
+        const auto shardedFromBottomBits = MakeShardedUuidBytes(expectedParam, epochSeconds, true);
+        UNIT_ASSERT_VALUES_EQUAL(shardedFromRaw, shardedFromBottomBits);
         SetRandomSeed(88);
-        const auto v8WithSmallPrefix = MakeV8Bytes(kSmallPrefix, epochSeconds, true);
+        const auto shardedWithSmallPrefix = MakeShardedUuidBytes(kSmallPrefix, epochSeconds, true);
         SetRandomSeed(88);
-        const auto v8WithZeroPrefix = MakeV8Bytes(0, epochSeconds, true);
-        UNIT_ASSERT_VALUES_UNEQUAL(v8WithSmallPrefix, v8WithZeroPrefix);
+        const auto shardedWithZeroPrefix = MakeShardedUuidBytes(0, epochSeconds, true);
+        UNIT_ASSERT_VALUES_UNEQUAL(shardedWithSmallPrefix, shardedWithZeroPrefix);
     }
 
-    Y_UNIT_TEST(V7SortOrderAtTimestampBoundary) {
+    Y_UNIT_TEST(ChronoSortOrderAtTimestampBoundary) {
         const ui64 earlierTimestampMs = 0x00FFFFFFULL;
         const ui64 laterTimestampMs = 0x01000000ULL;
 
         SetRandomSeed(16180);
-        const auto earlierGenerated = MakeV7Bytes(0, earlierTimestampMs, false);
+        const auto earlierGenerated = MakeChronoUuidBytes(0, earlierTimestampMs, false);
         SetRandomSeed(16180);
-        const auto laterGenerated = MakeV7Bytes(0, laterTimestampMs, false);
+        const auto laterGenerated = MakeChronoUuidBytes(0, laterTimestampMs, false);
 
         UNIT_ASSERT(CompareUuidBytes(earlierGenerated, laterGenerated) < 0);
     }
 
-    Y_UNIT_TEST(V7SortOrderWithoutPrefixFixedRandom) {
+    Y_UNIT_TEST(ChronoSortOrderWithoutPrefixFixedRandom) {
         const ui64 baseTimestampMs = MilliSeconds();
         TVector<TUuidBytes> generated;
         generated.reserve(10);
 
         for (ui32 i = 0; i < 10; ++i) {
-            generated.push_back(GenerateV7WithFixedRandom(baseTimestampMs + i * 2));
+            generated.push_back(GenerateChronoWithFixedRandom(baseTimestampMs + i * 2));
         }
 
         AssertGenerationOrderIsSortOrder(generated);
     }
 
-    Y_UNIT_TEST(V7SortOrderWithFixedPrefixAndFixedRandom) {
+    Y_UNIT_TEST(ChronoSortOrderWithFixedPrefixAndFixedRandom) {
         const ui64 baseTimestampMs = MilliSeconds();
         TVector<TUuidBytes> generated;
         generated.reserve(10);
 
         for (ui32 i = 0; i < 10; ++i) {
-            generated.push_back(GenerateV7WithPrefixAndFixedRandom(kTestV7Prefix, baseTimestampMs + i * 2));
+            generated.push_back(GenerateChronoWithPrefixAndFixedRandom(kTestChronoPrefix, baseTimestampMs + i * 2));
         }
 
         AssertGenerationOrderIsSortOrder(generated);
     }
 
-    Y_UNIT_TEST(V8SortOrderWithFixedPrefixAndFixedRandom) {
+    Y_UNIT_TEST(ShardedSortOrderWithFixedPrefixAndFixedRandom) {
         const ui64 baseEpochSeconds = MilliSeconds() / 1000;
         TVector<TUuidBytes> generated;
         generated.reserve(3);
 
         for (ui32 i = 0; i < 3; ++i) {
-            generated.push_back(GenerateV8WithFixedRandom(kTestV8Prefix, baseEpochSeconds + i));
+            generated.push_back(GenerateShardedWithFixedRandom(kTestShardedPrefix, baseEpochSeconds + i));
         }
 
         AssertGenerationOrderIsSortOrder(generated);
     }
 
-    Y_UNIT_TEST(V7SortOrderWithoutPrefixVaryingRandom) {
+    Y_UNIT_TEST(ChronoSortOrderWithoutPrefixVaryingRandom) {
         SetRandomSeed(12345);
         const ui64 baseTimestampMs = MilliSeconds();
         TVector<TUuidBytes> generated;
         generated.reserve(10);
 
         for (ui32 i = 0; i < 10; ++i) {
-            generated.push_back(MakeV7Bytes(0, baseTimestampMs + i * 2, false));
+            generated.push_back(MakeChronoUuidBytes(0, baseTimestampMs + i * 2, false));
         }
 
         AssertGenerationOrderIsSortOrder(generated);
         AssertAllDistinct(generated);
     }
 
-    Y_UNIT_TEST(V7SortOrderWithPrefixVaryingRandom) {
+    Y_UNIT_TEST(ChronoSortOrderWithPrefixVaryingRandom) {
         SetRandomSeed(54321);
         const ui64 baseTimestampMs = MilliSeconds();
         TVector<TUuidBytes> generated;
         generated.reserve(10);
 
         for (ui32 i = 0; i < 10; ++i) {
-            generated.push_back(MakeV7Bytes(kTestV7Prefix, baseTimestampMs + i * 2, true));
+            generated.push_back(MakeChronoUuidBytes(kTestChronoPrefix, baseTimestampMs + i * 2, true));
         }
 
         AssertGenerationOrderIsSortOrder(generated);
         AssertAllDistinct(generated);
     }
 
-    Y_UNIT_TEST(V7DistinctRandomSuffixAtSameTimestamp) {
+    Y_UNIT_TEST(ChronoDistinctRandomSuffixAtSameTimestamp) {
         SetRandomSeed(98765);
         const ui64 timestampMs = MilliSeconds();
         TVector<TUuidBytes> generated;
         generated.reserve(32);
 
         for (ui32 i = 0; i < 32; ++i) {
-            generated.push_back(MakeV7Bytes(0, timestampMs, false));
+            generated.push_back(MakeChronoUuidBytes(0, timestampMs, false));
         }
 
         AssertAllDistinct(generated);
     }
 
-    Y_UNIT_TEST(V7DistinctRandomSuffixAtSameTimestampWithPrefix) {
+    Y_UNIT_TEST(ChronoDistinctRandomSuffixAtSameTimestampWithPrefix) {
         SetRandomSeed(13579);
         const ui64 prefix = 0x1FFULL;
         const ui64 timestampMs = MilliSeconds();
@@ -219,59 +219,59 @@ Y_UNIT_TEST_SUITE(TUuidSortOrder) {
         generated.reserve(32);
 
         for (ui32 i = 0; i < 32; ++i) {
-            generated.push_back(MakeV7Bytes(prefix, timestampMs, true));
+            generated.push_back(MakeChronoUuidBytes(prefix, timestampMs, true));
         }
 
         AssertAllDistinct(generated);
     }
 
-    Y_UNIT_TEST(V8DistinctAcrossTimestampsWithVaryingRandom) {
+    Y_UNIT_TEST(ShardedDistinctAcrossTimestampsWithVaryingRandom) {
         SetRandomSeed(24680);
         const ui64 baseEpochSeconds = MilliSeconds() / 1000;
         TVector<TUuidBytes> generated;
         generated.reserve(10);
 
         for (ui32 i = 0; i < 10; ++i) {
-            generated.push_back(MakeV8Bytes(kTestV8Prefix, baseEpochSeconds + i, true));
+            generated.push_back(MakeShardedUuidBytes(kTestShardedPrefix, baseEpochSeconds + i, true));
         }
 
         AssertAllDistinct(generated);
     }
 
-    Y_UNIT_TEST(V8DistinctRandomSuffixAtSameTimestamp) {
+    Y_UNIT_TEST(ShardedDistinctRandomSuffixAtSameTimestamp) {
         SetRandomSeed(112233);
         const ui64 epochSeconds = MilliSeconds() / 1000;
         TVector<TUuidBytes> generated;
         generated.reserve(32);
 
         for (ui32 i = 0; i < 32; ++i) {
-            generated.push_back(MakeV8Bytes(kTestV8Prefix, epochSeconds, true));
+            generated.push_back(MakeShardedUuidBytes(kTestShardedPrefix, epochSeconds, true));
         }
 
         AssertAllDistinct(generated);
     }
 
-    Y_UNIT_TEST(V7StringFormatShowsVersionDigit) {
+    Y_UNIT_TEST(ChronoStringFormatShowsVersionDigit) {
         SetRandomSeed(42);
-        const auto bytes = MakeV7Bytes(0, MilliSeconds(), false);
-        AssertUuidStringFormat(UuidBytesToDisplayString(bytes), '7');
+        const auto bytes = MakeChronoUuidBytes(0, MilliSeconds(), false);
+        AssertUuidStringFormat(UuidBytesToDisplayString(bytes));
     }
 
-    Y_UNIT_TEST(V7PrefixStringFormatShowsVersionDigit) {
+    Y_UNIT_TEST(ChronoPrefixStringFormatShowsVersionDigit) {
         SetRandomSeed(42);
-        const auto bytes = MakeV7Bytes(kTestV7Prefix, MilliSeconds(), true);
-        AssertUuidStringFormat(UuidBytesToDisplayString(bytes), '7');
+        const auto bytes = MakeChronoUuidBytes(kTestChronoPrefix, MilliSeconds(), true);
+        AssertUuidStringFormat(UuidBytesToDisplayString(bytes));
     }
 
-    Y_UNIT_TEST(V8StringFormatShowsVersionDigit) {
+    Y_UNIT_TEST(ShardedStringFormatShowsVersionDigit) {
         SetRandomSeed(42);
-        const auto bytes = MakeV8Bytes(0, MilliSeconds() / 1000, false);
-        AssertUuidStringFormat(UuidBytesToDisplayString(bytes), '8');
+        const auto bytes = MakeShardedUuidBytes(0, MilliSeconds() / 1000, false);
+        AssertUuidStringFormat(UuidBytesToDisplayString(bytes));
     }
 
-    Y_UNIT_TEST(V8PrefixStringFormatShowsVersionDigit) {
+    Y_UNIT_TEST(ShardedPrefixStringFormatShowsVersionDigit) {
         SetRandomSeed(42);
-        const auto bytes = MakeV8Bytes(kTestV8Prefix, MilliSeconds() / 1000, true);
-        AssertUuidStringFormat(UuidBytesToDisplayString(bytes), '8');
+        const auto bytes = MakeShardedUuidBytes(kTestShardedPrefix, MilliSeconds() / 1000, true);
+        AssertUuidStringFormat(UuidBytesToDisplayString(bytes));
     }
 }

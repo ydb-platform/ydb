@@ -8,7 +8,7 @@
                         "StructType";
                         [
                             [
-                                "v7_unique";
+                                "chrono_unique";
                                 [
                                     "DataType";
                                     "Bool"
@@ -34,7 +34,7 @@
                         "StructType";
                         [
                             [
-                                "v8_unique";
+                                "sharded_unique";
                                 [
                                     "DataType";
                                     "Bool"
@@ -60,7 +60,7 @@
                         "StructType";
                         [
                             [
-                                "v7_prefix_unique";
+                                "chrono_prefix_unique";
                                 [
                                     "DataType";
                                     "Bool"
@@ -86,7 +86,7 @@
                         "StructType";
                         [
                             [
-                                "v8_prefix_differs";
+                                "sharded_prefix_differs";
                                 [
                                     "DataType";
                                     "Bool"
@@ -112,7 +112,7 @@
                         "StructType";
                         [
                             [
-                                "v7_small_prefix_differs";
+                                "chrono_small_prefix_differs";
                                 [
                                     "DataType";
                                     "Bool"
@@ -138,7 +138,7 @@
                         "StructType";
                         [
                             [
-                                "v7_dep_unique";
+                                "chrono_dep_unique";
                                 [
                                     "DataType";
                                     "Bool"
@@ -164,7 +164,7 @@
                         "StructType";
                         [
                             [
-                                "v8_dep_unique";
+                                "sharded_dep_unique";
                                 [
                                     "DataType";
                                     "Bool"
@@ -190,7 +190,7 @@
                         "StructType";
                         [
                             [
-                                "v7_three_dep_unique";
+                                "chrono_three_dep_unique";
                                 [
                                     "DataType";
                                     "Bool"
@@ -216,7 +216,7 @@
                         "StructType";
                         [
                             [
-                                "v8_three_dep_unique";
+                                "sharded_three_dep_unique";
                                 [
                                     "DataType";
                                     "Bool"
@@ -242,7 +242,7 @@
                         "StructType";
                         [
                             [
-                                "v7_prefix_dep_unique";
+                                "chrono_prefix_dep_unique";
                                 [
                                     "DataType";
                                     "Bool"
@@ -268,7 +268,7 @@
                         "StructType";
                         [
                             [
-                                "v8_prefix_dep_unique";
+                                "sharded_prefix_dep_unique";
                                 [
                                     "DataType";
                                     "Bool"
@@ -294,7 +294,7 @@
                         "StructType";
                         [
                             [
-                                "v7_prefix_three_dep_unique";
+                                "chrono_prefix_three_dep_unique";
                                 [
                                     "DataType";
                                     "Bool"
@@ -320,7 +320,7 @@
                         "StructType";
                         [
                             [
-                                "v8_prefix_three_dep_unique";
+                                "sharded_prefix_three_dep_unique";
                                 [
                                     "DataType";
                                     "Bool"
@@ -346,7 +346,7 @@
                         "StructType";
                         [
                             [
-                                "v7_string_format";
+                                "chrono_string_format";
                                 [
                                     "DataType";
                                     "Bool"
@@ -372,7 +372,7 @@
                         "StructType";
                         [
                             [
-                                "v7_prefix_string_format";
+                                "chrono_prefix_string_format";
                                 [
                                     "DataType";
                                     "Bool"
@@ -398,7 +398,7 @@
                         "StructType";
                         [
                             [
-                                "v8_string_format";
+                                "sharded_string_format";
                                 [
                                     "DataType";
                                     "Bool"
@@ -424,7 +424,7 @@
                         "StructType";
                         [
                             [
-                                "v8_prefix_string_format";
+                                "sharded_prefix_string_format";
                                 [
                                     "DataType";
                                     "Bool"

@@ -3,6 +3,7 @@ import collections
 import glob
 import os
 import shutil
+import string
 
 import pytest
 
@@ -80,7 +81,15 @@ def make_test(case):
     extra_env["YQL_ARCADIA_BINARY_PATH"] = os.path.expandvars(yatest.common.build_path('.'))
     extra_env["YQL_ARCADIA_SOURCE_PATH"] = os.path.expandvars(yatest.common.source_path('.'))
     extra_env["Y_NO_AVX_IN_DOT_PRODUCT"] = "1"
-    extra_env.update(yql_utils.get_envs(cfg))
+    # Expand $VAR / ${VAR} references in `env`-directive values against extra_env so cfg files can
+    # parameterize paths (e.g. env FOO ${YQL_ARCADIA_BINARY_PATH}/...). Existing env directives use
+    # static values without `$`, so this stays backward-compatible.
+    raw_envs = yql_utils.get_envs(cfg)
+    for env_name, env_value in raw_envs.items():
+        if env_value and '$' in env_value:
+            extra_env[env_name] = string.Template(env_value).safe_substitute(extra_env)
+        else:
+            extra_env[env_name] = env_value
     # this breaks tests using V0 syntax
     if "YA_TEST_RUNNER" in extra_env:
         del extra_env["YA_TEST_RUNNER"]

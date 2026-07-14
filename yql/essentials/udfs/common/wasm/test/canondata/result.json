@@ -1,0 +1,27 @@
+{
+    "test.test[Basic]": [
+        {
+            "uri": "file://test.test_Basic_/results.txt"
+        }
+    ],
+    "test.test[EnvRegistry]": [
+        {
+            "uri": "file://test.test_EnvRegistry_/results.txt"
+        }
+    ],
+    "test.test[MemoryArgs]": [
+        {
+            "uri": "file://test.test_MemoryArgs_/results.txt"
+        }
+    ],
+    "test.test[Signatures]": [
+        {
+            "uri": "file://test.test_Signatures_/results.txt"
+        }
+    ],
+    "test.test[UdfRegistry]": [
+        {
+            "uri": "file://test.test_UdfRegistry_/results.txt"
+        }
+    ]
+}

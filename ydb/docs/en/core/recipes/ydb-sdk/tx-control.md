@@ -1,15 +1,39 @@
-# Setting up the transaction execution mode
+# Setting the transaction execution mode
 
-To run your queries, first you need to specify the [transaction execution mode](../../concepts/transactions.md#modes) in the {{ ydb-short-name }} SDK.
+To execute queries in the {{ ydb-short-name }} SDK, you must specify the [transaction execution mode](../../concepts/transactions.md#modes).
 
-Below are code examples showing the {{ ydb-short-name }} SDK built-in tools to create an object for the *transaction execution mode*.
+Below are code examples that use the {{ ydb-short-name }} SDK built-in tools to create a *transaction execution mode* object.
 
 ## ImplicitTx {#implicittx}
 
-[ImplicitTx](../../concepts/transactions#implicit) mode allows executing a single query without explicit transaction control. The query is executed in its own implicit transaction that automatically commits if successful.
+The [ImplicitTx](../../concepts/transactions#implicit) mode allows you to execute a single query without explicit transaction management. The query is executed in its own implicit transaction, which is automatically committed on success.
 
 {% list tabs group=lang %}
 
+- C++
+
+  {% list tabs %}
+
+  - Native SDK
+
+    ```cpp
+    #include <ydb-cpp-sdk/client/query/client.h>
+
+    void ImplicitTxExample(NYdb::NQuery::TSession session) {
+      auto result = session.ExecuteQuery(
+          "SELECT 1",
+          NYdb::NQuery::TTxControl::NoTx()
+      ).GetValueSync();
+
+      // ...
+    }
+    ```
+
+  - userver
+
+    {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+  {% endlist %}
 - Go
 
   {% list tabs %}
@@ -45,7 +69,7 @@ Below are code examples showing the {{ ydb-short-name }} SDK built-in tools to c
       if err != nil {
         fmt.Printf("unexpected error: %v", err)
       }
-      // work with row
+      // working with row
       _ = row
     }
     ```
@@ -85,7 +109,7 @@ Below are code examples showing the {{ ydb-short-name }} SDK built-in tools to c
       db := sql.OpenDB(connector)
       defer db.Close()
 
-      // ImplicitTx — query without an explicit transaction (auto-commit)
+      // ImplicitTx - query without explicit transaction (auto-commit)
       row := db.QueryRowContext(ctx, "SELECT 1")
       var result int
       if err := row.Scan(&result); err != nil {
@@ -95,38 +119,96 @@ Below are code examples showing the {{ ydb-short-name }} SDK built-in tools to c
     ```
 
   {% endlist %}
-
 - Java
+
+  In the Java SDK, the transaction mode is set via `TxMode` when calling `QueryClient.createQuery`. In JDBC — via `Connection.setAutoCommit`, `setReadOnly`, `setTransactionIsolation` and [driver properties](../../reference/languages-and-apis/jdbc-driver/properties.md). For more details on modes, see [transaction documentation](../../concepts/transactions.md#modes); for client initialization, see [Driver initialization](./init.md).
 
   {% list tabs %}
 
   - Native SDK
 
     ```java
+    import tech.ydb.common.transaction.TxMode;
+    import tech.ydb.core.grpc.GrpcTransport;
     import tech.ydb.query.QueryClient;
+    import tech.ydb.query.result.ResultSetReader;
     import tech.ydb.query.tools.QueryReader;
     import tech.ydb.query.tools.SessionRetryContext;
+    import tech.ydb.table.query.Params;
 
-    // ...
-    try (QueryClient queryClient = QueryClient.newClient(transport).build()) {
-        SessionRetryContext retryCtx = SessionRetryContext.create(queryClient).build();
-        QueryReader reader = retryCtx.supplyResult(
-            session -> QueryReader.readFrom(session.createQuery("SELECT 1", TxMode.NONE))
-        );
-        // work with reader
+    public class ImplicitTxExample {
+
+        public static void main(String[] args) {
+            String connectionString = System.getenv().getOrDefault(
+                    "YDB_CONNECTION_STRING", "grpc://localhost:2136/local");
+
+            try (GrpcTransport transport = GrpcTransport.forConnectionString(connectionString).build();
+                 QueryClient queryClient = QueryClient.newClient(transport).build()) {
+
+                SessionRetryContext retryCtx = SessionRetryContext.create(queryClient).build();
+
+                // ImplicitTx — one query without explicit BEGIN/COMMIT
+                QueryReader reader = retryCtx.supplyResult(session -> QueryReader.readFrom(
+                        session.createQuery("SELECT 1 AS value", TxMode.NONE, Params.empty())
+                )).join().getValue();
+
+                ResultSetReader rs = reader.getResultSet(0);
+                if (rs.next()) {
+                    System.out.println("ImplicitTx: SELECT 1 = " + rs.getColumn("value").getInt32());
+                }
+            }
+        }
     }
     ```
 
   - JDBC
 
-    On the JDBC side, implicit mode corresponds to auto-commit (`Connection.setAutoCommit(true)` by default): each standalone statement runs as its own transaction and commits automatically. With `setAutoCommit(false)`, boundaries are defined by explicit `commit` / `rollback`.
+    The JDBC driver does not allow explicitly specifying the `ImplicitTx` mode for executing transactions. It independently uses this mode for executing those queries for which it is necessary:
 
-    In the **current** {{ ydb-short-name }} JDBC driver, for **standalone** **read** calls, **snapshot** mode is used when **`setReadOnly(true)`** is set on the `Connection`. **Write** queries use **Serializable Read/Write** (the connection must not be read-only).
+    * DDL statements, such as [CREATE TABLE](../../yql/reference/syntax/create_table/index.md), [DROP TABLE](../../yql/reference/syntax/drop_table.md), etc.
+    * The [BATCH UPDATE](../../yql/reference/syntax/batch-update.md) and [BATCH DELETE](../../yql/reference/syntax/batch-delete.md) operations
 
-    In **Spring**, the **`@Transactional(readOnly = true)`** attribute triggers `Connection.setReadOnly(true)` when the transaction starts, so snapshot is selected automatically for read-only flows. Hibernate, JOOQ, and other JDBC wrappers use the same connection — set read-only the same way (or via framework transaction settings if they propagate it to `Connection`).
+    {% note info %}
+
+    Since these operations are not transactional and cannot be rolled back via `rollback()`, the driver does not allow executing them within an open transaction. They should be executed either in auto-commit mode or before executing any other queries to the database.
+
+    {% endnote %}
+
+
+    ```java
+    import java.sql.Connection;
+    import java.sql.DriverManager;
+    import java.sql.ResultSet;
+    import java.sql.SQLException;
+    import java.sql.Statement;
+
+    public class JdbcImplicitTxExample {
+
+        public static void main(String[] args) {
+            String connectionUrl = System.getenv().getOrDefault(
+                    "YDB_JDBC_URL", "jdbc:ydb:grpc://localhost:2136/local");
+
+            try (Connection connection = DriverManager.getConnection(connectionUrl)) {
+                // autocommit=true by default — implicit transaction (ImplicitTx)
+                try (Statement statement = connection.createStatement();
+                     ResultSet rs = statement.executeQuery("SELECT 1 AS value")) {
+                    rs.next();
+                    System.out.println("ImplicitTx: SELECT 1 = " + rs.getInt("value"));
+                }
+
+                // DDL is also executed in ImplicitTx
+                try (Statement statement = connection.createStatement()) {
+                    statement.execute(
+                            "CREATE TABLE IF NOT EXISTS tx_demo (id Int32, value Text, PRIMARY KEY (id))");
+                }
+            } catch (SQLException e) {
+                throw new RuntimeException(e);
+            }
+        }
+    }
+    ```
 
   {% endlist %}
-
 - Python
 
   {% list tabs %}
@@ -161,92 +243,72 @@ Below are code examples showing the {{ ydb-short-name }} SDK built-in tools to c
     ```
 
   {% endlist %}
+- C#
 
-- C++
+  {% list tabs %}
 
-  ```cpp
-  auto result = session.ExecuteQuery(
-      "SELECT 1",
-      NYdb::NQuery::TTxControl::NoTx()
-  ).GetValueSync();
-  ```
+  - ADO.NET
 
-- C# (.NET)
+    ```csharp
+    using Ydb.Sdk.Ado;
 
-  {% cut "ADO.NET" %}
+    await using var connection = await dataSource.OpenRetryableConnectionAsync();
+    // Execution without explicit transaction (auto-commit)
+    await using var command = new YdbCommand(connection) { CommandText = "SELECT 1" };
+    await command.ExecuteNonQueryAsync();
+    ```
 
-  ```csharp
-  using Ydb.Sdk.Ado;
+  - Entity Framework
 
-  await using var connection = await dataSource.OpenRetryableConnectionAsync();
+    ```csharp
+    using Microsoft.EntityFrameworkCore;
 
-  // Execute without explicit transaction (auto-commit)
-  await using var command = new YdbCommand(connection) { CommandText = "SELECT 1" };
-  await command.ExecuteNonQueryAsync();
-  ```
+    await using var context = await dbContextFactory.CreateDbContextAsync();
+    // Entity Framework auto-commit mode (without explicit transaction)
+    var result = await context.SomeEntities.FirstOrDefaultAsync();
+    ```
 
-  {% endcut %}
+  - linq2db
 
-  {% cut "Entity Framework" %}
+    ```csharp
+    using LinqToDB;
+    using LinqToDB.Data;
 
-  ```csharp
-  using Microsoft.EntityFrameworkCore;
+    using var db = new DataConnection(
+        new DataOptions().UseConnectionString(
+            "YDB",
+            "Host=localhost;Port=2136;Database=/local;UseTls=false"
+        )
+    );
+    // linq2db auto-commit mode (without explicit transaction)
+    var result = db.GetTable<Employee>().FirstOrDefault(e => e.Id == 1);
+    ```
 
-  await using var context = await dbContextFactory.CreateDbContextAsync();
-
-  // Entity Framework auto-commit mode (no explicit transaction)
-  var result = await context.SomeEntities.FirstOrDefaultAsync();
-  ```
-
-  {% endcut %}
-
-  {% cut "linq2db" %}
-
-  ```csharp
-  using LinqToDB;
-  using LinqToDB.Data;
-
-  using var db = new DataConnection(
-      new DataOptions().UseConnectionString(
-          "YDB",
-          "Host=localhost;Port=2136;Database=/local;UseTls=false"
-      )
-  );
-
-  // linq2db auto-commit mode (no explicit transaction)
-  var result = db.GetTable<Employee>().FirstOrDefault(e => e.Id == 1);
-  ```
-
-  {% endcut %}
-
-  ```csharp
-  using Ydb.Sdk.Services.Query;
-
-  // ImplicitTx - single query without explicit transaction
-  var response = await queryClient.Exec("SELECT 1");
-  ```
-
+  {% endlist %}
 - JavaScript
+
 
   ```javascript
   import { sql } from '@ydbjs/query';
 
   // ...
 
-  // ImplicitTx - single query without explicit transaction
+  // ImplicitTx - one query without explicit transaction
   const result = await sql`SELECT 1`;
   ```
 
 - Rust
 
+
   ```rust
   let mut qc = client.query_client();
-  // ImplicitTx is the default for QueryClient methods that execute a single SQL statement:
-  // the server picks isolation from SQL (SELECT → snapshot RO, DML → serializable RW).
+  // ImplicitTx — default mode for QueryClient helper methods that execute a single transactional SQL query:
+  // the server selects isolation based on SQL type (SELECT → snapshot RO, DML → serializable RW).
   let mut row = qc.query_row("SELECT 1 AS one").await?;
   ```
 
 - PHP
+
 
   ```php
   <?php
@@ -267,6 +329,41 @@ Below are code examples showing the {{ ydb-short-name }} SDK built-in tools to c
 
 {% list tabs group=lang %}
 
+- C++
+
+  {% list tabs %}
+
+  - Native SDK
+
+    ```cpp
+    #include <ydb-cpp-sdk/client/query/client.h>
+
+    void SerializableExample(NYdb::NQuery::TSession session) {
+        auto settings = NYdb::NQuery::TTxSettings::SerializableRW();
+        auto result = session.ExecuteQuery(
+            "SELECT 1",
+            NYdb::NQuery::TTxControl::BeginTx(settings).CommitTx()
+        ).GetValueSync();
+
+        // ...
+    }
+    ```
+
+  - userver
+
+    ```cpp
+    #include <userver/ydb/table.hpp>
+
+    void SerializableExample(ydb::TableClient& client) {
+        auto result = client.ExecuteQuery(
+            ydb::OperationSettings{.tx_mode = ydb::TransactionMode::kSerializableRW},
+            ydb::Query{"SELECT 1;"}
+        );
+        // ...
+    }
+    ```
+
+  {% endlist %}
 - Go
 
   {% list tabs %}
@@ -302,7 +399,7 @@ Below are code examples showing the {{ ydb-short-name }} SDK built-in tools to c
       if err != nil {
         fmt.Printf("unexpected error: %v", err)
       }
-      // work with row
+      // working with row
       _ = row
     }
     ```
@@ -350,8 +447,8 @@ Below are code examples showing the {{ ydb-short-name }} SDK built-in tools to c
           return row.Scan(&result)
         },
         retry.WithIdempotent(true),
-        // Serializable Read-Write mode is used by default for transactions.
-        // Alternatively, set it explicitly as shown below.
+        // Serializable Read-Write mode is used by default for transactions
+        // Or it can be set explicitly as shown below
         retry.WithTxOptions(&sql.TxOptions{
           Isolation: sql.LevelSerializable,
           ReadOnly:  false,
@@ -364,7 +461,6 @@ Below are code examples showing the {{ ydb-short-name }} SDK built-in tools to c
     ```
 
   {% endlist %}
-
 - Java
 
   {% list tabs %}
@@ -372,27 +468,76 @@ Below are code examples showing the {{ ydb-short-name }} SDK built-in tools to c
   - Native SDK
 
     ```java
+    import tech.ydb.common.transaction.TxMode;
+    import tech.ydb.core.grpc.GrpcTransport;
     import tech.ydb.query.QueryClient;
-    import tech.ydb.query.TxMode;
+    import tech.ydb.query.result.ResultSetReader;
     import tech.ydb.query.tools.QueryReader;
     import tech.ydb.query.tools.SessionRetryContext;
+    import tech.ydb.table.query.Params;
 
-    // ...
-    try (QueryClient queryClient = QueryClient.newClient(transport).build()) {
-        SessionRetryContext retryCtx = SessionRetryContext.create(queryClient).build();
-        QueryReader reader = retryCtx.supplyResult(
-            session -> QueryReader.readFrom(session.createQuery("SELECT 1", TxMode.SERIALIZABLE_RW))
-        );
-        // work with reader
+    public class SerializableTxExample {
+
+        public static void main(String[] args) {
+            String connectionString = System.getenv().getOrDefault(
+                    "YDB_CONNECTION_STRING", "grpc://localhost:2136/local");
+
+            try (GrpcTransport transport = GrpcTransport.forConnectionString(connectionString).build();
+                 QueryClient queryClient = QueryClient.newClient(transport).build()) {
+
+                SessionRetryContext retryCtx = SessionRetryContext.create(queryClient).build();
+
+                QueryReader reader = retryCtx.supplyResult(session -> QueryReader.readFrom(
+                        session.createQuery("SELECT 1 AS value", TxMode.SERIALIZABLE_RW, Params.empty())
+                )).join().getValue();
+
+                ResultSetReader rs = reader.getResultSet(0);
+                if (rs.next()) {
+                    System.out.println("Serializable RW: SELECT 1 = " + rs.getColumn("value").getInt32());
+                }
+            }
+        }
     }
     ```
 
   - JDBC
 
-    For **standalone** JDBC calls, the **current** driver implementation uses **Serializable Read/Write** — including from Spring Boot, ORMs, and other JDBC wrappers. **Snapshot** for reads is enabled via **`setReadOnly(true)`** (see [ImplicitTx](#implicittx)). Auto-commit semantics and explicit transactions are described there as well.
+    The JDBC driver uses the `Serializable` mode by default for executing all non-read-only queries.
+
+
+    ```java
+    import java.sql.Connection;
+    import java.sql.DriverManager;
+    import java.sql.PreparedStatement;
+    import java.sql.ResultSet;
+    import java.sql.SQLException;
+
+    public class JdbcSerializableTxExample {
+
+        public static void main(String[] args) {
+            String connectionUrl = System.getenv().getOrDefault(
+                    "YDB_JDBC_URL", "jdbc:ydb:grpc://localhost:2136/local");
+
+            try (Connection connection = DriverManager.getConnection(connectionUrl)) {
+                connection.setAutoCommit(false);
+                connection.setReadOnly(false);
+                connection.setTransactionIsolation(Connection.TRANSACTION_SERIALIZABLE);
+
+                try (PreparedStatement ps = connection.prepareStatement("SELECT 1 AS value");
+                     ResultSet rs = ps.executeQuery()) {
+                    rs.next();
+                    System.out.println("Serializable RW: SELECT 1 = " + rs.getInt("value"));
+                }
+
+                connection.commit();
+            } catch (SQLException e) {
+                throw new RuntimeException(e);
+            }
+        }
+    }
+    ```
 
   {% endlist %}
-
 - Python
 
   {% list tabs %}
@@ -439,116 +584,95 @@ Below are code examples showing the {{ ydb-short-name }} SDK built-in tools to c
     ```
 
   {% endlist %}
+- C#
 
-- C++
+  {% list tabs %}
 
-  ```cpp
-  auto settings = NYdb::NQuery::TTxSettings::SerializableRW();
-  auto result = session.ExecuteQuery(
-      "SELECT 1",
-      NYdb::NQuery::TTxControl::BeginTx(settings).CommitTx()
-  ).GetValueSync();
-  ```
+  - ADO.NET
 
-- C# (.NET)
+    ```csharp
+    using Ydb.Sdk.Ado;
 
-  {% cut "ADO.NET" %}
+    // Serializable mode is used by default
+    await _ydbDataSource.ExecuteInTransactionAsync(async ydbConnection =>
+        {
+            var ydbCommand = ydbConnection.CreateCommand();
+            ydbCommand.CommandText = """
+                                     UPSERT INTO episodes (series_id, season_id, episode_id, title, air_date)
+                                     VALUES (2, 5, 13, "Test Episode", Date("2018-08-27"))
+                                     """;
+            await ydbCommand.ExecuteNonQueryAsync();
+            ydbCommand.CommandText = """
+                                     INSERT INTO episodes(series_id, season_id, episode_id, title, air_date)
+                                     VALUES
+                                         (2, 5, 21, "Test 21", Date("2018-08-27")),
+                                         (2, 5, 22, "Test 22", Date("2018-08-27"))
+                                     """;
+            await ydbCommand.ExecuteNonQueryAsync();
+        }
+    );
+    ```
 
-  ```csharp
-  using Ydb.Sdk.Ado;
+  - Entity Framework
 
-  // Serializable Read-Write mode is used by default
-  await _ydbDataSource.ExecuteInTransactionAsync(async ydbConnection =>
-      {
-          var ydbCommand = ydbConnection.CreateCommand();
-          ydbCommand.CommandText = """
-                                   UPSERT INTO episodes (series_id, season_id, episode_id, title, air_date)
-                                   VALUES (2, 5, 13, "Test Episode", Date("2018-08-27"))
-                                   """;
-          await ydbCommand.ExecuteNonQueryAsync();
-          ydbCommand.CommandText = """
-                                   INSERT INTO episodes(series_id, season_id, episode_id, title, air_date)
-                                   VALUES
-                                       (2, 5, 21, "Test 21", Date("2018-08-27")),
-                                       (2, 5, 22, "Test 22", Date("2018-08-27"))
-                                   """;
-          await ydbCommand.ExecuteNonQueryAsync();
-      }
-  );
-  ```
+    ```csharp
+    var strategy = db.Database.CreateExecutionStrategy();
 
-  {% endcut %}
+    // Entity Framework uses Serializable mode by default
+    strategy.ExecuteInTransaction(
+        db,
+        ctx =>
+        {
+            ctx.Users.AddRange(
+                new User { Name = "Alex", Email = "alex@example.com" },
+                new User { Name = "Kirill", Email = "kirill@example.com" }
+            );
 
-  {% cut "Entity Framework" %}
+            ctx.SaveChanges();
 
-  ```csharp
-  var strategy = db.Database.CreateExecutionStrategy();
+            var users = ctx.Users.OrderBy(u => u.Id).ToList();
+            Console.WriteLine("Users in database:");
+            foreach (var user in users)
+                Console.WriteLine($"- {user.Id}: {user.Name} ({user.Email})");
+        },
+        ctx => ctx.Users.Any(u => u.Email == "alex@example.com")
+            && ctx.Users.Any(u => u.Email == "kirill@example.com")
+      );
+    ```
 
-  // Serializable Read-Write mode is used by default
-  strategy.ExecuteInTransaction(
-      db,
-      ctx =>
-      {
-          ctx.Users.AddRange(
-              new User { Name = "Alex", Email = "alex@example.com" },
-              new User { Name = "Kirill", Email = "kirill@example.com" }
-          );
+  - linq2db
 
-          ctx.SaveChanges();
+    ```csharp
+    using LinqToDB;
+    using LinqToDB.Data;
 
-          var users = ctx.Users.OrderBy(u => u.Id).ToList();
-          Console.WriteLine("Users in database:");
-          foreach (var user in users)
-              Console.WriteLine($"- {user.Id}: {user.Name} ({user.Email})");
-      },
-      ctx => ctx.Users.Any(u => u.Email == "alex@example.com")
-          && ctx.Users.Any(u => u.Email == "kirill@example.com")
-  );
-  ```
+    // linq2db uses Serializable mode by default
+    using var db = new DataConnection(
+        new DataOptions().UseConnectionString(
+            "YDB",
+            "Host=localhost;Port=2136;Database=/local;UseTls=false"
+        )
+    );
 
-  {% endcut %}
+    await using var tr = await db.BeginTransactionAsync();
 
-  {% cut "linq2db" %}
+    await db.InsertAsync(new Episode
+    {
+        SeriesId = 2, SeasonId = 5, EpisodeId = 13, Title = "Test Episode", AirDate = new DateTime(2018, 08, 27)
+    });
+    await db.InsertAsync(new Episode
+        { SeriesId = 2, SeasonId = 5, EpisodeId = 21, Title = "Test 21", AirDate = new DateTime(2018, 08, 27) });
+    await db.InsertAsync(new Episode
+        { SeriesId = 2, SeasonId = 5, EpisodeId = 22, Title = "Test 22", AirDate = new DateTime(2018, 08, 27) });
 
-  ```csharp
-  using LinqToDB;
-  using LinqToDB.Data;
+    await tr.CommitAsync();
+    ```
 
-  // linq2db uses Serializable isolation by default
-  using var db = new DataConnection(
-      new DataOptions().UseConnectionString(
-          "YDB",
-          "Host=localhost;Port=2136;Database=/local;UseTls=false"
-      )
-  );
-
-  // Serializable Read-Write mode is used by default
-  await using var tr = await db.BeginTransactionAsync();
-
-  await db.InsertAsync(new Episode
-  {
-      SeriesId = 2, SeasonId = 5, EpisodeId = 13, Title = "Test Episode", AirDate = new DateTime(2018, 08, 27)
-  });
-  await db.InsertAsync(new Episode
-      { SeriesId = 2, SeasonId = 5, EpisodeId = 21, Title = "Test 21", AirDate = new DateTime(2018, 08, 27) });
-  await db.InsertAsync(new Episode
-      { SeriesId = 2, SeasonId = 5, EpisodeId = 22, Title = "Test 22", AirDate = new DateTime(2018, 08, 27) });
-
-  await tr.CommitAsync();
-  ```
-
-  {% endcut %}
-
-  ```csharp
-  using Ydb.Sdk.Services.Query;
-
-  // Serializable Read-Write mode is used by default
-  var response = await queryClient.Exec("SELECT 1");
-  ```
-
+  {% endlist %}
 - JavaScript
 
-  ```javascript
+
+  ```typescript
   import { sql } from '@ydbjs/query';
 
   // ...
@@ -558,13 +682,14 @@ Below are code examples showing the {{ ydb-short-name }} SDK built-in tools to c
       return await tx`SELECT 1`;
   });
 
-  // Or explicitly specify transaction mode
+  // Or explicitly specify the transaction mode
   await sql.begin({ isolation: 'serializableReadWrite', idempotent: true }, async (tx) => {
       return await tx`SELECT 1`;
   });
   ```
 
 - Rust
+
 
   ```rust
   use ydb::{QueryTransactionOptions, QueryTxMode};
@@ -582,6 +707,7 @@ Below are code examples showing the {{ ydb-short-name }} SDK built-in tools to c
   ```
 
 - PHP
+
 
   ```php
   <?php
@@ -609,6 +735,41 @@ Below are code examples showing the {{ ydb-short-name }} SDK built-in tools to c
 
 {% list tabs group=lang %}
 
+- C++
+
+  {% list tabs %}
+
+  - Native SDK
+
+    ```cpp
+    #include <ydb-cpp-sdk/client/query/client.h>
+
+    void OnlineReadOnlyExample(NYdb::NQuery::TSession session) {
+        auto settings = NYdb::NQuery::TTxSettings::OnlineRO();
+        auto result = session.ExecuteQuery(
+            "SELECT 1",
+            NYdb::NQuery::TTxControl::BeginTx(settings).CommitTx()
+        ).GetValueSync();
+
+        // ...
+    }
+    ```
+
+  - userver
+
+    ```cpp
+    #include <userver/ydb/table.hpp>
+
+    void OnlineReadOnlyExample(ydb::TableClient& client) {
+        auto result = client.ExecuteQuery(
+            ydb::OperationSettings{.tx_mode = ydb::TransactionMode::OnlineRO},
+            ydb::Query{"SELECT 1;"}
+        );
+        // ...
+    }
+    ```
+
+  {% endlist %}
 - Go
 
   {% list tabs %}
@@ -646,7 +807,7 @@ Below are code examples showing the {{ ydb-short-name }} SDK built-in tools to c
       if err != nil {
         fmt.Printf("unexpected error: %v", err)
       }
-      // work with row
+      // working with row
       _ = row
     }
     ```
@@ -705,7 +866,6 @@ Below are code examples showing the {{ ydb-short-name }} SDK built-in tools to c
     ```
 
   {% endlist %}
-
 - Java
 
   {% list tabs %}
@@ -713,27 +873,80 @@ Below are code examples showing the {{ ydb-short-name }} SDK built-in tools to c
   - Native SDK
 
     ```java
+    import tech.ydb.common.transaction.TxMode;
+    import tech.ydb.core.grpc.GrpcTransport;
     import tech.ydb.query.QueryClient;
-    import tech.ydb.query.TxMode;
+    import tech.ydb.query.result.ResultSetReader;
     import tech.ydb.query.tools.QueryReader;
     import tech.ydb.query.tools.SessionRetryContext;
+    import tech.ydb.table.query.Params;
 
-    // ...
-    try (QueryClient queryClient = QueryClient.newClient(transport).build()) {
-        SessionRetryContext retryCtx = SessionRetryContext.create(queryClient).build();
-        QueryReader reader = retryCtx.supplyResult(
-            session -> QueryReader.readFrom(session.createQuery("SELECT 1", TxMode.ONLINE_RO))
-        );
-        // work with reader
+    public class OnlineReadOnlyTxExample {
+
+        public static void main(String[] args) {
+            String connectionString = System.getenv().getOrDefault(
+                    "YDB_CONNECTION_STRING", "grpc://localhost:2136/local");
+
+            try (GrpcTransport transport = GrpcTransport.forConnectionString(connectionString).build();
+                 QueryClient queryClient = QueryClient.newClient(transport).build()) {
+
+                SessionRetryContext retryCtx = SessionRetryContext.create(queryClient).build();
+
+                QueryReader reader = retryCtx.supplyResult(session -> QueryReader.readFrom(
+                        session.createQuery("SELECT 1 AS value", TxMode.ONLINE_RO, Params.empty())
+                )).join().getValue();
+
+                ResultSetReader rs = reader.getResultSet(0);
+                if (rs.next()) {
+                    System.out.println("Online RO: SELECT 1 = " + rs.getColumn("value").getInt32());
+                }
+            }
+        }
     }
     ```
 
   - JDBC
 
-    Online Read-Only from the Query API is **not** configured separately for **standalone** JDBC calls. For **snapshot** reads, call **`Connection.setReadOnly(true)`** (in Spring — `@Transactional(readOnly = true)`). For writes, see [ImplicitTx](#implicittx).
+    The JDBC standard does not support transaction levels other than the [standard ones](https://docs.oracle.com/javase/8/docs/api/constant-values.html#java.sql.Connection.TRANSACTION_NONE). However, the JDBC driver allows setting this mode by specifying a [non-standard constant 16](https://github.com/ydb-platform/ydb-jdbc-driver/blob/v2.3.25/jdbc/src/main/java/tech/ydb/jdbc/YdbConst.java#L130).
+
+    {% note warning %}
+
+    This mode does not support interactive transactions.
+
+    {% endnote %}
+
+
+    ```java
+    import java.sql.Connection;
+    import java.sql.DriverManager;
+    import java.sql.ResultSet;
+    import java.sql.SQLException;
+    import java.sql.Statement;
+
+    public class JdbcOnlineReadOnlyTxExample {
+
+        public static void main(String[] args) {
+            String connectionUrl = System.getenv().getOrDefault(
+                    "YDB_JDBC_URL", "jdbc:ydb:grpc://localhost:2136/local");
+
+            try (Connection connection = DriverManager.getConnection(connectionUrl)) {
+                connection.setAutoCommit(true); // mode does not support interactive transactions
+                connection.setReadOnly(true);
+                connection.setTransactionIsolation(16); // ONLINE_RO in YDB JDBC
+
+                try (Statement statement = connection.createStatement();
+                     ResultSet rs = statement.executeQuery("SELECT 1 AS value")) {
+                    rs.next();
+                    System.out.println("Online RO: SELECT 1 = " + rs.getInt("value"));
+                }
+            } catch (SQLException e) {
+                throw new RuntimeException(e);
+            }
+        }
+    }
+    ```
 
   {% endlist %}
-
 - Python
 
   {% list tabs %}
@@ -780,57 +993,47 @@ Below are code examples showing the {{ ydb-short-name }} SDK built-in tools to c
     ```
 
   {% endlist %}
+- C#
 
-- C++
+  {% list tabs %}
 
-  ```cpp
-  auto settings = NYdb::NQuery::TTxSettings::OnlineRO();
-  auto result = session.ExecuteQuery(
-      "SELECT 1",
-      NYdb::NQuery::TTxControl::BeginTx(settings).CommitTx()
-  ).GetValueSync();
-  ```
+  - ADO.NET
 
-- C# (.NET)
+    ```csharp
+    using Ydb.Sdk.Ado;
 
-  {% cut "ADO.NET" %}
+    // OnlineRo — data is as up-to-date as possible at the time of each read operation;
+    // data within a single transaction is consistent
+    await using var connection = await dataSource.OpenConnectionAsync();
+    await using var transaction = await connection.BeginTransactionAsync(TransactionMode.OnlineRo);
+    await using var command = new YdbCommand(connection) { CommandText = "SELECT 1" };
+    await using var reader = await command.ExecuteReaderAsync();
+    await transaction.CommitAsync();
 
-  ```csharp
-  using Ydb.Sdk.Ado;
+    // OnlineInconsistentRo — maximum performance, minimal consistency:
+    // data may be inconsistent even within a single read operation
+    await using var connection2 = await dataSource.OpenConnectionAsync();
+    await using var transaction2 = await connection2.BeginTransactionAsync(TransactionMode.OnlineInconsistentRo);
+    await using var command2 = new YdbCommand(connection2) { CommandText = "SELECT 1" };
+    await using var reader2 = await command2.ExecuteReaderAsync();
+    await transaction2.CommitAsync();
+    ```
 
-  await using var connection = await dataSource.OpenConnectionAsync();
-  await using var transaction = await connection.BeginTransactionAsync(TransactionMode.OnlineRo);
-  await using var command = new YdbCommand(connection) { CommandText = "SELECT 1" };
-  await using var reader = await command.ExecuteReaderAsync();
-  await transaction.CommitAsync();
-  ```
+  - Entity Framework
 
-  {% endcut %}
+    Entity Framework does not support the OnlineRo mode directly.
+    Use ydb-dotnet-sdk or ADO.NET for this isolation level.
 
-  {% cut "Entity Framework" %}
+  - linq2db
 
-  Entity Framework does not support OnlineRo mode directly.
-  Use ydb-dotnet-sdk or ADO.NET for this isolation level.
+    linq2db does not support the OnlineRo mode directly.
+    Use ydb-dotnet-sdk or ADO.NET for this isolation level.
 
-  {% endcut %}
-
-  {% cut "linq2db" %}
-
-  linq2db does not support OnlineRo mode directly.
-  Use ydb-dotnet-sdk or ADO.NET for this isolation level.
-
-  {% endcut %}
-
-  ```csharp
-  using Ydb.Sdk.Ado;
-  using Ydb.Sdk.Services.Query;
-
-  var response = await queryClient.ReadAllRows("SELECT 1", txMode: TransactionMode.OnlineRo);
-  ```
-
+  {% endlist %}
 - JavaScript
 
-  ```javascript
+
+  ```typescript
   import { sql } from '@ydbjs/query';
 
   // ...
@@ -842,18 +1045,19 @@ Below are code examples showing the {{ ydb-short-name }} SDK built-in tools to c
 
 - Rust
 
+
   ```rust
   use ydb::QueryTxMode;
 
   let mut qc = client.query_client();
 
-  // Online RO — consistent reads (allow_inconsistent_reads = false)
+  // Online RO — consistent read (allow_inconsistent_reads = false)
   let mut row = qc
       .query_row("SELECT 1 AS one")
       .with_tx_mode(QueryTxMode::OnlineReadOnly)
       .await?;
 
-  // Online inconsistent RO — higher throughput (allow_inconsistent_reads = true)
+  // Online inconsistent RO — maximum performance (allow_inconsistent_reads = true)
   let mut row = qc
       .query_row("SELECT 1 AS one")
       .with_tx_mode(QueryTxMode::OnlineReadOnlyInconsistent)
@@ -861,6 +1065,7 @@ Below are code examples showing the {{ ydb-short-name }} SDK built-in tools to c
   ```
 
 - PHP
+
 
   ```php
   <?php
@@ -885,6 +1090,41 @@ Below are code examples showing the {{ ydb-short-name }} SDK built-in tools to c
 
 {% list tabs group=lang %}
 
+- C++
+
+  {% list tabs %}
+
+  - Native SDK
+
+    ```cpp
+    #include <ydb-cpp-sdk/client/query/client.h>
+
+    void StaleReadOnlyExample(NYdb::NQuery::TSession session) {
+        auto settings = NYdb::NQuery::TTxSettings::StaleRO();
+        auto result = session.ExecuteQuery(
+            "SELECT 1",
+            NYdb::NQuery::TTxControl::BeginTx(settings).CommitTx()
+        ).GetValueSync();
+
+        // ...
+    }
+    ```
+
+  - userver
+
+    ```cpp
+    #include <userver/ydb/table.hpp>
+
+    void StaleReadOnlyExample(ydb::TableClient& client) {
+        auto result = client.ExecuteQuery(
+            ydb::OperationSettings{.tx_mode = ydb::TransactionMode::kStaleRO},
+            ydb::Query{"SELECT 1;"}
+        );
+        // ...
+    }
+    ```
+
+  {% endlist %}
 - Go
 
   {% list tabs %}
@@ -920,7 +1160,7 @@ Below are code examples showing the {{ ydb-short-name }} SDK built-in tools to c
       if err != nil {
         fmt.Printf("unexpected error: %v", err)
       }
-      // work with row
+      // working with row
       _ = row
     }
     ```
@@ -979,7 +1219,6 @@ Below are code examples showing the {{ ydb-short-name }} SDK built-in tools to c
     ```
 
   {% endlist %}
-
 - Java
 
   {% list tabs %}
@@ -987,27 +1226,80 @@ Below are code examples showing the {{ ydb-short-name }} SDK built-in tools to c
   - Native SDK
 
     ```java
+    import tech.ydb.common.transaction.TxMode;
+    import tech.ydb.core.grpc.GrpcTransport;
     import tech.ydb.query.QueryClient;
-    import tech.ydb.query.TxMode;
+    import tech.ydb.query.result.ResultSetReader;
     import tech.ydb.query.tools.QueryReader;
     import tech.ydb.query.tools.SessionRetryContext;
+    import tech.ydb.table.query.Params;
 
-    // ...
-    try (QueryClient queryClient = QueryClient.newClient(transport).build()) {
-        SessionRetryContext retryCtx = SessionRetryContext.create(queryClient).build();
-        QueryReader reader = retryCtx.supplyResult(
-            session -> QueryReader.readFrom(session.createQuery("SELECT 1", TxMode.STALE_RO))
-        );
-        // work with reader
+    public class StaleReadOnlyTxExample {
+
+        public static void main(String[] args) {
+            String connectionString = System.getenv().getOrDefault(
+                    "YDB_CONNECTION_STRING", "grpc://localhost:2136/local");
+
+            try (GrpcTransport transport = GrpcTransport.forConnectionString(connectionString).build();
+                 QueryClient queryClient = QueryClient.newClient(transport).build()) {
+
+                SessionRetryContext retryCtx = SessionRetryContext.create(queryClient).build();
+
+                QueryReader reader = retryCtx.supplyResult(session -> QueryReader.readFrom(
+                        session.createQuery("SELECT 1 AS value", TxMode.STALE_RO, Params.empty())
+                )).join().getValue();
+
+                ResultSetReader rs = reader.getResultSet(0);
+                if (rs.next()) {
+                    System.out.println("Stale RO: SELECT 1 = " + rs.getColumn("value").getInt32());
+                }
+            }
+        }
     }
     ```
 
   - JDBC
 
-    Stale Read-Only from the Query API is **not** configured separately for **standalone** JDBC calls. For **snapshot** reads, call **`Connection.setReadOnly(true)`** (in Spring — `@Transactional(readOnly = true)`). For writes, see [ImplicitTx](#implicittx).
+    The JDBC standard does not support transaction levels other than the [standard ones](https://docs.oracle.com/javase/8/docs/api/constant-values.html#java.sql.Connection.TRANSACTION_NONE). However, the JDBC driver allows setting this mode by specifying a [non-standard constant 32](https://github.com/ydb-platform/ydb-jdbc-driver/blob/v2.3.25/jdbc/src/main/java/tech/ydb/jdbc/YdbConst.java#L142).
+
+    {% note warning %}
+
+    This mode does not support interactive transactions.
+
+    {% endnote %}
+
+
+    ```java
+    import java.sql.Connection;
+    import java.sql.DriverManager;
+    import java.sql.ResultSet;
+    import java.sql.SQLException;
+    import java.sql.Statement;
+
+    public class JdbcStaleReadOnlyTxExample {
+
+        public static void main(String[] args) {
+            String connectionUrl = System.getenv().getOrDefault(
+                    "YDB_JDBC_URL", "jdbc:ydb:grpc://localhost:2136/local");
+
+            try (Connection connection = DriverManager.getConnection(connectionUrl)) {
+                connection.setAutoCommit(true); // mode does not support interactive transactions
+                connection.setReadOnly(true);
+                connection.setTransactionIsolation(32); // STALE_RO in YDB JDBC
+
+                try (Statement statement = connection.createStatement();
+                     ResultSet rs = statement.executeQuery("SELECT 1 AS value")) {
+                    rs.next();
+                    System.out.println("Stale RO: SELECT 1 = " + rs.getInt("value"));
+                }
+            } catch (SQLException e) {
+                throw new RuntimeException(e);
+            }
+        }
+    }
+    ```
 
   {% endlist %}
-
 - Python
 
   {% list tabs %}
@@ -1054,58 +1346,39 @@ Below are code examples showing the {{ ydb-short-name }} SDK built-in tools to c
     ```
 
   {% endlist %}
+- C#
 
-- C++
+  {% list tabs %}
 
-  ```cpp
-  auto settings = NYdb::NQuery::TTxSettings::StaleRO();
-  auto result = session.ExecuteQuery(
-      "SELECT 1",
-      NYdb::NQuery::TTxControl::BeginTx(settings).CommitTx()
-  ).GetValueSync();
-  ```
+  - ADO.NET
 
-- C# (.NET)
+    ```csharp
+    using Ydb.Sdk.Ado;
 
-  {% cut "ADO.NET" %}
+    // StaleRo — data may be slightly outdated relative to the current state;
+    // provides maximum read speed due to relaxed consistency
+    await using var connection = await dataSource.OpenConnectionAsync();
+    await using var transaction = await connection.BeginTransactionAsync(TransactionMode.StaleRo);
+    await using var command = new YdbCommand(connection) { CommandText = "SELECT 1", Transaction = transaction };
+    await using var reader = await command.ExecuteReaderAsync();
+    await transaction.CommitAsync();
+    ```
 
-  ```csharp
-  using Ydb.Sdk.Ado;
-  using Ydb.Sdk.Services.Query;
+  - Entity Framework
 
-  await using var connection = await dataSource.OpenConnectionAsync();
-  await using var transaction = await connection.BeginTransactionAsync(TransactionMode.StaleRo);
-  await using var command = new YdbCommand(connection) { CommandText = "SELECT 1", Transaction = transaction };
-  await using var reader = await command.ExecuteReaderAsync();
-  await transaction.CommitAsync();
-  ```
+    Entity Framework does not support the StaleRo mode directly.
+    Use ydb-dotnet-sdk or ADO.NET for this isolation level.
 
-  {% endcut %}
+  - linq2db
 
-  {% cut "Entity Framework" %}
+    linq2db does not support the StaleRo mode directly.
+    Use ydb-dotnet-sdk or ADO.NET for this isolation level.
 
-  Entity Framework does not support StaleRo mode directly.
-  Use ydb-dotnet-sdk or ADO.NET for this isolation level.
-
-  {% endcut %}
-
-  {% cut "linq2db" %}
-
-  linq2db does not support StaleRo mode directly.
-  Use ydb-dotnet-sdk or ADO.NET for this isolation level.
-
-  {% endcut %}
-
-  ```csharp
-  using Ydb.Sdk.Ado;
-  using Ydb.Sdk.Services.Query;
-
-  var response = await queryClient.ReadAllRows("SELECT 1", txMode: TransactionMode.StaleRo);
-  ```
-
+  {% endlist %}
 - JavaScript
 
-  ```javascript
+
+  ```typescript
   import { sql } from '@ydbjs/query';
 
   // ...
@@ -1117,11 +1390,12 @@ Below are code examples showing the {{ ydb-short-name }} SDK built-in tools to c
 
 - Rust
 
+
   ```rust
   use ydb::QueryTxMode;
 
   let mut qc = client.query_client();
-  // Stale Read-Only is supported only for QueryClient methods that execute a single SQL statement (not for retry_transaction).
+  // Stale Read-Only mode is only supported for such calls on the query client (not for retry_transaction).
   let mut row = qc
       .query_row("SELECT 1 AS one")
       .with_tx_mode(QueryTxMode::StaleReadOnly)
@@ -1129,6 +1403,7 @@ Below are code examples showing the {{ ydb-short-name }} SDK built-in tools to c
   ```
 
 - PHP
+
 
   ```php
   <?php
@@ -1153,6 +1428,41 @@ Below are code examples showing the {{ ydb-short-name }} SDK built-in tools to c
 
 {% list tabs group=lang %}
 
+- C++
+
+  {% list tabs %}
+
+  - Native SDK
+
+    ```cpp
+    #include <ydb-cpp-sdk/client/query/client.h>
+
+    void SnapshotReadOnlyExample(NYdb::NQuery::TSession session) {
+        auto settings = NYdb::NQuery::TTxSettings::SnapshotRO();
+        auto result = session.ExecuteQuery(
+            "SELECT 1",
+            NYdb::NQuery::TTxControl::BeginTx(settings).CommitTx()
+        ).GetValueSync();
+
+        // ...
+    }
+    ```
+
+  - userver
+
+    ```cpp
+    #include <userver/ydb/table.hpp>
+
+    void SnapshotReadOnlyExample(ydb::TableClient& client) {
+        auto result = client.ExecuteQuery(
+            ydb::OperationSettings{.tx_mode = ydb::TransactionMode::kSnapshotRO},
+            ydb::Query{"SELECT 1;"}
+        );
+        // ...
+    }
+    ```
+
+  {% endlist %}
 - Go
 
   {% list tabs %}
@@ -1188,7 +1498,7 @@ Below are code examples showing the {{ ydb-short-name }} SDK built-in tools to c
       if err != nil {
         fmt.Printf("unexpected error: %v", err)
       }
-      // work with row
+      // working with row
       _ = row
     }
     ```
@@ -1229,7 +1539,7 @@ Below are code examples showing the {{ ydb-short-name }} SDK built-in tools to c
       db := sql.OpenDB(connector)
       defer db.Close()
 
-      // Snapshot Read-Only — consistent reads at a point in time
+      // Snapshot Read-Only — provides consistent data read at a specific point in time
       err = retry.DoTx(ctx, db, func(ctx context.Context, tx *sql.Tx) error {
         row := tx.QueryRowContext(ctx, "SELECT 1")
         var result int
@@ -1245,7 +1555,6 @@ Below are code examples showing the {{ ydb-short-name }} SDK built-in tools to c
     ```
 
   {% endlist %}
-
 - Java
 
   {% list tabs %}
@@ -1253,27 +1562,76 @@ Below are code examples showing the {{ ydb-short-name }} SDK built-in tools to c
   - Native SDK
 
     ```java
+    import tech.ydb.common.transaction.TxMode;
+    import tech.ydb.core.grpc.GrpcTransport;
     import tech.ydb.query.QueryClient;
-    import tech.ydb.query.TxMode;
+    import tech.ydb.query.result.ResultSetReader;
     import tech.ydb.query.tools.QueryReader;
     import tech.ydb.query.tools.SessionRetryContext;
+    import tech.ydb.table.query.Params;
 
-    // ...
-    try (QueryClient queryClient = QueryClient.newClient(transport).build()) {
-        SessionRetryContext retryCtx = SessionRetryContext.create(queryClient).build();
-        QueryReader reader = retryCtx.supplyResult(
-            session -> QueryReader.readFrom(session.createQuery("SELECT 1", TxMode.SNAPSHOT_RO))
-        );
-        // work with reader
+    public class SnapshotReadOnlyTxExample {
+
+        public static void main(String[] args) {
+            String connectionString = System.getenv().getOrDefault(
+                    "YDB_CONNECTION_STRING", "grpc://localhost:2136/local");
+
+            try (GrpcTransport transport = GrpcTransport.forConnectionString(connectionString).build();
+                 QueryClient queryClient = QueryClient.newClient(transport).build()) {
+
+                SessionRetryContext retryCtx = SessionRetryContext.create(queryClient).build();
+
+                QueryReader reader = retryCtx.supplyResult(session -> QueryReader.readFrom(
+                        session.createQuery("SELECT 1 AS value", TxMode.SNAPSHOT_RO, Params.empty())
+                )).join().getValue();
+
+                ResultSetReader rs = reader.getResultSet(0);
+                if (rs.next()) {
+                    System.out.println("Snapshot RO: SELECT 1 = " + rs.getColumn("value").getInt32());
+                }
+            }
+        }
     }
     ```
 
   - JDBC
 
-    For **standalone** **read-only** JDBC calls, **snapshot** mode is enabled when **`Connection.setReadOnly(true)`** is set on the connection (in Spring, **`@Transactional(readOnly = true)`** propagates this to the driver when the transaction starts). See [ImplicitTx](#implicittx) for details.
+    The JDBC driver uses the `Snapshot Read-Only` mode for executing all read-only queries, provided that standard transaction modes (TRANSACTION_SERIALIZABLE or REPEATABLE_READ) are used.
+
+
+    ```java
+    import java.sql.Connection;
+    import java.sql.DriverManager;
+    import java.sql.PreparedStatement;
+    import java.sql.ResultSet;
+    import java.sql.SQLException;
+
+    public class JdbcSnapshotReadOnlyTxExample {
+
+        public static void main(String[] args) {
+            String connectionUrl = System.getenv().getOrDefault(
+                    "YDB_JDBC_URL", "jdbc:ydb:grpc://localhost:2136/local");
+
+            try (Connection connection = DriverManager.getConnection(connectionUrl)) {
+                connection.setAutoCommit(false);
+                connection.setReadOnly(true); // Snapshot Read-Only
+                connection.setTransactionIsolation(Connection.TRANSACTION_SERIALIZABLE);
+
+                try (PreparedStatement ps = connection.prepareStatement("SELECT 1 AS value");
+                     ResultSet rs = ps.executeQuery()) {
+                    rs.next();
+                    System.out.println("Snapshot RO: SELECT 1 = " + rs.getInt("value"));
+                }
+
+                connection.commit();
+            } catch (SQLException e) {
+                throw new RuntimeException(e);
+            }
+        }
+    }
+    ```
 
   {% endlist %}
-
 - Python
 
   {% list tabs %}
@@ -1320,57 +1678,37 @@ Below are code examples showing the {{ ydb-short-name }} SDK built-in tools to c
     ```
 
   {% endlist %}
+- C#
 
-- C++
+  {% list tabs %}
 
-  ```cpp
-  auto settings = NYdb::NQuery::TTxSettings::SnapshotRO();
-  auto result = session.ExecuteQuery(
-      "SELECT 1",
-      NYdb::NQuery::TTxControl::BeginTx(settings).CommitTx()
-  ).GetValueSync();
-  ```
+  - ADO.NET
 
-- C# (.NET)
+    ```csharp
+    using Ydb.Sdk.Ado;
 
-  {% cut "ADO.NET" %}
+    await using var connection = await dataSource.OpenConnectionAsync();
+    await using var transaction = await connection.BeginTransactionAsync(TransactionMode.SnapshotRo);
+    await using var command = new YdbCommand(connection) { CommandText = "SELECT 1" };
+    await using var reader = await command.ExecuteReaderAsync();
+    await transaction.CommitAsync();
+    ```
 
-  ```csharp
-  using Ydb.Sdk.Ado;
+  - Entity Framework
 
-  await using var connection = await dataSource.OpenConnectionAsync();
-  await using var transaction = await connection.BeginTransactionAsync(TransactionMode.SnapshotRo);
-  await using var command = new YdbCommand(connection) { CommandText = "SELECT 1" };
-  await using var reader = await command.ExecuteReaderAsync();
-  await transaction.CommitAsync();
-  ```
+    Entity Framework does not support the Snapshot Read-Only mode directly.
+    Use ydb-dotnet-sdk or ADO.NET for this isolation level.
 
-  {% endcut %}
+  - linq2db
 
-  {% cut "Entity Framework" %}
+    linq2db does not support the Snapshot Read-Only mode directly.
+    Use ydb-dotnet-sdk or ADO.NET for this isolation level.
 
-  Entity Framework does not support Snapshot Read-Only mode directly.
-  Use ydb-dotnet-sdk or ADO.NET for this isolation level.
-
-  {% endcut %}
-
-  {% cut "linq2db" %}
-
-  linq2db does not support Snapshot Read-Only mode directly.
-  Use ydb-dotnet-sdk or ADO.NET for this isolation level.
-
-  {% endcut %}
-
-  ```csharp
-  using Ydb.Sdk.Ado;
-  using Ydb.Sdk.Services.Query;
-
-  var response = await queryClient.ReadAllRows("SELECT 1", TransactionMode.SnapshotRo);
-  ```
-
+  {% endlist %}
 - JavaScript
 
-  ```javascript
+
+  ```typescript
   import { sql } from '@ydbjs/query';
 
   // ...
@@ -1381,6 +1719,7 @@ Below are code examples showing the {{ ydb-short-name }} SDK built-in tools to c
   ```
 
 - Rust
+
 
   ```rust
   use ydb::{QueryTransactionOptions, QueryTxMode};
@@ -1401,6 +1740,7 @@ Below are code examples showing the {{ ydb-short-name }} SDK built-in tools to c
   ```
 
 - PHP
+
 
   ```php
   <?php
@@ -1428,6 +1768,41 @@ Below are code examples showing the {{ ydb-short-name }} SDK built-in tools to c
 
 {% list tabs group=lang %}
 
+- C++
+
+  {% list tabs %}
+
+  - Native SDK
+
+    ```cpp
+    #include <ydb-cpp-sdk/client/query/client.h>
+
+    void SnapshotReadWriteExample(NYdb::NQuery::TSession session) {
+        auto settings = NYdb::NQuery::TTxSettings::SnapshotRW();
+        auto result = session.ExecuteQuery(
+            "SELECT 1",
+            NYdb::NQuery::TTxControl::BeginTx(settings).CommitTx()
+        ).GetValueSync();
+
+        // ...
+    }
+    ```
+
+  - userver
+
+    ```cpp
+    #include <userver/ydb/table.hpp>
+
+    void SnapshotReadWriteExample(ydb::TableClient& client) {
+        auto result = client.ExecuteQuery(
+            ydb::OperationSettings{.tx_mode = ydb::TransactionMode::kSnapshotRW},
+            ydb::Query{"SELECT 1;"}
+        );
+        // ...
+    }
+    ```
+
+  {% endlist %}
 - Go
 
   {% list tabs %}
@@ -1463,7 +1838,7 @@ Below are code examples showing the {{ ydb-short-name }} SDK built-in tools to c
       if err != nil {
         fmt.Printf("unexpected error: %v", err)
       }
-      // work with row
+      // working with row
       _ = row
     }
     ```
@@ -1504,7 +1879,8 @@ Below are code examples showing the {{ ydb-short-name }} SDK built-in tools to c
       db := sql.OpenDB(connector)
       defer db.Close()
 
-      // Snapshot Read-Write — consistent reads at a point in time with writes allowed
+      // Snapshot Read-Write — provides consistent data read at a specific point in time
+      // with write capability
       err = retry.DoTx(ctx, db, func(ctx context.Context, tx *sql.Tx) error {
         row := tx.QueryRowContext(ctx, "SELECT 1")
         var result int
@@ -1520,7 +1896,6 @@ Below are code examples showing the {{ ydb-short-name }} SDK built-in tools to c
     ```
 
   {% endlist %}
-
 - Java
 
   {% list tabs %}
@@ -1528,27 +1903,86 @@ Below are code examples showing the {{ ydb-short-name }} SDK built-in tools to c
   - Native SDK
 
     ```java
+    import tech.ydb.common.transaction.TxMode;
+    import tech.ydb.core.grpc.GrpcTransport;
     import tech.ydb.query.QueryClient;
-    import tech.ydb.query.TxMode;
+    import tech.ydb.query.result.ResultSetReader;
     import tech.ydb.query.tools.QueryReader;
     import tech.ydb.query.tools.SessionRetryContext;
+    import tech.ydb.table.query.Params;
 
-    // ...
-    try (QueryClient queryClient = QueryClient.newClient(transport).build()) {
-        SessionRetryContext retryCtx = SessionRetryContext.create(queryClient).build();
-        QueryReader reader = retryCtx.supplyResult(
-            session -> QueryReader.readFrom(session.createQuery("SELECT 1", TxMode.SNAPSHOT_RW))
-        );
-        // work with reader
+    public class SnapshotReadWriteTxExample {
+
+        public static void main(String[] args) {
+            String connectionString = System.getenv().getOrDefault(
+                    "YDB_CONNECTION_STRING", "grpc://localhost:2136/local");
+
+            try (GrpcTransport transport = GrpcTransport.forConnectionString(connectionString).build();
+                 QueryClient queryClient = QueryClient.newClient(transport).build()) {
+
+                SessionRetryContext retryCtx = SessionRetryContext.create(queryClient).build();
+
+                QueryReader reader = retryCtx.supplyResult(session -> QueryReader.readFrom(
+                        session.createQuery("SELECT 1 AS value", TxMode.SNAPSHOT_RW, Params.empty())
+                )).join().getValue();
+
+                ResultSetReader rs = reader.getResultSet(0);
+                if (rs.next()) {
+                    System.out.println("Snapshot RW: SELECT 1 = " + rs.getColumn("value").getInt32());
+                }
+            }
+        }
     }
     ```
 
   - JDBC
 
-    Snapshot Read-Write from the Query API is **not** set separately for **standalone** JDBC calls; for **writes**, the **current** driver implementation uses **Serializable Read/Write** (see [ImplicitTx](#implicittx) and [Serializable](#serializable)).
+    To set the `Snapshot Read-Write` mode, use the standard REPEATABLE_READ mode.
+
+    {% note info %}
+
+    This mode is supported starting from JDBC driver version 2.3.24 and requires explicit enabling via the `repeatableReadEnabled` option.
+
+    {% endnote %}
+
+
+    ```java
+    import java.sql.Connection;
+    import java.sql.DriverManager;
+    import java.sql.PreparedStatement;
+    import java.sql.ResultSet;
+    import java.sql.SQLException;
+    import java.util.Properties;
+
+    public class JdbcSnapshotReadWriteTxExample {
+
+        public static void main(String[] args) {
+            String connectionUrl = System.getenv().getOrDefault(
+                    "YDB_JDBC_URL", "jdbc:ydb:grpc://localhost:2136/local");
+
+            Properties props = new Properties();
+            props.setProperty("repeatableReadEnabled", "true");
+
+            try (Connection connection = DriverManager.getConnection(connectionUrl, props)) {
+                connection.setAutoCommit(false);
+                connection.setReadOnly(false);
+                connection.setTransactionIsolation(Connection.TRANSACTION_REPEATABLE_READ);
+
+                try (PreparedStatement ps = connection.prepareStatement("SELECT 1 AS value");
+                     ResultSet rs = ps.executeQuery()) {
+                    rs.next();
+                    System.out.println("Snapshot RW: SELECT 1 = " + rs.getInt("value"));
+                }
+
+                connection.commit();
+            } catch (SQLException e) {
+                throw new RuntimeException(e);
+            }
+        }
+    }
+    ```
 
   {% endlist %}
-
 - Python
 
   {% list tabs %}
@@ -1595,100 +2029,80 @@ Below are code examples showing the {{ ydb-short-name }} SDK built-in tools to c
     ```
 
   {% endlist %}
+- C#
 
-- C++
+  {% list tabs %}
 
-  ```cpp
-  auto settings = NYdb::NQuery::TTxSettings::SnapshotRW();
-  auto result = session.ExecuteQuery(
-      "SELECT 1",
-      NYdb::NQuery::TTxControl::BeginTx(settings).CommitTx()
-  ).GetValueSync();
-  ```
+  - ADO.NET
 
-- C# (.NET)
+    ```csharp
+    await _ydbDataSource.ExecuteInTransactionAsync(async ydbConnection =>
+        {
+            var ydbCommand = ydbConnection.CreateCommand();
+            ydbCommand.CommandText = """
+                                     UPSERT INTO episodes (series_id, season_id, episode_id, title, air_date)
+                                     VALUES (2, 5, 13, "Test Episode", Date("2018-08-27"))
+                                     """;
+            await ydbCommand.ExecuteNonQueryAsync();
+            ydbCommand.CommandText = """
+                                     INSERT INTO episodes(series_id, season_id, episode_id, title, air_date)
+                                     VALUES
+                                         (2, 5, 21, "Test 21", Date("2018-08-27")),
+                                         (2, 5, 22, "Test 22", Date("2018-08-27"))
+                                     """;
+            await ydbCommand.ExecuteNonQueryAsync();
+        }, TransactionMode.SnapshotRw
+    );
+    ```
 
-  {% cut "ADO.NET" %}
+  - Entity Framework
 
-  ```csharp
-  await _ydbDataSource.ExecuteInTransactionAsync(async ydbConnection =>
-      {
-          var ydbCommand = ydbConnection.CreateCommand();
-          ydbCommand.CommandText = """
-                                   UPSERT INTO episodes (series_id, season_id, episode_id, title, air_date)
-                                   VALUES (2, 5, 13, "Test Episode", Date("2018-08-27"))
-                                   """;
-          await ydbCommand.ExecuteNonQueryAsync();
-          ydbCommand.CommandText = """
-                                   INSERT INTO episodes(series_id, season_id, episode_id, title, air_date)
-                                   VALUES
-                                       (2, 5, 21, "Test 21", Date("2018-08-27")),
-                                       (2, 5, 22, "Test 22", Date("2018-08-27"))
-                                   """;
-          await ydbCommand.ExecuteNonQueryAsync();
-      }, TransactionMode.SnapshotRw
-  );
-  ```
+    ```csharp
+    var strategy = db.Database.CreateExecutionStrategy();
 
-  {% endcut %}
+    strategy.Execute(() =>
+        {
+            using var ctx = new AppDbContext(options);
+            using var tr = ctx.Database.BeginTransaction(IsolationLevel.Snapshot);
 
-  {% cut "EF" %}
+            ctx.Users.AddRange(
+                new User { Name = "Alex", Email = "alex@example.com" },
+                new User { Name = "Kirill", Email = "kirill@example.com" }
+            );
 
-  ```csharp
-  var strategy = db.Database.CreateExecutionStrategy();
+            ctx.SaveChanges();
 
-  strategy.Execute(() =>
-      {
-          using var ctx = new AppDbContext(options);
-          using var tr = ctx.Database.BeginTransaction(IsolationLevel.Snapshot);
+            var users = ctx.Users.OrderBy(u => u.Id).ToList();
+            Console.WriteLine("Users in database:");
+            foreach (var user in users)
+                Console.WriteLine($"- {user.Id}: {user.Name} ({user.Email})");
+          }
+    );
+    ```
 
-          ctx.Users.AddRange(
-              new User { Name = "Alex", Email = "alex@example.com" },
-              new User { Name = "Kirill", Email = "kirill@example.com" }
-          );
+  - linq2db
 
-          ctx.SaveChanges();
+    ```csharp
+    await using var db = new MyYdb(BuildOptions());
+    await using var tr = await db.BeginTransactionAsync(IsolationLevel.Snapshot);
 
-          var users = ctx.Users.OrderBy(u => u.Id).ToList();
-          Console.WriteLine("Users in database:");
-          foreach (var user in users)
-              Console.WriteLine($"- {user.Id}: {user.Name} ({user.Email})");
-        }
-  );
-  ```
+    await db.InsertAsync(new Episode
+    {
+        SeriesId = 2, SeasonId = 5, EpisodeId = 13, Title = "Test Episode", AirDate = new DateTime(2018, 08, 27)
+    });
+    await db.InsertAsync(new Episode
+        { SeriesId = 2, SeasonId = 5, EpisodeId = 21, Title = "Test 21", AirDate = new DateTime(2018, 08, 27) });
+    await db.InsertAsync(new Episode
+        { SeriesId = 2, SeasonId = 5, EpisodeId = 22, Title = "Test 22", AirDate = new DateTime(2018, 08, 27) });
 
-  {% endcut %}
+    await tr.CommitAsync();
+    ```
 
-  {% cut "linq2db" %}
-
-  ```csharp
-  await using var db = new MyYdb(BuildOptions());
-  await using var tr = await db.BeginTransactionAsync(IsolationLevel.Snapshot);
-
-  await db.InsertAsync(new Episode
-  {
-      SeriesId = 2, SeasonId = 5, EpisodeId = 13, Title = "Test Episode", AirDate = new DateTime(2018, 08, 27)
-  });
-  await db.InsertAsync(new Episode
-      { SeriesId = 2, SeasonId = 5, EpisodeId = 21, Title = "Test 21", AirDate = new DateTime(2018, 08, 27) });
-  await db.InsertAsync(new Episode
-      { SeriesId = 2, SeasonId = 5, EpisodeId = 22, Title = "Test 22", AirDate = new DateTime(2018, 08, 27) });
-
-  await tr.CommitAsync();
-  ```
-
-  {% endcut %}
-
-  ```csharp
-  using Ydb.Sdk.Ado;
-  using Ydb.Sdk.Services.Query;
-
-  var response = await queryClient.ReadAllRows("SELECT 1", TransactionMode.SnapshotRw);
-  ```
-
+  {% endlist %}
 - JavaScript
 
-  ```javascript
+
+  ```typescript
   import { sql } from '@ydbjs/query';
 
   // ...
@@ -1699,6 +2113,7 @@ Below are code examples showing the {{ ydb-short-name }} SDK built-in tools to c
   ```
 
 - Rust
+
 
   ```rust
   use ydb::{QueryTransactionOptions, QueryTxMode};
@@ -1720,6 +2135,6 @@ Below are code examples showing the {{ ydb-short-name }} SDK built-in tools to c
 
 - PHP
 
-  Snapshot Read-Write mode is not supported in the PHP SDK.
+  The Snapshot Read-Write mode is not supported in the PHP SDK.
 
 {% endlist %}

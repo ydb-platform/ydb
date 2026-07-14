@@ -148,7 +148,7 @@ Below are code examples for enabling logging in different {{ ydb-short-name }} S
 
     {% endcut %}
 
-    {% cut "Implement obtaining information about server errors `IterateByIssues`" %}
+    {% cut "Implement retrieving information about server errors `IterateByIssues`" %}
 
     When working with {{ ydb-short-name }} via the Go SDK, you can not only enable logging of requests and responses, but also programmatically obtain detailed information about server errors (issues) — additional messages that YDB returns as part of the response when operations fail. To iterate over the list of issues contained in the server response, use the [IterateByIssues](https://pkg.go.dev/github.com/ydb-platform/ydb-go-sdk/v3#IterateByIssues) method.
 
@@ -328,17 +328,40 @@ Below are code examples for enabling logging in different {{ ydb-short-name }} S
 
   - Native SDK
 
-    The {{ ydb-short-name }} Java SDK uses the slf4j library for logging, which allows using different logging levels (`error`, `warn`, `info`, `debug`, `trace`) for one or more loggers. The following loggers are available in the current implementation:
+    {{ ydb-short-name }} Java SDK uses [SLF4J](https://www.slf4j.org/) as a logging facade: the SDK writes messages via the SLF4J API, and the specific output (log4j2, logback, etc.) is added via application dependencies. Place the log4j2 configuration in `src/main/resources/log4j2.xml`.
 
-    * The `tech.ydb.core.grpc` logger provides information about the internal implementation of the gRPC protocol
-    * The `debug` level logs all operations over the gRPC protocol; it is recommended to use only for debugging
-    * The `info` level is recommended for use by default
-    * The `tech.ydb.table.impl` logger at the `debug` level allows tracking the internal state of the YDB driver, in particular the session pool operation.
-    * The `tech.ydb.table.SessionRetryContext` logger at the `debug` level will inform about the number of retries, results of executed queries, execution time of individual retries, and the total execution time of the entire operation
-    * The `tech.ydb.table.Session` logger at the `debug` level provides information about the query text, response status, and execution time for various session operations
+    Maven dependencies (Native SDK + log4j2):
 
-    Enabling and configuring Java SDK loggers depends on the `slf4j-api` implementation used.
-    Here is an example of `log4j2` configuration for the `log4j-slf4j-impl` library
+
+    ```xml
+    <dependencies>
+        <dependency>
+            <groupId>tech.ydb</groupId>
+            <artifactId>ydb-sdk-core</artifactId>
+            <version><!-- актуальная версия --></version>
+        </dependency>
+        <dependency>
+            <groupId>tech.ydb</groupId>
+            <artifactId>ydb-sdk-query</artifactId>
+            <version><!-- актуальная версия --></version>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.logging.log4j</groupId>
+            <artifactId>log4j-slf4j2-impl</artifactId>
+            <version>2.24.3</version>
+        </dependency>
+    </dependencies>
+    ```
+
+
+    The following loggers are available in {{ ydb-short-name }} Java SDK:
+
+    * `tech.ydb.core.grpc` — gRPC transport (`info` by default, `debug` — all RPCs)
+    * `tech.ydb.table.impl` — internal driver state, including the session pool
+    * `tech.ydb.table.SessionRetryContext` — retries, attempt duration
+    * `tech.ydb.table.Session` — query text, status, and execution time
+
+    Example `src/main/resources/log4j2.xml`:
 
 
     ```xml
@@ -369,24 +392,103 @@ Below are code examples for enabling logging in different {{ ydb-short-name }} S
           <AppenderRef ref="Console"/>
         </Logger>
 
-        <Root level="debug" >
+        <Root level="debug">
           <AppenderRef ref="Console"/>
         </Root>
       </Loggers>
     </Configuration>
     ```
 
+
+    Run example — connection and `SELECT 1` with logging enabled:
+
+
+    ```java
+    import tech.ydb.common.transaction.TxMode;
+    import tech.ydb.core.grpc.GrpcTransport;
+    import tech.ydb.query.QueryClient;
+    import tech.ydb.query.result.ResultSetReader;
+    import tech.ydb.query.tools.QueryReader;
+    import tech.ydb.query.tools.SessionRetryContext;
+    import tech.ydb.table.query.Params;
+
+    public class DebugLogsNativeExample {
+
+        public static void main(String[] args) {
+            String connectionString = System.getenv().getOrDefault(
+                    "YDB_CONNECTION_STRING", "grpc://localhost:2136/local");
+
+            try (GrpcTransport transport = GrpcTransport.forConnectionString(connectionString).build();
+                 QueryClient queryClient = QueryClient.newClient(transport).build()) {
+
+                SessionRetryContext retryCtx = SessionRetryContext.create(queryClient).build();
+
+                QueryReader reader = retryCtx.supplyResult(session -> QueryReader.readFrom(
+                        session.createQuery("SELECT 1 AS value", TxMode.NONE, Params.empty())
+                )).join().getValue();
+
+                ResultSetReader rs = reader.getResultSet(0);
+                if (rs.next()) {
+                    System.out.println("SELECT 1 = " + rs.getColumn("value").getInt32());
+                }
+            }
+        }
+    }
+    ```
+
   - JDBC
 
-    The JDBC driver uses the same logging stack via `slf4j`; configure the `tech.ydb.*` loggers the same way as in the native SDK.
+    The JDBC driver uses the same SLF4J stack; configure the `tech.ydb.*` loggers the same way as in the native SDK. Place the log4j2 configuration in `src/main/resources/log4j2.xml` (see XML above). Maven dependencies:
 
-    The same debug logs are available in all other frameworks around JDBC (Spring Boot, ORM, connection pools, etc.): they go to {{ ydb-short-name }} through this driver; just connect the same `slf4j` / log4j2 / logback configuration in the application.
+
+    ```xml
+    <dependencies>
+        <dependency>
+            <groupId>tech.ydb.jdbc</groupId>
+            <artifactId>ydb-jdbc-driver</artifactId>
+            <version><!-- актуальная версия --></version>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.logging.log4j</groupId>
+            <artifactId>log4j-slf4j2-impl</artifactId>
+            <version>2.24.3</version>
+        </dependency>
+    </dependencies>
+    ```
+
+
+    ```java
+    import java.sql.Connection;
+    import java.sql.DriverManager;
+    import java.sql.ResultSet;
+    import java.sql.SQLException;
+    import java.sql.Statement;
+
+    public class DebugLogsJdbcExample {
+
+        public static void main(String[] args) throws SQLException {
+            String url = System.getenv().getOrDefault(
+                    "YDB_JDBC_URL", "jdbc:ydb:grpc://localhost:2136/local");
+
+            try (Connection connection = DriverManager.getConnection(url);
+                 Statement statement = connection.createStatement();
+                 ResultSet rs = statement.executeQuery("SELECT 1 AS value")) {
+
+                rs.next();
+                System.out.println("SELECT 1 = " + rs.getInt("value"));
+            }
+        }
+    }
+    ```
+
+
+    The same debug logs are available in all other frameworks around JDBC (Spring Boot, ORM, connection pools, etc.): they go to {{ ydb-short-name }} through this driver, just add the same `slf4j` / log4j2 / logback configuration in the application.
 
   {% endlist %}
 
 - Python
 
-  The Python SDK uses the standard logging library — `logging`. To enable a specific logging mode:
+  Python SDK uses the standard logging library - `logging`. To enable a specific logging mode:
 
 
   ```python
@@ -397,12 +499,12 @@ Below are code examples for enabling logging in different {{ ydb-short-name }} S
 
 - JavaScript
 
-  For logging events inside the SDK, the [debug](https://www.npmjs.com/package/debug) library is used.
-  To enable logs, set the `DEBUG` environment variable with the SDK event filter value — `DEBUG=ydbjs:*`.
+  The [debug](https://www.npmjs.com/package/debug) library is used for logging events inside the SDK.
+  To enable logs, set the `DEBUG` environment variable to a filter value for SDK events - `DEBUG=ydbjs:*`.
 
 - Rust
 
-  Inside the `ydb` crate, messages go through the standard Rust ecosystem library [`tracing`](https://docs.rs/tracing) (this is the crate name; it also includes regular text logs at debug/trace level, not just "distributed tracing"). To see output in the console, before creating the client, attach a subscriber, for example [`tracing_subscriber::fmt`](https://docs.rs/tracing-subscriber) with the required level (`TRACE` for maximum detail). Example: [`basic-logs.rs`](https://github.com/ydb-platform/ydb-rs-sdk/blob/master/ydb/examples/basic-logs.rs).
+  Inside the `ydb` crate, messages go through the standard Rust ecosystem library [`tracing`](https://docs.rs/tracing) (this is the crate name; it also includes regular text logs at debug/trace level, not just "distributed tracing"). To see output in the console, before creating the client, attach a subscriber, for example [`⟦C3⟧_subscriber::fmt`](https://docs.rs/tracing-subscriber) with the required level (`TRACE` for maximum detail). Example: [`basic-logs.rs`](https://github.com/ydb-platform/ydb-rs-sdk/blob/master/ydb/examples/basic-logs.rs).
 
 
   ```rust
@@ -416,7 +518,7 @@ Below are code examples for enabling logging in different {{ ydb-short-name }} S
 
 - C#
 
-  In the {{ ydb-short-name }} C# SDK, logging is connected via the standard `ILoggerFactory` interface from `Microsoft.Extensions.Logging`. You can pass any implementation — a console logger, Serilog, NLog, and others:
+  In the {{ ydb-short-name }} C# SDK, logging is connected via the standard `ILoggerFactory` interface from `Microsoft.Extensions.Logging`. You can pass any implementation — console logger, Serilog, NLog, and others:
 
 
   ```C#
@@ -455,8 +557,8 @@ Below are code examples for enabling logging in different {{ ydb-short-name }} S
   In the YDB PHP SDK, for logging you need to use a class that implements `\Psr\Log\LoggerInterface`.
   The YDB-PHP-SDK includes built-in loggers in the `YdbPlatform\Ydb\Logger` namespace:
 
-  * `NullLogger` - the default one that outputs nothing
-  * `SimpleStdLogger($level)` - a logger that outputs logs to stderr.
+  * `NullLogger` - default, which outputs nothing
+  * `SimpleStdLogger($level)` - logger that outputs logs to stderr.
 
   Usage example:
 

@@ -1,9 +1,5 @@
 # Project
 
-Before editing, read the nearest `AGENTS.md` to the code you change.
-Directory-local `AGENTS.md` files take priority over this file when they
-conflict.
-
 ## Build & Test
 
 ```bash
@@ -28,5 +24,3 @@ conflict.
 ## C++
 
 - Use C++20 or earlier
-
-

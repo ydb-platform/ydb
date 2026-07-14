@@ -78,7 +78,7 @@ public:
                 YDB_LOG_DEBUG("THive::TTxKillNode::Complete sending reconnect",
                     {"logPrefix", GetLogPrefix()},
                     {"nodeId", NodeId},
-                    {"reconnectActor", Local});
+                    {"local", Local});
                 Self->SendReconnect(Local); // defibrillation
             }
         }

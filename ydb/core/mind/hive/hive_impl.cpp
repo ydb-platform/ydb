@@ -89,13 +89,13 @@ void THive::Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev) {
     if (!PipeClientCache->OnConnect(ev)) {
         YDB_LOG_ERROR("Handle TEvTabletPipe::TEvClientConnected: failed to connect to remote tablet",
             {"logPrefix", GetLogPrefix()},
-            {"remoteTabletId", ev->Get()->TabletId},
+            {"tabletId", ev->Get()->TabletId},
             {"hiveTabletId", TabletID()});
         RestartPipeTx(ev->Get()->TabletId);
     } else {
         YDB_LOG_DEBUG("Handle TEvTabletPipe::TEvClientConnected: connected to remote tablet",
             {"logPrefix", GetLogPrefix()},
-            {"remoteTabletId", ev->Get()->TabletId},
+            {"tabletId", ev->Get()->TabletId},
             {"hiveTabletId", TabletID()});
     }
 }
@@ -122,7 +122,7 @@ void THive::Handle(TEvTabletPipe::TEvClientDestroyed::TPtr& ev) {
     }
     YDB_LOG_DEBUG("Handle TEvTabletPipe::TEvClientDestroyed: client pipe to remote tablet reset",
         {"logPrefix", GetLogPrefix()},
-        {"remoteTabletId", ev->Get()->TabletId},
+        {"tabletId", ev->Get()->TabletId},
         {"hiveTabletId", TabletID()});
     PipeClientCache->OnDisconnect(ev);
     RestartPipeTx(ev->Get()->TabletId);
@@ -468,7 +468,7 @@ void THive::PostponeProcessBootQueue(TDuration after) {
     if (!ProcessBootQueuePostponed || postponeUntil < ProcessBootQueuePostponedUntil) {
         YDB_LOG_DEBUG("PostponeProcessBootQueue:",
             {"logPrefix", GetLogPrefix()},
-            {"after", after});
+            {"duration", after});
         ProcessBootQueuePostponed = true;
         ProcessBootQueuePostponedUntil = postponeUntil;
         Schedule(after, new TEvPrivate::TEvPostponeProcessBootQueue());
@@ -1176,7 +1176,7 @@ void THive::Handle(TEvents::TEvUndelivered::TPtr &ev) {
     YDB_LOG_WARN("THive::Handle TEvents::TEvUndelivered:",
         {"logPrefix", GetLogPrefix()},
         {"senderId", ev->Sender},
-        {"sourceType", ev->Get()->SourceType});
+        {"eventType", ev->Get()->SourceType});
     switch (ev->Get()->SourceType) {
     case TEvLocal::EvBootTablet: {
         // restart boot of the tablet (on different node)
@@ -1684,7 +1684,7 @@ THive::TBestNodeResult THive::FindBestNode(const TTabletInfo& tablet, TNodeId su
         YDB_LOG_TRACE("[FBN] selected node",
             {"logPrefix", GetLogPrefix()},
             {"tablet", tablet},
-            {"selectedNodeId", selectedNode->Id});
+            {"nodeId", selectedNode->Id});
         tablet.BootState = BootStateStarting;
         return selectedNode;
     } else {

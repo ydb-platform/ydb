@@ -1417,6 +1417,8 @@ ydb/tests/functional/tpc/large py3test.[test_tpcds.py] chunk
 ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS0_1DecimalNative.test_tpcds[19]
 ydb/tests/stress/oltp_workload/tests py3test.sole chunk
 ydb/tests/stress/oltp_workload/tests test_workload.py.TestYdbWorkload.test
+ydb/tests/stress/simple_queue/tests py3test.sole chunk
+ydb/tests/stress/simple_queue/tests test_workload.py.TestYdbWorkload.test[light-column]
 ydb/tests/stress/testshard_workload/tests test_workload.py.TestYdbTestShardWorkload.test
 ydb/tests/stress/topic/tests test_workload_topic.py.TestYdbTopicWorkload.test_0
 ydb/tests/stress/topic/tests test_workload_topic.py.TestYdbTopicWorkload.test_1

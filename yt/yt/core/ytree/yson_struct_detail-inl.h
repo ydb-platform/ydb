@@ -500,6 +500,16 @@ inline void PostprocessRecursive(
     // Random class is not postprocessed.
 }
 
+// Fields postprocessed via their own #Postprocess method (e.g. TPolymorphicYsonStruct).
+template <class T>
+    requires requires { typename T::TImplementsYsonStructPostprocess; }
+inline void PostprocessRecursive(
+    T& parameter,
+    const std::function<NYPath::TYPath()>& pathGetter)
+{
+    parameter.Postprocess(pathGetter);
+}
+
 template <CExternallySerializable T>
 inline void PostprocessRecursive(
     T& parameter,

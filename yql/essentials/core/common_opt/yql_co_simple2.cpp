@@ -969,6 +969,11 @@ TExprNode::TPtr CheckIfWorldWithSame(const TExprNode::TPtr& node, TExprContext& 
 }
 
 TExprNode::TPtr CheckIfWithSame(const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx) {
+    static const char OptName[] = "SameBranchesCollapse";
+    if (IsOptimizerDisabled<OptName>(*optCtx.Types)) {
+        return node;
+    }
+
     if (node->Child(node->ChildrenSize() - 1U) == node->Child(node->ChildrenSize() - 2U)) {
         YQL_CLOG(DEBUG, Core) << node->Content() << " with identical branches.";
         auto children = node->ChildrenList();

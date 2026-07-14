@@ -636,13 +636,6 @@ public:
     void InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) override;
 };
 
-class TLocalPgWireServiceInitializer : public IKikimrServicesInitializer {
-public:
-    TLocalPgWireServiceInitializer(const TKikimrRunConfig& runConfig);
-
-    void InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) override;
-};
-
 class TKafkaProxyServiceInitializer : public IKikimrServicesInitializer {
 public:
     template<typename T>
@@ -696,6 +689,13 @@ public:
     void InitializeServices(NActors::TActorSystemSetup *setup, const NKikimr::TAppData *appData) override;
 };
 #endif
+
+class TUdfStoreInitializer: public IKikimrServicesInitializer {
+    TIntrusivePtr<NMiniKQL::IMutableFunctionRegistry> FunctionRegistry;
+public:
+    TUdfStoreInitializer(const TKikimrRunConfig& runConfig, TIntrusivePtr<NMiniKQL::IMutableFunctionRegistry> functionRegistry);
+    void InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) override;
+};
 
 } // namespace NKikimrServicesInitializers
 } // namespace NKikimr

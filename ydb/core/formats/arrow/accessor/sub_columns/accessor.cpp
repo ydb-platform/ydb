@@ -74,7 +74,8 @@ TString TSubColumnsArray::SerializeToString(const TChunkConstructionData& extern
     ui32 columnIdx = 0;
     TMonotonic pred = TMonotonic::Now();
     for (auto&& i : ColumnsData.GetRecords()->GetColumns()) {
-        TChunkConstructionData cData(GetRecordsCount(), nullptr, arrow::binary(), externalInfo.GetDefaultSerializer());
+        TChunkConstructionData cData(
+            GetRecordsCount(), nullptr, ColumnsData.GetStats().GetField(columnIdx)->type(), externalInfo.GetDefaultSerializer());
         auto* cInfo = proto.AddKeyColumns();
         if (ColumnsData.GetStats().GetAccessorType(columnIdx) == IChunkedArray::EType::Dictionary) {
             // Dictionary columns produce [dictionary blob][positions blob]; the split is not

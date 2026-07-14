@@ -59,12 +59,16 @@ public:
 
     void SetHostState(THostIndex hostIndex, EHostState state);
 
+    void OnHostAppended(size_t newHostCount);
+
     [[nodiscard]] const TVChunkConfig& GetConfig() const;
     [[nodiscard]] ui64 GetPBufferUsedSize(THostIndex hostIndex) const;
     [[nodiscard]] TString DebugPrintDirtyMap();
 
     // This vchunk's contribution to the tablet-wide cleanup watermark: the
     // smallest lsn still held in PBuffers, or nullopt when nothing is inflight.
+    // Until the dirty map is restored it returns 0 (the blocking bound), so
+    // the cleanup cannot erase records that are not accounted for yet.
     // Must run on the executor thread.
     [[nodiscard]] std::optional<ui64> GetSafeBarrierForErase() const;
 

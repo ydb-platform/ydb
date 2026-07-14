@@ -12,7 +12,6 @@ class TPagedVectorTest: public TTestBase {
     UNIT_TEST(Test4)
     UNIT_TEST(Test5)
     UNIT_TEST(Test6)
-    // UNIT_TEST(Test7)
     UNIT_TEST(TestAt)
     UNIT_TEST(TestAutoRef)
     UNIT_TEST(TestIterators)
@@ -29,6 +28,7 @@ class TPagedVectorTest: public TTestBase {
     UNIT_TEST(TestEmplaceBackNoncopyable)
     UNIT_TEST(TestClear)
     UNIT_TEST(TestBack)
+    UNIT_TEST(TestIterator)
     UNIT_TEST_SUITE_END();
 
 private:
@@ -225,44 +225,6 @@ private:
         UNIT_ASSERT(v[0] == 4);
         UNIT_ASSERT(v[1] == 25);
     }
-
-    // void Test7() {
-    //     int array1[] = {1, 4, 25};
-    //     int array2[] = {9, 16};
-
-    // typedef NPagedVector::TPagedVector<int, 3> TVectorType;
-
-    // TVectorType v(array1, array1 + 3);
-    // TVectorType::iterator vit;
-    // vit = v.insert(v.begin(), 0); // Insert before first element.
-    // UNIT_ASSERT_VALUES_EQUAL(*vit, 0);
-
-    // vit = v.insert(v.end(), 36); // Insert after last element.
-    // UNIT_ASSERT(*vit == 36);
-
-    // UNIT_ASSERT(v.size() == 5);
-    // UNIT_ASSERT(v[0] == 0);
-    // UNIT_ASSERT(v[1] == 1);
-    // UNIT_ASSERT(v[2] == 4);
-    // UNIT_ASSERT(v[3] == 25);
-    // UNIT_ASSERT(v[4] == 36);
-
-    // // Insert contents of array2 before fourth element.
-    // v.insert(v.begin() + 3, array2, array2 + 2);
-
-    // UNIT_ASSERT(v.size() == 7);
-
-    // UNIT_ASSERT(v[0] == 0);
-    // UNIT_ASSERT(v[1] == 1);
-    // UNIT_ASSERT(v[2] == 4);
-    // UNIT_ASSERT(v[3] == 9);
-    // UNIT_ASSERT(v[4] == 16);
-    // UNIT_ASSERT(v[5] == 25);
-    // UNIT_ASSERT(v[6] == 36);
-
-    // v.clear();
-    // UNIT_ASSERT(v.empty());
-    // }
 
     void TestAt() {
         using NPagedVector::TPagedVector;
@@ -651,6 +613,37 @@ private:
         UNIT_ASSERT_VALUES_EQUAL(v.back(), "3");
         v.pop_back();
         UNIT_ASSERT_VALUES_EQUAL(v.back(), "2");
+    }
+
+    void TestIterator() {
+        using NPagedVector::TPagedVector;
+        TPagedVector<TString, 5> v;
+        for (int i = 0; i < 11; ++i) {
+            v.push_back(ToString(i));
+        }
+
+        v.emplace_back("Hello");
+        v.emplace_back("world");
+
+        auto it = v.begin();
+
+        UNIT_ASSERT_VALUES_EQUAL(it.GetIndex(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(*it, "0");
+
+        ++it;
+
+        UNIT_ASSERT_VALUES_EQUAL(it.GetIndex(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(*it, "1");
+
+        it += 5;
+
+        UNIT_ASSERT_VALUES_EQUAL(it.GetIndex(), 6);
+        UNIT_ASSERT_VALUES_EQUAL(*it, "6");
+
+        it = v.erase(it);
+
+        UNIT_ASSERT_VALUES_EQUAL(it.GetIndex(), 6);
+        UNIT_ASSERT_VALUES_EQUAL(*it, "7");
     }
 };
 

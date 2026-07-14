@@ -119,6 +119,22 @@ private:
 
 ////////////////////////////////////////////////////////////////////////////////
 
+TOracleHostStat::TOracleHostStat(
+    THostIndex index,
+    const THostState& state,
+    EHostHealth health,
+    const THostStat& hostStat,
+    TInstant now)
+    : Index(index)
+    , State(state.State)
+    , Health(health)
+    , InflightByOperation(hostStat.GetInflightByOperation())
+    , Errors(hostStat.GetErrorsInfo(now))
+    , PBufferUsedSize(state.PBufferUsedSize)
+{}
+
+////////////////////////////////////////////////////////////////////////////////
+
 TOracle::TOracle(
     TStorageConfigPtr storageConfig,
     IHostStateController* hostStateController)
@@ -206,6 +222,19 @@ void TOracle::Think(TInstant now)
             }
         }
     }
+}
+
+void TOracle::OnHostAdded()
+{
+    HostStatistics.emplace_back();
+    HostStates.emplace_back();
+    HostsHealths.push_back(EHostHealth::Online);
+    HostsReconnectDelays.emplace_back(MinReconnectDelay, MaxReconnectDelay);
+}
+
+size_t TOracle::GetHostCount() const
+{
+    return HostStates.size();
 }
 
 void TOracle::OnRequestStarted(
@@ -406,6 +435,23 @@ TTimePredictor& TOracle::AccessTimePredictor(EOperation operation)
 const TTimePredictor& TOracle::GetTimePredictor(EOperation operation) const
 {
     return TimePredictors[static_cast<size_t>(operation)];
+}
+
+TVector<TOracleHostStat> TOracle::BuildHostStats(TInstant now) const
+{
+    TVector<TOracleHostStat> stats;
+    stats.reserve(HostStatistics.size());
+    for (THostIndex hostIndex = 0; hostIndex < HostStatistics.size();
+         ++hostIndex)
+    {
+        stats.emplace_back(
+            hostIndex,
+            HostStates[hostIndex],
+            HostsHealths[hostIndex],
+            HostStatistics[hostIndex],
+            now);
+    }
+    return stats;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

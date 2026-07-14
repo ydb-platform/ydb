@@ -1,5 +1,6 @@
 #pragma once
 
+#include "regex_predicate.h"
 #include "resource_pool_settings.h"
 
 #include <unordered_map>
@@ -10,23 +11,31 @@ namespace NKikimr::NResourcePool {
 inline constexpr i64 CLASSIFIER_RANK_OFFSET = 1000;
 inline constexpr i64 CLASSIFIER_COUNT_LIMIT = 1000;
 
+enum class EClassifierAction {
+    Reject /* "reject" */,
+};
+
 struct TClassifierSettings : public TSettingsBase {
     using TBase = TSettingsBase;
-    using TProperty = std::variant<i64*, TString*, std::optional<TString>*>;
+    using TProperty = std::variant<i64*, TString*, std::optional<TString>*, std::optional<TRegexPredicate>*, std::optional<EClassifierAction>*>;
 
     struct TParser : public TBase::TParser {
         void operator()(i64* setting) const;
         void operator()(TString* setting) const;
         void operator()(std::optional<TString>* setting) const;
+        void operator()(std::optional<TRegexPredicate>* setting) const;
+        void operator()(std::optional<EClassifierAction>* setting) const;
     };
 
     struct TExtractor : public TBase::TExtractor {
         TString operator()(i64* setting) const;
         TString operator()(TString* setting) const;
         TString operator()(std::optional<TString>* setting) const;
+        TString operator()(std::optional<TRegexPredicate>* setting) const;
+        TString operator()(std::optional<EClassifierAction>* setting) const;
     };
 
-    bool operator==(const TClassifierSettings& other) const = default;
+    bool operator==(const TClassifierSettings& other) const = delete;
 
     std::unordered_map<TString, TProperty> GetPropertiesMap();
     [[nodiscard]] std::optional<TString> Validate() const;
@@ -34,6 +43,10 @@ struct TClassifierSettings : public TSettingsBase {
     i64 Rank = -1;  // -1 = max rank + CLASSIFIER_RANK_OFFSET
     TString ResourcePool = DEFAULT_POOL_ID;
     std::optional<TString> MemberName;
+    std::optional<TRegexPredicate> HasAppName;
+    std::optional<TRegexPredicate> HasFullScan;
+    std::optional<TRegexPredicate> HasPath;
+    std::optional<EClassifierAction> Action;
 };
 
 }  // namespace NKikimr::NResourcePool

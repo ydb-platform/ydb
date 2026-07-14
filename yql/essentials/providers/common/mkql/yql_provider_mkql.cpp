@@ -2147,7 +2147,7 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
                                                  [&](TRuntimeNode item, TRuntimeNode state) { return ctx.ProgramBuilder.Append(state, item); }),
                     makePartitions);
 
-                return ETypeAnnotationKind::Stream == kind ? MkqlBuildLambda(partition.ListHandlerLambda().Ref(), ctx, {sorted}) : ctx.ProgramBuilder.ToFlow(MkqlBuildLambda(partition.ListHandlerLambda().Ref(), ctx, {ctx.ProgramBuilder.FromFlow(sorted)}));
+                return ETypeAnnotationKind::Stream == kind ? MkqlBuildLambda(partition.ListHandlerLambda().Ref(), ctx, {sorted}) : ctx.ProgramBuilder.ToFlow(MkqlBuildLambda(partition.ListHandlerLambda().Ref(), ctx, {ctx.ProgramBuilder.FromFlow(sorted)}), {});
             }
             case ETypeAnnotationKind::List: {
                 const auto sorted = ctx.ProgramBuilder.Iterator(makePartitions(input), {});

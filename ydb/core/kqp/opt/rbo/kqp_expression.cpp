@@ -1,6 +1,7 @@
 #include "kqp_expression.h"
 #include "kqp_rbo_utils.h"
 
+#include <ydb/core/kqp/opt/cbo/solver/kqp_opt_stat.h>
 #include <yql/essentials/ast/yql_ast_escaping.h>
 #include <yql/essentials/core/yql_expr_optimize.h>
 #include <yql/essentials/core/yql_expr_type_annotation.h>
@@ -28,35 +29,41 @@ TExprNode::TPtr ReplaceArg(TExprNode::TPtr input, TExprNode::TPtr arg, TExprCont
     if (input->IsCallable("Member")) {
         auto member = TCoMember(input);
         // clang-format off
-        return Build<TCoMember>(ctx, input->Pos())
+        auto res = Build<TCoMember>(ctx, input->Pos())
             .Struct(arg)
             .Name(member.Name())
         .Done().Ptr();
         // clang-format on
+        res->SetTypeAnn(input->GetTypeAnn());
+        return res;
     } else if (input->IsCallable()) {
         TVector<TExprNode::TPtr> newChildren;
         for (auto c : input->Children()) {
             newChildren.push_back(ReplaceArg(c, arg, ctx));
         }
         // clang-format off
-        return ctx.Builder(input->Pos())
+        auto res = ctx.Builder(input->Pos())
             .Callable(input->Content())
             .Add(std::move(newChildren))
             .Seal()
         .Build();
         // clang-format on
+        res->SetTypeAnn(input->GetTypeAnn());
+        return res;
     } else if (input->IsList()) {
         TVector<TExprNode::TPtr> newChildren;
         for (auto c : input->Children()) {
             newChildren.push_back(ReplaceArg(c, arg, ctx));
         }
         // clang-format off
-        return ctx.Builder(input->Pos())
+        auto res = ctx.Builder(input->Pos())
             .List()
             .Add(std::move(newChildren))
             .Seal()
         .Build();
         // clang-format on
+        res->SetTypeAnn(input->GetTypeAnn());
+        return res;
     } else {
         return input;
     }
@@ -587,6 +594,27 @@ bool TExpression::MaybeEquiJoinConditionInternal(bool includeExpressions) const 
             return (leftIUs.size() >= 1 && rightIUs.size() >= 1);
         }
     }
+    return false;
+}
+
+bool TExpression::MaybeConstantCondition() const {
+    auto body = Node->ChildPtr(1);
+    if (TCoCompare::Match(body.Get())) {
+        auto left = body->Child(0);
+        auto right = body->Child(1);
+
+        if (!IsConstantExpr(left) && !IsConstantExpr(right)) {
+            return false;
+        }
+
+        auto ius = GetInputIUs(true, false);
+        if (ius.size() != 1) {
+            return false;
+        }
+
+        return true;
+    }
+
     return false;
 }
 

@@ -307,6 +307,7 @@ message TDomainsConfig {
         optional bool DisableBuiltinGroups = 20;
         optional bool DisableBuiltinAccess = 21;
         optional bool HideAuthenticationFailureReasons = 22 [default = true];
+        optional bool AlwaysSetSystemOwner = 23 [default = false];
     }
 
     repeated TDomain Domain = 1;
@@ -395,6 +396,10 @@ message TSelfManagementConfig {
     optional bool AutomaticStateStorageManagement = 24; // the same for state storage
     optional bool AutomaticStateStorageBoardManagement = 25; // the same for state storage board
     optional bool AutomaticSchemeBoardManagement = 26; // the same for scheme board
+
+    // node ids onto which vdisks of static groups may be relocated during self-heal;
+    // empty list means no restriction
+    repeated uint32 StaticGroupSelfHealAllowedNodes = 27;
 }
 
 message TBlobStorageFormatConfig {
@@ -2152,6 +2157,12 @@ message TImmediateControlsConfig {
             Description: "Return error on write/getstatus to non-existent storage channel instead of fallback to MAIN",
             MinValue: 0,
             MaxValue: 1,
+            DefaultValue: 1
+        }];
+        optional uint64 UsePerChannelReadQueues = 5 [(ControlOptions) = {
+            Description: "Use separate KeyValue read request queues per storage channel",
+            MinValue: 0,
+            MaxValue: 1,
             DefaultValue: 0
         }];
     }
@@ -3084,14 +3095,6 @@ message TClientCertificateAuthorization {
     optional string DefaultGroup = 3 [default = "DefaultClientAuth@cert"];
 }
 
-message TLocalPgWireConfig {
-    optional int32 ListeningPort = 1 [default = 5432];
-    optional string SslCertificate = 5 [(Ydb.sensitive) = true];
-    optional string Address = 6 [default = "::"];
-    optional bool TcpNotDelay = 7 [default = true];
-    optional bool EnableLocalPgWire = 8 [default = false];
-}
-
 message TKafkaProxyConfig {
     optional bool EnableKafkaProxy = 1 [default = false];
 
@@ -3253,6 +3256,13 @@ message TOpaqueConfig {
     // Empty
 }
 
+message TUdfStoreConfig {
+    optional bool Enabled = 1 [default = false];
+    optional string KvStorageMedia = 2 [default = "ssd"];
+    optional bool EnableUnsafeNativeUdf = 3 [default = false];
+    optional string UnsafeNativeUdfDir = 4;
+}
+
 message TAppConfig {
     option (NMarkers.Root) = true;
     optional TActorSystemConfig ActorSystemConfig = 1;
@@ -3317,7 +3327,7 @@ message TAppConfig {
     optional bool YamlConfigEnabled = 64;
     optional TConveyorConfig ScanConveyorConfig = 65;
     optional TColumnShardConfig ColumnShardConfig = 66;
-    optional TLocalPgWireConfig LocalPgWireConfig = 69;
+    reserved 69; // LocalPgWireConfig
     optional TAwsCompatibilityConfig AwsCompatibilityConfig = 70;
     optional TKafkaProxyConfig KafkaProxyConfig = 71;
     optional TConveyorConfig CompConveyorConfig = 72;
@@ -3343,6 +3353,7 @@ message TAppConfig {
     optional TGroupedMemoryLimiterConfig CompGroupedMemoryLimiterConfig = 92;
     optional TBlockstoreConfig BlockstoreConfig = 93;
     optional TOpaqueConfig PrivateDatabaseConfig = 94 [(NMarkers.AllowInDatabaseConfig) = true, (NMarkers.OpaqueConfig) = true];
+    optional TUdfStoreConfig UdfStoreConfig = 95;
 
     repeated TNamedConfig NamedConfigs = 100;
     optional string ClusterYamlConfig = 101;

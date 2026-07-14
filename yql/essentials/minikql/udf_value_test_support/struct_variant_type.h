@@ -74,7 +74,7 @@ private:
 
 } // namespace NYql::NUdf::NTest
 
-namespace NKikimr::NMiniKQL::NPrivate {
+namespace NYql {
 
 template <typename... TMembers>
 struct TRandomDataGenerator<NYql::NUdf::NTest::TStructVariant<TMembers...>> {
@@ -99,4 +99,4 @@ private:
     }
 };
 
-} // namespace NKikimr::NMiniKQL::NPrivate
+} // namespace NYql

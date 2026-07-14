@@ -593,6 +593,7 @@ namespace Tests {
             auto& securityConfig = Settings->AppConfig->GetDomainsConfig().GetSecurityConfig();
             appData.EnforceUserTokenRequirement = securityConfig.GetEnforceUserTokenRequirement();
             appData.EnforceUserTokenCheckRequirement = securityConfig.GetEnforceUserTokenCheckRequirement();
+            appData.AlwaysSetSystemOwner = securityConfig.GetAlwaysSetSystemOwner();
             TVector<TString> administrationAllowedSIDs(securityConfig.GetAdministrationAllowedSIDs().begin(), securityConfig.GetAdministrationAllowedSIDs().end());
             appData.AdministrationAllowedSIDs = std::move(administrationAllowedSIDs);
             TVector<TString> registerDynamicNodeAllowedSIDs(securityConfig.GetRegisterDynamicNodeAllowedSIDs().cbegin(), securityConfig.GetRegisterDynamicNodeAllowedSIDs().cend());
@@ -2428,15 +2429,36 @@ namespace Tests {
         UNIT_ASSERT_VALUES_EQUAL(status, NMsgBusProxy::EResponseStatus::MSTATUS_OK);
     }
 
-    NKikimrScheme::TEvLoginResult TClient::Login(TTestActorRuntime& runtime, const TString& user, const TString& password) {
+    NKikimrScheme::TEvLoginResult TClient::Login(TTestActorRuntime& runtime,
+        const TString& user, NLoginProto::ESaslAuthMech::SaslAuthMech authMech,
+        NLoginProto::EHashType::HashType hashType, const TString& hash, const TString& authMessage)
+    {
         TActorId sender = runtime.AllocateEdgeActor();
         TAutoPtr<NSchemeShard::TEvSchemeShard::TEvLogin> evLogin(new NSchemeShard::TEvSchemeShard::TEvLogin());
         evLogin->Record.SetUser(user);
-        evLogin->Record.SetPassword(password);
+        auto& hashesToValidate = *evLogin->Record.MutableHashToValidate();
+        hashesToValidate.SetAuthMech(authMech);
+        hashesToValidate.SetHashType(hashType);
+        hashesToValidate.SetHash(hash);
+        hashesToValidate.SetAuthMessage(authMessage);
 
-        if (auto ldapDomain = runtime.GetAppData().AuthConfig.GetLdapAuthenticationDomain(); user.EndsWith("@" + ldapDomain)) {
-            evLogin->Record.SetExternalAuth(ldapDomain);
-        }
+        const ui64 schemeRoot = GetPatchedSchemeRoot(SchemeRoot, Domain, SupportsRedirect);
+        ForwardToTablet(runtime, schemeRoot, sender, evLogin.Release());
+        TAutoPtr<IEventHandle> handle;
+        auto event = runtime.GrabEdgeEvent<NSchemeShard::TEvSchemeShard::TEvLoginResult>(handle);
+        UNIT_ASSERT(event);
+        return event->Record;
+    }
+
+    NKikimrScheme::TEvLoginResult TClient::LoginExternal(TTestActorRuntime& runtime, const TString& user) {
+        // External (LDAP) authentication: the password is verified by LDAP, not by YDB, so it is passed through as is.
+        const auto ldapDomain = runtime.GetAppData().AuthConfig.GetLdapAuthenticationDomain();
+
+        TActorId sender = runtime.AllocateEdgeActor();
+        TAutoPtr<NSchemeShard::TEvSchemeShard::TEvLogin> evLogin(new NSchemeShard::TEvSchemeShard::TEvLogin());
+        evLogin->Record.SetUser(user);
+        evLogin->Record.SetExternalAuth(ldapDomain);
+
         const ui64 schemeRoot = GetPatchedSchemeRoot(SchemeRoot, Domain, SupportsRedirect);
         ForwardToTablet(runtime, schemeRoot, sender, evLogin.Release());
         TAutoPtr<IEventHandle> handle;

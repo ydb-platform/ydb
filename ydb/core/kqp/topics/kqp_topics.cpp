@@ -37,6 +37,114 @@ static void UpdateKafkaProducerInstanceId(TMaybe<NKafka::TProducerInstanceId>& l
     }
 }
 
+static void UpdateDeferredPublicationOp(
+    TMaybe<NKikimrKqp::TTopicDeferredPublicationRequest::EOp>& lhs,
+    NKikimrKqp::TTopicDeferredPublicationRequest::EOp rhs)
+{
+    if (lhs.Empty()) {
+        lhs = rhs;
+        return;
+    }
+    Y_ENSURE(*lhs == rhs, "DeferredPublication merge requires matching Op");
+}
+
+static void UpdateDeferredPublicationOp(
+    TMaybe<NKikimrKqp::TTopicDeferredPublicationRequest::EOp>& lhs,
+    const TMaybe<NKikimrKqp::TTopicDeferredPublicationRequest::EOp>& rhs)
+{
+    if (rhs.Empty()) {
+        return;
+    }
+    UpdateDeferredPublicationOp(lhs, *rhs);
+}
+
+static void UpdateDeferredPublicationIntId(TMaybe<ui64>& lhs, ui64 rhs)
+{
+    if (lhs.Empty()) {
+        lhs = rhs;
+        return;
+    }
+    Y_ENSURE(*lhs == rhs, "DeferredPublication merge requires matching IntPublicationId");
+}
+
+static void UpdateDeferredPublicationIntId(TMaybe<ui64>& lhs, const TMaybe<ui64>& rhs)
+{
+    if (rhs.Empty()) {
+        return;
+    }
+    UpdateDeferredPublicationIntId(lhs, *rhs);
+}
+
+static void UpdateDeferredPublicationExtId(TMaybe<TString>& lhs, const TString& rhs)
+{
+    if (rhs.empty()) {
+        return;
+    }
+    if (lhs.Empty() || lhs->empty()) {
+        lhs = rhs;
+        return;
+    }
+    Y_ENSURE(*lhs == rhs, "DeferredPublication merge requires matching ExtPublicationId");
+}
+
+static void UpdateDeferredPublicationExtId(TMaybe<TString>& lhs, const TMaybe<TString>& rhs)
+{
+    if (rhs.Empty()) {
+        return;
+    }
+    UpdateDeferredPublicationExtId(lhs, *rhs);
+}
+
+static NKikimrPQ::TPartitionOperation::TWriteOp::TDeferredPublicationApi::EOp MapDeferredPublicationOp(
+    NKikimrKqp::TTopicDeferredPublicationRequest::EOp op)
+{
+    switch (op) {
+        case NKikimrKqp::TTopicDeferredPublicationRequest::Publish:
+            return NKikimrPQ::TPartitionOperation::TWriteOp::TDeferredPublicationApi::Publish;
+        case NKikimrKqp::TTopicDeferredPublicationRequest::Cancel:
+            return NKikimrPQ::TPartitionOperation::TWriteOp::TDeferredPublicationApi::Cancel;
+        case NKikimrKqp::TTopicDeferredPublicationRequest::Unspecified:
+        default:
+            return NKikimrPQ::TPartitionOperation::TWriteOp::TDeferredPublicationApi::Unspecified;
+    }
+}
+
+static void EnsureNoDeferredPublicationOperations(const TTopicPartitionOperations& ops)
+{
+    Y_ENSURE(!ops.HasDeferredPublicationOperations(),
+        "Topic/Kafka operations cannot be mixed with DeferredPublication");
+}
+
+static void EnsureNoTopicKafkaOperations(const TTopicPartitionOperations& ops)
+{
+    Y_ENSURE(!ops.HasReadOperations() && !ops.HasWriteOperations(),
+        "DeferredPublication cannot be mixed with Topic/Kafka operations");
+}
+
+static void EnsurePartitionOperationsNotMixed(const TTopicPartitionOperations& ops)
+{
+    Y_ENSURE(!(ops.HasDeferredPublicationOperations() && (ops.HasReadOperations() || ops.HasWriteOperations())),
+        "DeferredPublication cannot be mixed with Topic/Kafka operations");
+}
+
+static bool HasTopicKafkaOperations(const TTopicOperations& ops)
+{
+    return ops.HasReadOperations() || ops.HasKafkaOperations()
+        || (ops.HasWriteOperations() && !ops.HasDeferredPublicationOperations());
+}
+
+static void EnsureNoDeferredPublicationOperations(const TTopicOperations& ops)
+{
+    Y_ENSURE(!ops.HasDeferredPublicationOperations(),
+        "Topic/Kafka operations cannot be mixed with DeferredPublication");
+}
+
+static void EnsureNoTopicKafkaOperations(const TTopicOperations& ops)
+{
+    Y_ENSURE(!HasTopicKafkaOperations(ops),
+        "DeferredPublication cannot be mixed with Topic/Kafka operations");
+}
+
 //
 // TConsumerOperations
 //
@@ -171,6 +279,7 @@ void TTopicPartitionOperations::AddOperation(const TString& topic,
                                              bool onlyCheckCommitedToFinish,
                                              const TString& readSessionId)
 {
+    EnsureNoDeferredPublicationOperations(*this);
     Y_ENSURE(Topic_.Empty() || Topic_ == topic);
     Y_ENSURE(Partition_.Empty() || Partition_ == partition);
 
@@ -185,6 +294,7 @@ void TTopicPartitionOperations::AddOperation(const TString& topic,
 void TTopicPartitionOperations::AddOperation(const TString& topic, ui32 partition,
                                              TMaybe<ui32> supportivePartition)
 {
+    EnsureNoDeferredPublicationOperations(*this);
     Y_ENSURE(Topic_.Empty() || Topic_ == topic);
     Y_ENSURE(Partition_.Empty() || Partition_ == partition);
 
@@ -199,6 +309,7 @@ void TTopicPartitionOperations::AddOperation(const TString& topic, ui32 partitio
 }
 
 void TTopicPartitionOperations::AddKafkaApiWriteOperation(const TString& topic, ui32 partition, const NKafka::TProducerInstanceId& producerInstanceId) {
+    EnsureNoDeferredPublicationOperations(*this);
     Y_ENSURE(Topic_.Empty() || Topic_ == topic);
     Y_ENSURE(Partition_.Empty() || Partition_ == partition);
 
@@ -213,6 +324,7 @@ void TTopicPartitionOperations::AddKafkaApiWriteOperation(const TString& topic, 
 }
 
 void TTopicPartitionOperations::AddKafkaApiReadOperation(const TString& topic, ui32 partition, const TString& consumerName, ui64 offset) {
+    EnsureNoDeferredPublicationOperations(*this);
     Y_ENSURE(Topic_.Empty() || Topic_ == topic);
     Y_ENSURE(Partition_.Empty() || Partition_ == partition);
 
@@ -224,8 +336,30 @@ void TTopicPartitionOperations::AddKafkaApiReadOperation(const TString& topic, u
     Operations_[consumerName].AddKafkaApiOffsetCommit(consumerName, offset);
 }
 
+void TTopicPartitionOperations::AddDeferredPublicationOperation(
+    const TString& topic,
+    ui32 partition,
+    ui64 tabletId,
+    NKikimrKqp::TTopicDeferredPublicationRequest::EOp op)
+{
+    EnsureNoTopicKafkaOperations(*this);
+    Y_ENSURE(op != NKikimrKqp::TTopicDeferredPublicationRequest::Unspecified,
+        "DeferredPublication operation must be Publish or Cancel");
+    Y_ENSURE(Topic_.Empty() || Topic_ == topic);
+    Y_ENSURE(Partition_.Empty() || Partition_ == partition);
+
+    if (Topic_.Empty()) {
+        Topic_ = topic;
+        Partition_ = partition;
+    }
+
+    SetTabletId(tabletId);
+    UpdateDeferredPublicationOp(DeferredPublicationOp_, op);
+}
+
 void TTopicPartitionOperations::BuildTopicTxs(TTopicOperationTransactions& txs, bool skipConflictCheck)
 {
+    EnsurePartitionOperationsNotMixed(*this);
     Y_ENSURE(TabletId_.Defined());
     Y_ENSURE(Partition_.Defined());
 
@@ -253,7 +387,19 @@ void TTopicPartitionOperations::BuildTopicTxs(TTopicOperationTransactions& txs, 
         NPQ::DowngradeToLegacy(*o);
     }
 
-    if (HasWriteOperations_) {
+    // One partition operation is either deferred publication or a Topic/Kafka write,
+    // not both. Mixing different APIs in one distributed transaction is not supported.
+    if (DeferredPublicationOp_.Defined()) {
+        NKikimrPQ::TPartitionOperation* o = t.tx.MutableOperations()->Add();
+        o->SetPartitionId(*Partition_);
+        o->SetPath(*Topic_);
+
+        auto* write = o->MutableWrite();
+        write->SetSkipConflictCheck(skipConflictCheck);
+        write->MutableDeferredPublication()->SetOp(MapDeferredPublicationOp(*DeferredPublicationOp_));
+        NPQ::DowngradeToLegacy(*o);
+        t.hasWrite = true;
+    } else if (HasWriteOperations_) {
         NKikimrPQ::TPartitionOperation* o = t.tx.MutableOperations()->Add();
         o->SetPartitionId(*Partition_);
         o->SetPath(*Topic_);
@@ -293,6 +439,13 @@ void TTopicPartitionOperations::Merge(const TTopicPartitionOperations& rhs)
     }
 
     HasWriteOperations_ |= rhs.HasWriteOperations_;
+    UpdateDeferredPublicationOp(DeferredPublicationOp_, rhs.DeferredPublicationOp_);
+    EnsurePartitionOperationsNotMixed(*this);
+}
+
+bool TTopicPartitionOperations::HasDeferredPublicationOperations() const
+{
+    return DeferredPublicationOp_.Defined();
 }
 
 ui64 TTopicPartitionOperations::GetTabletId() const
@@ -364,7 +517,7 @@ bool TTopicOperations::IsValid() const
 
 bool TTopicOperations::HasOperations() const
 {
-    return HasReadOperations() || HasWriteOperations();
+    return HasReadOperations() || HasWriteOperations() || HasDeferredPublicationOperations();
 }
 
 bool TTopicOperations::HasReadOperations() const
@@ -380,6 +533,11 @@ bool TTopicOperations::HasWriteOperations() const
 bool TTopicOperations::HasKafkaOperations() const
 {
     return HasKafkaOperations_;
+}
+
+bool TTopicOperations::HasDeferredPublicationOperations() const
+{
+    return DeferredPublicationIntId_.Defined();
 }
 
 bool TTopicOperations::HasWriteId() const
@@ -405,6 +563,21 @@ NKafka::TProducerInstanceId TTopicOperations::GetKafkaProducerInstanceId() const
     return *KafkaProducerInstanceId_;
 }
 
+ui64 TTopicOperations::GetDeferredPublicationIntId() const
+{
+    Y_ENSURE(HasDeferredPublicationOperations());
+    Y_ENSURE(DeferredPublicationIntId_.Defined());
+
+    return *DeferredPublicationIntId_;
+}
+
+const TString& TTopicOperations::GetDeferredPublicationExtId() const
+{
+    Y_ENSURE(HasDeferredPublicationOperations());
+    static const TString emptyExtPublicationId;
+    return DeferredPublicationExtId_.GetOrElse(emptyExtPublicationId);
+}
+
 bool TTopicOperations::TabletHasReadOperations(ui64 tabletId) const
 {
     for (auto& [_, value] : Operations_) {
@@ -426,6 +599,7 @@ void TTopicOperations::AddOperation(const TString& topic,
                                     const TString& readSessionId
                                     )
 {
+    EnsureNoDeferredPublicationOperations(*this);
     TTopicPartition key{topic, partition};
     Operations_[key].AddOperation(topic,
                                   partition,
@@ -441,6 +615,7 @@ void TTopicOperations::AddOperation(const TString& topic,
 void TTopicOperations::AddOperation(const TString& topic, ui32 partition,
                                     TMaybe<ui32> supportivePartition)
 {
+    EnsureNoDeferredPublicationOperations(*this);
     TTopicPartition key{topic, partition};
     Operations_[key].AddOperation(topic, partition, supportivePartition);
     HasWriteOperations_ = true;
@@ -448,6 +623,7 @@ void TTopicOperations::AddOperation(const TString& topic, ui32 partition,
 
 void TTopicOperations::AddKafkaApiWriteOperation(const TString& topic, ui32 partition, const NKafka::TProducerInstanceId& producerInstanceId)
 {
+    EnsureNoDeferredPublicationOperations(*this);
     Y_ENSURE(!KafkaProducerInstanceId_ || *KafkaProducerInstanceId_ == producerInstanceId);
 
     if (KafkaProducerInstanceId_.Empty()) {
@@ -462,10 +638,28 @@ void TTopicOperations::AddKafkaApiWriteOperation(const TString& topic, ui32 part
 
 void TTopicOperations::AddKafkaApiReadOperation(const TString& topic, ui32 partition, const TString& consumerName, ui64 offset)
 {
+    EnsureNoDeferredPublicationOperations(*this);
     TTopicPartition key{topic, partition};
     Operations_[key].AddKafkaApiReadOperation(topic, partition, consumerName, offset);
     HasReadOperations_ = true;
     HasKafkaOperations_ = true;
+}
+
+void TTopicOperations::AddDeferredPublicationOperation(
+    const TString& topic,
+    ui32 partition,
+    ui64 tabletId,
+    NKikimrKqp::TTopicDeferredPublicationRequest::EOp op,
+    ui64 intPublicationId,
+    const TString& extPublicationId)
+{
+    EnsureNoTopicKafkaOperations(*this);
+    UpdateDeferredPublicationIntId(DeferredPublicationIntId_, intPublicationId);
+    UpdateDeferredPublicationExtId(DeferredPublicationExtId_, extPublicationId);
+
+    TTopicPartition key{topic, partition};
+    Operations_[key].AddDeferredPublicationOperation(topic, partition, tabletId, op);
+    HasWriteOperations_ = true;
 }
 
 void TTopicOperations::FillSchemeCacheNavigate(NSchemeCache::TSchemeCacheNavigate& navigate,
@@ -627,6 +821,14 @@ void TTopicOperations::BuildTopicTxs(TTopicOperationTransactions& txs)
 
 void TTopicOperations::Merge(const TTopicOperations& rhs)
 {
+    // Merging accumulates operations from the same API within one transaction
+    // (e.g. multiple Topic offset commits). Mixing Topic, Kafka, and DeferredPublication
+    // APIs in one transaction is not supported.
+    Y_ENSURE(!(HasDeferredPublicationOperations() && HasTopicKafkaOperations(rhs)),
+        "DeferredPublication cannot be merged with Topic/Kafka operations");
+    Y_ENSURE(!(rhs.HasDeferredPublicationOperations() && HasTopicKafkaOperations(*this)),
+        "Topic/Kafka operations cannot be merged with DeferredPublication");
+
     for (auto& [key, value] : rhs.Operations_) {
         Operations_[key].Merge(value);
     }
@@ -635,6 +837,9 @@ void TTopicOperations::Merge(const TTopicOperations& rhs)
     HasReadOperations_ |= rhs.HasReadOperations_;
     HasWriteOperations_ |= rhs.HasWriteOperations_;
     HasKafkaOperations_ |= rhs.HasKafkaOperations_;
+
+    UpdateDeferredPublicationIntId(DeferredPublicationIntId_, rhs.DeferredPublicationIntId_);
+    UpdateDeferredPublicationExtId(DeferredPublicationExtId_, rhs.DeferredPublicationExtId_);
 
     MergeSkipConflictCheck(rhs.SkipConflictCheck_);
     MergeTrackProducerId(rhs.TrackProducerId_);
@@ -654,7 +859,8 @@ TSet<ui64> TTopicOperations::GetSendingTabletIds() const
     TSet<ui64> ids;
     for (auto& [_, operations] : Operations_) {
         if (!operations.HasReadOperations() &&
-            operations.HasWriteOperations() && CalcSkipConflictCheck()) {
+            operations.HasWriteOperations() && CalcSkipConflictCheck() &&
+            !operations.HasDeferredPublicationOperations()) {
             continue;
         }
 
@@ -707,6 +913,23 @@ bool TTopicOperations::CalcSkipConflictCheck() const
 bool TTopicOperations::ShouldOmitPeerTopicTabletsForPredicateExchange() const
 {
     return CalcSkipConflictCheck() && !HasReadOperations();
+}
+
+void ValidateDeferredPublicationRequest(const NKikimrKqp::TTopicDeferredPublicationRequest& request)
+{
+    Y_ENSURE(request.HasOp(), "DeferredPublication request must have Op");
+    const auto op = request.GetOp();
+    Y_ENSURE(op == NKikimrKqp::TTopicDeferredPublicationRequest::Publish
+            || op == NKikimrKqp::TTopicDeferredPublicationRequest::Cancel,
+        "DeferredPublication request must specify Publish or Cancel");
+    Y_ENSURE(request.HasIntPublicationId(), "DeferredPublication request must have IntPublicationId");
+    Y_ENSURE(!request.GetDestinations().empty(), "DeferredPublication request must have at least one destination");
+
+    for (const auto& destination : request.GetDestinations()) {
+        Y_ENSURE(destination.HasPath(), "DeferredPublication destination must have Path");
+        Y_ENSURE(destination.HasPartitionId(), "DeferredPublication destination must have PartitionId");
+        Y_ENSURE(destination.HasTabletId(), "DeferredPublication destination must have TabletId");
+    }
 }
 
 }

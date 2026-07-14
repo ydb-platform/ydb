@@ -13,7 +13,6 @@
 #include "schemeshard_forced_compaction.h"
 #include "schemeshard_import.h"
 #include "schemeshard_info_types.h"
-#include "schemeshard_login_helper.h"
 #include "schemeshard_path.h"
 #include "schemeshard_path_element.h"
 #include "schemeshard_private.h"
@@ -427,8 +426,6 @@ public:
     bool EnableExternalSourceSchemaInference = false;
     bool EnableMoveColumnTable = false;
 
-    bool IsOldArgonHashFormatMigrationCompleted = false;
-
     TShardDeleter ShardDeleter;
 
     // Counter-strike stuff
@@ -444,6 +441,7 @@ public:
     ui32 MaxCdcInitialScanShardsInFlight = 10;
     ui32 MaxRestoreBuildIndexShardsInFlight = 0;
     ui32 MaxBuildIndexShardsInFlight = 0;
+    ui32 MaxStoredIndexBuilds = 0;
 
     TDuration StatsMaxExecuteTime;
     TDuration StatsBatchTimeout;
@@ -938,6 +936,7 @@ public:
     void PersistRemoveKesusInfo(NIceDb::TNiceDb& db, TPathId pathId);
     void PersistRemoveTableIndex(NIceDb::TNiceDb& db, TPathId tableId);
     void PersistRemoveTable(NIceDb::TNiceDb& db, TPathId tableId, const TActorContext& ctx);
+    void ClearBackupRestoreHistory(NIceDb::TNiceDb& db, TPathId pathId, const TMap<TTxId, TTableInfo::TBackupRestoreResult>& history);
     void PersistRevertedMigration(NIceDb::TNiceDb& db, TPathId pathId, TTabletId abandonedSchemeShardId);
     void UpdateDiskSpaceUsage(NIceDb::TNiceDb& db, TPathId pathId, const TPartitionStats& newPartitionStats, const TPartitionStats& oldPartitionStats, const TActorContext &ctx);
 
@@ -1060,6 +1059,10 @@ public:
     struct TTxMonitoring;
     //OnRenderAppHtmlPage
 
+    struct TTxMoveShardToStoragePool;
+    NTabletFlatExecutor::ITransaction* CreateTxMoveShardToStoragePool(TEvPrivate::TEvMoveShardToStoragePool::TPtr& ev);
+    void Handle(TEvPrivate::TEvMoveShardToStoragePool::TPtr& ev, const TActorContext& ctx);
+
     struct TTxInit;
     NTabletFlatExecutor::ITransaction* CreateTxInit();
 
@@ -1109,9 +1112,6 @@ public:
 
     struct TTxCleanDroppedPaths;
     NTabletFlatExecutor::ITransaction* CreateTxCleanDroppedPaths();
-
-    struct TTxUserHashesMigration;
-    NTabletFlatExecutor::ITransaction* CreateTxUserHashesMigration();
 
     void ScheduleCleanDroppedPaths();
     void Handle(TEvPrivate::TEvCleanDroppedPaths::TPtr& ev, const TActorContext& ctx);
@@ -1259,8 +1259,6 @@ public:
 
     struct TTxLogin;
     NTabletFlatExecutor::ITransaction* CreateTxLogin(TEvSchemeShard::TEvLogin::TPtr &ev);
-    struct TTxLoginFinalize;
-    NTabletFlatExecutor::ITransaction* CreateTxLoginFinalize(TEvPrivate::TEvLoginFinalize::TPtr &ev);
     struct TTxListUsers;
     NTabletFlatExecutor::ITransaction* CreateTxListUsers(TEvSchemeShard::TEvListUsers::TPtr &ev);
 
@@ -1579,7 +1577,6 @@ public:
     void Handle(NConsole::TEvConsole::TEvConfigNotificationRequest::TPtr &ev, const TActorContext &ctx);
 
     void Handle(TEvSchemeShard::TEvLogin::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvPrivate::TEvLoginFinalize::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvSchemeShard::TEvListUsers::TPtr& ev, const TActorContext& ctx);
 
     void Handle(TEvPrivate::TEvProgressTablePartitionsFormatSweep::TPtr& ev, const TActorContext& ctx);
@@ -1612,6 +1609,7 @@ public:
     TSet<std::pair<TInstant, ui64>> ExportsByTime;
     THashMap<TTxId, std::pair<ui64, ui32>> TxIdToExport;
     THashMap<TTxId, THashSet<ui64>> TxIdToDependentExport;
+    THashMap<TTxId, THashSet<TIndexBuildId>> TxIdToDependentIndexBuild;
     // This set is needed to kill all the running scheme uploaders on SchemeShard death.
     THashSet<TActorId> RunningExportSchemeUploaders;
 
@@ -1852,32 +1850,16 @@ public:
     void PersistBuildIndexAddIssue(NIceDb::TNiceDb& db, TIndexBuildInfo& indexInfo, const TString& issue);
     void PersistBuildIndexCancelRequest(NIceDb::TNiceDb& db, const TIndexBuildInfo& indexInfo);
 
-    void PersistBuildIndexAlterMainTableTxId(NIceDb::TNiceDb& db, const TIndexBuildInfo& indexInfo);
-    void PersistBuildIndexAlterMainTableTxStatus(NIceDb::TNiceDb& db, const TIndexBuildInfo& indexInfo);
-    void PersistBuildIndexAlterMainTableTxDone(NIceDb::TNiceDb& db, const TIndexBuildInfo& indexInfo);
-
-    void PersistBuildIndexCreateBuildSequenceTxId(NIceDb::TNiceDb& db, const TIndexBuildInfo& indexInfo);
-    void PersistBuildIndexCreateBuildSequenceTxStatus(NIceDb::TNiceDb& db, const TIndexBuildInfo& indexInfo);
-    void PersistBuildIndexCreateBuildSequenceTxDone(NIceDb::TNiceDb& db, const TIndexBuildInfo& indexInfo);
-
     // Persists the fulltext rowid auto-provisioning intent + child-build linkage fields together.
     void PersistBuildIndexFulltextProvisioning(NIceDb::TNiceDb& db, const TIndexBuildInfo& indexInfo);
 
-    void PersistBuildIndexInitiateTxId(NIceDb::TNiceDb& db, const TIndexBuildInfo& indexInfo);
-    void PersistBuildIndexInitiateTxStatus(NIceDb::TNiceDb& db, const TIndexBuildInfo& indexInfo);
-    void PersistBuildIndexInitiateTxDone(NIceDb::TNiceDb& db, const TIndexBuildInfo& indexInfo);
-
-    void PersistBuildIndexLockTxId(NIceDb::TNiceDb& db, const TIndexBuildInfo& indexInfo);
-    void PersistBuildIndexLockTxStatus(NIceDb::TNiceDb& db, const TIndexBuildInfo& indexInfo);
-    void PersistBuildIndexLockTxDone(NIceDb::TNiceDb& db, const TIndexBuildInfo& indexInfo);
-
-    void PersistBuildIndexApplyTxId(NIceDb::TNiceDb& db, const TIndexBuildInfo& indexInfo);
-    void PersistBuildIndexApplyTxStatus(NIceDb::TNiceDb& db, const TIndexBuildInfo& indexInfo);
-    void PersistBuildIndexApplyTxDone(NIceDb::TNiceDb& db, const TIndexBuildInfo& indexInfo);
-
-    void PersistBuildIndexUnlockTxId(NIceDb::TNiceDb& db, const TIndexBuildInfo& indexInfo);
-    void PersistBuildIndexUnlockTxStatus(NIceDb::TNiceDb& db, const TIndexBuildInfo& indexInfo);
-    void PersistBuildIndexUnlockTxDone(NIceDb::TNiceDb& db, const TIndexBuildInfo& indexInfo);
+    void PersistBuildIndexAlterMainTableTx(NIceDb::TNiceDb& db, const TIndexBuildInfo& indexInfo);
+    void PersistBuildIndexCreateBuildSequenceTx(NIceDb::TNiceDb& db, const TIndexBuildInfo& indexInfo);
+    void PersistBuildIndexInitiateTx(NIceDb::TNiceDb& db, const TIndexBuildInfo& indexInfo);
+    void PersistBuildIndexLockTx(NIceDb::TNiceDb& db, const TIndexBuildInfo& indexInfo);
+    void PersistBuildIndexApplyTx(NIceDb::TNiceDb& db, const TIndexBuildInfo& indexInfo);
+    void PersistBuildIndexUnlockTx(NIceDb::TNiceDb& db, const TIndexBuildInfo& indexInfo);
+    void PersistBuildIndexDropColumnsTx(NIceDb::TNiceDb& db, const TIndexBuildInfo& indexInfo);
 
     void PersistBuildIndexShardStatusInitiate(NIceDb::TNiceDb& db, TIndexBuildId buildId, const TShardIdx& shardIdx, const TIndexBuildShardStatus& shardStatus);
     void PersistBuildIndexShardStatus(NIceDb::TNiceDb& db, TIndexBuildId buildId, const TShardIdx& shardIdx, const TIndexBuildShardStatus& shardStatus);
@@ -1885,10 +1867,6 @@ public:
     void PersistBuildIndexShardStatusFulltext(NIceDb::TNiceDb& db, TIndexBuildId buildId, const TShardIdx& shardIdx, const TIndexBuildShardStatus& shardStatus);
     void PersistBuildIndexShardStatusReset(NIceDb::TNiceDb& db, TIndexBuildId buildId, const TShardIdx& shardIdx, TIndexBuildShardStatus& shardStatus);
     void PersistBuildIndexShardStatusReset(NIceDb::TNiceDb& db, TIndexBuildInfo& info);
-
-    void PersistBuildIndexDropColumnsTxId(NIceDb::TNiceDb& db, const TIndexBuildInfo& indexInfo);
-    void PersistBuildIndexDropColumnsTxStatus(NIceDb::TNiceDb& db, const TIndexBuildInfo& indexInfo);
-    void PersistBuildIndexDropColumnsTxDone(NIceDb::TNiceDb& db, const TIndexBuildInfo& indexInfo);
 
     void PersistBuildIndexProcessed(NIceDb::TNiceDb& db, const TIndexBuildInfo& indexInfo);
     void PersistBuildIndexBilled(NIceDb::TNiceDb& db, const TIndexBuildInfo& indexInfo);
@@ -1938,6 +1916,9 @@ public:
         class TTxCreateSetColumnConstraint;
         struct TTxProgressSetColumnConstraint;
         struct TTxGetSetColumnConstraint;
+        struct TTxListSetColumnConstraint;
+        struct TTxForgetSetColumnConstraint;
+        struct TTxCancelSetColumnConstraint;
     };
 
     NTabletFlatExecutor::ITransaction* CreateTxCreate(TEvIndexBuilder::TEvCreateRequest::TPtr& ev);
@@ -1990,9 +1971,15 @@ public:
     // Begin SetColumnConstraint
     void Handle(TEvSetColumnConstraint::TEvCreateRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvSetColumnConstraint::TEvGetRequest::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvSetColumnConstraint::TEvListRequest::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvSetColumnConstraint::TEvForgetRequest::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvSetColumnConstraint::TEvCancelRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvValidateRowConditionResponse::TPtr& ev, const TActorContext& ctx);
     NTabletFlatExecutor::ITransaction* CreateTxCreateSetColumnConstraint(TEvSetColumnConstraint::TEvCreateRequest::TPtr& ev);
     NTabletFlatExecutor::ITransaction* CreateTxGetSetColumnConstraint(TEvSetColumnConstraint::TEvGetRequest::TPtr& ev);
+    NTabletFlatExecutor::ITransaction* CreateTxListSetColumnConstraint(TEvSetColumnConstraint::TEvListRequest::TPtr& ev);
+    NTabletFlatExecutor::ITransaction* CreateTxForgetSetColumnConstraint(TEvSetColumnConstraint::TEvForgetRequest::TPtr& ev);
+    NTabletFlatExecutor::ITransaction* CreateTxCancelSetColumnConstraint(TEvSetColumnConstraint::TEvCancelRequest::TPtr& ev);
     NTabletFlatExecutor::ITransaction* CreateTxSetColumnConstraintProgress(TIndexBuildId id);
     NTabletFlatExecutor::ITransaction* CreateTxReplyAllocateSetColumnConstraint(TEvTxAllocatorClient::TEvAllocateResult::TPtr& ev);
     NTabletFlatExecutor::ITransaction* CreateTxReplyModifySetColumnConstraint(TEvSchemeShard::TEvModifySchemeTransactionResult::TPtr& ev);
@@ -2021,7 +2008,10 @@ public:
     void PersistSetColumnConstraintUnlockTxStatus(NIceDb::TNiceDb& db, const TSetColumnConstraintOperationInfo& operationInfo);
     void PersistSetColumnConstraintUnlockTxDone(NIceDb::TNiceDb& db, const TSetColumnConstraintOperationInfo& operationInfo);
     void PersistSetColumnConstraintValidationFailedValue(NIceDb::TNiceDb& db, const TSetColumnConstraintOperationInfo& operationInfo);
+    void PersistSetColumnConstraintCancellation(NIceDb::TNiceDb& db, const TSetColumnConstraintOperationInfo& operationInfo);
     void PersistSetColumnConstraintShardDone(NIceDb::TNiceDb& db, TIndexBuildId operationId, TShardIdx shardIdx, const TSetColumnConstraintOperationInfo& operationInfo);
+    void PersistSetColumnConstraintForget(NIceDb::TNiceDb& db, const TSetColumnConstraintOperationInfo& info);
+    void ForgetSetColumnConstraint(NIceDb::TNiceDb& db, const TSetColumnConstraintOperationInfo& info);
 
     void AddSetColumnConstraintOperation(const std::shared_ptr<TSetColumnConstraintOperationInfo>& indexInfo);
 
@@ -2216,7 +2206,6 @@ public:
     void SetShardsQuota(ui64 value) override;
 
     NLogin::TLoginProvider LoginProvider;
-    TActorId LoginHelper;
 
     THolder<TRootShredManager> RootShredManager = nullptr;
     THolder<TTenantShredManager> TenantShredManager = nullptr;
@@ -2240,8 +2229,6 @@ private:
     const TDomainsInfo::TDomain& GetDomainDescription(const TActorContext &ctx) const;
     NKikimrSubDomains::TProcessingParams CreateRootProcessingParams(const TActorContext &ctx);
     static NTabletPipe::TClientConfig GetPipeClientConfig();
-
-    static bool IsLoginCacheEnabled();
 
 public:
     static const NKikimrConfig::TDomainsConfig& GetDomainsConfig();

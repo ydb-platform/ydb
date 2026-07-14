@@ -31,6 +31,9 @@ void TAssetsServlet::DoGet(const TRequest& req, TResponse& resp) const
 
     TString lastModified = FormatHttpDate(asset.LastModified);
     resp.Headers.AddHeader("Last-Modified", lastModified);
+    resp.Headers.AddHeader("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0");
+    resp.Headers.AddHeader("Pragma", "no-cache");
+    resp.Headers.AddHeader("Expires", "0");
     if (asset.ContentType) {
         resp.ContentType = asset.ContentType;
     }
@@ -58,17 +61,6 @@ TString TAssetsServlet::SafeFilePath(const TString& basePath, TStringBuf reqPath
     return basePath + TStringBuf(b, e);
 }
 
-bool TAssetsServlet::IsCachedOnClient(const TRequest& req, const TAsset& asset) const
-{
-    const TString* value = req.RD.HeaderIn("If-Modified-Since");
-    if (value) {
-        time_t mt = parse_http_date(*value);
-        return (mt >= asset.LastModified);
-    }
-
-    return false;
-}
-
 void TAssetsServlet::LoadAsset(const TRequest& req, TAsset* asset) const
 {
     TString filePath = SafeFilePath(BaseDir_, req.RD.ScriptName());
@@ -86,10 +78,6 @@ void TAssetsServlet::LoadAsset(const TRequest& req, TAsset* asset) const
 
     asset->LastModified = stat.MTime;
     asset->ContentType = mimetypeByExt(filePath.data());
-
-    if (IsCachedOnClient(req, *asset)) {
-        ythrow THttpError(HTTP_NOT_MODIFIED);
-    }
 
     TFile file(filePath, EOpenModeFlag::RdOnly);
     asset->Data = TBlob::FromFile(file);

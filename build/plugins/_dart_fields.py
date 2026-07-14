@@ -62,11 +62,6 @@ def with_fields(fields):
         def innermost(*args, **kwargs):
             func(fields, *args, **kwargs)
 
-        # Drop annotation for injected fields argument
-        annotations = getattr(func, '__annotations__', {}).copy()
-        annotations.pop('fields', None)
-        innermost.__annotations__ = annotations
-
         return innermost
 
     return inner

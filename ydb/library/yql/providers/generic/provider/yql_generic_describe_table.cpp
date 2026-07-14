@@ -425,45 +425,44 @@ TIssues TGenericDescribeTableTransformer::DescribeTableFromConnector(const TGene
         client = State_->GenericClient,
         timeout = State_->Configuration->DescribeTableTimeout
     ](const NThreading::TFuture<NConnector::NApi::TDescribeTableRequest>& f1) mutable {
-    try {
-    NThreading::TFuture<NConnector::NApi::TDescribeTableRequest> f2(f1);
-    auto request = f2.ExtractValueSync();
-    desc->DataSourceInstance = request.data_source_instance();
-
-    client->DescribeTable(request, timeout).Subscribe(
-    [desc, tableAddress, promise, client](const NConnector::TDescribeTableAsyncResult& f1) mutable {
         try {
-        NConnector::TDescribeTableAsyncResult f2(f1);
-        auto result = f2.ExtractValueSync();
+            NThreading::TFuture<NConnector::NApi::TDescribeTableRequest> f2(f1);
+            auto request = f2.ExtractValueSync();
+            desc->DataSourceInstance = request.data_source_instance();
 
-        // Check transport error
-        if (!result.Status.Ok()) {
-            desc->Issues.AddIssue(TStringBuilder()
-                << "Call DescribeTable for table " << tableAddress.ToString() << ": "
-                << result.Status.ToDebugString());
-            promise.SetValue();
-            return;
-        }
+            client->DescribeTable(request, timeout).Subscribe([desc, tableAddress, promise, client](const NConnector::TDescribeTableAsyncResult& f1) mutable {
+                try {
+                    NConnector::TDescribeTableAsyncResult f2(f1);
+                    auto result = f2.ExtractValueSync();
 
-        // Check logical error
-        if (!NConnector::IsSuccess(*result.Response)) {
-            desc->Issues.AddIssues(NConnector::ErrorToIssues(
-                result.Response->error(),
-                TStringBuilder() << "Call DescribeTable for table " << tableAddress.ToString() << ": "));
-            promise.SetValue();
-            return;
-        }
+                    // Check transport error
+                    if (!result.Status.Ok()) {
+                        desc->Issues.AddIssue(TStringBuilder()
+                            << "Call DescribeTable for table " << tableAddress.ToString() << ": "
+                            << result.Status.ToDebugString());
+                        promise.SetValue();
+                        return;
+                    }
 
-        // Preserve schema for the further usage
-        desc->Schema = result.Response->schema();
-        promise.SetValue();
+                    // Check logical error
+                    if (!NConnector::IsSuccess(*result.Response)) {
+                        desc->Issues.AddIssues(NConnector::ErrorToIssues(
+                            result.Response->error(),
+                            TStringBuilder() << "Call DescribeTable for table " << tableAddress.ToString() << ": "));
+                        promise.SetValue();
+                        return;
+                    }
+
+                    // Preserve schema for the further usage
+                    desc->Schema = result.Response->schema();
+                    promise.SetValue();
+                } catch(const std::exception&) {
+                    promise.SetException(std::current_exception());
+                }
+            });
         } catch(const std::exception&) {
             promise.SetException(std::current_exception());
         }
-    });
-    } catch(const std::exception&) {
-        promise.SetException(std::current_exception());
-    }
     });
 
     return {};

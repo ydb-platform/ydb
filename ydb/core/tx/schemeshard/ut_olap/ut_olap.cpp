@@ -1,8 +1,10 @@
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/local_indexes.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/olap_helpers.h>
+#include <ydb/core/testlib/actors/block_events.h>
 #include <ydb/core/tx/columnshard/columnshard.h>
 #include <ydb/core/tx/columnshard/test_helper/columnshard_ut_common.h>
+#include <ydb/core/tx/columnshard/test_helper/shard_reader.h>
 #include <ydb/core/tx/columnshard/hooks/testing/controller.h>
 #include <ydb/core/tx/columnshard/engines/changes/abstract/abstract.h>
 #include <ydb/core/formats/arrow/arrow_helpers.h>
@@ -20,6 +22,21 @@ namespace {
 
 namespace NTypeIds = NScheme::NTypeIds;
 using TTypeInfo = NScheme::TTypeInfo;
+
+bool IsSchemeTxCompleted(TTestBasicRuntime& runtime, ui64 txId) {
+    const TActorId subscriber = NSchemeShardUT_Private::CreateNotificationSubscriber(runtime, TTestTxConfig::SchemeShard);
+    const TActorId sender = runtime.AllocateEdgeActor();
+    runtime.Send(new IEventHandle(subscriber, sender, new TEvSchemeShard::TEvNotifyTxCompletion(txId)));
+
+    TAutoPtr<IEventHandle> handle;
+    const auto* ev = runtime.GrabEdgeEventIf<TEvSchemeShard::TEvNotifyTxCompletionResult>(
+        handle,
+        [txId](const TEvSchemeShard::TEvNotifyTxCompletionResult& msg) {
+            return msg.Record.GetTxId() == txId;
+        },
+        TDuration::Zero());
+    return ev != nullptr;
+}
 
 // A ColumnShard test controller that can pause compaction after every single compaction wave. The shard
 // re-schedules compaction as soon as one completes, so once enabled it would normally collapse all portions
@@ -1928,6 +1945,93 @@ Y_UNIT_TEST_SUITE(TOlap) {
         }
 
         CheckQuotaExceedance(runtime, TTestTxConfig::SchemeShard, "/MyRoot/SomeDatabase", false, DEBUG_HINT);
+    }
+
+    // Reproduces export race: while ColumnShard copy plan step is blocked, SS must not
+    // complete read-only copy. If it does, scan metadata is not ready on ColumnShard.
+    Y_UNIT_TEST(ColumnTableCopyCompletesOnSSBeforeColumnShardProgressScanFails) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        auto csControllerGuard = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
+        ui64 txId = 100;
+
+        runtime.SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::TX_COLUMNSHARD, NActors::NLog::PRI_DEBUG);
+
+        runtime.GetAppData().FeatureFlags.SetEnableColumnTablesBackup(true);
+
+        TestCreateColumnTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "ColumnTable"
+            ColumnShardCount: 1
+            Schema {
+                Columns { Name: "timestamp" Type: "Timestamp" NotNull: true }
+                Columns { Name: "value" Type: "Utf8" }
+                KeyColumnNames: "timestamp"
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        ui64 srcPathId = 0;
+        ui64 shardId = 0;
+        NOlap::TSnapshot lastSnapshot{0, 0};
+        {
+            const auto describe = DescribePath(runtime, "/MyRoot/ColumnTable");
+            TestDescribeResult(describe, {NLs::PathExist});
+            srcPathId = describe.GetPathId();
+            const auto& sharding = describe.GetPathDescription().GetColumnTableDescription().GetSharding();
+            UNIT_ASSERT_VALUES_EQUAL(sharding.ColumnShardsSize(), 1);
+            shardId = sharding.GetColumnShards()[0];
+        }
+
+        {
+            TActorId sender = runtime.AllocateEdgeActor();
+            const std::vector<NArrow::NTest::TTestColumn> ydbSchema = {
+                NArrow::NTest::TTestColumn("timestamp", NScheme::TTypeInfo(NScheme::NTypeIds::Timestamp)).SetNullable(false),
+                NArrow::NTest::TTestColumn("value", NScheme::TTypeInfo(NScheme::NTypeIds::Utf8)),
+            };
+            const auto data = NTxUT::MakeTestBlob({0, 100}, ydbSchema, {}, {"timestamp"});
+            ui64 writeId = 0;
+            std::vector<ui64> writeIds;
+            const ui64 writeTxId = ++txId;
+            NTxUT::WriteData(runtime, sender, shardId, ++writeId, srcPathId, data, ydbSchema, &writeIds, NEvWrite::EModificationType::Upsert, writeTxId);
+            const auto planStep = NTxUT::ProposeCommit(runtime, sender, shardId, writeTxId, writeIds, writeTxId);
+            NTxUT::PlanCommit(runtime, sender, shardId, planStep, {writeTxId});
+            lastSnapshot = NOlap::TSnapshot(planStep, writeTxId);
+        }
+
+        const ui64 copyTxId = ++txId;
+        TBlockEvents<NKikimr::TEvTxProcessing::TEvPlanStep> planBlocker(runtime,
+            [shardId](const NKikimr::TEvTxProcessing::TEvPlanStep::TPtr& ev) {
+                return ev->Get()->Record.GetTabletID() == shardId;
+            });
+
+        AsyncConsistentCopyTables(runtime, copyTxId, "/MyRoot", R"(
+            CopyTableDescriptions {
+                SrcPath: "/MyRoot/ColumnTable"
+                DstPath: "/MyRoot/ColumnTableCopy"
+                IsBackup: true
+            }
+        )");
+
+        runtime.WaitFor("copy plan step blocked", [&]() { return !planBlocker.empty(); });
+        env.SimulateSleep(runtime, TDuration::Seconds(1));
+
+        UNIT_ASSERT_C(
+            !IsSchemeTxCompleted(runtime, copyTxId),
+            "read-only copy must not complete on SS while ColumnShard copy plan step is blocked");
+
+        planBlocker.Stop().Unblock(1);
+        env.TestWaitNotification(runtime, copyTxId);
+
+        const ui64 copyPathId = DescribePath(runtime, "/MyRoot/ColumnTableCopy").GetPathId();
+
+        NTxUT::TShardReader reader(runtime, shardId, copyPathId, lastSnapshot);
+        reader.SetReplyColumnIds({1, 2});
+        const auto batch = reader.ReadAll();
+        UNIT_ASSERT_C(!reader.IsError(), reader.GetErrors().empty() ? "scan failed" : reader.GetErrors().front().message());
+        UNIT_ASSERT(batch);
+        UNIT_ASSERT_VALUES_EQUAL(batch->num_rows(), 100);
+        Y_UNUSED(csControllerGuard);
     }
 }
 

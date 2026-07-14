@@ -32,7 +32,7 @@ The primary role of database nodes is to run various [tablets](#tablet) and [act
 
 #### Storage node {#storage-node}
 
-**Storage nodes** (or **nodes storage**) are stateful nodes responsible for long-term storage of data fragments. The collection of storage nodes in a given [cluster {{ ydb-short-name }}](#cluster) is called the [distributed storage](#distributed-storage) and can be viewed as the storage layer of that cluster. Thus, adding more storage nodes and disks is the main way to increase the cluster's storage capacity and I/O throughput.
+**Storage nodes** (or **storage nodes**) are stateful nodes responsible for long-term storage of data fragments. The collection of storage nodes in a given [cluster {{ ydb-short-name }}](#cluster) is called the [distributed storage](#distributed-storage) and can be viewed as the storage layer of that cluster. Thus, adding more storage nodes and disks is the main way to increase the cluster's storage capacity and I/O throughput.
 
 #### Hybrid node {#hybrid-mode}
 
@@ -48,13 +48,13 @@ A **hybrid node** is a process that simultaneously performs the roles of a [data
 
 ### Distributed storage {#distributed-storage}
 
-**Distributed storage**, **Blob storage**, or **BlobStorage** is a distributed fault-tolerant data storage layer in {{ ydb-short-name }}. It has a specialized API designed for storing immutable data fragments of a [tablet](#tablet).
+**Distributed storage**, **Distributed storage**, **Blob storage**, or **BlobStorage** is a distributed fault-tolerant data storage layer in {{ ydb-short-name }}. It has a specialized API designed for storing immutable data fragments of a [tablet](#tablet).
 
 Many terms related to the [distributed storage implementation](#distributed-storage-implementation) are discussed below.
 
 ### Storage group {#storage-group}
 
-**Storage group**, **distributed storage group**, or **Blob storage group** is a place for reliable data storage, similar to [RAID](https://en.wikipedia.org/wiki/RAID) but using disks from multiple servers. Depending on the chosen [cluster topology](#topology), storage groups use different algorithms to ensure high availability, similar to [standard RAID levels](https://en.wikipedia.org/wiki/Standard_RAID_levels).
+**Group storage**, **distributed storage group**, **storage group**, or **Blob storage group** is a place for reliable data storage, similar to [RAID](https://en.wikipedia.org/wiki/RAID) but using disks from multiple servers. Depending on the chosen [cluster topology](#topology), storage groups use different algorithms to ensure high availability, similar to [standard RAID levels](https://en.wikipedia.org/wiki/Standard_RAID_levels).
 
 [Distributed storage](#distributed-storage) typically manages a large number of relatively small storage groups. Each group can be assigned to a specific [database](#database) to increase the disk space capacity and I/O throughput available to that database.
 
@@ -62,25 +62,25 @@ Many terms related to the [distributed storage implementation](#distributed-stor
 
 #### Static group {#static-group}
 
-**Static group** is a special [storage group](#storage-group) created during the initial cluster deployment. Its main role is to store data of system [tablets](#tablet), which can be considered as cluster-wide metadata.
+**Static group** or **static group** is a special [storage group](#storage-group) created during the initial cluster deployment. Its main role is to store data of system [tablets](#tablet), which can be considered as cluster-wide metadata.
 
 The static group may require special attention during major cluster maintenance, such as decommissioning an [availability zone](#regions-az).
 
 #### Dynamic group {#dynamic-group}
 
-Ordinary storage groups that are not [static](#static-group) are called **dynamic groups**. They are called dynamic because they can be created and deleted on the fly while the [cluster](#cluster) is running.
+Ordinary storage groups that are not [static](#static-group) are called **dynamic groups** or **dynamic group**. They are called dynamic because they can be created and deleted on the fly while the [cluster](#cluster) is running.
 
 #### Virtual storage group {#virtual-storage-groups}
 
-**Virtual storage group** is an entity that is not actually a [storage group](#storage-group) but appears as one from the outside (provides a similar external interface). It can store its data in other storage groups or in S3.
+**Virtual group storage** or **virtual storage group** is an entity that is not actually a [storage group](#storage-group) but appears as one from the outside (provides a similar external interface). It can store its data in other storage groups or in S3.
 
 ### Storage pool {#storage-pool}
 
-**Storage pool** is a set of data storage devices with similar characteristics. Each storage pool is assigned a unique name within the {{ ydb-short-name }} cluster. Technically, each storage pool consists of multiple physical disks ( [PDisk](#pdisk)). Each [storage group](#storage-group) is created in a specific storage pool, which determines the performance characteristics of the storage group through the selection of appropriate storage devices. Typically, separate storage pools are created for devices of different types (e.g., NVMe, SSD, and HDD) or for specific models of these devices that have different capacity and access speed.
+**Pool storage** or **storage pool** is a set of data storage devices with similar characteristics. Each storage pool is assigned a unique name within the {{ ydb-short-name }} cluster. Technically, each storage pool consists of multiple physical disks ([PDisk](#pdisk)). Each [storage group](#storage-group) is created in a specific storage pool, which determines the performance characteristics of the storage group through the selection of appropriate storage devices. Typically, separate storage pools are created for devices of different types (e.g., NVMe, SSD, and HDD) or for specific models of these devices that have different capacity and access speed.
 
 ### Actor {#actor}
 
-[Actor model](https://en.wikipedia.org/wiki/Actor_model) is one of the main approaches to execution parallelism used in {{ ydb-short-name }}. In this model, **actors** are lightweight user-space processes that can have and modify their private state, but can only influence each other indirectly through message passing. {{ ydb-short-name }} has its own implementation of this model, which is described [below](#actor-implementation).
+[Actor model](https://en.wikipedia.org/wiki/Actor_model) is one of the main approaches to execution parallelism used in {{ ydb-short-name }}. In this model, **actors** or **actor** are lightweight user-space processes that can have and modify their private state, but can only influence each other indirectly through message passing. {{ ydb-short-name }} has its own implementation of this model, which is described [below](#actor-implementation).
 
 In {{ ydb-short-name }}, actors with reliably persisted state are called [tablets](#tablet).
 
@@ -184,7 +184,7 @@ A guide on choosing primary keys is provided in [{#T}](../dev/primary-key/index.
 
 #### Primary index {#primary-index}
 
-**Primary index**, **primary key index**, or **primary index** — the main data structure used to find rows in a table. It is created based on the selected [primary key](#primary-key) and determines the physical order of rows in the table; thus, each table can have only one primary index. The primary index is unique.
+**Primary index** or **primary key index** — the main data structure used to find rows in a table. It is created based on the selected [primary key](#primary-key) and determines the physical order of rows in the table; thus, each table can have only one primary index. The primary index is unique.
 
 #### Secondary index {#secondary-index}
 
@@ -219,7 +219,7 @@ Local Bloom index — a special case of a [local index](#local-index): a probabi
 
 #### Column family {#column-family}
 
-**Column family**, **column group**, or **column family** — a feature that allows storing subsets of columns of a [row table](#row-oriented-table) separately in a separate family or group. The main use case is storing some columns on other disk types (moving less important columns to HDD) or with different compression settings. If the workload requires many column families, consider using [column tables](#column-oriented-table).
+**Column family** or **column group** — a feature that allows storing subsets of columns of a [row table](#row-oriented-table) separately in a separate family or group. The main use case is storing some columns on other disk types (moving less important columns to HDD) or with different compression settings. If the workload requires many column families, consider using [column tables](#column-oriented-table).
 
 #### Column encoding {#column-encoding}
 
@@ -394,7 +394,7 @@ For organizational convenience, schema objects form a hierarchy using [directori
 
 ### Directory {#folder}
 
-As in file systems, a **directory**, **catalog**, **folder**, or **directory** is a container for [schema objects](#scheme-object).
+As in file systems, a **folder**, **catalog**, **folder**, or **directory** is a container for [schema objects](#scheme-object).
 
 Directories can contain subdirectories, and such nesting can be of arbitrary depth.
 
@@ -559,7 +559,7 @@ Since a tablet stores its state in [distributed storage](#distributed-storage), 
 
 ### Tablet local database {#local-database}
 
-**Tablet local database**, **local database**, or **local database** — it is a set of data structures and associated code that manage the state of a tablet and the data it stores. Logically, the state of the local database is represented by a set of tables, very similar to relational tables. Modification of the local database state is performed by local tablet transactions created by the tablet's user actor.
+**Tablet local database**, **local database**, **tablet local database**, or **local database** — it is a set of data structures and associated code that manage the state of a tablet and the data it stores. Logically, the state of the local database is represented by a set of tables, very similar to relational tables. Modification of the local database state is performed by local tablet transactions created by the tablet's user actor.
 
 Each table of the local database is stored as an [LSM tree](#lsm-tree).
 
@@ -629,11 +629,11 @@ Additionally, there is a **root SchemeShard** that stores information about data
 
 #### TxAllocator {#txallocator}
 
-**TxAllocator**, **transaction allocator**, or **transaction allocator** — is a system tablet that allocates unique transaction identifiers ( [TxID](#txid)) in the cluster. Typically, there are several such tablets in the cluster, from which the [transaction proxy](#transaction-proxy) pre-allocates and caches ranges for local issuance within a single process.
+**TxAllocator**, **transaction allocator**, or **transaction allocator** — is a system tablet that allocates unique transaction identifiers ([TxID](#txid)) in the cluster. Typically, there are several such tablets in the cluster, from which the [transaction proxy](#transaction-proxy) pre-allocates and caches ranges for local issuance within a single process.
 
 #### Coordinator {#coordinator}
 
-**Coordinator** is a system tablet that ensures the global order of transactions. The coordinator's task is to assign a logical time [PlanStep](#planstep) to each transaction planned through this coordinator. Each transaction is assigned exactly one coordinator, selected by hashing its [TxId](#txid).
+**Coordinator** or **coordinator** is a system tablet that ensures the global order of transactions. The coordinator's task is to assign a logical time [PlanStep](#planstep) to each transaction planned through this coordinator. Each transaction is assigned exactly one coordinator, selected by hashing its [TxId](#txid).
 
 #### Mediator {#mediator}
 
@@ -645,7 +645,7 @@ Additionally, there is a **root SchemeShard** that stores information about data
 
 #### CMS {#cms}
 
-**CMS**, **cluster management system** is a system tablet responsible for managing information about the current state of the [{{ ydb-short-name }} cluster](#cluster). This information is used to perform gradual cluster restarts without affecting user workloads, maintenance, cluster reconfiguration, etc.
+**CMS**, **cluster management system**, or **cluster management system** is a system tablet responsible for managing information about the current state of the [{{ ydb-short-name }} cluster](#cluster). This information is used to perform gradual cluster restarts without affecting user workloads, maintenance, cluster reconfiguration, etc.
 
 #### NodeBroker {#node-broker}
 
@@ -653,7 +653,7 @@ Additionally, there is a **root SchemeShard** that stores information about data
 
 #### BSController {#ds-controller}
 
-**BSController**, **blob storage controller**, or **BS controller** manages the dynamic configuration of the distributed storage, including information about [PDisk](#pdisk), [VDisk](#vdisk), and [storage groups](#storage-group). It interacts with [node warden](#node-warden) to start various components of the distributed storage. It interacts with [Hive](#hive) to allocate [channels](#channel) to tablets.
+**BSController**, **distributed storage controller**, **blob storage controller**, or **BS controller** manages the dynamic configuration of the distributed storage, including information about [PDisk](#pdisk), [VDisk](#vdisk), and [storage groups](#storage-group). It interacts with [node warden](#node-warden) to start various components of the distributed storage. It interacts with [Hive](#hive) to allocate [channels](#channel) to tablets.
 
 #### Console {#console}
 
@@ -764,11 +764,11 @@ Distributed storage preserves immutable data, with each immutable data block ide
 
 **PDisk**, **physical disk** — a component that controls a physical disk drive (block device). In other words, PDisk is a subsystem that implements an abstraction similar to a specialized file system on top of block devices (or files emulating a block device for testing purposes). PDisk provides data integrity control (including [error-correcting coding](#erasure-coding) of sector groups to recover data on individual damaged sectors, integrity control using checksums), transparent encryption of all data on the disk, and transactional guarantees for disk operations (write confirmation strictly after `fsync`).
 
-PDisk contains a scheduler that ensures shared use of device bandwidth among multiple clients ( [VDisk](#vdisk)). PDisk divides the block device into blocks called [slots](#slot) (about 128 megabytes in size; smaller blocks are also allowed). At any given time, no more than one VDisk can own each slot. PDisk also maintains a recovery log shared by PDisk service records and all VDisks.
+PDisk contains a scheduler that ensures shared use of device bandwidth among multiple clients ([VDisk](#vdisk)). PDisk divides the block device into blocks called [slots](#slot) (about 128 megabytes in size; smaller blocks are also allowed). At any given time, no more than one VDisk can own each slot. PDisk also maintains a recovery log shared by PDisk service records and all VDisks.
 
 #### VDisk {#vdisk}
 
-**VDisk**, **virtual disk** — a component that implements data storage of the [distributed storage](#distributed-storage) [LogoBlob](#logoblob) on a [PDisk](#pdisk). VDisk stores all its data on a PDisk. One VDisk corresponds to one PDisk, but typically several VDisks are associated with one PDisk. Unlike PDisk, which hides blocks and logs, VDisk provides an interface at the LogoBlob and [LogoBlobID](#logoblobid) level, for example, writing a LogoBlob, reading LogoBlobID data, and deleting a set of LogoBlobs using a special command. VDisk is a member of a [storage group](#storage-group). VDisk itself is local, but many VDisks in a given group ensure reliable data storage. VDisks in a group synchronize data with each other and replicate data in case of losses. The set of VDisks in a storage group forms a distributed RAID.
+**VDisk**, **virtual disk**, or **virtual disk** — a component that implements data storage of the [distributed storage](#distributed-storage) [LogoBlob](#logoblob) on a [PDisk](#pdisk). VDisk stores all its data on a PDisk. One VDisk corresponds to one PDisk, but typically several VDisks are associated with one PDisk. Unlike PDisk, which hides blocks and logs, VDisk provides an interface at the LogoBlob and [LogoBlobID](#logoblobid) level, for example, writing a LogoBlob, reading LogoBlobID data, and deleting a set of LogoBlobs using a special command. VDisk is a member of a [storage group](#storage-group). VDisk itself is local, but many VDisks in a given group ensure reliable data storage. VDisks in a group synchronize data with each other and replicate data in case of losses. The set of VDisks in a storage group forms a distributed RAID.
 
 #### Yard {#yard}
 
@@ -784,7 +784,7 @@ PDisk contains a scheduler that ensures shared use of device bandwidth among mul
 
 #### Proxy {#ds-proxy}
 
-**Distributed storage proxy**, **DS-proxy**, **BS-proxy** acts as a client library for performing operations with [distributed storage](#distributed-storage). The users of DS-proxy are [tablets](#tablet) that write to and read from distributed storage. DS-proxy hides the distributed nature of distributed storage from the user. The task of DS-proxy is to write to a quorum of [VDisk](#vdisk), perform retries when necessary, and control the write/read flow to prevent VDisk overload.
+**Distributed storage proxy**, **DS-proxy**, **BS-proxy**, **Proxy distributed storage**, **DS-proxy**, or **BS-proxy** acts as a client library for performing operations with [distributed storage](#distributed-storage). The users of DS-proxy are [tablets](#tablet) that write to and read from distributed storage. DS-proxy hides the distributed nature of distributed storage from the user. The task of DS-proxy is to write to a quorum of [VDisk](#vdisk), perform retries when necessary, and control the write/read flow to prevent VDisk overload.
 
 Technically, DS-proxy is implemented as an [actor service](#actor-service) launched by [node warden](#node-warden) on each node for each storage group, handling all requests to the group (writing, reading, and deleting [LogoBlob](#logoblob), group locking). When writing data, DS-proxy performs [error correction coding](#erasure-coding) of the data, splitting the LogoBlob into parts that are then sent to the corresponding VDisks. DS-proxy performs the reverse process when reading, receiving parts from VDisks and reconstructing the LogoBlob from them.
 
@@ -853,7 +853,7 @@ In the case of read-only transactions, similar to "read uncommitted" in other da
 
 #### Transaction proxies {#transaction-proxy}
 
-**Transaction proxy**, **transaction proxy**, or `TX_PROXY` is a service that orchestrates the execution of many [distributed transactions](#transactions): sequential phases, phase execution, planning, and result aggregation. In the case of direct orchestration by other actors (e.g., QP data transactions), it is used for caching and allocating unique [TxIDs](#txid).
+**Transaction proxy** or `TX_PROXY` is a service that orchestrates the execution of many [distributed transactions](#transactions): sequential phases, phase execution, planning, and result aggregation. In the case of direct orchestration by other actors (e.g., QP data transactions), it is used for caching and allocating unique [TxIDs](#txid).
 
 #### Transaction flags {#txflags}
 
@@ -873,7 +873,7 @@ In the case of read-only transactions, similar to "read uncommitted" in other da
 
 #### Mediator time {#mediator-time}
 
-During the execution of distributed transactions, **mediator time** or **mediator time** is the logical time up to which (inclusive) a participating shard must know the entire execution plan. It is used to advance time when there are no transactions on a particular shard, to determine whether it can read from a snapshot.
+During the execution of distributed transactions, **mediator time** is the logical time up to which (inclusive) a participating shard must know the entire execution plan. It is used to advance time when there are no transactions on a particular shard, to determine whether it can read from a snapshot.
 
 #### MiniKQL {#minikql}
 

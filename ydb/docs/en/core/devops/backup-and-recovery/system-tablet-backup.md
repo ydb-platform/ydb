@@ -172,7 +172,7 @@ If recovery is performed after a complete loss of the [static group](../../conce
 3. Select the most recent backup. The name of each backup contains key information: `backup_<timestamp>_g<generation>_s<step>`, where:
 
    - `timestamp` — the time the backup was created;
-   - — [tablet `generation`](../../concepts/glossary.md#tablet-generation), increases with each tablet restart;
+   - `generation` — [tablet generation](../../concepts/glossary.md#tablet-generation), increases with each tablet restart;
    - `step` — tablet step within a generation, increases with each tablet state change.
 
    Select a backup with the **maximum generation**, and if generations are equal, with the **maximum step**. If backups are found on multiple hosts, compare them and select the most recent one.

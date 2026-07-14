@@ -196,7 +196,7 @@ private:
             IgnoreFunc(TEvSysView::TEvSendDbCountersRequest);
             default:
                 if (!HandleDefaultEvents(ev, SelfId())) {
-                    YDB_LOG_CRIT_CTX_COMP(*TlsActivationContext, NKikimrServices::SYSTEM_VIEWS, "TSysViewProcessor StateInit unexpected event 0x%08x",
+                    YDB_LOG_CRIT_CTX_COMP(*TlsActivationContext, NKikimrServices::SYSTEM_VIEWS, "TSysViewProcessor StateInit unexpected event",
                         {"eventType", ev->GetTypeRewrite()});
                 }
         }
@@ -215,7 +215,7 @@ private:
             IgnoreFunc(TEvTabletPipe::TEvServerDisconnected);
             default:
                 if (!HandleDefaultEvents(ev, SelfId())) {
-                    YDB_LOG_CRIT_CTX_COMP(*TlsActivationContext, NKikimrServices::SYSTEM_VIEWS, "TSysViewProcessor StateOffline unexpected event 0x%08x",
+                    YDB_LOG_CRIT_CTX_COMP(*TlsActivationContext, NKikimrServices::SYSTEM_VIEWS, "TSysViewProcessor StateOffline unexpected event",
                         {"eventType", ev->GetTypeRewrite()});
                 }
         }
@@ -248,7 +248,7 @@ private:
             IgnoreFunc(TEvTabletPipe::TEvServerDisconnected);
             default:
                 if (!HandleDefaultEvents(ev, SelfId())) {
-                    YDB_LOG_CRIT_CTX_COMP(*TlsActivationContext, NKikimrServices::SYSTEM_VIEWS, "TSysViewProcessor StateWork unexpected event 0x%08x",
+                    YDB_LOG_CRIT_CTX_COMP(*TlsActivationContext, NKikimrServices::SYSTEM_VIEWS, "TSysViewProcessor StateWork unexpected event",
                         {"eventType", ev->GetTypeRewrite()});
                 }
         }

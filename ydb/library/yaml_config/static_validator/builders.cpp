@@ -209,7 +209,7 @@ TMapBuilder ActorSystemConfigBuilder() {
         .Enum("type", {"IO", "BASIC", "NUMA"})
         .AddCheck("threads and placement_groups usage must match executor type", [](auto& executorContext) {
           auto node = executorContext.Node();
-          const bool isNuma = node["type"].String() == "NUMA";
+          const bool isNuma = node["type"].String().Value() == "NUMA";
           const bool hasThreads = node["threads"].Exists();
           const bool hasPlacementGroups = node["placement_groups"].Exists();
 

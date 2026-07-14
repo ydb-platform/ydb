@@ -57,8 +57,10 @@ void WriteFile(const TFsPath& root, const TString& path, const TString& data) {
     TFileOutput(fullPath.GetPath()).Write(data);
 }
 
-void WriteCpu(const TFsPath& root, TCpuId cpuId, ui32 dieId, const TString& dieCpus, ui32 l3CacheId, const TString& l3CacheCpus) {
+void WriteCpu(const TFsPath& root, TCpuId cpuId, ui32 dieId, const TString& dieCpus, ui32 l3CacheId,
+        const TString& l3CacheCpus, bool online = true) {
     const TString cpuPath = "cpu/cpu" + ToString(cpuId);
+    WriteFile(root, cpuPath + "/online", online ? "1\n" : "0\n");
     WriteFile(root, cpuPath + "/topology/core_id", ToString(cpuId) + "\n");
     WriteFile(root, cpuPath + "/topology/core_cpus_list", ToString(cpuId) + "\n");
     WriteFile(root, cpuPath + "/topology/thread_siblings_list", ToString(cpuId) + "\n");
@@ -205,6 +207,26 @@ Y_UNIT_TEST_SUITE(CpuTopology) {
         AssertGroup(topology->L3CacheGroups, 0, 10, "0-1");
         UNIT_ASSERT_VALUES_EQUAL(topology->PlacementGroups.size(), 1);
         AssertGroup(topology->PlacementGroups, 0, 0, "0-1");
+    }
+
+    Y_UNIT_TEST(OfflineCpusAreFilteredFromPlacementGroups) {
+        TTempDir tempDir;
+        WriteCpu(tempDir.Name(), 0, 0, "0-1", 10, "0-1");
+        WriteCpu(tempDir.Name(), 1, 0, "0-1", 10, "0-1", false);
+
+        auto topology = ParseSysfsCpuTopology(tempDir.Name());
+        UNIT_ASSERT_C(topology.has_value(), topology.error());
+        UNIT_ASSERT_VALUES_EQUAL(ToCpuListString(topology->AllCpus), "0");
+
+        const TLogicalCpuInfo* cpu1 = topology->FindCpu(1);
+        UNIT_ASSERT(cpu1);
+        UNIT_ASSERT(!cpu1->Online);
+        UNIT_ASSERT_VALUES_EQUAL(ToCpuListString(cpu1->L3CacheCpus), "0");
+
+        UNIT_ASSERT_VALUES_EQUAL(topology->L3CacheGroups.size(), 1);
+        AssertGroup(topology->L3CacheGroups, 0, 10, "0");
+        UNIT_ASSERT_VALUES_EQUAL(topology->PlacementGroups.size(), 1);
+        AssertGroup(topology->PlacementGroups, 0, 0, "0");
     }
 
     Y_UNIT_TEST(AmdEpyc9654SnapshotUsesL3PlacementGroups) {

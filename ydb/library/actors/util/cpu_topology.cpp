@@ -353,7 +353,31 @@ void AddUniqueGroup(TVector<TCpuTopologyGroup>& groups, TCpuTopologyGroup group)
 }
 
 void BuildDerivedGroups(TCpuTopology& topology) {
+    TCpuMask offlineCpus;
     for (const auto& cpu : topology.Cpus) {
+        if (!cpu.Online) {
+            offlineCpus.Set(cpu.CpuId);
+        }
+    }
+    TVector<TCpuTopologyGroup> numaNodes;
+    numaNodes.reserve(topology.NumaNodes.size());
+    for (auto& node : topology.NumaNodes) {
+        node.Cpus = node.Cpus - offlineCpus;
+        if (!node.Cpus.IsEmpty()) {
+            numaNodes.push_back(std::move(node));
+        }
+    }
+    topology.NumaNodes = std::move(numaNodes);
+
+    for (auto& cpu : topology.Cpus) {
+        cpu.CoreCpus = cpu.CoreCpus - offlineCpus;
+        cpu.ThreadSiblings = cpu.ThreadSiblings - offlineCpus;
+        cpu.ClusterCpus = cpu.ClusterCpus - offlineCpus;
+        cpu.L3CacheCpus = cpu.L3CacheCpus - offlineCpus;
+        cpu.DieCpus = cpu.DieCpus - offlineCpus;
+        cpu.PackageCpus = cpu.PackageCpus - offlineCpus;
+        cpu.NumaNodeCpus = cpu.NumaNodeCpus - offlineCpus;
+
         AddUniqueGroup(topology.Clusters, TCpuTopologyGroup{cpu.ClusterId, cpu.ClusterCpus});
         AddUniqueGroup(topology.L3CacheGroups, TCpuTopologyGroup{cpu.L3CacheId, cpu.L3CacheCpus});
         AddUniqueGroup(topology.Dies, TCpuTopologyGroup{cpu.DieId, cpu.DieCpus});
@@ -468,7 +492,12 @@ std::expected<TCpuTopology, TString> ParseSysfsCpuTopology(const TFsPath& root) 
         return std::unexpected("no CPU topology data found under " + CpuRootPath(root).GetPath());
     }
     for (const auto& cpu : result.Cpus) {
-        result.AllCpus.Set(cpu.CpuId);
+        if (cpu.Online) {
+            result.AllCpus.Set(cpu.CpuId);
+        }
+    }
+    if (result.AllCpus.IsEmpty()) {
+        return std::unexpected("no online CPU topology data found under " + CpuRootPath(root).GetPath());
     }
 
     auto numaNodes = ParseNumaNodes(root);

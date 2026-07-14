@@ -204,6 +204,7 @@ void AddExecutorPools(NActors::TCpuManagerConfig& cpuManager, const NKikimrConfi
     std::optional<TCpuTopology> cpuTopology;
     std::optional<TCpuMask> remainingCpus;
     TCpuMask usedPlacementCpus;
+    ui32 placementGroupOffset = 0;
     for (const auto& poolConfig : systemConfig.GetExecutor()) {
         if (poolConfig.GetType() != TExecutorConfig::NUMA) {
             continue;
@@ -219,19 +220,21 @@ void AddExecutorPools(NActors::TCpuManagerConfig& cpuManager, const NKikimrConfi
             cpuTopology.emplace(std::move(*parsedCpuTopology));
         }
 
-        Y_ABORT_UNLESS(placementGroups <= cpuTopology->PlacementGroups.size(),
-            "NUMA executor requested %" PRIu32 " placement groups, but CPU topology has only %zu placement groups",
-            placementGroups, cpuTopology->PlacementGroups.size());
+        Y_ABORT_UNLESS(placementGroupOffset + placementGroups <= cpuTopology->PlacementGroups.size(),
+            "NUMA executors requested %" PRIu32 " placement groups, but CPU topology has only %zu placement groups",
+            placementGroupOffset + placementGroups, cpuTopology->PlacementGroups.size());
 
         for (ui32 group = 0; group < placementGroups; ++group) {
-            usedPlacementCpus = usedPlacementCpus | cpuTopology->PlacementGroups[group].Cpus;
+            usedPlacementCpus = usedPlacementCpus | cpuTopology->PlacementGroups[placementGroupOffset + group].Cpus;
         }
+        placementGroupOffset += placementGroups;
     }
     if (cpuTopology) {
         remainingCpus = cpuTopology->AllCpus - usedPlacementCpus;
     }
 
     ui32 poolId = 0;
+    placementGroupOffset = 0;
     for (const auto& poolConfig : systemConfig.GetExecutor()) {
         if (poolConfig.GetType() != TExecutorConfig::NUMA) {
             const TString poolName = poolConfig.GetName();
@@ -246,9 +249,11 @@ void AddExecutorPools(NActors::TCpuManagerConfig& cpuManager, const NKikimrConfi
         const ui32 placementGroups = poolConfig.GetPlacementGroups();
         for (ui32 group = 0; group < placementGroups; ++group) {
             const TString poolName = GetStoragePoolName(poolConfig, group, placementGroups);
-            AddExecutorPool(cpuManager, poolConfig, systemConfig, poolId, poolName, counters, cpuTopology->PlacementGroups[group]);
+            AddExecutorPool(cpuManager, poolConfig, systemConfig, poolId, poolName, counters,
+                cpuTopology->PlacementGroups[placementGroupOffset + group]);
             ++poolId;
         }
+        placementGroupOffset += placementGroups;
     }
 }
 

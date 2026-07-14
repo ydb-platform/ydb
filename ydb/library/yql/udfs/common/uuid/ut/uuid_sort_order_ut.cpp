@@ -351,4 +351,19 @@ Y_UNIT_TEST_SUITE(TUuidSortOrder) {
         const auto chrono = MakeChronoUuidBytes(0, timestampMs, false);
         UNIT_ASSERT_VALUES_UNEQUAL(rfcV7, chrono);
     }
+
+    Y_UNIT_TEST(ReorderRfcMsbMatchesJavaExample) {
+        const ui64 msb = ReadBe64(std::array<ui8, 8>{0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08}.data());
+        const ui64 reordered = ReorderRfcMsbToYdb(msb);
+        std::array<ui8, 8> bytes{};
+        WriteBe64(reordered, bytes.data());
+        UNIT_ASSERT_VALUES_EQUAL(bytes[0], 0x04);
+        UNIT_ASSERT_VALUES_EQUAL(bytes[1], 0x03);
+        UNIT_ASSERT_VALUES_EQUAL(bytes[2], 0x02);
+        UNIT_ASSERT_VALUES_EQUAL(bytes[3], 0x01);
+        UNIT_ASSERT_VALUES_EQUAL(bytes[4], 0x06);
+        UNIT_ASSERT_VALUES_EQUAL(bytes[5], 0x05);
+        UNIT_ASSERT_VALUES_EQUAL(bytes[6], 0x08);
+        UNIT_ASSERT_VALUES_EQUAL(bytes[7], 0x07);
+    }
 }

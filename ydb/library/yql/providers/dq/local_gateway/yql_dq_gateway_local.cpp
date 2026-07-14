@@ -1,13 +1,12 @@
 #include "yql_dq_gateway_local.h"
 
 #include <ydb/library/yql/providers/dq/provider/yql_dq_gateway.h>
-#include <yt/yql/providers/dq/gateway/yql_dq_gateway_factory.h>
 #include <ydb/library/yql/providers/dq/task_runner/tasks_runner_local.h>
 
-#include <yt/yql/providers/dq/service/interconnect_helpers.h>
-#include <yt/yql/providers/dq/service/service_node.h>
+#include <ydb/library/yql/providers/dq/service/interconnect_helpers.h>
+#include <ydb/library/yql/providers/dq/service/service_node.h>
 
-#include <yt/yql/providers/dq/stats_collector/pool_stats_collector.h>
+#include <ydb/library/yql/providers/dq/stats_collector/pool_stats_collector.h>
 #include <ydb/library/yql/providers/dq/worker_manager/local_worker_manager.h>
 #include <ydb/library/yql/dq/actors/spilling/spilling_file.h>
 

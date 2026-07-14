@@ -18,6 +18,10 @@
 
 namespace NYql {
 
+namespace NProto {
+class TDqConfig;
+}
+
 class IDqGateway : public TThrRefBase {
 public:
     struct TStageStats {
@@ -112,5 +116,8 @@ public:
 
     virtual void Stop() { }
 };
+
+TIntrusivePtr<IDqGateway> CreateDqGateway(const TString& host, int port);
+TIntrusivePtr<IDqGateway> CreateDqGateway(const NProto::TDqConfig& config);
 
 } // namespace NYql

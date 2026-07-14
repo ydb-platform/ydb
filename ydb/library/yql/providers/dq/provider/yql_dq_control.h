@@ -41,4 +41,6 @@ IDqControlFactoryPtr CreateDqControlFactory(
     const TMap<TString, TString>& udfs,
     const TFileStoragePtr& fileStorage);
 
+extern const TString DqStrippedSuffied;
+
 } // namespace NYql

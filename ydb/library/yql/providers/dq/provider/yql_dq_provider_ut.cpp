@@ -1,4 +1,4 @@
-#include <ydb/library/yql/providers/dq/provider/yql_dq_statistics_json.h>
+#include "yql_dq_statistics_json.h"
 
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -17,7 +17,7 @@
 
 #include <ydb/library/yql/providers/dq/common/yql_dq_common.h>
 #include <ydb/library/yql/providers/dq/counters/counters.h>
-#include <yt/yql/providers/dq/local_gateway/yql_dq_gateway_local.h>
+#include <ydb/library/yql/providers/dq/local_gateway/yql_dq_gateway_local.h>
 #include <ydb/library/yql/providers/dq/provider/exec/yql_dq_exectransformer.h>
 #include <ydb/library/yql/providers/dq/provider/yql_dq_gateway.h>
 #include <ydb/library/yql/providers/dq/provider/yql_dq_provider.h>

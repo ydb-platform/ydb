@@ -5,7 +5,7 @@
 #include <ydb/library/actors/interconnect/interconnect.h>
 #include <library/cpp/yson/node/node.h>
 
-#include <yt/yql/providers/dq/config/config.pb.h>
+#include <ydb/library/yql/providers/dq/config/config.pb.h>
 
 namespace NYql::NDqs {
 

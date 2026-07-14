@@ -64,6 +64,7 @@ public:
         , LogPrefix(TStringBuilder() << "Table: `" << Settings.TablePath << "` (" << Settings.TableId << "), "
             << "SessionActorId: " << Settings.SessionActorId)
         , LockActorSpan(TWilsonKqp::LockActor, std::move(Settings.ParentTraceId), "LockActor") {
+        AFL_ENSURE(Settings.MvccSnapshot); // Read Committed tx always acquires snapshot.
     }
 
     void Bootstrap() {
@@ -151,7 +152,8 @@ public:
 
     void SetLockSettings(
             ui64 cookie,
-            TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> keyColumns) override
+            TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> keyColumns,
+            bool skipAbsent) override
     {
         TKqpStreamLockSettings lockSettings(Settings.HolderFactory);
         lockSettings.Table.SetOwnerId(Settings.TableId.PathId.OwnerId);
@@ -166,11 +168,9 @@ public:
         lockSettings.LockTxId = Settings.LockTxId;
         lockSettings.LockNodeId = Settings.LockNodeId;
         lockSettings.LockMode = Settings.LockMode;
+        lockSettings.SkipAbsent = skipAbsent;
         lockSettings.QuerySpanId = Settings.QuerySpanId;
-
-        if (Settings.MvccSnapshot) {
-            lockSettings.Snapshot = *Settings.MvccSnapshot;
-        }
+        lockSettings.Snapshot = *Settings.MvccSnapshot;
 
         if (KeyColumnTypes.empty()) {
             for (const auto& keyColumn : keyColumns) {
@@ -402,8 +402,12 @@ public:
         lockState.Worker->AddLockResult(record.GetRequestId(), ev->Get());
 
         lockState.Worker->ProcessRowsByLockResult(record.GetRequestId(),
-            [&](const TOwnedCellVec& row, bool modified) {
-                lockState.CollectedRows.emplace_back(row, modified);
+            [&](const TOwnedCellVec& row, bool locked, bool modified) {
+                if (locked) {
+                    lockState.CollectedRows.emplace_back(row, modified);
+                } else {
+                    AFL_ENSURE(modified); // Row wasn't locked, because it was deleted before locking.
+                }
             });
 
         --lockState.LocksInflight;

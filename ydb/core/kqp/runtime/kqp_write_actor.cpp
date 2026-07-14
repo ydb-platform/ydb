@@ -1308,7 +1308,7 @@ public:
         if (MvccSnapshot && (isPrepare || isImmediateCommit)) {
             // Commit in snapshot isolation must validate writes against a snapshot
             bool needMvccSnapshot = LockMode == NKikimrDataEvents::OPTIMISTIC_SNAPSHOT_ISOLATION;
-            if (!needMvccSnapshot && isPrepare) {
+            if (!needMvccSnapshot && isPrepare && LockMode != NKikimrDataEvents::PESSIMISTIC_NONE) {
                 for (const auto& operation : evWrite->Record.GetOperations()) {
                     if (operation.GetType() == NKikimrDataEvents::TEvWrite::TOperation::OPERATION_INSERT) {
                         // This operation may fail with an incorrect unique constraint violation otherwise
@@ -1318,6 +1318,7 @@ public:
                 }
             }
             if (needMvccSnapshot) {
+                AFL_ENSURE(LockMode != NKikimrDataEvents::PESSIMISTIC_NONE);
                 *evWrite->Record.MutableMvccSnapshot() = *MvccSnapshot;
             }
         }
@@ -3801,7 +3802,8 @@ public:
 
                     lockActor->SetLockSettings(
                         token.Cookie,
-                        indexSettings.KeyColumns);
+                        indexSettings.KeyColumns,
+                        /* skipAbsent */ false);
                 }
 
                 {
@@ -3903,9 +3905,13 @@ public:
                 .LockActor = lockActor,
             });
 
+            const bool skipAbsent = settings.OperationType == NKikimrKqp::TKqpTableSinkSettings::MODE_UPDATE
+                || settings.OperationType == NKikimrKqp::TKqpTableSinkSettings::MODE_DELETE;
+
             lockActor->SetLockSettings(
                 token.Cookie,
-                settings.KeyColumns);
+                settings.KeyColumns,
+                skipAbsent);
         }
 
         // Main table lookup

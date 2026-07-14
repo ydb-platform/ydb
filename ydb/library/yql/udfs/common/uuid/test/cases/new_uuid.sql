@@ -6,6 +6,13 @@ SELECT Uuid::newSharded() != Uuid::newSharded() AS sharded_unique;
 SELECT Uuid::newChronoPrefix($p) != Uuid::newChronoPrefix($p) AS chrono_prefix_unique;
 SELECT Uuid::newShardedPrefix($p) != Uuid::newSharded() AS sharded_prefix_differs;
 
+$chronoBase = Uuid::newChronoPrefix($p);
+$shardedBase = Uuid::newShardedPrefix($p);
+SELECT Uuid::newChronoPrefix($chronoBase) != Uuid::newChronoPrefix($chronoBase) AS chrono_uuid_prefix_unique;
+SELECT Uuid::newShardedPrefix($shardedBase) != Uuid::newShardedPrefix($shardedBase) AS sharded_uuid_prefix_unique;
+SELECT Uuid::newChronoPrefix($chronoBase, 1) != Uuid::newChronoPrefix($chronoBase, 2) AS chrono_uuid_prefix_dep_unique;
+SELECT Uuid::newShardedPrefix($shardedBase, 1) != Uuid::newShardedPrefix($shardedBase, 2) AS sharded_uuid_prefix_dep_unique;
+
 SELECT Uuid::newChronoPrefix(3) != Uuid::newChrono(0) AS chrono_small_prefix_differs;
 
 SELECT Uuid::newChrono(1) != Uuid::newChrono(2) AS chrono_dep_unique;

@@ -424,13 +424,15 @@ TIssues TGenericDescribeTableTransformer::DescribeTableFromConnector(const TGene
         promise = std::move(promise),
         client = State_->GenericClient,
         timeout = State_->Configuration->DescribeTableTimeout
-    ](const NThreading::TFuture<NConnector::NApi::TDescribeTableRequest>& f1) {
-    NThreading::TFuture<NConnector::NApi::TDescribeTableRequest>f2(f1);
+    ](const NThreading::TFuture<NConnector::NApi::TDescribeTableRequest>& f1) mutable {
+    try {
+    NThreading::TFuture<NConnector::NApi::TDescribeTableRequest> f2(f1);
     auto request = f2.ExtractValueSync();
     desc->DataSourceInstance = request.data_source_instance();
 
     client->DescribeTable(request, timeout).Subscribe(
     [desc, tableAddress, promise, client](const NConnector::TDescribeTableAsyncResult& f1) mutable {
+        try {
         NConnector::TDescribeTableAsyncResult f2(f1);
         auto result = f2.ExtractValueSync();
 
@@ -455,7 +457,13 @@ TIssues TGenericDescribeTableTransformer::DescribeTableFromConnector(const TGene
         // Preserve schema for the further usage
         desc->Schema = result.Response->schema();
         promise.SetValue();
+        } catch(const std::exception&) {
+            promise.SetException(std::current_exception());
+        }
     });
+    } catch(const std::exception&) {
+        promise.SetException(std::current_exception());
+    }
     });
 
     return {};

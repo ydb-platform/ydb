@@ -11,7 +11,7 @@
 | [ClickHouse](from/clickhouse/index.md) | — | [да](from/clickhouse/spark.md) | [да](from/clickhouse/ydb-importer.md) | [да](from/clickhouse/federated-queries.md) |
 | [Oracle Database](from/oracle/index.md) | — | [да](from/oracle/spark.md) | [да](from/oracle/ydb-importer.md) | — |
 | [CSV](from/csv/index.md) | [да](from/csv/ydb-cli.md) | [да](from/csv/spark.md) | — | — |
-| [Parquet](from/parquet/index.md) | [да](from/parquet/ydb-cli.md) | [да](from/parquet/spark.md) | — | — |
+| [Parquet](from/parquet/index.md) | [да](from/parquet/ydb-cli.md) | [да](from/parquet/spark.md) | — | [да](from/parquet/federated-queries-s3.md) |
 
 ## Как выбрать способ переноса {#how-to-choose}
 

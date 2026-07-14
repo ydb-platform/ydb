@@ -1,20 +1,9 @@
 #!/usr/bin/env python3
-"""Unit tests for the "new stable branch grace" feature in ``create_new_muted_ya.py``.
+"""Tests for the stable-branch-grace feature in ``create_new_muted_ya.py``: git-history
+date lookup, ``*_debug`` list parity with their raw counterparts, and the on-disk files.
 
-Covers:
-- ``_git_branch_added_to_stable_config``: date derivation from git history via
-  ``git log -S`` (pickaxe), ``main`` exclusion, "branch never added" case.
-- ``_apply_stable_branch_grace``: inherited-mute preservation during the grace
-  window, expiry after the window, and — the actual bug this suite guards against —
-  that the ``*_debug`` lists it returns stay 1:1 in sync with their raw counterparts
-  (``to_delete``/``to_delete_debug`` and ``all_muted_ya``/``all_muted_ya_debug``).
-- ``apply_and_add_mutes`` end-to-end: the files written to disk for ``to_delete.txt``
-  and ``muted_ya.txt`` have exactly as many lines as their ``_debug.txt`` siblings.
-
-Run directly (works from any cwd): ``python3 .github/scripts/tests/mute/tests/test_stable_branch_grace.py``
-or via discovery from the ``mute`` dir: ``cd .github/scripts/tests/mute && python3 -m unittest discover -s tests``.
-(Running ``-m unittest`` from the repo root adds the repo root to ``sys.path``, which shadows
-the installed ``ydb`` package with the in-repo ``ydb/`` source tree — run from ``mute/`` instead.)
+Run from ``.github/scripts/tests/mute``: ``python3 -m unittest discover -s tests``
+(running from the repo root shadows the installed ``ydb`` package).
 """
 import datetime
 import json

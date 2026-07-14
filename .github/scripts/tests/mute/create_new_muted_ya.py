@@ -69,12 +69,9 @@ def _grace_inherited_debug_line(line, branch, config_since, grace_until):
 def _git_branch_added_to_stable_config(branch, repo_root):
     """Calendar date the branch first appeared in ``_STABLE_BRANCHES_CONFIG``.
 
-    ``-S<needle>`` (pickaxe) narrows ``git log`` to the commits that actually
-    changed the occurrence count of the exact JSON-quoted branch string —
-    normally just the one commit that added it — instead of every commit that
-    ever touched the config file. Without it this re-``git show``s the whole
-    file history on every scheduled ``update_muted_ya`` run, for every
-    branch/build_type in the matrix, forever.
+    ``git log -S<needle>`` (pickaxe) narrows to the commit(s) that changed the
+    branch string's occurrence count, instead of ``git show``-ing every commit
+    that ever touched the config file on every scheduled run.
     """
     if not branch or branch == 'main':
         return None
@@ -178,13 +175,10 @@ def _apply_stable_branch_grace(
     """Keep inherited ``muted_ya`` lines for a new stable branch during its grace window.
 
     Returns ``(all_muted_ya, all_muted_ya_debug, to_delete, to_delete_debug,
-    grace_inherited, grace_config_since, grace_until)``. The two ``*_debug``
-    lists are adjusted in lock-step with their raw counterparts so that
-    ``write_file_set`` keeps producing a matching number of lines in
-    ``foo.txt``/``foo_debug.txt`` (mismatched counts previously made the
-    "Removed from mute" / "muted_ya" debug artifacts misleading whenever grace
-    actually kicked in — e.g. a test protected from deletion by grace would
-    still show up in ``to_delete_debug.txt`` as if it had been removed).
+    grace_inherited, grace_config_since, grace_until)``. The ``*_debug`` lists are
+    kept 1:1 with their raw counterparts, so grace can't desync ``foo.txt`` from
+    ``foo_debug.txt`` (previously it could, e.g. a test grace protected from
+    deletion would still show up in ``to_delete_debug.txt`` as removed).
     """
     inactive = all_muted_ya, all_muted_ya_debug, to_delete, to_delete_debug, frozenset(), None, None
     added = _git_branch_added_to_stable_config(branch, repo_root)

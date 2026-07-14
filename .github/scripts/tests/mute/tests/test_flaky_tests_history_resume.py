@@ -1,14 +1,8 @@
 #!/usr/bin/env python3
-"""Unit tests for the cold-start / incremental-resume logic in ``flaky_tests_history.py``.
+"""Tests for the cold-start / incremental-resume logic in ``flaky_tests_history.py``.
 
-Lives alongside the stable-branch-grace tests because both were introduced/touched by
-the same "new stable branch cold-start" change; there is no dedicated analytics test
-package to place it in instead.
-
-Run directly (works from any cwd): ``python3 .github/scripts/tests/mute/tests/test_flaky_tests_history_resume.py``
-or via discovery from the ``mute`` dir: ``cd .github/scripts/tests/mute && python3 -m unittest discover -s tests``.
-(Running ``-m unittest`` from the repo root adds the repo root to ``sys.path``, which shadows
-the installed ``ydb`` package with the in-repo ``ydb/`` source tree — run from ``mute/`` instead.)
+Run from ``.github/scripts/tests/mute``: ``python3 -m unittest discover -s tests``
+(running from the repo root shadows the installed ``ydb`` package).
 """
 import datetime
 import sys

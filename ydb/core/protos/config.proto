@@ -307,6 +307,7 @@ message TDomainsConfig {
         optional bool DisableBuiltinGroups = 20;
         optional bool DisableBuiltinAccess = 21;
         optional bool HideAuthenticationFailureReasons = 22 [default = true];
+        optional bool AlwaysSetSystemOwner = 23 [default = false];
     }
 
     repeated TDomain Domain = 1;
@@ -2156,7 +2157,7 @@ message TImmediateControlsConfig {
             Description: "Return error on write/getstatus to non-existent storage channel instead of fallback to MAIN",
             MinValue: 0,
             MaxValue: 1,
-            DefaultValue: 0
+            DefaultValue: 1
         }];
         optional uint64 UsePerChannelReadQueues = 5 [(ControlOptions) = {
             Description: "Use separate KeyValue read request queues per storage channel",
@@ -3255,6 +3256,13 @@ message TOpaqueConfig {
     // Empty
 }
 
+message TUdfStoreConfig {
+    optional bool Enabled = 1 [default = false];
+    optional string KvStorageMedia = 2 [default = "ssd"];
+    optional bool EnableUnsafeNativeUdf = 3 [default = false];
+    optional string UnsafeNativeUdfDir = 4;
+}
+
 message TAppConfig {
     option (NMarkers.Root) = true;
     optional TActorSystemConfig ActorSystemConfig = 1;
@@ -3345,6 +3353,7 @@ message TAppConfig {
     optional TGroupedMemoryLimiterConfig CompGroupedMemoryLimiterConfig = 92;
     optional TBlockstoreConfig BlockstoreConfig = 93;
     optional TOpaqueConfig PrivateDatabaseConfig = 94 [(NMarkers.AllowInDatabaseConfig) = true, (NMarkers.OpaqueConfig) = true];
+    optional TUdfStoreConfig UdfStoreConfig = 95;
 
     repeated TNamedConfig NamedConfigs = 100;
     optional string ClusterYamlConfig = 101;

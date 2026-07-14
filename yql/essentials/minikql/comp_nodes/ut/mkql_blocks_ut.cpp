@@ -258,10 +258,10 @@ void TestChunked(bool withBlockExpand) {
             std::string small(smallStrSize, 'A' + i);
 
             items.push_back(NTest::ConvertValueToLiteralNode(pb, std::tuple<ui64, bool, TStringBuf, NTest::TUtf8>{
-                                                                     ui64(i), true, TStringBuf(big), NTest::TUtf8{TStringBuf(small)}}));
+                                                                     ui64(i), true, TStringBuf(big), NTest::TUtf8{TString(small)}}));
         } else {
             items.push_back(NTest::ConvertValueToLiteralNode(pb, std::tuple<ui64, bool, TStringBuf, NTest::TUtf8>{
-                                                                     ui64(i), false, TStringBuf(""), NTest::TUtf8{TStringBuf("")}}));
+                                                                     ui64(i), false, TStringBuf(""), NTest::TUtf8{TString("")}}));
         }
     }
 
@@ -299,9 +299,9 @@ void TestChunked(bool withBlockExpand) {
         if (i % 2 == 0) {
             storedBig.push_back(TString(bigStrSize, '0' + i));
             storedSmall.push_back(TString(smallStrSize, 'A' + i));
-            expected.push_back(TRow{ui64(i), true, TStringBuf(storedBig.back()), NTest::TUtf8{TStringBuf(storedSmall.back())}});
+            expected.push_back(TRow{ui64(i), true, TStringBuf(storedBig.back()), NTest::TUtf8{TString(storedSmall.back())}});
         } else {
-            expected.push_back(TRow{ui64(i), false, TStringBuf(""), NTest::TUtf8{TStringBuf("")}});
+            expected.push_back(TRow{ui64(i), false, TStringBuf(""), NTest::TUtf8{TString("")}});
         }
     }
 

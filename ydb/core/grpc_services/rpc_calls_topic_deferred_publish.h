@@ -1,6 +1,6 @@
 #pragma once
 
-#include <ydb/public/api/protos/ydb_topic_deferred_publish.pb.h>
+#include <ydb/public/api/protos/draft/ydb_topic_deferred_publish.pb.h>
 
 #include "rpc_calls.h"
 

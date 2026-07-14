@@ -53,6 +53,47 @@ TSamplingThrottlingControl* GetTracingControlTls() {
     return TracingControlRawPtr;
 }
 
+// --- Twin machinery for the independent user-facing channel ---
+
+Y_POD_STATIC_THREAD(TSamplingThrottlingControl*) UserFacingTracingControlRawPtr;
+
+class TUserFacingSamplingThrottlingControlTlsHolder {
+public:
+    TUserFacingSamplingThrottlingControlTlsHolder()
+        : Control(CreateNewTracingControl())
+    {}
+
+    TSamplingThrottlingControl* GetTracingControlPtr() {
+        if (Y_UNLIKELY(!Control)) {
+            Control = CreateNewTracingControl();
+        }
+        return Control.Get();
+    }
+
+    void ResetTracingControl() {
+        Control = nullptr;
+    }
+
+private:
+    static TIntrusivePtr<TSamplingThrottlingControl> CreateNewTracingControl() {
+        Y_ASSERT(HasAppData());
+        if (Y_UNLIKELY(!HasAppData())) {
+            return nullptr;
+        }
+        return AppData()->UserFacingTracingConfigurator->GetControl();
+    }
+
+private:
+    TIntrusivePtr<TSamplingThrottlingControl> Control;
+};
+
+TSamplingThrottlingControl* GetUserFacingTracingControlTls() {
+    if (Y_UNLIKELY(!UserFacingTracingControlRawPtr)) {
+        UserFacingTracingControlRawPtr = FastTlsSingleton<TUserFacingSamplingThrottlingControlTlsHolder>()->GetTracingControlPtr();
+    }
+    return UserFacingTracingControlRawPtr;
+}
+
 } // namespace
 
 NWilson::TTraceId HandleTracing(const TRequestDiscriminator& discriminator, const TMaybe<TString>& traceparent) {
@@ -67,6 +108,21 @@ void ClearTracingControl() {
     if (TracingControlRawPtr) {
         TracingControlRawPtr = nullptr;
         FastTlsSingleton<TSamplingThrottlingControlTlsHolder>()->ResetTracingControl();
+    }
+}
+
+NWilson::TTraceId HandleUserFacingTracing(const TRequestDiscriminator& discriminator, const TMaybe<TString>& traceparent) {
+    TSamplingThrottlingControl* control = GetUserFacingTracingControlTls();
+    if (Y_LIKELY(control)) {
+        return control->HandleTracing(discriminator, traceparent);
+    }
+    return NWilson::TTraceId{};
+}
+
+void ClearUserFacingTracingControl() {
+    if (UserFacingTracingControlRawPtr) {
+        UserFacingTracingControlRawPtr = nullptr;
+        FastTlsSingleton<TUserFacingSamplingThrottlingControlTlsHolder>()->ResetTracingControl();
     }
 }
 

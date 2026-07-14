@@ -243,6 +243,13 @@ public:
         return {};
     }
 
+    NWilson::TTraceId GetUserFacingWilsonTraceId() const {
+        if (Record.HasUserFacingTraceId()) {
+            return NWilson::TTraceId(Record.GetUserFacingTraceId());
+        }
+        return {};
+    }
+
     const TString& GetRequestType() const {
         if (RequestCtx) {
             if (!RequestType) {

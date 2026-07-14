@@ -522,6 +522,12 @@ void TGRpcRequestProxyImpl::MaybeStartTracing(TAutoPtr<TEventHandle<TEvent>>& ev
         grpcRequestProxySpan.Attribute("request_type", ctx.GetRequestName());
         ctx.StartTracing(std::move(grpcRequestProxySpan));
     }
+
+    NWilson::TTraceId userTraceId = NJaegerTracing::HandleUserFacingTracing(
+        ctx.GetRequestDiscriminator(), ctx.GetPeerMetaValues(NYdb::OTEL_TRACE_HEADER));
+    if (userTraceId) {
+        ctx.SetUserFacingTraceId(std::move(userTraceId));
+    }
 }
 
 void TGRpcRequestProxyImpl::HandleSchemeBoard(TSchemeBoardEvents::TEvNotifyUpdate::TPtr& ev, const TActorContext& ctx) {

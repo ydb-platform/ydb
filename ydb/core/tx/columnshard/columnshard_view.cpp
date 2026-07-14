@@ -23,6 +23,30 @@ bool HasPkRowSchema(const NArrow::TSimpleRow& row) {
     return HasPkSchema(row.GetSchema());
 }
 
+TString BinaryToHexKey(const char* data, size_t size) {
+    static const char hexDigits[] = "0123456789abcdef";
+    TString result;
+    result.reserve(size * 2);
+    for (size_t i = 0; i < size; ++i) {
+        const unsigned char byte = static_cast<unsigned char>(data[i]);
+        result.push_back(hexDigits[byte >> 4]);
+        result.push_back(hexDigits[byte & 0x0f]);
+    }
+    return result;
+}
+
+std::optional<TString> BinaryScalarToHexKey(const std::shared_ptr<arrow::Buffer>& buffer) {
+    if (!buffer) {
+        return std::nullopt;
+    }
+    return BinaryToHexKey(reinterpret_cast<const char*>(buffer->data()), buffer->size());
+}
+
+void WriteJsonForHtmlScript(IOutputStream& out, const NJson::TJsonValue& value) {
+    NJsonWriter::TBuf buf(NJsonWriter::HEM_DONT_ESCAPE_HTML, &out);
+    buf.WriteJsonValue(&value, false);
+}
+
 bool UsesCompressedPkView(const arrow::Type::type typeId) {
     switch (typeId) {
         case arrow::Type::INT8:
@@ -89,14 +113,23 @@ std::optional<double> GetPk0NumericValue(const NArrow::TSimpleRow& row) {
         case arrow::Type::UINT64:
             return static_cast<double>(static_cast<const arrow::UInt64Scalar&>(*scalar).value);
         case arrow::Type::TIMESTAMP:
+            return static_cast<double>(static_cast<const arrow::TimestampScalar&>(*scalar).value);
         case arrow::Type::DATE32:
+            return static_cast<double>(static_cast<const arrow::Date32Scalar&>(*scalar).value);
         case arrow::Type::DATE64:
+            return static_cast<double>(static_cast<const arrow::Date64Scalar&>(*scalar).value);
         case arrow::Type::TIME32:
+            return static_cast<double>(static_cast<const arrow::Time32Scalar&>(*scalar).value);
         case arrow::Type::TIME64:
+            return static_cast<double>(static_cast<const arrow::Time64Scalar&>(*scalar).value);
         case arrow::Type::DURATION:
+            return static_cast<double>(static_cast<const arrow::DurationScalar&>(*scalar).value);
         case arrow::Type::INTERVAL_MONTHS:
-        case arrow::Type::INTERVAL_DAY_TIME:
-            return static_cast<double>(static_cast<const arrow::Int64Scalar&>(*scalar).value);
+            return static_cast<double>(static_cast<const arrow::MonthIntervalScalar&>(*scalar).value);
+        case arrow::Type::INTERVAL_DAY_TIME: {
+            const auto& interval = static_cast<const arrow::DayTimeIntervalScalar&>(*scalar).value;
+            return static_cast<double>(interval.days) * 86400000.0 + interval.milliseconds;
+        }
         default:
             return std::nullopt;
     }
@@ -131,17 +164,25 @@ std::optional<TString> ScalarToCanonicalKey(const std::shared_ptr<arrow::Scalar>
         return std::nullopt;
     }
     switch (scalar->type->id()) {
-        case arrow::Type::STRING:
-        case arrow::Type::LARGE_STRING:
-            return TString(static_cast<const arrow::StringScalar&>(*scalar).value->ToString());
-        case arrow::Type::BINARY:
-        case arrow::Type::LARGE_BINARY: {
+        case arrow::Type::STRING: {
+            const auto& value = static_cast<const arrow::StringScalar&>(*scalar).value;
+            return value ? TString(value->ToString()) : TString{};
+        }
+        case arrow::Type::LARGE_STRING: {
+            const auto& value = static_cast<const arrow::LargeStringScalar&>(*scalar).value;
+            return value ? TString(value->ToString()) : TString{};
+        }
+        case arrow::Type::BINARY: {
             const auto& value = static_cast<const arrow::BinaryScalar&>(*scalar).value;
-            return TString(TStringBuf(reinterpret_cast<const char*>(value->data()), value->size()));
+            return BinaryScalarToHexKey(value);
+        }
+        case arrow::Type::LARGE_BINARY: {
+            const auto& value = static_cast<const arrow::LargeBinaryScalar&>(*scalar).value;
+            return BinaryScalarToHexKey(value);
         }
         case arrow::Type::FIXED_SIZE_BINARY: {
             const auto& value = static_cast<const arrow::FixedSizeBinaryScalar&>(*scalar).value;
-            return TString(TStringBuf(reinterpret_cast<const char*>(value->data()), value->size()));
+            return BinaryScalarToHexKey(value);
         }
         case arrow::Type::BOOL:
             return static_cast<const arrow::BooleanScalar&>(*scalar).value ? TString("true") : TString("false");
@@ -166,9 +207,23 @@ std::optional<TString> ScalarToCanonicalKey(const std::shared_ptr<arrow::Scalar>
         case arrow::Type::DOUBLE:
             return ToString(static_cast<const arrow::DoubleScalar&>(*scalar).value);
         case arrow::Type::TIMESTAMP:
+            return ToString(static_cast<const arrow::TimestampScalar&>(*scalar).value);
         case arrow::Type::DATE32:
+            return ToString(static_cast<const arrow::Date32Scalar&>(*scalar).value);
         case arrow::Type::DATE64:
-            return ToString(static_cast<const arrow::Int64Scalar&>(*scalar).value);
+            return ToString(static_cast<const arrow::Date64Scalar&>(*scalar).value);
+        case arrow::Type::TIME32:
+            return ToString(static_cast<const arrow::Time32Scalar&>(*scalar).value);
+        case arrow::Type::TIME64:
+            return ToString(static_cast<const arrow::Time64Scalar&>(*scalar).value);
+        case arrow::Type::DURATION:
+            return ToString(static_cast<const arrow::DurationScalar&>(*scalar).value);
+        case arrow::Type::INTERVAL_MONTHS:
+            return ToString(static_cast<const arrow::MonthIntervalScalar&>(*scalar).value);
+        case arrow::Type::INTERVAL_DAY_TIME: {
+            const auto& interval = static_cast<const arrow::DayTimeIntervalScalar&>(*scalar).value;
+            return ToString(interval.days) + "d" + ToString(interval.milliseconds) + "ms";
+        }
         default:
             return std::nullopt;
     }
@@ -885,11 +940,12 @@ TString TTxMonitoring::RenderPortionsPage() {
         <canvas id="portions-chart" class="portions-canvas" width="900" height="400"></canvas>
         <h4>Portion intersections</h4>
         <canvas id="portions-intersections" class="portions-canvas" width="900" height="200"></canvas>
+        <script type="application/json" id="portions-data">)";
+    WriteJsonForHtmlScript(html, data);
+    html << R"(</script>
         <script>
         (function() {
-            const data = )";
-    NJson::WriteJson(&html, &data, true, true, true);
-    html << R"(;
+            const data = JSON.parse(document.getElementById('portions-data').textContent);
 
             function levelColor(level, maxLevel) {
                 if (level === 0) return 'rgba(255, 0, 0, 0.5)';

@@ -160,7 +160,7 @@ Data types are mapped to {{ ydb-short-name }} equivalents:
 Functions are matched by value family:
 
 - **Date and time:** `DATE_TRUNC`, `EXTRACT`, interval operations.
-- **Rows:** `CONCAT`, `UPPER`, `LOWER`, `LENGTH`, and others.
+- **Strings:** `CONCAT`, `UPPER`, `LOWER`, `LENGTH`, and others.
 - **Collections:** `ARRAY`, `ARRAY_FILTER`, `UNNEST` → `FLATTEN BY`.
 - **Conditional and numeric:** `NULLIF`, `ROUND`, `COUNT()`.
 - **JSON:** `JSON_VALUE`, `JSON_QUERY` with support for related constructs.

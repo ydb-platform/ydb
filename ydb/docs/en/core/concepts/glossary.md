@@ -32,7 +32,7 @@ The main role of database nodes is to run various [tablets](#tablet) and [actors
 
 #### Storage node {#storage-node}
 
-**Storage nodes** (or **nodes storage**) are stateful nodes responsible for long-term storage of data fragments. The collection of storage nodes in a given [cluster {{ ydb-short-name }}](#cluster) is called [distributed storage](#distributed-storage) and can be viewed as the storage layer of that cluster. Thus, adding more storage nodes and disks is the main way to increase the cluster's storage capacity and I/O throughput.
+**Storage nodes** (or **storage nodes**) are stateful nodes responsible for long-term storage of data fragments. The collection of storage nodes in a given [cluster {{ ydb-short-name }}](#cluster) is called [distributed storage](#distributed-storage) and can be viewed as the storage layer of that cluster. Thus, adding more storage nodes and disks is the main way to increase the cluster's storage capacity and I/O throughput.
 
 #### Hybrid node {#hybrid-mode}
 
@@ -227,7 +227,7 @@ Full-text search capabilities and index parameters are described in the articles
 
 #### JSON index {#json-index}
 
-**JSON index** or **JSON-index** is an additional data structure used to speed up predicates with functions [JSON_EXISTS](../yql/reference/builtins/json.md#json_exists) and [JSON_VALUE](../yql/reference/builtins/json.md#json_value) on a column of type `Json` or `JsonDocument`. Unlike traditional secondary indexes optimized for equality or range searches on individual table columns, a JSON index works with arbitrary [JsonPath](../yql/reference/builtins/json.md#jsonpath) paths within a JSON document.
+**JSON index** is an additional data structure used to speed up predicates with functions [JSON_EXISTS](../yql/reference/builtins/json.md#json_exists) and [JSON_VALUE](../yql/reference/builtins/json.md#json_value) on a column of type `Json` or `JsonDocument`. Unlike traditional secondary indexes optimized for equality or range searches on individual table columns, a JSON index works with arbitrary [JsonPath](../yql/reference/builtins/json.md#jsonpath) paths within a JSON document.
 
 JSON index, like [full-text index](#fulltext-index), is implemented on top of [inverted index](https://en.wikipedia.org/wiki/Inverted_index), but uses its own tokenizer for JSON documents. JSON search capabilities are described in the articles [{#T}](../dev/json-indexes.md) and [{#T}](query_execution/json_search.md).
 
@@ -440,7 +440,7 @@ An access subject can be a [user](#access-user) or a [group](#access-group).
 
 ### Access right {#access-right}
 
-An ** [access right](../security/authorization.md#right)** or **access right** is an entity that reflects permission for an [access subject](#access-subject) to perform a specific set of operations in a cluster or database on a specific [access object](#access-object).
+An **[access right](../security/authorization.md#right)** or **access right** is an entity that reflects permission for an [access subject](#access-subject) to perform a specific set of operations in a cluster or database on a specific [access object](#access-object).
 
 ### Access right inheritance {#access-right-inheritance}
 
@@ -448,7 +448,7 @@ An ** [access right](../security/authorization.md#right)** or **access right** i
 
 ### Access control list {#access-control-list}
 
-An ** [access control list](../security/authorization.md#right)**, **access control list**, or **ACL** is a list of all [rights](#access-right) granted to [access subjects](#access-subject) (users and groups) on a specific [access object](#access-object).
+An **[access control list](../security/authorization.md#right)**, **access control list**, or **ACL** is a list of all [rights](#access-right) granted to [access subjects](#access-subject) (users and groups) on a specific [access object](#access-object).
 
 ### Access level {#access-level}
 
@@ -471,11 +471,11 @@ Detailed information about access level lists, their hierarchy, and how they wor
 
 ### Owner {#access-owner}
 
-An ** [owner](../security/authorization.md#owner)** is an [access subject](#access-subject) ([user](#access-user) or [group](#access-group)) that has full rights to a specific [access object](#access-object).
+An **[owner](../security/authorization.md#owner)** is an [access subject](#access-subject) ([user](#access-user) or [group](#access-group)) that has full rights to a specific [access object](#access-object).
 
 ### User {#access-user}
 
-A ** [user](../security/authorization.md#user)** is a person who uses {{ ydb-short-name }} to perform a specific function.
+A **[user](../security/authorization.md#user)** is a person who uses {{ ydb-short-name }} to perform a specific function.
 
 In {{ ydb-short-name }}, there are different types of users depending on the creation method:
 
@@ -494,7 +494,7 @@ A {{ ydb-short-name }} user whose account is created in a third-party directory,
 
 ### Group {#access-group}
 
-** [Group](../security/authorization.md#group)** or **access group** is a named set of [users](#access-user) and other groups with equal permissions for their members.
+**[Group](../security/authorization.md#group)** or **access group** is a named set of [users](#access-user) and other groups with equal permissions for their members.
 
 A group is identified by a [SID](#access-sid).
 
@@ -913,7 +913,7 @@ MiniKQL is a low-level language. End users of the system only see queries in [YQ
 
 ### Global schema {#global-schema}
 
-**Global schema**, **database schema**, **global scheme**, or **database schema** is the schema of all data stored in the [database](#database). It consists of [tables](#table) and other entities such as [topics](#topic). The metadata about these entities is called the global schema. The term is used in contrast to **local schema**, which refers to the data schema inside a [tablet](#tablet). {{ ydb-short-name }} users never see the local schema and work only with the global schema.
+**Global schema**, **database schema**, or **global scheme** is the schema of all data stored in the [database](#database). It consists of [tables](#table) and other entities such as [topics](#topic). The metadata about these entities is called the global schema. The term is used in contrast to **local schema**, which refers to the data schema inside a [tablet](#tablet). {{ ydb-short-name }} users never see the local schema and work only with the global schema.
 
 ### KiKiMR {#kikimr}
 

@@ -46,7 +46,7 @@ To create a connection to {{ ydb-short-name }} from FineBI using the PostgreSQL 
    * Username — the login for connecting to the {{ ydb-short-name }} database.
    * Password — the password for connecting to the {{ ydb-short-name }} database.
 
-   ! [](![](_assets/finebi/finebi-database-connection.png =600x) =600x)
+   ![](_assets/finebi/finebi-database-connection.png =600x)
 7. Click the Test Connection button.
 
    If the connection details are correct, you will see a message about the successful connection establishment.
@@ -111,7 +111,7 @@ To create a chart, follow these steps:
 5. On the **Chart Type** panel, click the **Pie Chart** icon.
 6. In the column list of the `episodes` dataset, click the arrow next to the `episode_id` column and select **Convert to Dimension** from the dropdown list.
 
-   ! [](![](_assets/finebi/finebi-convert2dimension.png =350x) =350x)
+   ![](_assets/finebi/finebi-convert2dimension.png =350x)
 7. Drag the `season_id` column to the **Color** field.
 8. Drag the `title` column to the **Label** field.
 9. Drag the `series_id` column to the **Filter** field.

@@ -241,7 +241,7 @@ Y_UNIT_TEST_SUITE(HasPathSysView) {
         SetupRowStoreTable(ydb, userSID);
 
         ydb->ExecuteSchemeQuery(RejectClassifierDdl(
-            poolId, "sysview_classifier", "/Root/.sys/.*"));
+            poolId, "sysview_classifier", "/Root/.sys/*"));
 
         const TString query = "SELECT * FROM t;";
         auto settings = NWorkload::TQueryRunnerSettings().PoolId("").UserSID(userSID);

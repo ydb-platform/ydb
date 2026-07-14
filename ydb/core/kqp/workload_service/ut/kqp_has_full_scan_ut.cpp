@@ -53,9 +53,9 @@ Y_UNIT_TEST_SUITE(TQueryClassifierHasFullScan) {
         UNIT_ASSERT_VALUES_EQUAL(GetPostPoolId(result), "default");
     }
 
-    Y_UNIT_TEST(ShouldMatchRegexPattern) {
+    Y_UNIT_TEST(ShouldMatchGlobPattern) {
         TClassifyTestCase tc;
-        tc.ClassifierHasFullScan = "/Root/testdb/orders_.*";
+        tc.ClassifierHasFullScan = "/Root/testdb/orders_*";
         auto result = tc.RunPostClassify("/Root/testdb/orders_2024", /*isFullScan=*/true);
         UNIT_ASSERT_VALUES_EQUAL(GetPostPoolId(result), "pool_target");
     }

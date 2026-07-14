@@ -265,8 +265,6 @@ public:
                     {"/viewer/json/simple_counter", {EViewerEndpointAccessType::Viewer}},
                     {"/viewer/sse_counter", {EViewerEndpointAccessType::Viewer}},
                     {"/viewer/json/sse_counter", {EViewerEndpointAccessType::Viewer}},
-                    {"/viewer/feature_flags", {EViewerEndpointAccessType::Viewer}},
-                    {"/viewer/json/feature_flags", {EViewerEndpointAccessType::Viewer}},
                     {"/viewer/groups", {EViewerEndpointAccessType::Viewer}},
                     {"/viewer/json/groups", {EViewerEndpointAccessType::Viewer}},
                     {"/viewer/render", {EViewerEndpointAccessType::Viewer}},
@@ -293,6 +291,8 @@ public:
                     {"/viewer/json/topic_data", {EViewerEndpointAccessType::Administration}},
 
                     // Database-level endpoints that require explicit database parameter for strict database tokens.
+                    {"/viewer/feature_flags", {EViewerEndpointAccessType::Database, true}},
+                    {"/viewer/json/feature_flags", {EViewerEndpointAccessType::Database, true}},
                     {"/viewer/sysinfo", {EViewerEndpointAccessType::Database, true}},
                     {"/viewer/json/sysinfo", {EViewerEndpointAccessType::Database, true}},
                     {"/viewer/autocomplete", {EViewerEndpointAccessType::Database, true}},

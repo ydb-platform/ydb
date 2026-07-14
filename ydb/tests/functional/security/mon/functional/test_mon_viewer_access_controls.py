@@ -84,7 +84,7 @@ def test_viewer_v2_aliases_access_controls(ydb_cluster_with_external_access_cont
     _assert_status(base_url, SYSINFO_V2_ENDPOINT, 'root@builtin', 200)
 
 
-def test_viewer_sysinfo_access_controls(ydb_cluster_with_external_access_controls):
+def test_database_scoped_endpoints_access_controls(ydb_cluster_with_external_access_controls):
     node = ydb_cluster_with_external_access_controls.nodes[1]
     base_url = f'https://{node.host}:{node.mon_port}'
     db_qs = f'?database={DATABASE.replace("/", "%2F")}'
@@ -102,7 +102,7 @@ def test_viewer_sysinfo_access_controls(ydb_cluster_with_external_access_control
     )
     assert grant_response.status_code == 200, grant_response.text
 
-    for ep in ['/viewer/sysinfo', '/viewer/json/sysinfo']:
+    for ep in ['/viewer/sysinfo', '/viewer/json/sysinfo', '/viewer/json/feature_flags', '/viewer/feature_flags']:
         # no database CGI-param for database_allowed_sids level
         _assert_status(base_url, ep, 'database@builtin', 400)
         # with database CGI-param for database_allowed_sids level

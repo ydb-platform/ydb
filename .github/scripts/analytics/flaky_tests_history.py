@@ -21,7 +21,7 @@ def _dedupe_history_rows(rows):
 
 
 BASE_DATE = datetime.date(1970, 1, 1)
-DEFAULT_MONTHS_BACK = 180  # 6 months
+DEFAULT_DAYS_BACK = 30  # cold start when branch has no flaky_tests_window history
 
 
 def parse_arguments():
@@ -91,10 +91,10 @@ def determine_start_date(ydb_wrapper, test_runs_table, flaky_tests_table, build_
     1. If start_date_override is provided, use it (must be <= end_date)
     2. If history exists, use max_date_window from history (but not after end_date)
     3. If no history, check test_runs_table for min_run_date
-    4. Default to 6 months ago from end_date
+    4. Default to 30 days ago from end_date
     """
     end_date = end_date_override if end_date_override else datetime.date.today()
-    default_start_date = end_date - datetime.timedelta(days=DEFAULT_MONTHS_BACK)
+    default_start_date = end_date - datetime.timedelta(days=DEFAULT_DAYS_BACK)
     
     # If user explicitly provided start_date_override, use it
     if start_date_override:

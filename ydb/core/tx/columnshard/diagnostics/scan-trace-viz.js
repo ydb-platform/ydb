@@ -182,7 +182,7 @@
     function buildActiveSeries(sourceIntervals) {
         const activeEv = [];
         for (const si of sourceIntervals) {
-            activeEv.push({t: si.start_t, delta: 1, sourceId: si.sourceId, blobBytes: si.blobBytes});
+            activeEv.push({t: si.start_t, delta: 1, sourceId: si.sourceId, blobBytes: si.startBlobBytes});
             activeEv.push({t: si.end_t, delta: -1, sourceId: si.sourceId, blobBytes: si.blobBytes});
         }
         activeEv.sort((a, b) => a.t - b.t);

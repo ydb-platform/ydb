@@ -297,7 +297,7 @@ Y_UNIT_TEST_SUITE(SubColumnsArrayAccessor) {
             for (const auto& path : testPaths) {
                 testAccessors.emplace_back(TTrivialArray::BuildEmpty(std::make_shared<arrow::BinaryType>()));
                 testCookies.emplace_back(testCookie++);
-                UNIT_ASSERT(jsonPathAccessorTrie.Insert(path, testAccessors.back(), testCookies.back()).IsSuccess());
+                UNIT_ASSERT(jsonPathAccessorTrie.Insert(path, testAccessors.back(), NSubColumns::EValueType::BinaryJson, testCookies.back()).IsSuccess());
             }
         }
 
@@ -377,7 +377,7 @@ Y_UNIT_TEST_SUITE(SubColumnsArrayAccessor) {
             R"({"root_integer": 1, "root_string": "a", "root_true": true, "root_false": false, "root_null": null, "root_object": {"a": "b"}, "root_array": ["a", 1, true, false, null, {}, [], [1, 2]]})");
 
         NKikimr::NArrow::NAccessor::NSubColumns::TJsonPathAccessorTrie jsonPathAccessorTrie;
-        UNIT_ASSERT(jsonPathAccessorTrie.Insert("$.a", accessor).IsSuccess());
+        UNIT_ASSERT(jsonPathAccessorTrie.Insert("$.a", accessor, NSubColumns::EValueType::BinaryJson).IsSuccess());
 
         // Non-existing paths and root path must return std::nullopt and called only once for our binary JSON
         // Object, array, null must return std::nullopt
@@ -420,7 +420,7 @@ Y_UNIT_TEST_SUITE(SubColumnsArrayAccessor) {
         auto accessor = CreateTrivialArrayAccessor(R"(["a", 1, true, false, null, {"a": "b"}, {}, [1,2], []])");
 
         NKikimr::NArrow::NAccessor::NSubColumns::TJsonPathAccessorTrie jsonPathAccessorTrie;
-        UNIT_ASSERT(jsonPathAccessorTrie.Insert("$.a", accessor).IsSuccess());
+        UNIT_ASSERT(jsonPathAccessorTrie.Insert("$.a", accessor, NSubColumns::EValueType::BinaryJson).IsSuccess());
 
         // Non-existing paths and root path must return std::nullopt and called only once for our binary JSON
         // Object, array, null must return std::nullopt
@@ -463,7 +463,7 @@ Y_UNIT_TEST_SUITE(SubColumnsArrayAccessor) {
             auto accessor = CreateTrivialArrayAccessor(scalarJson);
 
             NKikimr::NArrow::NAccessor::NSubColumns::TJsonPathAccessorTrie jsonPathAccessorTrie;
-            UNIT_ASSERT(jsonPathAccessorTrie.Insert("$.a", accessor).IsSuccess());
+            UNIT_ASSERT(jsonPathAccessorTrie.Insert("$.a", accessor, NSubColumns::EValueType::BinaryJson).IsSuccess());
 
             // Non-existing paths must return std::nullopt and called only once for our binary JSON
             {
@@ -487,18 +487,18 @@ Y_UNIT_TEST_SUITE(SubColumnsArrayAccessor) {
         auto accessorTopArray = CreateTrivialArrayAccessor("[3,4]");
 
         NKikimr::NArrow::NAccessor::NSubColumns::TJsonPathAccessorTrie jsonPathAccessorTrie;
-        UNIT_ASSERT(jsonPathAccessorTrie.Insert("$.a", accessorTopObject).IsSuccess());
-        UNIT_ASSERT(jsonPathAccessorTrie.Insert("$.a.b", accessorTopScalar2).IsSuccess());
-        UNIT_ASSERT(jsonPathAccessorTrie.Insert("$.b", accessorTopArray).IsSuccess());
-        UNIT_ASSERT(jsonPathAccessorTrie.Insert("$.d.e.f", accessorTopScalar1).IsSuccess());
-        UNIT_ASSERT(jsonPathAccessorTrie.Insert("$.d.e.g", accessorTopScalar2).IsSuccess());
-        UNIT_ASSERT(jsonPathAccessorTrie.Insert("$.d.e.h", accessorTopScalar3).IsSuccess());
-        UNIT_ASSERT(jsonPathAccessorTrie.Insert("$.d.i.j", accessorTopScalar1).IsSuccess());
-        UNIT_ASSERT(jsonPathAccessorTrie.Insert("$.d.i", accessorTopScalar2).IsSuccess());
-        UNIT_ASSERT(jsonPathAccessorTrie.Insert("$.d", accessorTopArray).IsSuccess());
-        UNIT_ASSERT(jsonPathAccessorTrie.Insert("$.k", accessorTopScalar1).IsSuccess());
-        UNIT_ASSERT(jsonPathAccessorTrie.Insert("$.k.l", accessorTopObject).IsSuccess());
-        UNIT_ASSERT(jsonPathAccessorTrie.Insert("$.k.m", accessorTopArray).IsSuccess());
+        UNIT_ASSERT(jsonPathAccessorTrie.Insert("$.a", accessorTopObject, NSubColumns::EValueType::BinaryJson).IsSuccess());
+        UNIT_ASSERT(jsonPathAccessorTrie.Insert("$.a.b", accessorTopScalar2, NSubColumns::EValueType::BinaryJson).IsSuccess());
+        UNIT_ASSERT(jsonPathAccessorTrie.Insert("$.b", accessorTopArray, NSubColumns::EValueType::BinaryJson).IsSuccess());
+        UNIT_ASSERT(jsonPathAccessorTrie.Insert("$.d.e.f", accessorTopScalar1, NSubColumns::EValueType::BinaryJson).IsSuccess());
+        UNIT_ASSERT(jsonPathAccessorTrie.Insert("$.d.e.g", accessorTopScalar2, NSubColumns::EValueType::BinaryJson).IsSuccess());
+        UNIT_ASSERT(jsonPathAccessorTrie.Insert("$.d.e.h", accessorTopScalar3, NSubColumns::EValueType::BinaryJson).IsSuccess());
+        UNIT_ASSERT(jsonPathAccessorTrie.Insert("$.d.i.j", accessorTopScalar1, NSubColumns::EValueType::BinaryJson).IsSuccess());
+        UNIT_ASSERT(jsonPathAccessorTrie.Insert("$.d.i", accessorTopScalar2, NSubColumns::EValueType::BinaryJson).IsSuccess());
+        UNIT_ASSERT(jsonPathAccessorTrie.Insert("$.d", accessorTopArray, NSubColumns::EValueType::BinaryJson).IsSuccess());
+        UNIT_ASSERT(jsonPathAccessorTrie.Insert("$.k", accessorTopScalar1, NSubColumns::EValueType::BinaryJson).IsSuccess());
+        UNIT_ASSERT(jsonPathAccessorTrie.Insert("$.k.l", accessorTopObject, NSubColumns::EValueType::BinaryJson).IsSuccess());
+        UNIT_ASSERT(jsonPathAccessorTrie.Insert("$.k.m", accessorTopArray, NSubColumns::EValueType::BinaryJson).IsSuccess());
 
         CheckValueByPath(jsonPathAccessorTrie, "$.a", std::nullopt);
         CheckValueByPath(jsonPathAccessorTrie, "$.a.data", "1");

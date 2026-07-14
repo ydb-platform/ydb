@@ -51,9 +51,32 @@ inline TString TEscapeHtml(const TString& in) {
     return out;
 }
 
-TString RenderLwTraceShardProbeLink(const TString& provider, const TString& probe, ui64 tabletId, const TString& title) {
+TString RenderLwTraceShardLogUrl(const TString& provider, const TString& probe, ui64 tabletId) {
     const TString traceId = TStringBuilder() << "." << provider << "." << probe << ".alsrt100000";
-    return TStringBuilder() << "<a href=\"../trace?mode=log&id=" << traceId << "&f=tabletId=" << tabletId << "\"> " << title << " </a>";
+    return TStringBuilder() << "../trace?mode=log&id=" << traceId << "&f=tabletId=" << tabletId;
+}
+
+TString RenderLwTraceShardLinks(
+    const TString& vizPage, const TString& provider, const TString& probe, ui64 tabletId, const TString& tabletIdCgi, const TString& title) {
+    const TString traceUrl = RenderLwTraceShardLogUrl(provider, probe, tabletId);
+    TStringStream html;
+    html << "<a href=\"app?page=" << vizPage << "&TabletID=" << tabletIdCgi << "\">" << title << "</a>";
+    html << " | ";
+    html << "<a href=\"" << traceUrl << "\">" << title << " (text)</a>";
+    return html.Str();
+}
+
+TString RenderScanTracesPage(ui64 tabletId, const TString& tabletIdCgi) {
+    const TString traceUrl = RenderLwTraceShardLogUrl("YDB_CS_SCAN", "StartScan", tabletId);
+    TStringStream html;
+    html << "<h3>Traces for all scans on shard</h3>";
+    html << "<p>Trace source: <a href=\"" << traceUrl << "\">" << traceUrl << "</a></p>";
+    html << "<p><a href=\"app?TabletID=" << tabletIdCgi << "\">Back</a></p>";
+    html << "<script src=\"https://cdn.plot.ly/plotly-2.35.2.min.js\"></script>";
+    html << R"(<script language="javascript" type="text/javascript" src="../columnshard/scan-trace-viz.js"></script>)";
+    html << "<div id=\"scan-trace-viz\" style=\"width:100%;\"></div>";
+    html << "<script>renderScanTraceVisualization('" << traceUrl << "', 'scan-trace-viz');</script>";
+    return html.Str();
 }
 
 bool TTxMonitoring::Execute(TTransactionContext& txc, const TActorContext&) {
@@ -169,10 +192,11 @@ TString TTxMonitoring::RenderMainPage() {
 
     html << "<h3><a href=\"app?page=compaction&TabletID=" << cgi.Get("TabletID") << "\"> Compaction </a></h3>";
     html << "<h3><a href=\"app?page=scan&TabletID=" << cgi.Get("TabletID") << "\"> Scan </a></h3>";
-    html << "<h3>" << RenderLwTraceShardProbeLink("YDB_CS_SCAN", "StartScan", Self->TabletID(), "Traces for all scans on shard") << "</h3>";
-    html << "<h3>"
-         << RenderLwTraceShardProbeLink("YDB_CS_DATA_SOURCE", "StartSourceProcessing", Self->TabletID(), "Traces for all portions on shard")
+    html << "<h3>" << RenderLwTraceShardLinks("scan_traces", "YDB_CS_SCAN", "StartScan", Self->TabletID(), cgi.Get("TabletID"),
+                          "Traces for all scans on shard")
          << "</h3>";
+    html << "<h3><a href=\"" << RenderLwTraceShardLogUrl("YDB_CS_DATA_SOURCE", "StartSourceProcessing", Self->TabletID())
+         << "\"> Traces for all portions on shard </a></h3>";
 
     html << "<h3>Tiering Errors</h3>";
     auto readErrors = Self->Counters.GetEvictionCounters().TieringErrors->GetAllReadErrors();
@@ -224,6 +248,11 @@ bool TColumnShard::OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev, const T
     auto cgi = ev->Get()->Cgi();
     if (cgi.Has("page") && cgi.Get("page") == "scan") {
         Send(ev->Forward(ScanDiagnosticsActorId));
+        return true;
+    }
+
+    if (cgi.Has("page") && cgi.Get("page") == "scan_traces") {
+        ctx.Send(ev->Sender, new NMon::TEvRemoteHttpInfoRes(RenderScanTracesPage(TabletID(), cgi.Get("TabletID"))));
         return true;
     }
 

@@ -27,6 +27,8 @@ void TScanDiagnosticsActor::Bootstrap() {
     if (mon) {
         mon->Register(
             new NMonitoring::TResourceMonPage("columnshard/viz-global.js", "viz-global.js", NMonitoring::TResourceMonPage::JAVASCRIPT));
+        mon->Register(
+            new NMonitoring::TResourceMonPage("columnshard/scan-trace-viz.js", "scan-trace-viz.js", NMonitoring::TResourceMonPage::JAVASCRIPT));
     }
     Become(&TThis::StateMain);
 }

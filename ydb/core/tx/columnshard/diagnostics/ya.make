@@ -16,6 +16,7 @@ PEERDIR(
 )
 
 RESOURCE(
+    scan-trace-viz.js scan-trace-viz.js
     viz-global.js viz-global.js
 )
 

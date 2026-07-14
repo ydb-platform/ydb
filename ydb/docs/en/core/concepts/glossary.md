@@ -26,13 +26,13 @@ Since {{ ydb-short-name }} uses a storage and compute separation approach, `ydbd
 
 #### Database node {#database-node}
 
-**Database nodes** (also known as **tenant nodes**, **compute nodes**, **database nodes**, **tenant nodes**, or **compute nodes**) process user queries addressed to a specific logical [database](#database). Their state is stored only in RAM and can be restored from the [distributed storage](#distributed-storage). The collection of database nodes in a given [cluster {{ ydb-short-name }}](topology.md) can be considered the compute layer of that cluster. Thus, adding database nodes and allocating additional resources (CPU and RAM) to them are the main ways to increase the database's compute resources.
+**Database nodes** (also known as **tenant nodes** or **compute nodes**) process user queries addressed to a specific logical [database](#database). Their state is stored only in RAM and can be restored from the [distributed storage](#distributed-storage). The collection of database nodes in a given [cluster {{ ydb-short-name }}](topology.md) can be considered the compute layer of that cluster. Thus, adding database nodes and allocating additional resources (CPU and RAM) to them are the main ways to increase the database's compute resources.
 
 The primary role of database nodes is to run various [tablets](#tablet) and [actors](#actor), as well as to receive incoming network requests.
 
 #### Storage node {#storage-node}
 
-**Storage nodes** (or **storage nodes**) are stateful nodes responsible for long-term storage of data fragments. The collection of storage nodes in a given [cluster {{ ydb-short-name }}](#cluster) is called the [distributed storage](#distributed-storage) and can be viewed as the storage layer of that cluster. Thus, adding more storage nodes and disks is the main way to increase the cluster's storage capacity and I/O throughput.
+**Storage nodes** are stateful nodes responsible for long-term storage of data fragments. The collection of storage nodes in a given [cluster {{ ydb-short-name }}](#cluster) is called the [distributed storage](#distributed-storage) and can be viewed as the storage layer of that cluster. Thus, adding more storage nodes and disks is the main way to increase the cluster's storage capacity and I/O throughput.
 
 #### Hybrid node {#hybrid-mode}
 
@@ -40,7 +40,7 @@ A **hybrid node** is a process that simultaneously performs the roles of a [data
 
 #### Static node {#static-node}
 
-**Static nodes** (or **static nodes**) are configured manually during initial cluster initialization or reconfiguration. Typically, they act as [storage nodes](#storage-node), but it is technically possible to configure them as [database nodes](#database-node) as well.
+**Static nodes** are configured manually during initial cluster initialization or reconfiguration. Typically, they act as [storage nodes](#storage-node), but it is technically possible to configure them as [database nodes](#database-node) as well.
 
 #### Dynamic node {#dynamic}
 
@@ -54,7 +54,7 @@ Many terms related to the [distributed storage implementation](#distributed-stor
 
 ### Storage group {#storage-group}
 
-**Group storage**, **distributed storage group**, **storage group**, or **Blob storage group** is a place for reliable data storage, similar to [RAID](https://en.wikipedia.org/wiki/RAID) but using disks from multiple servers. Depending on the chosen [cluster topology](#topology), storage groups use different algorithms to ensure high availability, similar to [standard RAID levels](https://en.wikipedia.org/wiki/Standard_RAID_levels).
+**Storage group**, **distributed storage group**, **storage group**, or **Blob storage group** is a place for reliable data storage, similar to [RAID](https://en.wikipedia.org/wiki/RAID) but using disks from multiple servers. Depending on the chosen [cluster topology](#topology), storage groups use different algorithms to ensure high availability, similar to [standard RAID levels](https://en.wikipedia.org/wiki/Standard_RAID_levels).
 
 [Distributed storage](#distributed-storage) typically manages a large number of relatively small storage groups. Each group can be assigned to a specific [database](#database) to increase the disk space capacity and I/O throughput available to that database.
 
@@ -72,11 +72,11 @@ Ordinary storage groups that are not [static](#static-group) are called **dynami
 
 #### Virtual storage group {#virtual-storage-groups}
 
-**Virtual group storage** or **virtual storage group** is an entity that is not actually a [storage group](#storage-group) but appears as one from the outside (provides a similar external interface). It can store its data in other storage groups or in S3.
+**Virtual storage group** or **virtual storage group** is an entity that is not actually a [storage group](#storage-group) but appears as one from the outside (provides a similar external interface). It can store its data in other storage groups or in S3.
 
 ### Storage pool {#storage-pool}
 
-**Pool storage** or **storage pool** is a set of data storage devices with similar characteristics. Each storage pool is assigned a unique name within the {{ ydb-short-name }} cluster. Technically, each storage pool consists of multiple physical disks ([PDisk](#pdisk)). Each [storage group](#storage-group) is created in a specific storage pool, which determines the performance characteristics of the storage group through the selection of appropriate storage devices. Typically, separate storage pools are created for devices of different types (e.g., NVMe, SSD, and HDD) or for specific models of these devices that have different capacity and access speed.
+**Storage pool** or **storage pool** is a set of data storage devices with similar characteristics. Each storage pool is assigned a unique name within the {{ ydb-short-name }} cluster. Technically, each storage pool consists of multiple physical disks ([PDisk](#pdisk)). Each [storage group](#storage-group) is created in a specific storage pool, which determines the performance characteristics of the storage group through the selection of appropriate storage devices. Typically, separate storage pools are created for devices of different types (e.g., NVMe, SSD, and HDD) or for specific models of these devices that have different capacity and access speed.
 
 ### Actor {#actor}
 
@@ -334,7 +334,7 @@ For more details, see [{#T}](datamodel/backup-collection.md).
 
 ### Resource pool {#resource-pool}
 
-**Resource pool** — a schema object that describes the limits imposed on resources (CPU, RAM, etc.) available for executing queries in this resource pool. A query is always executed in some resource pool. By `default`, all queries are executed in the resource pool named , which does not impose any limits. For more details on using resource pools, see [{#T}](../dev/resource-consumption-management.md).
+**Resource pool** — a schema object that describes the limits imposed on resources (CPU, RAM, etc.) available for executing queries in this resource pool. A query is always executed in some resource pool. By default, all queries are executed in the resource pool named `default`, which does not impose any limits. For more details on using resource pools, see [{#T}](../dev/resource-consumption-management.md).
 
 ### Resource pool classifier {#resource-pool-classifier}
 
@@ -718,7 +718,7 @@ Due to its nature, the state storage service operates on a best-effort basis. Fo
 
 #### Compaction {#compaction}
 
-**Compaction**, **compaction**, or **compaction** is an internal background process of rebuilding the data of an [LSM tree](#lsm-tree). Data in [VDisk](#vdisk) and [local databases](#local-database) is organized as LSM trees. Therefore, a distinction is made between **VDisk compaction** and **tablet compaction**. The compaction process is usually quite resource-intensive, so measures are taken to minimize the overhead associated with it, for example, by limiting the number of simultaneously running compactions.
+**Compaction**, **kompaktizatsiya**, or **compaction** is an internal background process of rebuilding the data of an [LSM tree](#lsm-tree). Data in [VDisk](#vdisk) and [local databases](#local-database) is organized as LSM trees. Therefore, a distinction is made between **VDisk compaction** and **tablet compaction**. The compaction process is usually quite resource-intensive, so measures are taken to minimize the overhead associated with it, for example, by limiting the number of simultaneously running compactions.
 
 #### gRPC proxy {#grpc-proxy}
 
@@ -784,7 +784,7 @@ PDisk contains a scheduler that ensures shared use of device bandwidth among mul
 
 #### Proxy {#ds-proxy}
 
-**Distributed storage proxy**, **DS-proxy**, **BS-proxy**, **Proxy distributed storage**, **DS-proxy**, or **BS-proxy** acts as a client library for performing operations with [distributed storage](#distributed-storage). The users of DS-proxy are [tablets](#tablet) that write to and read from distributed storage. DS-proxy hides the distributed nature of distributed storage from the user. The task of DS-proxy is to write to a quorum of [VDisk](#vdisk), perform retries when necessary, and control the write/read flow to prevent VDisk overload.
+**Proxy distributed storage**, **DS-proxy**, **BS-proxy**, **distributed storage proxy**, **DS-proxy**, or **BS-proxy** acts as a client library for performing operations with [distributed storage](#distributed-storage). The users of DS-proxy are [tablets](#tablet) that write to and read from distributed storage. DS-proxy hides the distributed nature of distributed storage from the user. The task of DS-proxy is to write to a quorum of [VDisk](#vdisk), perform retries when necessary, and control the write/read flow to prevent VDisk overload.
 
 Technically, DS-proxy is implemented as an [actor service](#actor-service) launched by [node warden](#node-warden) on each node for each storage group, handling all requests to the group (writing, reading, and deleting [LogoBlob](#logoblob), group locking). When writing data, DS-proxy performs [error correction coding](#erasure-coding) of the data, splitting the LogoBlob into parts that are then sent to the corresponding VDisks. DS-proxy performs the reverse process when reading, receiving parts from VDisks and reconstructing the LogoBlob from them.
 

@@ -19,8 +19,13 @@ namespace NKikimr::NBlobDepot {
             Y_ABORT_UNLESS(info->BlobDepotId);
             TabletId = *info->BlobDepotId;
             LogId = TStringBuilder() << '{' << TabletId << '@' << virtualGroupId << '}';
+            Y_ABORT_UNLESS(info->Group);
+            Recommissioning = info->DecommitStatus == NKikimrBlobStorage::TGroupDecommitStatus::RECOMMISSIONING;
+            GroupGeneration = info->GroupGeneration;
         } else {
             LogId = TStringBuilder() << '{' << '?' << '@' << virtualGroupId << "}";
+            Recommissioning = false;
+            GroupGeneration = 0;
         }
     }
 

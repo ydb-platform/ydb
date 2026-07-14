@@ -1010,6 +1010,19 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
         return ctx.ProgramBuilder.BlockWay(blockVariantValue);
     });
 
+    AddCallable("BlockVariant", [](const TExprNode& node, TMkqlBuildContext& ctx) {
+        const auto payloadValue = MkqlBuildExpr(*node.Child(0), ctx);
+        const auto variantType = node.Child(2)->GetTypeAnn()->Cast<TTypeExprType>()->GetType()->Cast<TVariantExprType>();
+        const auto type = ctx.BuildType(*node.Child(2), *variantType);
+        if (variantType->GetUnderlyingType()->GetKind() == ETypeAnnotationKind::Tuple) {
+            const auto alternativeIndex = FromString<ui32>(node.Child(1)->Content());
+            return ctx.ProgramBuilder.BlockVariant(payloadValue, alternativeIndex, type);
+        }
+        YQL_ENSURE(variantType->GetUnderlyingType()->GetKind() == ETypeAnnotationKind::Struct,
+                   "Expected tuple or struct as variant underlying type");
+        return ctx.ProgramBuilder.BlockVariant(payloadValue, node.Child(1)->Content(), type);
+    });
+
     AddCallable("Visit", [](const TExprNode& node, TMkqlBuildContext& ctx) {
         const auto variantObj = MkqlBuildExpr(node.Head(), ctx);
         const auto type = node.Head().GetTypeAnn()->Cast<TVariantExprType>();

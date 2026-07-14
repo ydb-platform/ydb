@@ -22,6 +22,16 @@ public:
         return Sorting;
     }
 
+    template <typename F>
+    void ForEachObject(F&& f) const {
+        for (const auto& obj : AlreadySorted) {
+            f(obj);
+        }
+        for (const auto& obj : HeapObjects) {
+            f(obj);
+        }
+    }
+
     const std::deque<TObject>& GetObjects() const {
         if (AlreadySorted.size()) {
             AFL_VERIFY(!HeapObjects.size());
@@ -212,6 +222,11 @@ private:
     }
 
 public:
+    template <typename F>
+    void ForEachConstructor(F&& f) const {
+        Constructors.ForEachObject(std::forward<F>(f));
+    }
+
     const std::deque<TConstructor>& GetConstructors() const {
         return Constructors.GetObjects();
     }

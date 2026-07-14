@@ -5,6 +5,7 @@
 #include <ydb/core/kqp/gateway/kqp_gateway.h>
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <ydb/core/kqp/ut/common/columnshard.h>
+#include <ydb/core/kqp/ut/common/olap_indexes_enums.h>
 #include <ydb/core/kqp/workload_service/actors/actors.h>
 #include <ydb/core/kqp/workload_service/ut/common/kqp_workload_service_ut_common.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
@@ -7953,11 +7954,12 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         }
     }
 
-    Y_UNIT_TEST(AlterColumnTableTtl) {
+    Y_UNIT_TEST(AlterColumnTableTtl, ELocalIndexAsSchemeObject) {
+        const bool localIndexAsSchemeObject = (Arg<0>() == ELocalIndexAsSchemeObject::SchemeObjectEnabled);
         auto runnerSettings = TKikimrSettings()
             .SetColumnShardAlterObjectEnabled(true)
             .SetWithSampleTables(false);
-        runnerSettings.AppConfig.MutableFeatureFlags()->SetEnableLocalIndexAsSchemeObject(false);
+        runnerSettings.AppConfig.MutableFeatureFlags()->SetEnableLocalIndexAsSchemeObject(localIndexAsSchemeObject);
         TKikimrRunner kikimr(runnerSettings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -14942,6 +14944,86 @@ END DO)",
         }
     }
 
+    Y_UNIT_TEST(OldSecretsCreationDisabled) {
+        NKikimrConfig::TFeatureFlags featureFlags;
+        featureFlags.SetEnableSchemaSecrets(true);
+        featureFlags.SetDisableOldSecretCreation(true);
+        const auto settings = TKikimrSettings()
+            .SetFeatureFlags(featureFlags);
+        TKikimrRunner kikimr(settings);
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        // new schema secrets
+        { // create
+            static const auto query = R"sql(
+                CREATE SECRET `/Root/secret-name-1` WITH (value = "secret-value");
+            )sql";
+            const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+        { // alter
+            static const auto query = R"sql(
+                ALTER SECRET `/Root/secret-name-1` WITH (value = "secret-value");
+            )sql";
+            const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+        { // drop
+            static const auto query = R"sql(
+                DROP SECRET `/Root/secret-name-1`;
+            )sql";
+            const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        // old secrets
+        { // create
+            static const auto query = R"sql(
+                CREATE OBJECT SecretName (TYPE SECRET) WITH value="secret-value";
+            )sql";
+            const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
+
+            UNIT_ASSERT_STRING_CONTAINS_C(
+                result.GetIssues().ToString(),
+                "Old secrets creation syntax is disabled now. Please use the new one",
+                result.GetIssues().ToString());
+        }
+        { // upsert
+            static const auto query = R"sql(
+                UPSERT OBJECT SecretName (TYPE SECRET) WITH value="secret-value";
+            )sql";
+            const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
+
+            UNIT_ASSERT_STRING_CONTAINS_C(
+                result.GetIssues().ToString(),
+                "Old secrets creation syntax is disabled now. Please use the new one",
+                result.GetIssues().ToString());
+        }
+        { // alter
+            static const auto query = R"sql(
+                ALTER OBJECT SecretName (TYPE SECRET) SET value="secret-value";
+            )sql";
+            const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
+
+            UNIT_ASSERT_STRING_CONTAINS_C(
+                result.GetIssues().ToString(),
+                "preparation problem: secret SecretName not found for alter",
+                result.GetIssues().ToString());
+        }
+        { // drop
+            static const auto query = R"sql(
+                DROP OBJECT SecretName (TYPE SECRET);
+            )sql";
+            const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            // old secrets pretend that removing non existent secret is fine and succeeded
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+    }
+
     Y_UNIT_TEST(SimpleTruncateTableFullPathTableClient) {
         TestTruncateTable("`/Root/TestTable`", false);
     }
@@ -15447,24 +15529,6 @@ END DO)",
     }
 }
 
-namespace {
-
-void TestUnsupportedColumnTypeError(NScheme::TTypeId type) {
-    TKikimrSettings runnerSettings;
-    runnerSettings.WithSampleTables = false;
-    TTestHelper testHelper(runnerSettings);
-
-    TVector<TTestHelper::TColumnSchema> schema = {
-        TTestHelper::TColumnSchema().SetName("id").SetType(NScheme::NTypeIds::Int32).SetNullable(false),
-        TTestHelper::TColumnSchema().SetName("level").SetType(type).SetNullable(true)
-    };
-    TTestHelper::TColumnTable testTable;
-    testTable.SetName("/Root/ColumnTableTest").SetPrimaryKey({"id"}).SetSharding({"id"}).SetSchema(schema);
-    testHelper.CreateTable(testTable, NYdb::EStatus::SCHEME_ERROR);
-}
-
-}
-
 Y_UNIT_TEST_SUITE(KqpOlapScheme) {
 
     Y_UNIT_TEST(DropTable) {
@@ -15619,11 +15683,12 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
         testHelper.RebootTablets(tableName);
     }
 
-    Y_UNIT_TEST(AddColumnWithTtl) {
+    Y_UNIT_TEST(AddColumnWithTtl, ELocalIndexAsSchemeObject) {
+        const bool localIndexAsSchemeObject = (Arg<0>() == ELocalIndexAsSchemeObject::SchemeObjectEnabled);
         auto settings = TKikimrSettings()
             .SetColumnShardAlterObjectEnabled(true)
             .SetWithSampleTables(false);
-        settings.AppConfig.MutableFeatureFlags()->SetEnableLocalIndexAsSchemeObject(false);
+        settings.AppConfig.MutableFeatureFlags()->SetEnableLocalIndexAsSchemeObject(localIndexAsSchemeObject);
         TTestHelper testHelper(settings);
 
         TVector<TTestHelper::TColumnSchema> schema = {
@@ -16095,12 +16160,6 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
         testHelper.ReadData("SELECT * FROM `/Root/ColumnTableTest` WHERE id=1", "[]");
     }
 
-    Y_UNIT_TEST(UnsupportedColumnTypes) {
-        TestUnsupportedColumnTypeError(NScheme::NTypeIds::Uuid);
-        TestUnsupportedColumnTypeError(NScheme::NTypeIds::DyNumber);
-        TestUnsupportedColumnTypeError(NScheme::NTypeIds::Interval);
-    }
-
     Y_UNIT_TEST(DropColumn) {
         TKikimrSettings runnerSettings;
         runnerSettings.WithSampleTables = false;
@@ -16294,11 +16353,12 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
         TestDropThenAddColumn(true);
     }
 
-    Y_UNIT_TEST(DropTtlColumn) {
+    Y_UNIT_TEST(DropTtlColumn, ELocalIndexAsSchemeObject) {
         auto runnerSettings = TKikimrSettings()
             .SetColumnShardAlterObjectEnabled(true)
             .SetWithSampleTables(false);
-        runnerSettings.AppConfig.MutableFeatureFlags()->SetEnableLocalIndexAsSchemeObject(false);
+        const bool localIndexAsSchemeObject = (Arg<0>() == ELocalIndexAsSchemeObject::SchemeObjectEnabled);
+        runnerSettings.AppConfig.MutableFeatureFlags()->SetEnableLocalIndexAsSchemeObject(localIndexAsSchemeObject);
         TTestHelper testHelper(runnerSettings);
 
         TVector<TTestHelper::TColumnSchema> schema = {
@@ -16594,11 +16654,12 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
         auto alterAddResult = testHelper.GetSession().ExecuteSchemeQuery(alterQueryAdd).GetValueSync();
     }
 
-    Y_UNIT_TEST(DropColumnAndResetTtl) {
+    Y_UNIT_TEST(DropColumnAndResetTtl, ELocalIndexAsSchemeObject) {
         auto runnerSettings = TKikimrSettings()
             .SetColumnShardAlterObjectEnabled(true)
             .SetWithSampleTables(false);
-        runnerSettings.AppConfig.MutableFeatureFlags()->SetEnableLocalIndexAsSchemeObject(false);
+        const bool localIndexAsSchemeObject = (Arg<0>() == ELocalIndexAsSchemeObject::SchemeObjectEnabled);
+        runnerSettings.AppConfig.MutableFeatureFlags()->SetEnableLocalIndexAsSchemeObject(localIndexAsSchemeObject);
         TTestHelper testHelper(runnerSettings);
 
         TVector<TTestHelper::TColumnSchema> schema = {
@@ -16632,11 +16693,12 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
         }
     }
 
-    Y_UNIT_TEST(InitTtlSettingsOnShardStart) {
+    Y_UNIT_TEST(InitTtlSettingsOnShardStart, ELocalIndexAsSchemeObject) {
         auto runnerSettings = TKikimrSettings()
             .SetColumnShardAlterObjectEnabled(true)
             .SetWithSampleTables(false);
-        runnerSettings.AppConfig.MutableFeatureFlags()->SetEnableLocalIndexAsSchemeObject(false);
+        const bool localIndexAsSchemeObject = (Arg<0>() == ELocalIndexAsSchemeObject::SchemeObjectEnabled);
+        runnerSettings.AppConfig.MutableFeatureFlags()->SetEnableLocalIndexAsSchemeObject(localIndexAsSchemeObject);
         TTestHelper testHelper(runnerSettings);
 
         TVector<TTestHelper::TColumnSchema> schema = {

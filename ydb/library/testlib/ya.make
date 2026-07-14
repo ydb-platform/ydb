@@ -1,5 +1,6 @@
 RECURSE(
     common
+    parquet_helpers
     pq_helpers
     s3_recipe_helper
     service_mocks

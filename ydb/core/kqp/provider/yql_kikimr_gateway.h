@@ -1409,7 +1409,7 @@ struct TSecretSettings {
     TString Name;
     TString Value;
     TString ValueParamName; // when set, the value is taken from parameter at execution
-    bool InheritPermissions = false;
+    std::optional<bool> InheritPermissions; // Not set means the option is not specified explicitly
 };
 
 struct TKikimrListPathItem {

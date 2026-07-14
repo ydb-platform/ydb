@@ -1406,13 +1406,6 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
         }
 
         {
-            ui64 isOldArgonHashFormatMigrationCompletedVal = 0;
-            RETURN_IF_NO_PRECHARGED(Self->ReadSysValue(db, Schema::SysParam_IsOldArgonHashFormatMigrationCompleted,
-                isOldArgonHashFormatMigrationCompletedVal));
-            Self->IsOldArgonHashFormatMigrationCompleted = isOldArgonHashFormatMigrationCompletedVal;
-        }
-
-        {
             ui64 sweepStatusVal = 0;
             RETURN_IF_NO_PRECHARGED(Self->ReadSysValue(db, Schema::SysParam_TablePartitionsFormatSweepStatus, sweepStatusVal));
             switch (sweepStatusVal) {
@@ -3941,14 +3934,6 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     if (!srcPath->Dropped()) {
                         srcPath->PathState = TPathElement::EPathState::EPathStateCopying;
                     }
-                    srcPath->DbRefCount++;
-                }
-
-                if (txState.TxType == TTxState::TxCopySequence && txState.SourcePathId) {
-                    Y_ABORT_UNLESS(Self->PathsById.contains(txState.SourcePathId));
-                    TPathElement::TPtr srcPath = Self->PathsById.at(txState.SourcePathId);
-                    Y_VERIFY_S(srcPath, "Null path element, pathId: " << txState.SourcePathId);
-                    srcPath->DbRefCount++;
                 }
 
                 if (txState.TxType == TTxState::TxMoveTable || txState.TxType == TTxState::TxMoveTableIndex || txState.TxType == TTxState::TxMoveSequence || txState.TxType == TTxState::TxMoveLocalIndex) {
@@ -3960,7 +3945,16 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     if (!srcPath->Dropped()) {
                         srcPath->PathState = TPathElement::EPathState::EPathStateMoving;
                     }
-                    srcPath->DbRefCount++;
+                }
+
+                if (txState.SourcePathId) {
+                    auto srcPathIt = Self->PathsById.find(txState.SourcePathId);
+                    Y_VERIFY_S(srcPathIt != Self->PathsById.end(), "Source path element not found for in-flight tx"
+                        << ", txId: " << operationId.GetTxId()
+                        << ", TxType: " << TTxState::TypeName(txState.TxType)
+                        << ", pathId: " << txState.SourcePathId);
+                    Y_VERIFY_S(srcPathIt->second, "Null path element, pathId: " << txState.SourcePathId);
+                    srcPathIt->second->DbRefCount++;
                 }
 
                 if (txState.TxType == TTxState::TxCreateSubDomain) {
@@ -5554,6 +5548,10 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     operationInfo->EndTime = TInstant::Seconds(rowset.GetValueOrDefault<Schema::SetColumnConstraint::EndTime>(0));
                     if (rowset.HaveValue<Schema::SetColumnConstraint::UserSID>()) {
                         operationInfo->UserSID = rowset.GetValue<Schema::SetColumnConstraint::UserSID>();
+                    }
+                    operationInfo->IsCancelled = rowset.GetValueOrDefault<Schema::SetColumnConstraint::IsCancelled>(false);
+                    if (rowset.HaveValue<Schema::SetColumnConstraint::CancellationReason>()) {
+                        operationInfo->CancellationReason = rowset.GetValue<Schema::SetColumnConstraint::CancellationReason>();
                     }
 
                     TTxId subStateTxId = rowset.GetValueOrDefault<Schema::SetColumnConstraint::SubStateTxId>(TTxId());

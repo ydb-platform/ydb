@@ -9,6 +9,7 @@ ydb/core/kqp/ut/federated_query/datastreams KqpStreamingQueriesDdl.OffsetsAndSta
 ydb/core/kqp/ut/olap/indexes KqpOlapIndexes.VerifyBloomFilterIndexSpeedsUpQueriesInAppropriateScenarios-QueryService
 ydb/core/kqp/ut/olap/indexes KqpOlapIndexes.VerifyBloomFilterIndexSpeedsUpQueriesInAppropriateScenarios-SchemeQuery
 ydb/core/persqueue/ut PQCountersSimple.MonitoringProjectIdChange
+ydb/core/quoter/ut QuoterWithKesusTest.PrefetchCoefficient
 ydb/core/tx/schemeshard/ut_shred_reboots ShredReboots.SimpleShredTest
 ydb/core/tx/schemeshard/ut_shred_reboots unittest.[*/*] chunk
 ydb/core/tx/schemeshard/ut_split_merge_reboots TSchemeShardSplitTestReboots.SplitWithTxInFlightWithReboots[TabletRebootsBucket0]

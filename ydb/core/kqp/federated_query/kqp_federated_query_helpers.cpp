@@ -15,6 +15,7 @@
 #include <ydb/core/protos/table_service_config.pb.h>
 #include <ydb/library/actors/http/http_proxy.h>
 #include <ydb/library/yql/providers/common/db_id_async_resolver/database_type.h>
+#include <ydb/library/yql/providers/pq/comp_nodes/yql_pq_factory.h>
 #include <ydb/library/yql/providers/pq/gateway/native/yql_pq_gateway_factory.h>
 #include <ydb/library/yql/providers/pq/transform/yql_pq_dq_transform.h>
 #include <ydb/library/yql/providers/s3/proto/sink.pb.h>
@@ -388,13 +389,18 @@ namespace {
     }
 
     NMiniKQL::TComputationNodeFactory MakeKqpFederatedQueryComputeFactory(NMiniKQL::TComputationNodeFactory baseComputeFactory, const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup) {
+        auto pqComputeFactory = NYql::GetDqPqFactory();
         auto ytComputeFactory = NYql::GetDqYtFactory();
         auto federatedComputeFactory = federatedQuerySetup ? federatedQuerySetup->ComputationFactory : nullptr;
 
-        return [baseComputeFactory, ytComputeFactory, federatedComputeFactory]
+        return [baseComputeFactory, pqComputeFactory, ytComputeFactory, federatedComputeFactory]
             (NMiniKQL::TCallable& callable, const NMiniKQL::TComputationNodeFactoryContext& ctx) -> NMiniKQL::IComputationNode* {
                 if (auto compute = baseComputeFactory(callable, ctx)) {
                     return compute;
+                }
+
+                if (auto pqCompute = pqComputeFactory(callable, ctx)) {
+                    return pqCompute;
                 }
 
                 if (auto ytCompute = ytComputeFactory(callable, ctx)) {

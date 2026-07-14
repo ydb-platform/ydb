@@ -764,8 +764,18 @@ void TKqpTasksGraph::FillStages() {
                 }
             }
 
-            bool stageAdded = AddStageInfo(TStageInfo(stageId, stage.InputsSize() + stageSourcesCount, stage.GetOutputsCount(), std::move(meta)));
-            YQL_ENSURE(stageAdded);
+            {
+                const auto& programSettings = stage.GetProgram().GetSettings();
+                TStageInfo stageInfo(stageId, stage.InputsSize() + stageSourcesCount, stage.GetOutputsCount(), std::move(meta));
+                stageInfo.WatermarksMode = programSettings.GetHasWatermarkGenerator()
+                    ? NDqProto::WATERMARKS_MODE_DEFAULT
+                    : NDqProto::WATERMARKS_MODE_DISABLED;
+                if (programSettings.HasWatermarkGeneratorIdleTimeoutUs()) {
+                    stageInfo.WatermarksIdleTimeoutUs = programSettings.GetWatermarkGeneratorIdleTimeoutUs();
+                }
+                bool stageAdded = AddStageInfo(std::move(stageInfo));
+                YQL_ENSURE(stageAdded);
+            }
 
             auto& stageInfo = GetStageInfo(stageId);
             LOG_D(stageInfo.DebugString());

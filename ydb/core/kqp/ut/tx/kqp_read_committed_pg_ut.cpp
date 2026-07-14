@@ -408,6 +408,15 @@ Y_UNIT_TEST_SUITE(KqpReadCommittedPg) {
                 auto commitResult = runtime.WaitFuture(commitB);
                 UNIT_ASSERT_VALUES_EQUAL_C(commitResult.GetStatus(), EStatus::SUCCESS, commitResult.GetIssues().ToString());
             }
+
+            // Verify final state: Tx A updated 10,11,12 to "TxA"; Tx B re-updated row 11 to "TxB"
+            auto verify = Kikimr->RunCall([&] {
+                return session1.ExecuteQuery(Q_(R"(
+                    SELECT Id, Name FROM `/Root/RangeTest` ORDER BY Id;
+                )"), TTxControl::BeginTx(TTxSettings::SnapshotRW()).CommitTx()).ExtractValueSync();
+            });
+            UNIT_ASSERT_VALUES_EQUAL_C(verify.GetStatus(), EStatus::SUCCESS, verify.GetIssues().ToString());
+            CompareYson(R"([[10;["TxA"]];[11;["TxB"]];[12;["TxA"]]])", FormatResultSetYson(verify.GetResultSet(0)));
         }
     };
 
@@ -462,6 +471,15 @@ Y_UNIT_TEST_SUITE(KqpReadCommittedPg) {
                 auto commitResult = runtime.WaitFuture(commitA);
                 UNIT_ASSERT_VALUES_EQUAL_C(commitResult.GetStatus(), EStatus::SUCCESS, commitResult.GetIssues().ToString());
             }
+
+            // Verify final state: rows 10,11,12 = "TxA"; gap insert row 15 = "GapInsert"
+            auto verify = Kikimr->RunCall([&] {
+                return session1.ExecuteQuery(Q_(R"(
+                    SELECT Id, Name FROM `/Root/RangeTest` ORDER BY Id;
+                )"), TTxControl::BeginTx(TTxSettings::SnapshotRW()).CommitTx()).ExtractValueSync();
+            });
+            UNIT_ASSERT_VALUES_EQUAL_C(verify.GetStatus(), EStatus::SUCCESS, verify.GetIssues().ToString());
+            CompareYson(R"([[10;["TxA"]];[11;["TxA"]];[12;["TxA"]];[15;["GapInsert"]]])", FormatResultSetYson(verify.GetResultSet(0)));
         }
     };
 
@@ -535,6 +553,15 @@ Y_UNIT_TEST_SUITE(KqpReadCommittedPg) {
                 auto commitResult = runtime.WaitFuture(commitB);
                 UNIT_ASSERT_VALUES_EQUAL_C(commitResult.GetStatus(), EStatus::SUCCESS, commitResult.GetIssues().ToString());
             }
+
+            // Verify final state: Tx A deleted rows 10,11,12; Tx B updated 0 rows (row 11 was gone)
+            auto verify = Kikimr->RunCall([&] {
+                return session1.ExecuteQuery(Q_(R"(
+                    SELECT Id, Name FROM `/Root/RangeTest` ORDER BY Id;
+                )"), TTxControl::BeginTx(TTxSettings::SnapshotRW()).CommitTx()).ExtractValueSync();
+            });
+            UNIT_ASSERT_VALUES_EQUAL_C(verify.GetStatus(), EStatus::SUCCESS, verify.GetIssues().ToString());
+            CompareYson(R"([])", FormatResultSetYson(verify.GetResultSet(0)));
         }
     };
 
@@ -589,6 +616,15 @@ Y_UNIT_TEST_SUITE(KqpReadCommittedPg) {
                 auto commitResult = runtime.WaitFuture(commitA);
                 UNIT_ASSERT_VALUES_EQUAL_C(commitResult.GetStatus(), EStatus::SUCCESS, commitResult.GetIssues().ToString());
             }
+
+            // Verify final state: Tx A deleted rows 10,11,12; gap insert row 15 remains
+            auto verify = Kikimr->RunCall([&] {
+                return session1.ExecuteQuery(Q_(R"(
+                    SELECT Id, Name FROM `/Root/RangeTest` ORDER BY Id;
+                )"), TTxControl::BeginTx(TTxSettings::SnapshotRW()).CommitTx()).ExtractValueSync();
+            });
+            UNIT_ASSERT_VALUES_EQUAL_C(verify.GetStatus(), EStatus::SUCCESS, verify.GetIssues().ToString());
+            CompareYson(R"([[15;["GapInsert"]]])", FormatResultSetYson(verify.GetResultSet(0)));
         }
     };
 
@@ -665,9 +701,10 @@ Y_UNIT_TEST_SUITE(KqpReadCommittedPg) {
     }
 
     // =========================================================================
-    // Update waits for uncommitted inserted row with same key
+    // Update does not wait for uncommitted inserted row with same key
+    // (Read Committed: uncommitted row is not visible, so UPDATE finds 0 rows)
     // =========================================================================
-    class TUpdateWaitsForUncommittedInsert : public TTableDataModificationTester {
+    class TUpdateDoesNotWaitForUncommittedInsert : public TTableDataModificationTester {
     protected:
         void DoExecute() override {
             auto& runtime = *Kikimr->GetTestServer().GetRuntime();
@@ -726,17 +763,18 @@ Y_UNIT_TEST_SUITE(KqpReadCommittedPg) {
         }
     };
 
-    Y_UNIT_TEST(TUpdateWaitsForUncommittedInsert) {
-        TUpdateWaitsForUncommittedInsert tester;
+    Y_UNIT_TEST(TUpdateDoesNotWaitForUncommittedInsert) {
+        TUpdateDoesNotWaitForUncommittedInsert tester;
         tester.SetIsOlap(false);
         tester.SetUseRealThreads(false);
         tester.Execute();
     }
 
     // =========================================================================
-    // Delete waits for uncommitted inserted row with same key
+    // Delete does not wait for uncommitted inserted row with same key
+    // (Read Committed: uncommitted row is not visible, so DELETE finds 0 rows)
     // =========================================================================
-    class TDeleteWaitsForUncommittedInsert : public TTableDataModificationTester {
+    class TDeleteDoesNotWaitForUncommittedInsert : public TTableDataModificationTester {
     protected:
         void DoExecute() override {
             auto& runtime = *Kikimr->GetTestServer().GetRuntime();
@@ -795,8 +833,8 @@ Y_UNIT_TEST_SUITE(KqpReadCommittedPg) {
         }
     };
 
-    Y_UNIT_TEST(TDeleteWaitsForUncommittedInsert) {
-        TDeleteWaitsForUncommittedInsert tester;
+    Y_UNIT_TEST(TDeleteDoesNotWaitForUncommittedInsert) {
+        TDeleteDoesNotWaitForUncommittedInsert tester;
         tester.SetIsOlap(false);
         tester.SetUseRealThreads(false);
         tester.Execute();

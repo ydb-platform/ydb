@@ -32,7 +32,7 @@ Y_UNIT_TEST_SUITE(TQueryClassifierHasAppName) {
         UNIT_ASSERT_VALUES_EQUAL(GetPoolId(tc.RunPreClassify()), "pool_target");
     }
 
-    Y_UNIT_TEST(ShouldRejectLiteralBeyondAnchor) {
+    Y_UNIT_TEST(ShouldRequireExactMatch) {
         TClassifyTestCase tc;
         tc.ClassifierHasAppName = "ydb-ui";
         tc.ContextAppName = "ydb-ui-prod";

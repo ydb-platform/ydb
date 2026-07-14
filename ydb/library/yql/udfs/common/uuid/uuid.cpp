@@ -9,8 +9,8 @@
 //
 // Returned values are raw 16-byte YDB internal Uuid representation.
 // Use as primary keys when you want:
-//   - V7: chronological clustering by creation time;
-//   - V8: shard spread via random prefix + time locality within a prefix.
+//   - newChrono: chronological clustering by creation time;
+//   - newSharded: shard spread via random prefix + time locality within a prefix.
 // For plain random IDs without sort semantics, use RandomUuid() instead.
 //
 // Assemble bytes in YDB internal (Microsoft GUID) layout and return as Uuid.
@@ -141,14 +141,14 @@ TString BuildPrefixPolyArgs(TStringBuf errorMessage) {
 }
 
 // Returns a Uuid value as 16 raw bytes in the internal format, which is Microsoft-style mixed endian GUID.
-TUnboxedValue MakeUuidValue(const IValueBuilder* valueBuilder, bool isV8, ui64 prefix, bool hasPrefix) {
+TUnboxedValue MakeUuidValue(const IValueBuilder* valueBuilder, bool isSharded, ui64 prefix, bool hasPrefix) {
     std::array<ui8, NKikimr::NUuid::UUID_LEN> bytes{};
-    if (isV8) {
+    if (isSharded) {
         const ui64 epochSeconds = MilliSeconds() / 1000;
-        bytes = NUuidKeyGen::MakeV8Bytes(prefix, epochSeconds, hasPrefix);
+        bytes = NUuidKeyGen::MakeShardedUuidBytes(prefix, epochSeconds, hasPrefix);
     } else {
         ui64 timestampMs = MilliSeconds();
-        bytes = NUuidKeyGen::MakeV7Bytes(prefix, timestampMs, hasPrefix);
+        bytes = NUuidKeyGen::MakeChronoUuidBytes(prefix, timestampMs, hasPrefix);
     }
 
     return valueBuilder->NewString(TStringRef(
@@ -156,11 +156,11 @@ TUnboxedValue MakeUuidValue(const IValueBuilder* valueBuilder, bool isV8, ui64 p
         bytes.size()));
 }
 
-// IsV8=true  → custom v8 (prefix + second timestamp), shard-friendly.
-// IsV8=false → RFC v7 variant with timestamp-first internal byte layout.
-// HasPrefix=true → caller supplies prefix (e.g. RandomNumber() once per batch);
-//                  keys target a single partition range.
-template <bool IsV8, bool HasPrefix>
+// IsSharded=true  → prefix-first layout with second-granularity timestamp.
+// IsSharded=false → timestamp-first internal byte layout.
+// HasPrefix=true  → caller supplies prefix (e.g. RandomNumber() once per batch);
+//                   keys target a single partition range.
+template <bool IsSharded, bool HasPrefix>
 class TNewUuid: public TBoxedValue {
 public:
     using TTypeAwareMarker = bool;
@@ -172,19 +172,19 @@ public:
 
     static const TStringRef& Name() {
         if constexpr (HasPrefix) {
-            if constexpr (IsV8) {
-                static auto name = TStringRef::Of("newPrefixV8");
+            if constexpr (IsSharded) {
+                static auto name = TStringRef::Of("newShardedPrefix");
                 return name;
             } else {
-                static auto name = TStringRef::Of("newPrefixV7");
+                static auto name = TStringRef::Of("newChronoPrefix");
                 return name;
             }
         } else {
-            if constexpr (IsV8) {
-                static auto name = TStringRef::Of("newV8");
+            if constexpr (IsSharded) {
+                static auto name = TStringRef::Of("newSharded");
                 return name;
             } else {
-                static auto name = TStringRef::Of("newV7");
+                static auto name = TStringRef::Of("newChrono");
                 return name;
             }
         }
@@ -247,7 +247,7 @@ private:
             if constexpr (HasPrefix) {
                 prefix = args[0].Get<ui64>();
             }
-            return MakeUuidValue(valueBuilder, IsV8, prefix, HasPrefix);
+            return MakeUuidValue(valueBuilder, IsSharded, prefix, HasPrefix);
         } catch (const std::exception& e) {
             UdfTerminate((TStringBuilder() << valueBuilder->WithCalleePosition(Pos_) << " " << e.what()).data());
         }
@@ -266,26 +266,26 @@ public:
     }
 
     void GetAllFunctions(IFunctionsSink& sink) const override {
-        static const TString newV7PolyArgs = BuildNoPrefixPolyArgs("Unexpected arguments for Uuid::newV7");
-        static const TString newPrefixV7PolyArgs = BuildPrefixPolyArgs("Unexpected arguments for Uuid::newPrefixV7");
-        static const TString newV8PolyArgs = BuildNoPrefixPolyArgs("Unexpected arguments for Uuid::newV8");
-        static const TString newPrefixV8PolyArgs = BuildPrefixPolyArgs("Unexpected arguments for Uuid::newPrefixV8");
+        static const TString newChronoPolyArgs = BuildNoPrefixPolyArgs("Unexpected arguments for Uuid::newChrono");
+        static const TString newChronoPrefixPolyArgs = BuildPrefixPolyArgs("Unexpected arguments for Uuid::newChronoPrefix");
+        static const TString newShardedPolyArgs = BuildNoPrefixPolyArgs("Unexpected arguments for Uuid::newSharded");
+        static const TString newShardedPrefixPolyArgs = BuildPrefixPolyArgs("Unexpected arguments for Uuid::newShardedPrefix");
 
-        auto newV7 = sink.Add(TNewUuid<false, false>::Name());
-        newV7->SetTypeAwareness();
-        newV7->SetPolyArgs(TStringRef(newV7PolyArgs));
+        auto newChrono = sink.Add(TNewUuid<false, false>::Name());
+        newChrono->SetTypeAwareness();
+        newChrono->SetPolyArgs(TStringRef(newChronoPolyArgs));
 
-        auto newPrefixV7 = sink.Add(TNewUuid<false, true>::Name());
-        newPrefixV7->SetTypeAwareness();
-        newPrefixV7->SetPolyArgs(TStringRef(newPrefixV7PolyArgs));
+        auto newChronoPrefix = sink.Add(TNewUuid<false, true>::Name());
+        newChronoPrefix->SetTypeAwareness();
+        newChronoPrefix->SetPolyArgs(TStringRef(newChronoPrefixPolyArgs));
 
-        auto newV8 = sink.Add(TNewUuid<true, false>::Name());
-        newV8->SetTypeAwareness();
-        newV8->SetPolyArgs(TStringRef(newV8PolyArgs));
+        auto newSharded = sink.Add(TNewUuid<true, false>::Name());
+        newSharded->SetTypeAwareness();
+        newSharded->SetPolyArgs(TStringRef(newShardedPolyArgs));
 
-        auto newPrefixV8 = sink.Add(TNewUuid<true, true>::Name());
-        newPrefixV8->SetTypeAwareness();
-        newPrefixV8->SetPolyArgs(TStringRef(newPrefixV8PolyArgs));
+        auto newShardedPrefix = sink.Add(TNewUuid<true, true>::Name());
+        newShardedPrefix->SetTypeAwareness();
+        newShardedPrefix->SetPolyArgs(TStringRef(newShardedPrefixPolyArgs));
     }
 
     void BuildFunctionTypeInfo(

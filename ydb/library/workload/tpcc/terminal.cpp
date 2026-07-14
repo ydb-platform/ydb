@@ -80,6 +80,10 @@ TTerminal::TTerminal(size_t terminalID,
                      int simulateTransactionMs,
                      int simulateTransactionSelect1Count,
                      NQuery::TTxSettings txMode,
+                     bool mixedTxMode,
+                     double txModeWeightSerializable,
+                     double txModeWeightSnapshot,
+                     double txModeWeightReadCommitted,
                      std::stop_token stopToken,
                      std::atomic<bool>& stopWarmup,
                      std::shared_ptr<TTerminalStats>& stats,
@@ -87,10 +91,28 @@ TTerminal::TTerminal(size_t terminalID,
     : TaskQueue(taskQueue)
     , Context(terminalID, warehouseID, warehouseCount, TaskQueue, simulateTransactionMs, simulateTransactionSelect1Count, client, path, log, txMode)
     , NoDelays(noDelays)
+    , MixedTxMode(mixedTxMode)
+    , TxModeWeightSerializable(txModeWeightSerializable)
+    , TxModeWeightSnapshot(txModeWeightSnapshot)
+    , TxModeWeightReadCommitted(txModeWeightReadCommitted)
     , StopToken(stopToken)
     , StopWarmup(stopWarmup)
     , Stats(stats)
 {
+}
+
+NQuery::TTxSettings TTerminal::ChooseTxMode() const {
+    double totalWeight = TxModeWeightSerializable + TxModeWeightSnapshot + TxModeWeightReadCommitted;
+    double randomValue = RandomNumber(0, static_cast<size_t>(totalWeight * 100)) / 100.0;
+    double cumulative = TxModeWeightSerializable;
+    if (randomValue <= cumulative) {
+        return NQuery::TTxSettings::SerializableRW();
+    }
+    cumulative += TxModeWeightSnapshot;
+    if (randomValue <= cumulative) {
+        return NQuery::TTxSettings::SnapshotRW();
+    }
+    return NQuery::TTxSettings::ReadCommittedRW();
 }
 
 void TTerminal::Start() {
@@ -117,6 +139,10 @@ NThreading::TFuture<void> TTerminal::Run() {
 
         size_t txIndex = ChooseRandomTransactionIndex();
         auto& transaction = Transactions[txIndex];
+
+        if (MixedTxMode) {
+            Context.TxMode = ChooseTxMode();
+        }
 
         try {
             if (!NoDelays) {

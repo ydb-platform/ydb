@@ -255,21 +255,44 @@ void TCommandTPCCRun::Config(TConfig& config) {
             .Optional().StoreTrue(&RunConfig->NoDelays);
 
     auto txModeOpt = config.Opts->AddLongOption(
-        "tx-mode", TStringBuilder() << "Transaction mode: serializable-rw or snapshot-rw")
-            .OptionalArgument("STRING").StoreMappedResult(&RunConfig->TxMode, [](const TString& value) {
+        "tx-mode", TStringBuilder() << "Transaction mode: serializable-rw, snapshot-rw, or mixed")
+            .OptionalArgument("STRING").StoreMappedResult(&RunConfig->TxMode, [runConfig = RunConfig](const TString& value) {
                 if (value == "serializable-rw") {
+                    runConfig->MixedTxMode = false;
                     return NQuery::TTxSettings::SerializableRW();
                 } else if (value == "snapshot-rw") {
+                    runConfig->MixedTxMode = false;
                     return NQuery::TTxSettings::SnapshotRW();
                 } else if (value == "read-committed-rw") {
                     // Experimental isolation level. Hidden from help at current time.
+                    runConfig->MixedTxMode = false;
                     return NQuery::TTxSettings::ReadCommittedRW();
+                } else if (value == "mixed") {
+                    runConfig->MixedTxMode = true;
+                    return NQuery::TTxSettings::SerializableRW();
                 }
-                throw yexception() << "Invalid transaction mode: " << value << ". Valid values are: serializable-rw, snapshot-rw";
+                throw yexception() << "Invalid transaction mode: " << value
+                    << ". Valid values are: serializable-rw, snapshot-rw, mixed";
             }).DefaultValue("serializable-rw")
             .ChoicesWithCompletion({{"serializable-rw", "Serializable read-write"},
                                     {"snapshot-rw", "Snapshot read-write"},
-                                    {"read-committed-rw", "Read Committed read-write"}});
+                                    {"read-committed-rw", "Read Committed read-write"},
+                                    {"mixed", "Mixed mode: randomly selects isolation level per transaction"}});
+
+    config.Opts->AddLongOption(
+        "tx-mode-weight-serializable",
+        TStringBuilder() << "Weight for serializable-rw in mixed tx mode (default: 0)")
+            .RequiredArgument("FLOAT").StoreResult(&RunConfig->TxModeWeightSerializable).DefaultValue(0.0);
+
+    config.Opts->AddLongOption(
+        "tx-mode-weight-snapshot",
+        TStringBuilder() << "Weight for snapshot-rw in mixed tx mode (default: 0)")
+            .RequiredArgument("FLOAT").StoreResult(&RunConfig->TxModeWeightSnapshot).DefaultValue(0.0);
+
+    config.Opts->AddLongOption(
+        "tx-mode-weight-read-committed",
+        TStringBuilder() << "Weight for read-committed-rw in mixed tx mode (default: 0)")
+            .RequiredArgument("FLOAT").StoreResult(&RunConfig->TxModeWeightReadCommitted).DefaultValue(0.0);
 
     auto simulateOpt = config.Opts->AddLongOption(
         "simulate", TStringBuilder() << "Simulate transaction execution (delay is simulated transaction latency ms)")
@@ -292,6 +315,18 @@ void TCommandTPCCRun::Config(TConfig& config) {
 }
 
 int TCommandTPCCRun::Run(TConfig& connectionConfig) {
+    double totalWeight = RunConfig->TxModeWeightSerializable
+        + RunConfig->TxModeWeightSnapshot
+        + RunConfig->TxModeWeightReadCommitted;
+    if (RunConfig->MixedTxMode) {
+        if (totalWeight <= 0.0) {
+            Cout << "Run failed: --tx-mode mixed requires at least one non-zero --tx-mode-weight-* option" << Endl;
+            return 1;
+        }
+    } else if (totalWeight > 0.0) {
+        Cout << "Run failed: --tx-mode-weight-* options are only valid with --tx-mode mixed" << Endl;
+        return 1;
+    }
     RunConfig->SetFullPath(connectionConfig);
     try {
         NTPCC::RunSync(connectionConfig, *RunConfig);

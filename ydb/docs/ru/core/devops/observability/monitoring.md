@@ -26,7 +26,7 @@
 
 Конфигурацию сбора метрик с узлов {{ ydb-short-name }} можно подготовить одним из способов ниже. Во всех случаях потребуется файл `prometheus_ydb.yml` — в нем описан сбор метрик {{ ydb-short-name }}.
 
-Список узлов хранения и динамических узлов базы данных указывается в файлах `ydbd-storage.yml` и `ydbd-database.yml` соответственно. Пути к этим файлам задаются в `prometheus_ydb.yml` (подробнее — в разделе [Запуск Prometheus с подготовленной конфигурацией](#prometheus-start)).
+Список [узлов хранения](../../concepts/glossary.md#storage-node) и [динамических узлов](../../concepts/glossary.md#dynamic) базы данных указывается в файлах `ydbd-storage.yml` и `ydbd-database.yml` соответственно. Пути к этим файлам задаются в `prometheus_ydb.yml` (подробнее — в разделе [Запуск Prometheus с подготовленной конфигурацией](#prometheus-start)).
 
 {% list tabs %}
 

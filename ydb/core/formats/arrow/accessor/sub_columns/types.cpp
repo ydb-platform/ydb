@@ -131,4 +131,17 @@ NBinaryJson::TBinaryJson ArrayElementToBinaryJson(const arrow::Array& array, con
     }
 }
 
+ui32 ArrayElementSize(const arrow::Array& array, const i64 index, const EValueType valueType) {
+    switch (valueType) {
+        case EValueType::BinaryJson:
+        case EValueType::String:
+            return static_cast<const arrow::BinaryArray&>(array).GetView(index).size();
+        case EValueType::Double:
+            return sizeof(double);
+        case EValueType::Bool:
+            // actually only 1 bit in arrow representation, not 1 byte, but let's not overcomplicate things
+            return 1;
+    }
+}
+
 }   // namespace NKikimr::NArrow::NAccessor::NSubColumns

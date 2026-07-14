@@ -44,4 +44,6 @@ bool ExtractBoolScalar(const NBinaryJson::TBinaryJson& blob);
 NJson::TJsonValue ArrayElementToJsonValue(const arrow::Array& array, const i64 index, const EValueType valueType);
 NBinaryJson::TBinaryJson ArrayElementToBinaryJson(const arrow::Array& array, const i64 index, const EValueType valueType);
 
+ui32 ArrayElementSize(const arrow::Array& array, const i64 index, const EValueType valueType);
+
 }   // namespace NKikimr::NArrow::NAccessor::NSubColumns

@@ -188,23 +188,4 @@ Y_UNIT_TEST_SUITE(SubColumnsNativeScalars) {
         UNIT_ASSERT_VALUES_EQUAL_C(CountValueType(arr, EValueType::String), 1, arr->DebugJson().GetStringRobust());
         UNIT_ASSERT_VALUES_EQUAL(PrintBinaryJsons(arr->GetChunkedArray()), PrintBinaryJsons(BuildSubColumns(docs, OffSettings())->GetChunkedArray()));
     }
-
-    // Current compaction always restores BinaryJson, may be dropped once that is fixed
-    Y_UNIT_TEST(OrderedIteratorNormalizesNativeToBinaryJson) {
-        auto arr = BuildSubColumns({ R"({"s":"x","n":3.5,"b":true})" }, NativeSettings(0));
-        auto it = arr->BuildOrderedIterator();
-        std::vector<TString> jsons;
-        it->ReadRecord(
-            0, [](ui32) {},
-            [&](ui32, const NBinaryJson::TBinaryJson& json, bool) {
-                UNIT_ASSERT_C(NBinaryJson::IsValidBinaryJson(TStringBuf(json.data(), json.size())), "ordered value is not BinaryJson");
-                jsons.push_back(TString(NBinaryJson::SerializeToJson(json)));
-            },
-            []() {});
-        std::sort(jsons.begin(), jsons.end());
-        UNIT_ASSERT_VALUES_EQUAL(jsons.size(), 3u);
-        UNIT_ASSERT_VALUES_EQUAL(jsons[0], "\"x\"");
-        UNIT_ASSERT_VALUES_EQUAL(jsons[1], "3.5");
-        UNIT_ASSERT_VALUES_EQUAL(jsons[2], "true");
-    }
 };

@@ -78,7 +78,7 @@ TBlockedDetectedState TDBGFixture::GetBlockedDetected(
                    return TBlockedDetectedState{
                        .DDiskSessionBroken =
                            dbg->DDiskConnections[hostIndex].SessionState ==
-                           TDirectBlockGroup::EDDiskSessionState::Broken,
+                           EDDiskSessionState::Broken,
                        .BlockedGenerationDetected =
                            dbg->BlockedGenerationDetected};
                })

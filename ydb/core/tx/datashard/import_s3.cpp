@@ -37,6 +37,8 @@
 #include <util/memory/pool.h>
 #include <util/string/builder.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::DATASHARD_RESTORE
+
 namespace {
 
     struct DestroyZCtx {
@@ -647,7 +649,8 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader<TSettings>> {
     }
 
     void AllocateResource() {
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::DATASHARD_RESTORE, "[Import] [" << LogPrefix() << "] ""AllocateResource");
+        YDB_LOG_DEBUG("[Import]",
+            {"logPrefix", LogPrefix()});
 
         const auto* appData = AppData();
         this->Send(MakeResourceBrokerID(), new TEvResourceBroker::TEvSubmitTask(
@@ -662,9 +665,9 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader<TSettings>> {
     }
 
     void Handle(TEvResourceBroker::TEvResourceAllocated::TPtr& ev) {
-        LOG_INFO_S(*TlsActivationContext, NKikimrServices::DATASHARD_RESTORE, "[Import] [" << LogPrefix() << "] ""Handle TEvResourceBroker::TEvResourceAllocated {"
-            << " TaskId: " << ev->Get()->TaskId
-        << " }");
+        YDB_LOG_INFO("[Import]",
+            {"logPrefix", LogPrefix()},
+            {"taskId", ev->Get()->TaskId});
 
         TaskId = ev->Get()->TaskId;
         Restart();
@@ -688,8 +691,9 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader<TSettings>> {
     }
 
     void Restart() {
-        LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::DATASHARD_RESTORE, "[Import] [" << LogPrefix() << "] ""Restart"
-            << ": attempt# " << Attempt);
+        YDB_LOG_NOTICE("[Import]",
+            {"logPrefix", LogPrefix()},
+            {"attempt", Attempt});
 
         if (const TActorId client = std::exchange(Client, TActorId())) {
             this->Send(client, new TEvents::TEvPoisonPill());
@@ -702,8 +706,9 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader<TSettings>> {
     }
 
     void HeadObject(const TString& key) {
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::DATASHARD_RESTORE, "[Import] [" << LogPrefix() << "] ""HeadObject"
-            << ": key# " << key);
+        YDB_LOG_DEBUG("[Import]",
+            {"logPrefix", LogPrefix()},
+            {"key", key});
 
         auto request = Model::HeadObjectRequest()
             .WithKey(key);
@@ -712,9 +717,11 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader<TSettings>> {
     }
 
     void GetObject(const TString& key, const std::pair<ui64, ui64>& range) {
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::DATASHARD_RESTORE, "[Import] [" << LogPrefix() << "] ""GetObject"
-            << ": key# " << key
-            << ", range# " << range.first << "-" << range.second);
+        YDB_LOG_DEBUG("[Import]",
+            {"logPrefix", LogPrefix()},
+            {"key", key},
+            {"range", range.first},
+            {"#_range.second", range.second});
 
         auto request = Model::GetObjectRequest()
             .WithKey(key)
@@ -724,7 +731,9 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader<TSettings>> {
     }
 
     void Handle(TEvExternalStorage::TEvHeadObjectResponse::TPtr& ev) {
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::DATASHARD_RESTORE, "[Import] [" << LogPrefix() << "] ""Handle " << ev->Get()->ToString());
+        YDB_LOG_DEBUG("[Import]",
+            {"logPrefix", LogPrefix()},
+            {"#_ev->Get()->ToString", ev->Get()->ToString()});
 
         const auto& result = ev->Get()->Result;
         if (!result.IsSuccess()) {
@@ -733,8 +742,9 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader<TSettings>> {
             case S3Errors::NO_SUCH_KEY:
                 break;
             default:
-                LOG_ERROR_S(*TlsActivationContext, NKikimrServices::DATASHARD_RESTORE, "[Import] [" << LogPrefix() << "] ""Error at 'HeadObject'"
-                    << ": error# " << result);
+                YDB_LOG_ERROR("[Import]",
+                    {"logPrefix", LogPrefix()},
+                    {"error", result});
                 return RetryOrFinish(result.GetError());
             }
 
@@ -783,7 +793,9 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader<TSettings>> {
             // Encrypted file can not have zero length
             const TString error = TStringBuilder() << Settings.GetDataKey(DataFormat, CompressionCodec)
                 << ": file is corrupted";
-            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::DATASHARD_RESTORE, "[Import] [" << LogPrefix() << "] " << error);
+            YDB_LOG_ERROR("[Import]",
+                {"logPrefix", LogPrefix()},
+                {"error", error});
             return Finish(false, error);
         }
 
@@ -796,7 +808,9 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader<TSettings>> {
     }
 
     void Handle(TEvDataShard::TEvS3DownloadInfo::TPtr& ev) {
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::DATASHARD_RESTORE, "[Import] [" << LogPrefix() << "] ""Handle " << ev->Get()->ToString());
+        YDB_LOG_DEBUG("[Import]",
+            {"logPrefix", LogPrefix()},
+            {"#_ev->Get()->ToString", ev->Get()->ToString()});
 
         const auto& info = ev->Get()->Info;
         if (!info.DataETag) {
@@ -810,8 +824,10 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader<TSettings>> {
     }
 
     void ProcessDownloadInfo(const TS3Download& info, const TStringBuf marker, bool loadState = false) {
-        LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::DATASHARD_RESTORE, "[Import] [" << LogPrefix() << "] ""Process download info at '" << marker << "'"
-            << ": info# " << info);
+        YDB_LOG_NOTICE("[Import]",
+            {"logPrefix", LogPrefix()},
+            {"marker", marker},
+            {"info", info});
 
         Y_ENSURE(info.DataETag);
         if (!CheckETag(*info.DataETag, ETag, marker)) {
@@ -826,7 +842,9 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader<TSettings>> {
             if (TString restoreErr; !Reader->RestoreFromState(DownloadState, restoreErr)) {
                 const TString error = TStringBuilder() << Settings.GetDataKey(DataFormat, CompressionCodec)
                     << ": failed to restore reader state: " << restoreErr;
-                LOG_ERROR_S(*TlsActivationContext, NKikimrServices::DATASHARD_RESTORE, "[Import] [" << LogPrefix() << "] " << error);
+                YDB_LOG_ERROR("[Import]",
+                    {"logPrefix", LogPrefix()},
+                    {"error", error});
                 return Finish(false, error);
             }
         }
@@ -852,7 +870,9 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader<TSettings>> {
     }
 
     void Handle(TEvExternalStorage::TEvGetObjectResponse::TPtr& ev) {
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::DATASHARD_RESTORE, "[Import] [" << LogPrefix() << "] ""Handle " << ev->Get()->ToString());
+        YDB_LOG_DEBUG("[Import]",
+            {"logPrefix", LogPrefix()},
+            {"#_ev->Get()->ToString", ev->Get()->ToString()});
 
         auto& msg = *ev->Get();
         const auto& result = msg.Result;
@@ -866,10 +886,11 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader<TSettings>> {
             return;
         }
 
-        LOG_TRACE_S(*TlsActivationContext, NKikimrServices::DATASHARD_RESTORE, "[Import] [" << LogPrefix() << "] ""Content size"
-            << ": processed-bytes# " << ProcessedBytes
-            << ", content-length# " << ContentLength
-            << ", body-size# " << msg.Body.size());
+        YDB_LOG_TRACE("[Import]",
+            {"logPrefix", LogPrefix()},
+            {"#_processed-bytes", ProcessedBytes},
+            {"#_content-length", ContentLength},
+            {"#_body-size", msg.Body.size()});
 
         *Counters.BytesReceived += msg.Body.size();
         Counters.LatencyRead.Finish(Now());
@@ -880,7 +901,9 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader<TSettings>> {
     }
 
     void HandleChecksum(TEvExternalStorage::TEvHeadObjectResponse::TPtr& ev) {
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::DATASHARD_RESTORE, "[Import] [" << LogPrefix() << "] ""HandleChecksum " << ev->Get()->ToString());
+        YDB_LOG_DEBUG("[Import]",
+            {"logPrefix", LogPrefix()},
+            {"#_ev->Get()->ToString", ev->Get()->ToString()});
 
         const auto& result = ev->Get()->Result;
 
@@ -894,7 +917,9 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader<TSettings>> {
     }
 
     void HandleChecksum(TEvExternalStorage::TEvGetObjectResponse::TPtr& ev) {
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::DATASHARD_RESTORE, "[Import] [" << LogPrefix() << "] ""HandleChecksum " << ev->Get()->ToString());
+        YDB_LOG_DEBUG("[Import]",
+            {"logPrefix", LogPrefix()},
+            {"#_ev->Get()->ToString", ev->Get()->ToString()});
 
         auto& msg = *ev->Get();
         const auto& result = msg.Result;
@@ -1039,12 +1064,15 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader<TSettings>> {
     // --- Direct part import (EnableDataShardDirectPartImport) ---
 
     void BeginDirectImport() {
-        LOG_INFO_S(*TlsActivationContext, NKikimrServices::DATASHARD_RESTORE, "[Import] [" << LogPrefix() << "] ""Begin direct part write");
+        YDB_LOG_INFO("[Import]",
+            {"logPrefix", LogPrefix()});
         this->Send(DataShard, new TEvDataShard::TEvS3DirectWriteBegin(TxId, TableInfo.GetId()));
     }
 
     void Handle(TEvDataShard::TEvS3DirectWriteBeginResult::TPtr& ev) {
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::DATASHARD_RESTORE, "[Import] [" << LogPrefix() << "] ""Handle " << ev->Get()->ToString());
+        YDB_LOG_DEBUG("[Import]",
+            {"logPrefix", LogPrefix()},
+            {"#_ev->Get()->ToString", ev->Get()->ToString()});
 
         auto* msg = ev->Get();
         if (!msg->Success) {
@@ -1105,16 +1133,19 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader<TSettings>> {
         info.WrittenRows = WrittenRows;
         info.ProcessedChecksumState = ProcessedChecksumState;
 
-        LOG_INFO_S(*TlsActivationContext, NKikimrServices::DATASHARD_RESTORE, "[Import] [" << LogPrefix() << "] ""Finish direct part write"
-            << ": writtenBytes# " << WrittenBytes
-            << ", writtenRows# " << WrittenRows);
+        YDB_LOG_INFO("[Import]",
+            {"logPrefix", LogPrefix()},
+            {"writtenBytes", WrittenBytes},
+            {"writtenRows", WrittenRows});
 
         this->Send(DataShard, new TEvDataShard::TEvS3DirectWriteFinish(
             TxId, TableInfo.GetId(), std::move(result), info));
     }
 
     void Handle(TEvDataShard::TEvS3DirectWriteFinishResult::TPtr& ev) {
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::DATASHARD_RESTORE, "[Import] [" << LogPrefix() << "] ""Handle " << ev->Get()->ToString());
+        YDB_LOG_DEBUG("[Import]",
+            {"logPrefix", LogPrefix()},
+            {"#_ev->Get()->ToString", ev->Get()->ToString()});
 
         auto* msg = ev->Get();
         if (!msg->Success) {
@@ -1157,9 +1188,10 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader<TSettings>> {
     void UploadRows() {
         const auto& record = RequestBuilder.GetRecord();
 
-        LOG_INFO_S(*TlsActivationContext, NKikimrServices::DATASHARD_RESTORE, "[Import] [" << LogPrefix() << "] ""Upload rows"
-            << ": count# " << record->RowsSize()
-            << ", size# " << record->ByteSizeLong());
+        YDB_LOG_INFO("[Import]",
+            {"logPrefix", LogPrefix()},
+            {"count", record->RowsSize()},
+            {"size", record->ByteSizeLong()});
 
         Counters.LatencyProcess.Finish(Now());
         Counters.LatencyWrite.Start(Now());
@@ -1170,7 +1202,9 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader<TSettings>> {
     }
 
     void Handle(TEvDataShard::TEvS3UploadRowsResponse::TPtr& ev) {
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::DATASHARD_RESTORE, "[Import] [" << LogPrefix() << "] ""Handle " << ev->Get()->ToString());
+        YDB_LOG_DEBUG("[Import]",
+            {"logPrefix", LogPrefix()},
+            {"#_ev->Get()->ToString", ev->Get()->ToString()});
 
         *Counters.BytesWritten += RequestBuilder.GetCellBytes();
         Counters.LatencyWrite.Finish(Now());
@@ -1193,8 +1227,10 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader<TSettings>> {
             return true;
         }
 
-        LOG_ERROR_S(*TlsActivationContext, NKikimrServices::DATASHARD_RESTORE, "[Import] [" << LogPrefix() << "] ""Error at '" << marker << "'"
-            << ": error# " << result);
+        YDB_LOG_ERROR("[Import]",
+            {"logPrefix", LogPrefix()},
+            {"marker", marker},
+            {"error", result});
         RetryOrFinish(result.GetError());
 
         return false;
@@ -1210,7 +1246,9 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader<TSettings>> {
             << ": expected '" << expected << "'"
             << ", got '" << got << "'";
 
-        LOG_ERROR_S(*TlsActivationContext, NKikimrServices::DATASHARD_RESTORE, "[Import] [" << LogPrefix() << "] " << error);
+        YDB_LOG_ERROR("[Import]",
+            {"logPrefix", LogPrefix()},
+            {"error", error});
         Finish(false, error);
 
         return false;
@@ -1218,7 +1256,9 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader<TSettings>> {
 
     bool CheckScheme() {
         auto finish = [this](const TString& error) -> bool {
-            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::DATASHARD_RESTORE, "[Import] [" << LogPrefix() << "] " << error);
+            YDB_LOG_ERROR("[Import]",
+                {"logPrefix", LogPrefix()},
+                {"error", error});
             Finish(false, error);
 
             return false;
@@ -1278,7 +1318,9 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader<TSettings>> {
             << ": expected '" << ExpectedChecksum << "'"
             << ", got '" << gotChecksum << "'";
 
-        LOG_ERROR_S(*TlsActivationContext, NKikimrServices::DATASHARD_RESTORE, "[Import] [" << LogPrefix() << "] " << error);
+        YDB_LOG_ERROR("[Import]",
+            {"logPrefix", LogPrefix()},
+            {"error", error});
         Finish(false, error);
 
         return false;
@@ -1321,11 +1363,12 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader<TSettings>> {
     void Finish(bool success = true, const TString& error = TString()) {
         DownloadInterrupted = true;
 
-        LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::DATASHARD_RESTORE, "[Import] [" << LogPrefix() << "] ""Finish"
-            << ": success# " << success
-            << ", error# " << error
-            << ", writtenBytes# " << WrittenBytes
-            << ", writtenRows# " << WrittenRows);
+        YDB_LOG_NOTICE("[Import]",
+            {"logPrefix", LogPrefix()},
+            {"success", success},
+            {"error", error},
+            {"writtenBytes", WrittenBytes},
+            {"writtenRows", WrittenRows});
 
         // If a direct part write was reserved but never handed off, drop its barrier
         // so the uncommitted blobs get garbage collected.
@@ -1394,8 +1437,9 @@ public:
     }
 
     void Bootstrap() {
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::DATASHARD_RESTORE, "[Import] [" << LogPrefix() << "] ""Bootstrap"
-            << ": attempt# " << Attempt);
+        YDB_LOG_DEBUG("[Import]",
+            {"logPrefix", LogPrefix()},
+            {"attempt", Attempt});
 
         if (!CheckScheme()) {
             return;

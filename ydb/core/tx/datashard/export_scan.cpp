@@ -10,6 +10,8 @@
 #include <util/generic/bitmap.h>
 #include <util/string/builder.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::DATASHARD_BACKUP
+
 namespace NKikimr {
 namespace NDataShard {
 
@@ -114,8 +116,9 @@ class TExportScan: private NActors::IActorCallback, public IActorExceptionHandle
     void Handle(TEvExportScan::TEvReset::TPtr&) {
         Y_ENSURE(IsReady());
 
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::DATASHARD_BACKUP, "[Export] [" << LogPrefix() << "] ""Handle TEvExportScan::TEvReset"
-            << ": self# " << SelfId());
+        YDB_LOG_DEBUG("[Export]",
+            {"logPrefix", LogPrefix()},
+            {"self", SelfId()});
 
         Stats.Reset(new TStats);
         State.Reset(ES_UPLOADER_READY).Reset(ES_BUFFER_SENT).Reset(ES_NO_MORE_DATA);
@@ -126,8 +129,9 @@ class TExportScan: private NActors::IActorCallback, public IActorExceptionHandle
     void Handle(TEvExportScan::TEvFeed::TPtr&) {
         Y_ENSURE(IsReady());
 
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::DATASHARD_BACKUP, "[Export] [" << LogPrefix() << "] ""Handle TEvExportScan::TEvFeed"
-            << ": self# " << SelfId());
+        YDB_LOG_DEBUG("[Export]",
+            {"logPrefix", LogPrefix()},
+            {"self", SelfId()});
 
         State.Set(ES_UPLOADER_READY).Reset(ES_BUFFER_SENT);
         Spent->Alter(true);
@@ -139,9 +143,10 @@ class TExportScan: private NActors::IActorCallback, public IActorExceptionHandle
     void Handle(TEvExportScan::TEvFinish::TPtr& ev) {
         Y_ENSURE(IsReady());
 
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::DATASHARD_BACKUP, "[Export] [" << LogPrefix() << "] ""Handle TEvExportScan::TEvFinish"
-            << ": self# " << SelfId()
-            << ", msg# " << ev->Get()->ToString());
+        YDB_LOG_DEBUG("[Export]",
+            {"logPrefix", LogPrefix()},
+            {"self", SelfId()},
+            {"msg", ev->Get()->ToString()});
 
         Success = ev->Get()->Success;
         Error = ev->Get()->Error;
@@ -205,7 +210,9 @@ public:
         if (!Buffer->Collect(row)) {
             Success = false;
             Error = Buffer->GetError();
-            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::DATASHARD_BACKUP, "[Export] [" << LogPrefix() << "] ""Error read data from table: " << Error);
+            YDB_LOG_ERROR("[Export]",
+                {"logPrefix", LogPrefix()},
+                {"table", Error});
             return EScan::Final;
         }
 

@@ -3730,7 +3730,7 @@ void TDataShard::Handle(TEvTabletPipe::TEvClientConnected::TPtr &ev, const TActo
     if (LoanReturnTracker.Has(ev->Get()->TabletId, ev->Get()->ClientId)) {
         if (ev->Get()->Status != NKikimrProto::OK) {
             if (!ev->Get()->Dead) {
-                YDB_LOG_DEBUG_CTX(ctx, "Resending loan returns from",
+                YDB_LOG_DEBUG_CTX(ctx, "Resending loan returns",
                     {"tabletID", TabletID()},
                     {"#_ev->Get()->TabletId", ev->Get()->TabletId});
                 LoanReturnTracker.ResendLoans(ev->Get()->TabletId, ctx);
@@ -3794,7 +3794,7 @@ void TDataShard::Handle(TEvTabletPipe::TEvClientDestroyed::TPtr &ev, const TActo
 
     // Resend loan-related messages in needed
     if (LoanReturnTracker.Has(ev->Get()->TabletId, ev->Get()->ClientId)) {
-        YDB_LOG_DEBUG_CTX(ctx, "Resending loan returns from",
+        YDB_LOG_DEBUG_CTX(ctx, "Resending loan returns",
             {"tabletID", TabletID()},
             {"#_ev->Get()->TabletId", ev->Get()->TabletId});
         LoanReturnTracker.ResendLoans(ev->Get()->TabletId, ctx);

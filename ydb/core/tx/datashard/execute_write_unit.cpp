@@ -375,7 +375,7 @@ public:
         TWriteOperation* writeOp = TWriteOperation::CastWriteOperation(op);
         const ui64 tabletId = DataShard.TabletID();
 
-        YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::TX_DATASHARD, "Executing write operation for",
+        YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::TX_DATASHARD, "Executing write operation",
             {"#_*op", *op},
             {"tabletId", tabletId});
 
@@ -623,7 +623,7 @@ public:
                 validatedOperationIndex = SIZE_MAX;
                 DataShard.AddRecentWriteForTli(mvccVersion, guardLocks.QuerySpanId, writeOp->GetTarget().NodeId());
             } else {
-                YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::TX_DATASHARD, "Skip empty write operation for",
+                YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::TX_DATASHARD, "Skip empty write operation",
                     {"#_*writeOp", *writeOp},
                     {"#_DataShard.TabletID", DataShard.TabletID()});
             }

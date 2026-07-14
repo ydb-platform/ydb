@@ -13,6 +13,8 @@
 
 #include <ydb/core/tx/datashard/build_index/common_helper.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::BUILD_INDEX
+
 namespace NKikimr::NDataShard {
 
 class TValidateRowConditionScan final : public TActor<TValidateRowConditionScan>, public NTable::IScan {
@@ -40,10 +42,10 @@ public:
             columnNames.push_back(col);
         }
         ScanTags = BuildTags(tableInfo, std::move(columnNames));
-        LOG_INFO_S(*TlsActivationContext, NKikimrServices::BUILD_INDEX,"Create TValidateRowConditionScan"
-            << " id# " << Request.GetId()
-            << " tabletId# " << TabletId
-            << " notNullColumns# " << Request.NotNullColumnsSize());
+        YDB_LOG_INFO("Create TValidateRowConditionScan",
+            {"id", Request.GetId()},
+            {"tabletId", TabletId},
+            {"notNullColumns", Request.NotNullColumnsSize()});
     }
 
     ~TValidateRowConditionScan() final = default;
@@ -99,21 +101,21 @@ public:
         }
 
         if (Status == NKikimrSetColumnConstraint::EValidateStatus::DONE && IsValid) {
-            LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::BUILD_INDEX,"TValidateRowConditionScan: Done (valid)"
-                << " id# " << Request.GetId()
-                << " tabletId# " << TabletId
-                << " scanStatus# " << (int)scanStatus);
+            YDB_LOG_NOTICE("TValidateRowConditionScan: Done (valid)",
+                {"id", Request.GetId()},
+                {"tabletId", TabletId},
+                {"scanStatus", (int)scanStatus});
         } else if (!IsValid) {
             LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::BUILD_INDEX,"TValidateRowConditionScan: Done (invalid, NULL found)"
                 << " id# " << Request.GetId()
                 << " tabletId# " << TabletId
                 << " scanStatus# " << (int)scanStatus);
         } else {
-            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::BUILD_INDEX,"TValidateRowConditionScan: Failed"
-                << " id# " << Request.GetId()
-                << " tabletId# " << TabletId
-                << " buildStatus# " << (int)Status
-                << " scanStatus# " << (int)scanStatus);
+            YDB_LOG_ERROR("TValidateRowConditionScan: Failed",
+                {"id", Request.GetId()},
+                {"tabletId", TabletId},
+                {"buildStatus", (int)Status},
+                {"scanStatus", (int)scanStatus});
         }
 
         TActivationContext::Send(new IEventHandle(Sender, SelfId(), response.Release()));
@@ -175,13 +177,13 @@ void TDataShard::HandleSafe(TEvDataShard::TEvValidateRowConditionRequest::TPtr& 
     auto rowVersion = GetMvccTxVersion(EMvccTxMode::ReadOnly);
     TScanRecord::TSeqNo seqNo = {record.GetSeqNoGeneration(), record.GetSeqNoRound()};
 
-    LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::BUILD_INDEX,"HandleSafe TEvValidateRowConditionRequest"
-        << " id# " << id
-        << " tabletId# " << record.GetTabletId()
-        << " ownerId# " << record.GetOwnerId()
-        << " pathId# " << record.GetPathId()
-        << " notNullColumns# " << record.NotNullColumnsSize()
-        << " rowVersion# " << rowVersion);
+    YDB_LOG_DEBUG("HandleSafe TEvValidateRowConditionRequest",
+        {"id", id},
+        {"tabletId", record.GetTabletId()},
+        {"ownerId", record.GetOwnerId()},
+        {"pathId", record.GetPathId()},
+        {"notNullColumns", record.NotNullColumnsSize()},
+        {"rowVersion", rowVersion});
 
     if (VolatileTxManager.HasVolatileTxsAtSnapshot(rowVersion)) {
         LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::BUILD_INDEX,"HandleSafe TEvValidateRowConditionRequest: waiting for volatile txs"
@@ -205,37 +207,37 @@ void TDataShard::HandleSafe(TEvDataShard::TEvValidateRowConditionRequest::TPtr& 
     };
 
     if (record.GetTabletId() != TabletID()) {
-        LOG_ERROR_S(*TlsActivationContext, NKikimrServices::BUILD_INDEX,"HandleSafe TEvValidateRowConditionRequest: wrong shard"
-            << " id# " << id
-            << " expected# " << TabletID()
-            << " got# " << record.GetTabletId());
+        YDB_LOG_ERROR("HandleSafe TEvValidateRowConditionRequest: wrong shard",
+            {"id", id},
+            {"expected", TabletID()},
+            {"got", record.GetTabletId()});
         sendResponse(NKikimrSetColumnConstraint::EValidateStatus::BAD_REQUEST, TStringBuilder() << "Wrong shard " << record.GetTabletId() << " this is " << TabletID());
         return;
     }
 
     const auto tableId = TTableId(record.GetOwnerId(), record.GetPathId());
     if (!GetUserTables().contains(tableId.PathId.LocalPathId)) {
-        LOG_ERROR_S(*TlsActivationContext, NKikimrServices::BUILD_INDEX,"HandleSafe TEvValidateRowConditionRequest: unknown table"
-            << " id# " << id
-            << " localPathId# " << tableId.PathId.LocalPathId);
+        YDB_LOG_ERROR("HandleSafe TEvValidateRowConditionRequest: unknown table",
+            {"id", id},
+            {"localPathId", tableId.PathId.LocalPathId});
         sendResponse(NKikimrSetColumnConstraint::EValidateStatus::BAD_REQUEST, TStringBuilder() << "Unknown table id: " << tableId.PathId.LocalPathId);
         return;
     }
 
     if (!IsStateActive()) {
-        LOG_ERROR_S(*TlsActivationContext, NKikimrServices::BUILD_INDEX,"HandleSafe TEvValidateRowConditionRequest: shard not active"
-            << " id# " << id
-            << " tabletId# " << TabletID());
+        YDB_LOG_ERROR("HandleSafe TEvValidateRowConditionRequest: shard not active",
+            {"id", id},
+            {"tabletId", TabletID()});
         sendResponse(NKikimrSetColumnConstraint::EValidateStatus::BAD_REQUEST, TStringBuilder() << "Shard " << TabletID() << " is not ready for requests");
         return;
     }
 
     const auto& userTable = *GetUserTables().at(tableId.PathId.LocalPathId);
 
-    LOG_INFO_S(*TlsActivationContext, NKikimrServices::BUILD_INDEX,"HandleSafe TEvValidateRowConditionRequest: starting scan"
-        << " id# " << id
-        << " tabletId# " << TabletID()
-        << " localTid# " << userTable.LocalTid);
+    YDB_LOG_INFO("HandleSafe TEvValidateRowConditionRequest: starting scan",
+        {"id", id},
+        {"tabletId", TabletID()},
+        {"localTid", userTable.LocalTid});
 
     auto scan = new TValidateRowConditionScan(record, ev->Sender, TabletID(), userTable, GetScanManager());
     StartScan(this, scan, id, seqNo, rowVersion, userTable.LocalTid);

@@ -16,6 +16,8 @@
 #include <util/generic/algorithm.h>
 #include <util/string/builder.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::BUILD_INDEX
+
 namespace NKikimr::NDataShard {
 using namespace NKMeans;
 
@@ -81,7 +83,8 @@ public:
         , Lead(std::move(lead))
         , Clusters(std::move(clusters))
     {
-        LOG_INFO_S(*TlsActivationContext, NKikimrServices::BUILD_INDEX, "Create " << Debug());
+        YDB_LOG_INFO("Create",
+            {"debug", Debug()});
 
         InForeign = request.GetSkipOverlapForeign();
 
@@ -94,7 +97,8 @@ public:
     TInitialState Prepare(IDriver* driver, TIntrusiveConstPtr<TScheme>) final
     {
         TActivationContext::AsActorContext().RegisterWithSameMailbox(this);
-        LOG_INFO_S(*TlsActivationContext, NKikimrServices::BUILD_INDEX, "Prepare " << Debug());
+        YDB_LOG_INFO("Prepare",
+            {"debug", Debug()});
 
         Driver = driver;
 
@@ -132,9 +136,13 @@ public:
         NYql::IssuesToMessage(Issues, record.MutableIssues());
 
         if (Response->Record.GetStatus() == NKikimrIndexBuilder::DONE) {
-            LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::BUILD_INDEX, "Done " << Debug() << " " << ToShortDebugString(Response->Record));
+            YDB_LOG_NOTICE("Done",
+                {"debug", Debug()},
+                {"#_ToShortDebugString(Response->Record)", ToShortDebugString(Response->Record)});
         } else {
-            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::BUILD_INDEX, "Failed " << Debug() << " " << ToShortDebugString(Response->Record));
+            YDB_LOG_ERROR("Failed",
+                {"debug", Debug()},
+                {"#_ToShortDebugString(Response->Record)", ToShortDebugString(Response->Record)});
         }
         Send(ResponseActorId, Response.Release());
 
@@ -159,7 +167,9 @@ public:
 
     EScan Seek(TLead& lead, ui64 seq) final
     {
-        LOG_TRACE_S(*TlsActivationContext, NKikimrServices::BUILD_INDEX, "Seek " << seq << " " << Debug());
+        YDB_LOG_TRACE("Seek",
+            {"seq", seq},
+            {"debug", Debug()});
 
         lead = Lead;
 
@@ -168,7 +178,8 @@ public:
 
     EScan Feed(TArrayRef<const TCell> key, const TRow& row) final
     {
-        // LOG_TRACE_S(*TlsActivationContext, NKikimrServices::BUILD_INDEX, "Feed " << Debug());
+        // YDB_LOG_TRACE("Feed",
+        //     {"debug", Debug()});
 
         ++ReadRows;
         ReadBytes += CountRowCellBytes(key, *row);
@@ -184,7 +195,8 @@ public:
 
     EScan Exhausted() final
     {
-        LOG_TRACE_S(*TlsActivationContext, NKikimrServices::BUILD_INDEX, "Exhausted " << Debug());
+        YDB_LOG_TRACE("Exhausted",
+            {"debug", Debug()});
 
         return EScan::Final;
     }
@@ -193,8 +205,10 @@ protected:
     STFUNC(StateWork) {
         switch (ev->GetTypeRewrite()) {
             default:
-                LOG_ERROR_S(*TlsActivationContext, NKikimrServices::BUILD_INDEX, "StateWork unexpected event type: " << ev->GetTypeRewrite()
-                    << " event: " << ev->ToString() << " " << Debug());
+                YDB_LOG_ERROR("StateWork unexpected event",
+                    {"type", ev->GetTypeRewrite()},
+                    {"event", ev->ToString()},
+                    {"debug", Debug()});
         }
     }
 
@@ -282,9 +296,10 @@ void TDataShard::HandleSafe(TEvDataShard::TEvRecomputeKMeansRequest::TPtr& ev, c
         auto response = MakeHolder<TEvDataShard::TEvRecomputeKMeansResponse>();
         FillScanResponseCommonFields(*response, id, TabletID(), seqNo);
 
-        LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::BUILD_INDEX, "Starting TRecomputeKMeansScan TabletId: " << TabletID()
-            << " " << ToShortDebugString(request)
-            << " row version " << rowVersion);
+        YDB_LOG_NOTICE("Starting TRecomputeKMeansScan row version",
+            {"tabletId", TabletID()},
+            {"#_ToShortDebugString(request)", ToShortDebugString(request)},
+            {"rowVersion", rowVersion});
 
         // Note: it's very unlikely that we have volatile txs before this snapshot
         if (VolatileTxManager.HasVolatileTxsAtSnapshot(rowVersion)) {
@@ -300,9 +315,10 @@ void TDataShard::HandleSafe(TEvDataShard::TEvRecomputeKMeansRequest::TPtr& ev, c
         };
         auto trySendBadRequest = [&] {
             if (response->Record.GetStatus() == NKikimrIndexBuilder::EBuildStatus::BAD_REQUEST) {
-                LOG_ERROR_S(*TlsActivationContext, NKikimrServices::BUILD_INDEX, "Rejecting TRecomputeKMeansScan bad request TabletId: " << TabletID()
-                    << " " << ToShortDebugString(request)
-                    << " with response " << ToShortDebugString(response->Record));
+                YDB_LOG_ERROR("Rejecting TRecomputeKMeansScan bad request with response",
+                    {"tabletId", TabletID()},
+                    {"#_ToShortDebugString(request)", ToShortDebugString(request)},
+                    {"#_ToShortDebugString(response->Record)", ToShortDebugString(response->Record)});
                 ctx.Send(ev->Sender, std::move(response));
                 return true;
             } else {

@@ -279,7 +279,8 @@ private:
     }
 
     void StartUploadRowsInternal() {
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::BUILD_INDEX, "TBatchRowsUploader StartUploadRowsInternal " << Debug());
+        YDB_LOG_DEBUG_COMP(NKikimrServices::BUILD_INDEX, "TBatchRowsUploader StartUploadRowsInternal",
+            {"debug", Debug()});
 
         Y_ENSURE(Uploading);
         Y_ENSURE(!Uploading.Buffer.IsEmpty());
@@ -353,9 +354,12 @@ void FillScanResponseCommonFields(TResponse& response, ui64 scanId, ui64 tabletI
 template<typename TResponse>
 inline void FailScan(ui64 scanId, ui64 tabletId, TActorId sender, TScanRecord::TSeqNo seqNo, const std::exception& exc, const TString& logScanType)
 {
-    LOG_ERROR_S(*TlsActivationContext, NKikimrServices::BUILD_INDEX, "Unhandled exception " << logScanType << " TabletId: " << tabletId
-        << " " << TypeName(exc) << ": " << exc.what() << Endl
-        << TBackTrace::FromCurrentException().PrintToString());
+    YDB_LOG_ERROR_COMP(NKikimrServices::BUILD_INDEX, "Unhandled exception",
+        {"logScanType", logScanType},
+        {"tabletId", tabletId},
+        {"#_TypeName(exc)", TypeName(exc)},
+        {"#_exc.what", exc.what()},
+        {"#_TBackTrace::FromCurrentException().PrintToString", TBackTrace::FromCurrentException().PrintToString()});
 
     GetServiceCounters(AppData()->Counters, "tablets")->GetCounter("alerts_scan_broken", true)->Inc();
 

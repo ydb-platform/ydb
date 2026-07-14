@@ -246,7 +246,7 @@ bool TPipeline::IsReadyOp(TOperation::TPtr op)
                      << " " << *op << " executing in " << op->GetCurrentUnit()
                      << " at " << Self->TabletID());
     if (op->IsInProgress()) {
-        YDB_LOG_CRIT_CTX(TActivationContext::AsActorContext(), "Found in-progress candidate operation executing in",
+        YDB_LOG_CRIT_CTX(TActivationContext::AsActorContext(), "Found in-progress candidate operation executing",
             {"#_op->GetKind", op->GetKind()},
             {"#_*op", *op},
             {"#_op->GetCurrentUnit", op->GetCurrentUnit()},
@@ -294,7 +294,7 @@ TOperation::TPtr TPipeline::GetNextActiveOp(bool dryRun)
                 NextActiveOp = nullptr;
             return res;
         } else {
-            YDB_LOG_DEBUG_CTX(TActivationContext::AsActorContext(), "Cached ready operation is not ready anymore for",
+            YDB_LOG_DEBUG_CTX(TActivationContext::AsActorContext(), "Cached ready operation is not ready anymore",
                 {"#_NextActiveOp->GetKind", NextActiveOp->GetKind()},
                 {"#_*NextActiveOp", *NextActiveOp},
                 {"#_NextActiveOp->GetCurrentUnit", NextActiveOp->GetCurrentUnit()},
@@ -311,7 +311,7 @@ TOperation::TPtr TPipeline::GetNextActiveOp(bool dryRun)
         CandidateOps.erase(CandidateOps.begin());
 
         if (IsReadyOp(op)) {
-            YDB_LOG_DEBUG_CTX(TActivationContext::AsActorContext(), "Found ready candidate operation at",
+            YDB_LOG_DEBUG_CTX(TActivationContext::AsActorContext(), "Found ready candidate operation",
                 {"#_*op", *op},
                 {"#_Self->TabletID", Self->TabletID()},
                 {"#_op->GetCurrentUnit", op->GetCurrentUnit()});
@@ -767,7 +767,7 @@ bool TPipeline::SaveInReadSet(const TEvTxProcessing::TEvReadSet &rs,
     }
 
     if (step <= OutdatedReadSetStep()) {
-        YDB_LOG_INFO_CTX(ctx, "Outdated readset for",
+        YDB_LOG_INFO_CTX(ctx, "Outdated readset",
             {"step", step},
             {"txId", txId},
             {"#_Self->TabletID", Self->TabletID()});
@@ -783,7 +783,7 @@ bool TPipeline::SaveInReadSet(const TEvTxProcessing::TEvReadSet &rs,
     // is not finished yet (e.g. due to out-of-order). In this case we should
     // store ack and send it after its step become outdated.
     if (!Self->TransQueue.Has(txId)) {
-        YDB_LOG_INFO_CTX(ctx, "Unexpected readset in state for",
+        YDB_LOG_INFO_CTX(ctx, "Unexpected readset in state",
             {"#_Self->State", Self->State},
             {"step", step},
             {"txId", txId},
@@ -847,7 +847,7 @@ void TPipeline::SaveInReadSet(const TEvTxProcessing::TEvReadSet &rs,
         coverageList = pb.GetBalanceTrackList().SerializeAsString();
     }
 
-    YDB_LOG_DEBUG_CTX(TActivationContext::AsActorContext(), "Save read set at",
+    YDB_LOG_DEBUG_CTX(TActivationContext::AsActorContext(), "Save read set",
         {"#_Self->TabletID", Self->TabletID()},
         {"txId", txId},
         {"origin", origin},
@@ -879,7 +879,7 @@ bool TPipeline::LoadInReadSets(TOperation::TPtr op,
     // Create coverage builders to handle split/merge
     // of read set origins (datashards)
     for (const auto &kv : op->InReadSets()) {
-        YDB_LOG_TRACE_CTX(ctx, "Prepare for loading readset for",
+        YDB_LOG_TRACE_CTX(ctx, "Prepare for loading readset",
             {"#_*op", *op},
             {"#_Self->TabletID", Self->TabletID()},
             {"source", kv.first.first},
@@ -887,7 +887,7 @@ bool TPipeline::LoadInReadSets(TOperation::TPtr op,
         op->CoverageBuilders()[kv.first].reset(new TBalanceCoverageBuilder());
     }
 
-    YDB_LOG_TRACE_CTX(ctx, "Expected readsets for",
+    YDB_LOG_TRACE_CTX(ctx, "Expected readsets",
         {"#_op->GetRemainReadSets", op->GetRemainReadSets()},
         {"#_*op", *op},
         {"#_Self->TabletID", Self->TabletID()});
@@ -941,7 +941,7 @@ bool TPipeline::LoadInReadSets(TOperation::TPtr op,
     }
     op->DelayedInReadSets().clear();
 
-    YDB_LOG_TRACE_CTX(ctx, "Remain read sets for",
+    YDB_LOG_TRACE_CTX(ctx, "Remain read sets",
         {"#_op->GetRemainReadSets", op->GetRemainReadSets()},
         {"#_*op", *op},
         {"#_Self->TabletID", Self->TabletID()});
@@ -1180,7 +1180,7 @@ void TPipeline::CompleteTx(const TOperation::TPtr op, TTransactionContext& txc, 
     {
         auto &pr = *DelayedAcks.begin();
 
-        YDB_LOG_NOTICE_CTX(ctx, "Will send outdated delayed readset ack for",
+        YDB_LOG_NOTICE_CTX(ctx, "Will send outdated delayed readset ack",
             {"#_pr.first.Step", pr.first.Step},
             {"#_pr.first.TxId", pr.first.TxId},
             {"#_Self->TabletID", Self->TabletID()});

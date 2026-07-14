@@ -473,7 +473,7 @@ public:
             rightFull = true;
         }
 
-        YDB_LOG_TRACE_CTX(ctx, "Calculated ReplicationSourceOffsets range from to",
+        YDB_LOG_TRACE_CTX(ctx, "Calculated ReplicationSourceOffsets range",
             {"#_Self->TabletID", Self->TabletID()},
             {"#_EscapeC(range.From.GetBuffer())", EscapeC(range.From.GetBuffer())},
             {"#_num_0", (leftFull ? " (full)" : "")},

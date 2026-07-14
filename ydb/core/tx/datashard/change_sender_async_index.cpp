@@ -17,6 +17,8 @@
 
 #include <util/generic/maybe.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::CHANGE_EXCHANGE
+
 namespace NKikimr::NDataShard {
 
 using ESenderType = TEvChangeExchange::ESenderType;
@@ -49,8 +51,9 @@ private:
     void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
         const auto& result = ev->Get()->Request;
 
-        LOG_DEBUG_S (*TlsActivationContext, NKikimrServices::CHANGE_EXCHANGE, GetLogPrefix() <<"HandleIndex TEvTxProxySchemeCache::TEvNavigateKeySetResult"
-            << ": result# " << (result ? result->ToString(*AppData()->TypeRegistry) : "nullptr"));
+        YDB_LOG_DEBUG("HandleIndex TEvTxProxySchemeCache::TEvNavigateKeySetResult",
+            {"logPrefix", GetLogPrefix()},
+            {"result", (result ? result->ToString(*AppData()->TypeRegistry) : "nullptr")});
 
         if (!AsDerived()->CheckNotEmpty(result)) {
             return;
@@ -75,7 +78,8 @@ private:
         }
 
         if (entry.Self && entry.Self->Info.GetPathState() == NKikimrSchemeOp::EPathStateDrop) {
-            LOG_DEBUG_S (*TlsActivationContext, NKikimrServices::CHANGE_EXCHANGE, GetLogPrefix() <<"Index is planned to drop, waiting for the EvRemoveSender command");
+            YDB_LOG_DEBUG("Index is planned to drop, waiting for the EvRemoveSender command",
+                {"logPrefix", GetLogPrefix()});
 
             return AsDerived()->OnIndexUnderRemove();
         }
@@ -187,12 +191,16 @@ class TAsyncIndexChangeSenderMain
     }
 
     void LogCritAndRetry(const TString& error) {
-        LOG_CRIT_S  (*TlsActivationContext, NKikimrServices::CHANGE_EXCHANGE, GetLogPrefix() << error);
+        YDB_LOG_CRIT("",
+            {"logPrefix", GetLogPrefix()},
+            {"error", error});
         Retry();
     }
 
     void LogWarnAndRetry(const TString& error) {
-        LOG_WARN_S  (*TlsActivationContext, NKikimrServices::CHANGE_EXCHANGE, GetLogPrefix() << error);
+        YDB_LOG_WARN("",
+            {"logPrefix", GetLogPrefix()},
+            {"error", error});
         Retry();
     }
 
@@ -221,32 +229,44 @@ class TAsyncIndexChangeSenderMain
     }
 
     void Handle(NChangeExchange::TEvChangeExchange::TEvEnqueueRecords::TPtr& ev) {
-        LOG_DEBUG_S (*TlsActivationContext, NKikimrServices::CHANGE_EXCHANGE, GetLogPrefix() <<"Handle " << ev->Get()->ToString());
+        YDB_LOG_DEBUG("Handle",
+            {"logPrefix", GetLogPrefix()},
+            {"#_ev->Get()->ToString", ev->Get()->ToString()});
         EnqueueRecords(std::move(ev->Get()->Records));
     }
 
     void Handle(NChangeExchange::TEvChangeExchange::TEvRecords::TPtr& ev) {
-        LOG_DEBUG_S (*TlsActivationContext, NKikimrServices::CHANGE_EXCHANGE, GetLogPrefix() <<"Handle " << ev->Get()->ToString());
+        YDB_LOG_DEBUG("Handle",
+            {"logPrefix", GetLogPrefix()},
+            {"#_ev->Get()->ToString", ev->Get()->ToString()});
         ProcessRecords(std::move(ev->Get()->Records));
     }
 
     void Handle(NChangeExchange::TEvChangeExchange::TEvForgetRecords::TPtr& ev) {
-        LOG_DEBUG_S (*TlsActivationContext, NKikimrServices::CHANGE_EXCHANGE, GetLogPrefix() <<"Handle " << ev->Get()->ToString());
+        YDB_LOG_DEBUG("Handle",
+            {"logPrefix", GetLogPrefix()},
+            {"#_ev->Get()->ToString", ev->Get()->ToString()});
         ForgetRecords(std::move(ev->Get()->Records));
     }
 
     void Handle(NChangeExchange::TEvChangeExchangePrivate::TEvReady::TPtr& ev) {
-        LOG_DEBUG_S (*TlsActivationContext, NKikimrServices::CHANGE_EXCHANGE, GetLogPrefix() <<"Handle " << ev->Get()->ToString());
+        YDB_LOG_DEBUG("Handle",
+            {"logPrefix", GetLogPrefix()},
+            {"#_ev->Get()->ToString", ev->Get()->ToString()});
         OnReady(ev->Get()->PartitionId);
     }
 
     void Handle(NChangeExchange::TEvChangeExchangePrivate::TEvGone::TPtr& ev) {
-        LOG_DEBUG_S (*TlsActivationContext, NKikimrServices::CHANGE_EXCHANGE, GetLogPrefix() <<"Handle " << ev->Get()->ToString());
+        YDB_LOG_DEBUG("Handle",
+            {"logPrefix", GetLogPrefix()},
+            {"#_ev->Get()->ToString", ev->Get()->ToString()});
         OnGone(ev->Get()->PartitionId);
     }
 
     void Handle(TEvChangeExchange::TEvRemoveSender::TPtr& ev) {
-        LOG_DEBUG_S (*TlsActivationContext, NKikimrServices::CHANGE_EXCHANGE, GetLogPrefix() <<"Handle " << ev->Get()->ToString());
+        YDB_LOG_DEBUG("Handle",
+            {"logPrefix", GetLogPrefix()},
+            {"#_ev->Get()->ToString", ev->Get()->ToString()});
         Y_ENSURE(ev->Get()->PathId == GetChangeSenderIdentity());
 
         RemoveRecords();
@@ -254,7 +274,9 @@ class TAsyncIndexChangeSenderMain
     }
 
     void AutoRemove(NChangeExchange::TEvChangeExchange::TEvEnqueueRecords::TPtr& ev) {
-        LOG_DEBUG_S (*TlsActivationContext, NKikimrServices::CHANGE_EXCHANGE, GetLogPrefix() <<"Handle " << ev->Get()->ToString());
+        YDB_LOG_DEBUG("Handle",
+            {"logPrefix", GetLogPrefix()},
+            {"#_ev->Get()->ToString", ev->Get()->ToString()});
         RemoveRecords(std::move(ev->Get()->Records));
     }
 

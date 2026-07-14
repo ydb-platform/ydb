@@ -526,7 +526,7 @@ void TActiveTransaction::DbStoreLocksAccessLog(ui64 tabletId,
     db.Table<Schema::TxArtifacts>().Key(GetTxId())
         .Update(NIceDb::TUpdate<Schema::TxArtifacts::Locks>(vecData));
 
-    YDB_LOG_TRACE_CTX(ctx, "Storing locks for",
+    YDB_LOG_TRACE_CTX(ctx, "Storing locks",
         {"#_vec.size", vec.size()},
         {"txid", GetTxId()},
         {"tabletId", tabletId});
@@ -542,7 +542,7 @@ void TActiveTransaction::DbStoreArtifactFlags(ui64 tabletId,
     db.Table<Schema::TxArtifacts>().Key(GetTxId())
         .Update<Schema::TxArtifacts::Flags>(ArtifactFlags);
 
-    YDB_LOG_TRACE_CTX(ctx, "Storing for",
+    YDB_LOG_TRACE_CTX(ctx, "Storing",
         {"artifactflags", ArtifactFlags},
         {"txid", GetTxId()},
         {"tabletId", tabletId});

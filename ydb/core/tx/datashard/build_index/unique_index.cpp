@@ -9,6 +9,8 @@
 
 #include <util/string/builder.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::BUILD_INDEX
+
 namespace NKikimr::NDataShard {
 
 /*
@@ -48,26 +50,31 @@ public:
         , ScanTags(BuildTags(tableInfo, targetIndexColumns))
         , IndexColumnNames(targetIndexColumns.begin(), targetIndexColumns.end())
     {
-        LOG_INFO_S(*TlsActivationContext, NKikimrServices::BUILD_INDEX, "Create " << Debug());
+        YDB_LOG_INFO("Create",
+            {"debug", Debug()});
     }
 
     TInitialState Prepare(IDriver*, TIntrusiveConstPtr<TScheme> scheme) override {
         Scheme = std::move(scheme);
         MakeTypeInfos();
 
-        LOG_INFO_S(*TlsActivationContext, NKikimrServices::BUILD_INDEX, "Prepare " << Debug());
+        YDB_LOG_INFO("Prepare",
+            {"debug", Debug()});
         return {EScan::Feed, {}};
     }
 
     EScan Seek(TLead& lead, ui64 seq) override {
-        LOG_TRACE_S(*TlsActivationContext, NKikimrServices::BUILD_INDEX, "Seek " << seq << " " << Debug());
+        YDB_LOG_TRACE("Seek",
+            {"seq", seq},
+            {"debug", Debug()});
 
         lead.To(ScanTags, {}, NTable::ESeek::Lower);
         return EScan::Feed;
     }
 
     EScan Feed(TArrayRef<const TCell> key, const TRow& row) override {
-        // LOG_TRACE_S(*TlsActivationContext, NKikimrServices::BUILD_INDEX, "Feed " << Debug());
+        // YDB_LOG_TRACE("Feed",
+        //     {"debug", Debug()});
 
         if (row.Size() != ScanTags.size()) {
             return FinishValidation(NKikimrIndexBuilder::EBuildStatus::ABORTED, TStringBuilder() << "Row size mismatch: expected " << ScanTags.size() << ", got " << row.Size());
@@ -121,9 +128,13 @@ public:
         }
 
         if (rec.GetStatus() == NKikimrIndexBuilder::DONE) {
-            LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::BUILD_INDEX, "Done " << Debug() << " " << ToShortDebugString(rec));
+            YDB_LOG_NOTICE("Done",
+                {"debug", Debug()},
+                {"#_ToShortDebugString(rec)", ToShortDebugString(rec)});
         } else {
-            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::BUILD_INDEX, "Failed " << Debug() << " " << ToShortDebugString(rec));
+            YDB_LOG_ERROR("Failed",
+                {"debug", Debug()},
+                {"#_ToShortDebugString(rec)", ToShortDebugString(rec)});
         }
 
         TActivationContext::Send(ResponseActorId, std::move(response));
@@ -131,7 +142,8 @@ public:
     }
 
     EScan Exhausted() override {
-        LOG_TRACE_S(*TlsActivationContext, NKikimrServices::BUILD_INDEX, "Exhausted " << Debug());
+        YDB_LOG_TRACE("Exhausted",
+            {"debug", Debug()});
 
         return EScan::Final;
     }
@@ -245,8 +257,9 @@ void TDataShard::HandleSafe(TEvDataShard::TEvValidateUniqueIndexRequest::TPtr& e
         auto response = MakeHolder<TEvDataShard::TEvValidateUniqueIndexResponse>();
         FillScanResponseCommonFields(*response, request.GetId(), TabletID(), seqNo);
 
-        LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::BUILD_INDEX, "Starting TValidateUniqueIndexScan TabletId: " << TabletID()
-            << " " << request.ShortDebugString());
+        YDB_LOG_NOTICE("Starting TValidateUniqueIndexScan",
+            {"tabletId", TabletID()},
+            {"#_request", request.ShortDebugString()});
 
         if (VolatileTxManager.HasVolatileTxsAtSnapshot(rowVersion)) {
             VolatileTxManager.AttachWaitingSnapshotEvent(rowVersion, std::unique_ptr<IEventHandle>(ev.Release()));
@@ -261,9 +274,10 @@ void TDataShard::HandleSafe(TEvDataShard::TEvValidateUniqueIndexRequest::TPtr& e
         };
         auto trySendBadRequest = [&] {
             if (response->Record.GetStatus() == NKikimrIndexBuilder::EBuildStatus::BAD_REQUEST) {
-                LOG_ERROR_S(*TlsActivationContext, NKikimrServices::BUILD_INDEX, "Rejecting TValidateUniqueIndexScan bad request TabletId: " << TabletID()
-                    << " " << request.ShortDebugString()
-                    << " with response " << ToShortDebugString(response->Record));
+                YDB_LOG_ERROR("Rejecting TValidateUniqueIndexScan bad request with response",
+                    {"tabletId", TabletID()},
+                    {"#_request", request.ShortDebugString()},
+                    {"#_ToShortDebugString(response->Record)", ToShortDebugString(response->Record)});
                 ctx.Send(ev->Sender, std::move(response));
                 return true;
             } else {

@@ -323,7 +323,7 @@ void TExecuteDataTxUnit::ExecuteDataTx(TOperation::TPtr op,
 
     auto& counters = tx->GetDataTx()->GetCounters();
 
-    YDB_LOG_TRACE_CTX(ctx, "Datashard execution counters for",
+    YDB_LOG_TRACE_CTX(ctx, "Datashard execution counters",
         {"#_*op", *op},
         {"#_DataShard.TabletID", DataShard.TabletID()},
         {"counters", counters});

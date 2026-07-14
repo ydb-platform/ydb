@@ -244,7 +244,7 @@ std::tuple<bool, TVector<NKikimrDataEvents::TLock>> KqpValidateVolatileTx(ui64 o
                 continue;
             }
 
-            YDB_LOG_TRACE("Will wait for volatile decision from",
+            YDB_LOG_TRACE("Will wait for volatile decision",
                 {"srcTabletId", srcTabletId},
                 {"origin", origin});
 
@@ -286,7 +286,7 @@ std::tuple<bool, TVector<NKikimrDataEvents::TLock>> KqpValidateVolatileTx(ui64 o
 
             if (data.GetDecision() != NKikimrTx::TReadSetData::DECISION_COMMIT) {
                 // Explicit decision that is not a commit, need to abort
-                YDB_LOG_TRACE("Processed decision from to",
+                YDB_LOG_TRACE("Processed decision",
                     {"#_ui32(data.GetDecision())", ui32(data.GetDecision())},
                     {"srcTabletId", srcTabletId},
                     {"dstTabletId", dstTabletId},
@@ -295,7 +295,7 @@ std::tuple<bool, TVector<NKikimrDataEvents::TLock>> KqpValidateVolatileTx(ui64 o
                 break;
             }
 
-            YDB_LOG_TRACE("Processed commit decision from to",
+            YDB_LOG_TRACE("Processed commit decision",
                 {"srcTabletId", srcTabletId},
                 {"dstTabletId", dstTabletId},
                 {"txId", txId});
@@ -323,7 +323,7 @@ std::tuple<bool, TVector<NKikimrDataEvents::TLock>> KqpValidateVolatileTx(ui64 o
                 continue;
             }
 
-            YDB_LOG_TRACE("Send commit decision from",
+            YDB_LOG_TRACE("Send commit decision",
                 {"origin", origin},
                 {"dstTabletId", dstTabletId});
 
@@ -370,7 +370,7 @@ void KqpFillOutReadSets(TOutputOpData::TOutReadSets& outReadSets, const NKikimrD
                 continue;
             }
 
-            YDB_LOG_TRACE("Send locks from",
+            YDB_LOG_TRACE("Send locks",
                 {"tabletId", tabletId},
                 {"dstTabletId", dstTabletId},
                 {"locks", validateLocksResult.ShortDebugString()});
@@ -500,7 +500,7 @@ void KqpPrepareInReadsets(TInputOpData::TInReadSets& inReadSets, const NKikimrDa
                 continue;
             }
 
-            YDB_LOG_TRACE("Prepare InReadsets from",
+            YDB_LOG_TRACE("Prepare InReadsets",
                 {"shardId", shardId},
                 {"tabletId", tabletId});
 

@@ -96,7 +96,7 @@ EExecutionStatus TWaitForStreamClearanceUnit::Execute(TOperation::TPtr op,
         op->SetWaitingForStreamClearanceFlag();
         op->SetProcessDisconnectsFlag();
 
-        YDB_LOG_TRACE_CTX(ctx, "Requested stream clearance from for",
+        YDB_LOG_TRACE_CTX(ctx, "Requested stream clearance",
             {"#_tx->GetStreamSink", tx->GetStreamSink()},
             {"#_*op", *op},
             {"#_DataShard.TabletID", DataShard.TabletID()});
@@ -155,7 +155,7 @@ void TWaitForStreamClearanceUnit::Handle(TEvTxProcessing::TEvStreamClearanceResp
 {
     if (op->IsWaitingForStreamClearance()) {
         if (ev->Get()->Record.GetCleared()) {
-            YDB_LOG_TRACE_CTX(ctx, "Got stream clearance for",
+            YDB_LOG_TRACE_CTX(ctx, "Got stream clearance",
                 {"#_*op", *op},
                 {"#_DataShard.TabletID", DataShard.TabletID()});
             op->ResetWaitingForStreamClearanceFlag();

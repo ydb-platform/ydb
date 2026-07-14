@@ -556,6 +556,92 @@ Y_UNIT_TEST_SUITE(TQuoterServiceTest) {
         UNIT_ASSERT_VALUES_EQUAL(proxySessions, 2);
         UNIT_ASSERT_VALUES_EQUAL(proxyCloseSessions, 1);
     }
+
+    // The request deadline must be accounted only from the moment the resource
+    // session is established, not from the request arrival: the (possibly slow)
+    // session setup time must not count against the deadline.
+    Y_UNIT_TEST(DeadlineCountsFromSessionEstablished) {
+        TPortManager portManager;
+        TServerSettings serverSettings(portManager.GetPort());
+        serverSettings.SetUseRealThreads(false);
+        TServer server = TServer(serverSettings, true);
+        TTestActorRuntime* runtime = server.GetRuntime();
+
+        const TActorId serviceId = MakeQuoterServiceID();
+        const TActorId serviceActorId = runtime->Register(CreateQuoterService());
+        runtime->RegisterService(serviceId, serviceActorId);
+
+        auto dispatch = [&] {
+            TDispatchOptions options;
+            options.FinalEvents.emplace_back([](IEventHandle&) { return false; });
+            runtime->DispatchEvents(options, TDuration::MilliSeconds(1));
+        };
+
+        InitRootSchemeAsync(runtime);
+        CreateKesusAsync(runtime);
+        CreateKesusResourceAsync(runtime, 1000.0);
+        runtime->AdvanceCurrentTime(TDuration::Seconds(2));
+        dispatch();
+
+        const TActorId sender = runtime->AllocateEdgeActor();
+        const TEvQuota::TResourceLeaf resLeaf(
+            TStringBuilder() << "/" << Tests::TestDomainName,
+            TStringBuilder() << "/" << Tests::TestDomainName << "/KesusQuoter",
+            "Res",
+            1);
+
+        // Intercept the resource session together with the proxy updates that
+        // carry the initial quota, so they can be replayed later, after a delay
+        // that is longer than the request deadline. The updates are needed too:
+        // after the session the service has no balance until an update arrives,
+        // and the next real update is only sent on the proxy's 100ms tick, which
+        // is well past the 1ms deadline.
+        THolder<IEventHandle> heldSession;
+        TVector<THolder<IEventHandle>> heldUpdates;
+        bool replaying = false;
+        auto sessionObserver = runtime->AddObserver<TEvQuota::TEvProxySession>(
+            [&](TEvQuota::TEvProxySession::TPtr& ev) {
+                if (replaying || heldSession) {
+                    return;
+                }
+                if (ev->Get()->Result == TEvQuota::TEvProxySession::Success) {
+                    heldSession.Reset(ev.Release());
+                }
+            });
+        auto updateObserver = runtime->AddObserver<TEvQuota::TEvProxyUpdate>(
+            [&](TEvQuota::TEvProxyUpdate::TPtr& ev) {
+                if (replaying) {
+                    return;
+                }
+                heldUpdates.emplace_back(ev.Release());
+            });
+
+        // Request with a 1ms deadline that has to start a new session.
+        runtime->Send(new IEventHandle(MakeQuoterServiceID(), sender,
+            new TEvQuota::TEvRequest(TEvQuota::EResourceOperator::And, {resLeaf},
+                TDuration::MilliSeconds(1)), 0, 1));
+
+        // Let the session be established and the initial quota update be produced
+        // (and intercepted). This takes far longer than the 1ms deadline.
+        runtime->WaitFor("resource session and initial quota update",
+            [&] { return heldSession && !heldUpdates.empty(); });
+
+        // Sleep well past the deadline while the session is still not delivered.
+        runtime->AdvanceCurrentTime(TDuration::MilliSeconds(10));
+
+        // Deliver the session (and the quota) now: the deadline must be counted
+        // from this moment, so the request must succeed.
+        replaying = true;
+        runtime->Send(heldSession.Release());
+        for (auto& update : heldUpdates) {
+            runtime->Send(update.Release());
+        }
+
+        auto event = runtime->GrabEdgeEventIf<TEvQuota::TEvClearance>(
+            {sender},
+            [](const auto& ev) { return ev->Cookie == 1; });
+        UNIT_ASSERT_VALUES_EQUAL(event->Get()->Result, TEvQuota::TEvClearance::EResult::Success);
+    }
 }
 
 }

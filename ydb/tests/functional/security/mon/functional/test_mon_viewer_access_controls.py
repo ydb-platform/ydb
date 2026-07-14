@@ -1,35 +1,39 @@
 # -*- coding: utf-8 -*-
+from urllib.parse import urlencode
+
 import requests
 
 requests.packages.urllib3.disable_warnings()
 
 DATABASE = '/Root'
+TOPIC_NAME = 't'
+TOPIC_PATH = f'{DATABASE}/{TOPIC_NAME}'
 
 
-def _get_status(base_url, path, token):
+def _get_status(base_url, path, token, timeout=1):
     headers = {}
     if token is not None:
         headers['Authorization'] = token
-    response = requests.get(base_url + path, headers=headers, verify=False, timeout=1)
+    response = requests.get(base_url + path, headers=headers, verify=False, timeout=timeout)
     return response.status_code
 
 
-def _post_status(base_url, path, token):
+def _post_status(base_url, path, token, timeout=1):
     headers = {}
     if token is not None:
         headers['Authorization'] = token
-    response = requests.post(base_url + path, headers=headers, verify=False, timeout=1)
+    response = requests.post(base_url + path, headers=headers, verify=False, timeout=timeout)
     return response.status_code
 
 
-def _assert_status(base_url, path, token, status):
-    assert _get_status(base_url, path, token) == status
-    assert _post_status(base_url, path, token) == status
+def _assert_status(base_url, path, token, status, timeout=1):
+    assert _get_status(base_url, path, token, timeout=timeout) == status
+    assert _post_status(base_url, path, token, timeout=timeout) == status
 
 
-def _assert_not_status(base_url, path, token, status):
-    assert _get_status(base_url, path, token) != status
-    assert _post_status(base_url, path, token) != status
+def _assert_not_status(base_url, path, token, status, timeout=1):
+    assert _get_status(base_url, path, token, timeout=timeout) != status
+    assert _post_status(base_url, path, token, timeout=timeout) != status
 
 
 # External viewer access controls move these endpoints to viewer-level access.
@@ -84,6 +88,30 @@ def test_viewer_v2_aliases_access_controls(ydb_cluster_with_external_access_cont
     _assert_status(base_url, SYSINFO_V2_ENDPOINT, 'root@builtin', 200)
 
 
+def _run_query(base_url, query, token='root@builtin'):
+    response = requests.post(
+        base_url + '/viewer/query',
+        headers={'Authorization': token},
+        params={'database': DATABASE, 'query': query, 'schema': 'multi'},
+        verify=False,
+        timeout=30,
+    )
+    assert response.status_code == 200, response.text
+    return response
+
+
+def _topic_data_path(endpoint, *, database=True):
+    params = {
+        'path': TOPIC_PATH,
+        'partition': 0,
+        'offset': 0,
+        'limit': 1,
+    }
+    if database:
+        params = {'database': DATABASE, **params}
+    return endpoint + '?' + urlencode(params)
+
+
 def test_database_scoped_endpoints_access_controls(ydb_cluster_with_external_access_controls):
     node = ydb_cluster_with_external_access_controls.nodes[1]
     base_url = f'https://{node.host}:{node.mon_port}'
@@ -114,6 +142,51 @@ def test_database_scoped_endpoints_access_controls(ydb_cluster_with_external_acc
         _assert_status(base_url, ep + db_qs, 'monitoring@builtin', 200)
         _assert_status(base_url, ep + db_qs, 'root@builtin', 200)
         _assert_status(base_url, ep, 'root@builtin', 200)
+
+
+def test_topic_data_access_controls(ydb_cluster_with_external_access_controls):
+    node = ydb_cluster_with_external_access_controls.nodes[1]
+    base_url = f'https://{node.host}:{node.mon_port}'
+    topic_data_timeout = 5
+
+    _run_query(base_url, f'CREATE TOPIC `{TOPIC_NAME}`;')
+
+    endpoints = ['/viewer/topic_data', '/viewer/json/topic_data']
+
+    for ep in endpoints:
+        for token in ('database@builtin', 'viewer@builtin', 'monitoring@builtin'):
+            _assert_status(base_url, _topic_data_path(ep, database=True), token, 400, timeout=topic_data_timeout)
+            _assert_status(base_url, _topic_data_path(ep, database=False), token, 400, timeout=topic_data_timeout)
+
+    _run_query(
+        base_url,
+        f"GRANT 'ydb.granular.describe_schema' ON `{DATABASE}` "
+        f"TO `database@builtin`, `viewer@builtin`, `monitoring@builtin`;"
+    )
+    _run_query(
+        base_url,
+        f"GRANT 'ydb.granular.describe_schema', 'ydb.granular.select_row' ON `{TOPIC_PATH}` "
+        f"TO `database@builtin`, `viewer@builtin`, `monitoring@builtin`;"
+    )
+
+    for ep in endpoints:
+        # no database CGI-param for database_allowed_sids level
+        token = 'database@builtin'
+        _assert_status(base_url, _topic_data_path(ep, database=False), token, 400, timeout=topic_data_timeout)
+
+        # with database CGI-param for database_allowed_sids level
+        _assert_status(base_url, _topic_data_path(ep, database=True), token, 200, timeout=topic_data_timeout)
+
+        # check with and without database CGI-params for different access levels
+        token = 'viewer@builtin'
+        _assert_status(base_url, _topic_data_path(ep, database=True), token, 200, timeout=topic_data_timeout)
+        _assert_status(base_url, _topic_data_path(ep, database=False), token, 200, timeout=topic_data_timeout)
+        token = 'monitoring@builtin'
+        _assert_status(base_url, _topic_data_path(ep, database=True), token, 200, timeout=topic_data_timeout)
+        _assert_status(base_url, _topic_data_path(ep, database=False), token, 200, timeout=topic_data_timeout)
+        token = 'root@builtin'
+        _assert_status(base_url, _topic_data_path(ep, database=True), token, 200, timeout=topic_data_timeout)
+        _assert_status(base_url, _topic_data_path(ep, database=False), token, 200, timeout=topic_data_timeout)
 
 
 # database@builtin is a strict database-only token and must be rejected when path is out of database scope.
@@ -154,6 +227,9 @@ def test_out_of_scope_path_nodes_gives_400(ydb_cluster_with_external_access_cont
     node = ydb_cluster_with_external_access_controls.nodes[1]
     base_url = f'https://{node.host}:{node.mon_port}'
     db_qs = DATABASE.replace("/", "%2F")
+
+    _run_query(base_url, f"REVOKE ALL ON `{DATABASE}` FROM `database@builtin`;")
+
     for ep in ['/viewer/nodes', '/viewer/json/nodes']:
         path = f'{ep}?database={db_qs}&path=%2FOther'
         _assert_status(base_url, path, 'database@builtin', 400)

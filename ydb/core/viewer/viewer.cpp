@@ -287,10 +287,10 @@ public:
                     // Administration-level endpoints.
                     {"/viewer/bscontrollerinfo", {EViewerEndpointAccessType::Administration}},
                     {"/viewer/json/bscontrollerinfo", {EViewerEndpointAccessType::Administration}},
-                    {"/viewer/topic_data", {EViewerEndpointAccessType::Administration}},
-                    {"/viewer/json/topic_data", {EViewerEndpointAccessType::Administration}},
 
                     // Database-level endpoints that require explicit database parameter for strict database tokens.
+                    {"/viewer/topic_data", {EViewerEndpointAccessType::Database, true}},
+                    {"/viewer/json/topic_data", {EViewerEndpointAccessType::Database, true}},
                     {"/viewer/feature_flags", {EViewerEndpointAccessType::Database, true}},
                     {"/viewer/json/feature_flags", {EViewerEndpointAccessType::Database, true}},
                     {"/viewer/sysinfo", {EViewerEndpointAccessType::Database, true}},

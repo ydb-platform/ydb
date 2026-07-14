@@ -521,6 +521,9 @@ public:
                 }
 
                 if (tablet.NodeId == 0) {
+                    if (!tablet.LockedToActor || !Self->CurrentConfig.GetLockedTabletsSendMetrics()) {
+                        tablet.BecomeStopped();
+                    }
                     tablet.BecomeStopped();
                 } else {
                     auto it = Self->Nodes.find(tablet.NodeId);

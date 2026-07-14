@@ -251,12 +251,16 @@ void THive::Handle(TEvHive::TEvDeleteOwnerTablets::TPtr& ev) {
 }
 
 void THive::DeleteTabletWithoutStorage(TLeaderTabletInfo* tablet) {
-    if (!(tablet->IsDeleting())) { YDB_LOG_ERROR("DeleteTabletWithoutStorage: tablet is not in deleting state",
-                                       {"logPrefix", GetLogPrefix()},
-                                       {"tabletId", tablet->Id}); }
-    if (!(tablet->TabletStorageInfo->Channels.empty() || tablet->TabletStorageInfo->Channels[0].History.empty())) { YDB_LOG_ERROR("DeleteTabletWithoutStorage: tablet still has storage history",
-                                                                                                                        {"logPrefix", GetLogPrefix()},
-                                                                                                                        {"tabletId", tablet->Id}); }
+    if (!(tablet->IsDeleting())) {
+        YDB_LOG_ERROR("DeleteTabletWithoutStorage: tablet is not in deleting state",
+            {"logPrefix", GetLogPrefix()},
+            {"tabletId", tablet->Id});
+    }
+    if (!(tablet->TabletStorageInfo->Channels.empty() || tablet->TabletStorageInfo->Channels[0].History.empty())) {
+        YDB_LOG_ERROR("DeleteTabletWithoutStorage: tablet still has storage history",
+            {"logPrefix", GetLogPrefix()},
+            {"tabletId", tablet->Id});
+    }
 
     // Tablet has no storage, so there's nothing to block or delete
     // Simulate a response from CreateTabletReqDelete as if all steps have been completed

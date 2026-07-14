@@ -28,9 +28,9 @@ def _assert_status(base_url, path, token, status, method=EndpointMethod.GET):
     if token is not None:
         headers['Authorization'] = token
     if method == EndpointMethod.GET:
-        response = requests.get(base_url + path, headers=headers, verify=False)
+        response = requests.get(base_url + path, headers=headers, verify=False, timeout=5)
     else:
-        response = requests.post(base_url + path, headers=headers, verify=False)
+        response = requests.post(base_url + path, headers=headers, verify=False, timeout=5)
     assert response.status_code == status
 
 

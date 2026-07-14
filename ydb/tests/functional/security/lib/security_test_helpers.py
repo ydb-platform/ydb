@@ -84,12 +84,13 @@ def mon_base_url(cluster, node_index=1):
     return f'https://{node.host}:{node.mon_port}'
 
 
-def run_viewer_query(base_url, query, database=DATABASE, token='root@builtin'):
+def run_viewer_query(base_url, query, database=DATABASE, token='root@builtin', timeout=5):
     response = requests.post(
         base_url + '/viewer/query',
         headers={'Authorization': token},
         params={'database': database, 'query': query, 'schema': 'multi'},
         verify=False,
+        timeout=timeout,
     )
     assert response.status_code == 200, response.text
     return response

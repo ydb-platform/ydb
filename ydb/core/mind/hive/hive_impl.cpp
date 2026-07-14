@@ -268,12 +268,16 @@ void THive::DeleteTabletWithoutStorage(TLeaderTabletInfo* tablet) {
 }
 
 void THive::DeleteTabletWithoutStorage(TLeaderTabletInfo* tablet, TSideEffects& sideEffects) {
-    if (!(tablet->IsDeleting())) { YDB_LOG_ERROR("DeleteTabletWithoutStorage: tablet is not in deleting state",
-                                       {"logPrefix", GetLogPrefix()},
-                                       {"tabletId", tablet->Id}); }
-    if (!(tablet->TabletStorageInfo->Channels.empty() || tablet->TabletStorageInfo->Channels[0].History.empty())) { YDB_LOG_ERROR("DeleteTabletWithoutStorage: tablet still has storage history",
-                                                                                                                        {"logPrefix", GetLogPrefix()},
-                                                                                                                        {"tabletId", tablet->Id}); }
+    if (!(tablet->IsDeleting())) {
+        YDB_LOG_ERROR("DeleteTabletWithoutStorage: tablet is not in deleting state",
+            {"logPrefix", GetLogPrefix()},
+            {"tabletId", tablet->Id});
+    }
+    if (!(tablet->TabletStorageInfo->Channels.empty() || tablet->TabletStorageInfo->Channels[0].History.empty())) {
+        YDB_LOG_ERROR("DeleteTabletWithoutStorage: tablet still has storage history",
+            {"logPrefix", GetLogPrefix()},
+            {"tabletId", tablet->Id});
+    }
 
     // Tablet has no storage, so there's nothing to block or delete
     // Simulate a response from CreateTabletReqDelete as if all steps have been completed
@@ -1909,14 +1913,18 @@ void THive::DeleteTablet(TTabletId tabletId) {
         }
         for (auto nt = Nodes.begin(); nt != Nodes.end(); ++nt) {
             for (auto st = nt->second.Tablets.begin(); st != nt->second.Tablets.end(); ++st) {
-                if (!(st->second.count(&tablet) == 0)) { YDB_LOG_ERROR("DeleteTablet: tablet still present on node",
-                                                             {"logPrefix", GetLogPrefix()},
-                                                             {"nodeId", nt->first},
-                                                             {"volatileState", TTabletInfo::EVolatileStateName(st->first)}); }
+                if (!(st->second.count(&tablet) == 0)) {
+                    YDB_LOG_ERROR("DeleteTablet: tablet still present on node",
+                        {"logPrefix", GetLogPrefix()},
+                        {"nodeId", nt->first},
+                        {"volatileState", TTabletInfo::EVolatileStateName(st->first)});
+                }
             }
-            if (!(nt->second.LockedTablets.count(&tablet) == 0)) { YDB_LOG_ERROR("DeleteTablet: tablet still present in node locked set",
-                                                                       {"logPrefix", GetLogPrefix()},
-                                                                       {"nodeId", nt->first}); }
+            if (!(nt->second.LockedTablets.count(&tablet) == 0)) {
+                YDB_LOG_ERROR("DeleteTablet: tablet still present in node locked set",
+                    {"logPrefix", GetLogPrefix()},
+                    {"nodeId", nt->first});
+            }
         }
         for (const auto& followerGroup : tablet.FollowerGroups) {
             for (auto& [_, dataCenter] : DataCenters) {
@@ -3105,13 +3113,15 @@ static void AggregateDiff(TMetrics& aggregate, const TMetrics& before, const TMe
     i64 oldValue = aggregate.*field;
     i64 delta = after.*field - before.*field;
     i64 newValue = oldValue + delta;
-    if (!(newValue >= 0)) { YDB_LOG_ERROR("AggregateMetricsDiff: aggregated metric value became negative",
-                                {"logPrefix", GetLogPrefix()},
-                                {"tabletId", tabletId},
-                                {"metricName", name},
-                                {"oldValue", oldValue},
-                                {"delta", delta},
-                                {"newValue", newValue}); }
+    if (!(newValue >= 0)) {
+        YDB_LOG_ERROR("AggregateMetricsDiff: aggregated metric value became negative",
+            {"logPrefix", GetLogPrefix()},
+            {"tabletId", tabletId},
+            {"metricName", name},
+            {"oldValue", oldValue},
+            {"delta", delta},
+            {"newValue", newValue});
+    }
     newValue = Max(newValue, (i64)0);
     aggregate.*field = newValue;
 }

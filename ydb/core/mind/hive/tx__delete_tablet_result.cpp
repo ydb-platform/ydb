@@ -73,9 +73,11 @@ public:
                     {"logPrefix", GetLogPrefix()},
                     {"tabletId", TabletId},
                     {"replyStatus", NKikimrProto::EReplyStatus_Name(msg->Status)});
-                if (!(tablet->IsDeleting())) { YDB_LOG_ERROR("THive::TTxDeleteTabletResult::Execute tablet is not in Deleting state",
-                                                   {"logPrefix", GetLogPrefix()},
-                                                   {"tabletId", tablet->Id}); }
+                if (!(tablet->IsDeleting())) {
+                    YDB_LOG_ERROR("THive::TTxDeleteTabletResult::Execute tablet is not in Deleting state",
+                        {"logPrefix", GetLogPrefix()},
+                        {"tabletId", tablet->Id});
+                }
                 SideEffects.Schedule(TDuration::MilliSeconds(1000), new TEvHive::TEvInitiateDeleteStorage(tablet->Id));
             }
         }

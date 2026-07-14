@@ -71,7 +71,7 @@ public:
 
     virtual void OnDDiskDisconnected(THostIndex hostIndex, TInstant now) = 0;
     virtual void OnDDiskConnected(THostIndex hostIndex, TInstant now) = 0;
-    virtual TDuration GetDDiskReconnectDelay(THostIndex hostIndex) = 0;
+    virtual TDuration GetHostReconnectDelay(THostIndex hostIndex) = 0;
 
     // Picks the best host (by lowest inflight count) out of the provided set
     // of hosts. Ties are broken uniformly at random.
@@ -135,7 +135,7 @@ public:
 
     void OnDDiskDisconnected(THostIndex hostIndex, TInstant now) override;
     void OnDDiskConnected(THostIndex hostIndex, TInstant now) override;
-    [[nodiscard]] TDuration GetDDiskReconnectDelay(
+    [[nodiscard]] TDuration GetHostReconnectDelay(
         THostIndex hostIndex) override;
 
     void OnHostAdded();

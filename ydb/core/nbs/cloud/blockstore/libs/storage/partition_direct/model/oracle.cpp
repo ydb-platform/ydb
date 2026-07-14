@@ -275,7 +275,7 @@ void TOracle::OnDDiskConnected(THostIndex hostIndex, TInstant now)
     HostsReconnectDelays[hostIndex].Reset();
 }
 
-TDuration TOracle::GetDDiskReconnectDelay(THostIndex hostIndex)
+TDuration TOracle::GetHostReconnectDelay(THostIndex hostIndex)
 {
     return HostsReconnectDelays[hostIndex].GetDelayAndIncrease();
 }

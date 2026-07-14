@@ -1,8 +1,8 @@
 #include "vchunk.h"
 
 #include "flush_request.h"
-#include "range_translate.h"
 #include "read_request_executor.h"
+#include "region_geometry.h"
 #include "write_request.h"
 
 #include <ydb/core/nbs/cloud/blockstore/libs/common/constants.h>
@@ -258,6 +258,11 @@ const TVChunkConfig& TVChunk::GetConfig() const
     return VChunkConfig;
 }
 
+TExecutorPtr TVChunk::GetExecutor() const
+{
+    return Executor;
+}
+
 ui64 TVChunk::GetPBufferUsedSize(THostIndex hostIndex) const
 {
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
@@ -296,6 +301,32 @@ TString TVChunk::DebugPrintDirtyMap()
     sb << "FlushQueue: " << BlocksDirtyMap.DebugPrintReadyToFlush() << "\n";
     sb << "EraseQueue: " << BlocksDirtyMap.DebugPrintReadyToErase() << "\n";
     return sb;
+}
+
+TVChunkSnapshot TVChunk::BuildMonSnapshot()
+{
+    Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
+
+    const auto disabled = VChunkConfig.GetDisabledHosts();
+    TVector<TVChunkHostRole> hostRoles;
+    hostRoles.reserve(VChunkConfig.GetHostCount());
+    for (THostIndex host = 0; host < VChunkConfig.GetHostCount(); ++host) {
+        hostRoles.push_back({
+            .HostIndex = host,
+            .PBufferRole = VChunkConfig.GetPBufferRole(host),
+            .DDiskRole = VChunkConfig.GetDDiskRole(host),
+            .Enabled = !disabled.Get(host),
+            .Watermark = VChunkConfig.GetWatermark(host),
+        });
+    }
+
+    return {
+        .Index = VChunkConfig.GetVChunkIndex(),
+        .DbgIndex = VChunkConfig.GetDBGIndex(),
+        .SafeBarrier = GetSafeBarrierForErase(),
+        .HostRoles = std::move(hostRoles),
+        .DirtyMapDump = DebugPrintDirtyMap(),
+    };
 }
 
 void TVChunk::OnWriteBlocksResponse(

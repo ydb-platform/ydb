@@ -36,6 +36,9 @@ EMonPage ParsePage(const TCgiParameters& cgi)
     if (page == "localdb") {
         return EMonPage::LocalDb;
     }
+    if (page == "vchunk") {
+        return EMonPage::VChunk;
+    }
     return EMonPage::Overview;
 }
 
@@ -44,6 +47,15 @@ std::optional<size_t> ParseSelectedDbg(const TCgiParameters& cgi)
     ui32 dbgIndex = 0;
     if (cgi.Has("dbg") && TryFromString(cgi.Get("dbg"), dbgIndex)) {
         return dbgIndex;
+    }
+    return std::nullopt;
+}
+
+std::optional<ui32> ParseSelectedVChunk(const TCgiParameters& cgi)
+{
+    ui32 vchunkIndex = 0;
+    if (cgi.Has("vchunk") && TryFromString(cgi.Get("vchunk"), vchunkIndex)) {
+        return vchunkIndex;
     }
     return std::nullopt;
 }
@@ -110,6 +122,44 @@ void TPartitionActor::HandleHttpInfo(
     // CompleteMonitoring renders and replies.
     if (page == EMonPage::LocalDb) {
         ExecuteTx(ctx, CreateTx<TMonitoring>(ev->Sender));
+        return;
+    }
+
+    // VChunk page: no index - just the input form (synchronous); with an
+    // index - gather the snapshot from the owning DBG's executor.
+    if (page == EMonPage::VChunk) {
+        const std::optional<ui32> selectedVChunk = ParseSelectedVChunk(cgi);
+        if (!selectedVChunk) {
+            TMonPageData data{
+                .Page = page,
+                .TabletInfo = MakeMonTabletInfo(),
+            };
+            ctx.Send(
+                ev->Sender,
+                new NMon::TEvRemoteHttpInfoRes(RenderMonPage(data)));
+            return;
+        }
+
+        auto* actorSystem = TActivationContext::ActorSystem();
+        const TActorId requester = ev->Sender;
+        FastPathService->GatherVChunkMonSnapshot(*selectedVChunk)
+            .Subscribe(
+                [tabletInfo = MakeMonTabletInfo(),
+                 page,
+                 selectedVChunk,
+                 requester,
+                 actorSystem](const auto& future)
+                {
+                    TMonPageData data{
+                        .Page = page,
+                        .TabletInfo = tabletInfo,
+                        .SelectedVChunk = selectedVChunk,
+                        .VChunk = future.GetValue(),
+                    };
+                    actorSystem->Send(
+                        requester,
+                        new NMon::TEvRemoteHttpInfoRes(RenderMonPage(data)));
+                });
         return;
     }
 

@@ -2,7 +2,8 @@
 
 #include "direct_block_group.h"
 #include "partition_direct_events_private.h"
-#include "range_translate.h"
+#include "region_geometry.h"
+#include "vchunk.h"
 
 #include <ydb/core/nbs/cloud/blockstore/config/config.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/common/block_range.h>
@@ -431,6 +432,33 @@ NThreading::TFuture<TVector<TDbgSnapshot>> TFastPathService::GatherMonSnapshots(
             }
             return snapshots;
         });
+}
+
+NThreading::TFuture<std::optional<TVChunkSnapshot>>
+TFastPathService::GatherVChunkMonSnapshot(ui32 vchunkIndex) const
+{
+    const auto notFound =
+        MakeFuture<std::optional<TVChunkSnapshot>>(std::nullopt);
+
+    const size_t regionIndex =
+        GetRegionIndexByVChunk(*VolumeConfig, vchunkIndex);
+    if (regionIndex >= Regions.size()) {
+        return notFound;
+    }
+    const size_t vChunkIndexInRegion =
+        GetVChunkIndexInRegion(*VolumeConfig, vchunkIndex);
+    auto vchunk = Regions[regionIndex]->GetVChunk(vChunkIndexInRegion);
+    if (!vchunk) {
+        return notFound;
+    }
+
+    // The vchunk state is confined to its executor (the one of its DBG).
+    auto executor = vchunk->GetExecutor();
+    auto promise = NewPromise<std::optional<TVChunkSnapshot>>();
+    auto future = promise.GetFuture();
+    executor->ExecuteSimple([vchunk = std::move(vchunk), promise]() mutable
+                            { promise.SetValue(vchunk->BuildMonSnapshot()); });
+    return future;
 }
 
 void TFastPathService::MaybeTriggerPBufferCleanup(ui64 lsn)

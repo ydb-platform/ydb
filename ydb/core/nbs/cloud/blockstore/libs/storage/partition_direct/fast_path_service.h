@@ -121,6 +121,11 @@ public:
     [[nodiscard]] NThreading::TFuture<TVector<TDbgSnapshot>> GatherMonSnapshots(
         std::optional<size_t> dbgIndex) const;
 
+    // Snapshot of one vchunk by its global index, built on the owning DBG's
+    // executor. Resolves to nullopt when there is no such vchunk.
+    [[nodiscard]] NThreading::TFuture<std::optional<TVChunkSnapshot>>
+    GatherVChunkMonSnapshot(ui32 vchunkIndex) const;
+
 private:
     void ScheduleDirtyMapDebugPrint();
     void QueryDirtyMapDebugDump();

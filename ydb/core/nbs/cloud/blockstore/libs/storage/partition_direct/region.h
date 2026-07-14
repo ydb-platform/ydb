@@ -30,7 +30,10 @@ public:
         NMonitoring::TDynamicCounterPtr counters);
 
     void Run();
+
     NThreading::TFuture<void> Stop();
+
+    [[nodiscard]] TVChunkPtr GetVChunk(size_t vChunkIndex) const;
 
     NThreading::TFuture<TReadBlocksLocalResponse> ReadBlocksLocal(
         TCallContextPtr callContext,

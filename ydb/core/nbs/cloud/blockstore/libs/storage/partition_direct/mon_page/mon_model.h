@@ -23,6 +23,7 @@ enum class EMonPage
     Overview,
     Dbg,
     LocalDb,
+    VChunk,
 };
 
 struct TTabletInfo
@@ -67,6 +68,24 @@ struct TDbgSnapshot
     TVector<TConnectionSnapshot> Connections;
 };
 
+struct TVChunkHostRole
+{
+    THostIndex HostIndex = InvalidHostIndex;
+    EHostRole PBufferRole = EHostRole::None;
+    EHostRole DDiskRole = EHostRole::None;
+    bool Enabled = false;
+    std::optional<ui64> Watermark;
+};
+
+struct TVChunkSnapshot
+{
+    ui32 Index = 0;
+    ui32 DbgIndex = 0;
+    std::optional<ui64> SafeBarrier;
+    TVector<TVChunkHostRole> HostRoles;
+    TString DirtyMapDump;
+};
+
 // Persisted tablet state (local DB). Protos are pre-dumped to text; an absent
 // value means the row was never persisted.
 struct TLocalDbContents
@@ -91,6 +110,10 @@ struct TMonPageData
     std::optional<ui32> SelectedDbg;
     // Local DB tab.
     std::optional<TLocalDbContents> LocalDb;
+    // VChunk tab: the requested index (absent => only the input form) and the
+    // snapshot (absent => no such vchunk).
+    std::optional<ui32> SelectedVChunk;
+    std::optional<TVChunkSnapshot> VChunk;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

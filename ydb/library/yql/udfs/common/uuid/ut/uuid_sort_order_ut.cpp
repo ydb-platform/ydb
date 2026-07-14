@@ -46,6 +46,16 @@ void AssertUuidStringFormat(TStringBuf uuidString) {
         "Expected RFC variant digit at position 20, got '" << variantDigit << "' in " << uuidString);
 }
 
+void AssertRfcV7StringFormat(TStringBuf uuidString) {
+    AssertUuidStringHasCanonicalDashes(uuidString);
+    UNIT_ASSERT_C(uuidString[14] == '7',
+        "Expected version digit '7' at position 15, got '" << uuidString[14]
+        << "' in " << uuidString);
+    const char variantDigit = uuidString[19];
+    UNIT_ASSERT_C(variantDigit == '8' || variantDigit == '9' || variantDigit == 'a' || variantDigit == 'b',
+        "Expected RFC variant digit at position 20, got '" << variantDigit << "' in " << uuidString);
+}
+
 TString UuidBytesToHex(const TUuidBytes& bytes) {
     static const char hex[] = "0123456789abcdef";
     TString result;
@@ -315,5 +325,30 @@ Y_UNIT_TEST_SUITE(TUuidSortOrder) {
         const auto fromUuid = MakeShardedUuidBytes(
             ExtractPrefixFromUuidBytes(prefixUuid.data()), epochSeconds, true);
         UNIT_ASSERT_VALUES_EQUAL(fromUint64, fromUuid);
+    }
+
+    Y_UNIT_TEST(RfcV7StringFormatShowsVersionDigit) {
+        SetRandomSeed(42);
+        const auto bytes = MakeRfcV7YdbBytes(MilliSeconds());
+        AssertRfcV7StringFormat(UuidBytesToDisplayString(bytes));
+    }
+
+    Y_UNIT_TEST(RfcV7AtUsesFixedTimestamp) {
+        const ui64 timestampMs = 1'700'000'000'123ULL;
+        SetRandomSeed(42);
+        const auto first = MakeRfcV7YdbBytes(timestampMs);
+        SetRandomSeed(42);
+        const auto second = MakeRfcV7YdbBytes(timestampMs);
+        UNIT_ASSERT_VALUES_EQUAL(first, second);
+        AssertRfcV7StringFormat(UuidBytesToDisplayString(first));
+    }
+
+    Y_UNIT_TEST(RfcV7DiffersFromChronoForSameTimestamp) {
+        const ui64 timestampMs = 1'700'000'000'123ULL;
+        SetRandomSeed(42);
+        const auto rfcV7 = MakeRfcV7YdbBytes(timestampMs);
+        SetRandomSeed(42);
+        const auto chrono = MakeChronoUuidBytes(0, timestampMs, false);
+        UNIT_ASSERT_VALUES_UNEQUAL(rfcV7, chrono);
     }
 }

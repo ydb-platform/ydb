@@ -11,6 +11,8 @@
 // Use as primary keys when you want:
 //   - newChrono: chronological clustering by creation time;
 //   - newSharded: shard spread via random prefix + time locality within a prefix.
+//   - newV7: RFC 9562 UUID v7 for external interoperability (non-sortable in YDB);
+//   - newV7At: RFC 9562 UUID v7 with a fixed Timestamp/Timestamp64.
 // Prefix variants accept Uint64 or Uuid as the first argument; the Uuid overload
 // reuses the top PrefixBits of the source value as the generated key prefix.
 // For plain random IDs without sort semantics, use RandomUuid() instead.
@@ -156,6 +158,58 @@ TString BuildPrefixPolyArgs(TStringBuf errorMessage) {
     return sb;
 }
 
+TString BuildCallableTypeWithTimestampAndDeps(ui32 depCount, bool timestamp64) {
+    const TStringBuf timestampTypeName = timestamp64 ? "Timestamp64" : "Timestamp";
+    TStringBuilder sb;
+    sb << "[CallableType;[];[];[";
+    sb << "[[DataType;" << timestampTypeName << "]";
+    for (ui32 i = 0; i < depCount; ++i) {
+        sb << ";[UniversalType]";
+    }
+    sb << ";[[DataType;Uuid]]]";
+    sb << "]]";
+    return sb;
+}
+
+void AppendTimestampPolyArgRule(TStringBuilder& sb, ui32 depCount, bool timestamp64) {
+    const TStringBuf timestampTypeName = timestamp64 ? "Timestamp64" : "Timestamp";
+
+    sb << "[";
+    if (depCount == 0) {
+        sb << "{cmd=type;arg=T0;value=[DataType;" << timestampTypeName << "]}";
+    } else {
+        sb << "{cmd=and;value=[{cmd=type;arg=T0;value=[DataType;" << timestampTypeName << "]}";
+        for (ui32 i = 0; i < depCount; ++i) {
+            sb << ";" << BuildDepArgKindsPredicate(TStringBuilder() << "T" << (i + 1));
+        }
+        sb << "]}";
+    }
+    sb << "; {type=" << BuildCallableTypeWithTimestampAndDeps(depCount, timestamp64) << "}]";
+}
+
+TString BuildTimestampPolyArgs(TStringBuf errorMessage) {
+    TStringBuilder sb;
+    sb << "[[";
+    bool first = true;
+    for (ui32 depCount = MaxDepArgs; depCount > 0; --depCount) {
+        if (!first) {
+            sb << ";";
+        }
+        first = false;
+        AppendTimestampPolyArgRule(sb, depCount, /*timestamp64=*/true);
+        sb << ";";
+        AppendTimestampPolyArgRule(sb, depCount, /*timestamp64=*/false);
+    }
+    if (!first) {
+        sb << ";";
+    }
+    AppendTimestampPolyArgRule(sb, 0, /*timestamp64=*/true);
+    sb << ";";
+    AppendTimestampPolyArgRule(sb, 0, /*timestamp64=*/false);
+    sb << "; [{cmd=error;message=\"" << errorMessage << "\"}; {}]]";
+    return sb;
+}
+
 ui64 ReadPrefixArg(const TUnboxedValuePod& arg, bool prefixFromUuid) {
     if (prefixFromUuid) {
         const auto ref = arg.AsStringRef();
@@ -171,6 +225,26 @@ ui64 ReadPrefixArg(const TUnboxedValuePod& arg, bool prefixFromUuid) {
 bool IsUuidArgType(const ITypeInfoHelper1& typeHelper, const TType* argType) {
     TDataTypeInspector argInspector(typeHelper, argType);
     return argInspector && argInspector.GetTypeId() == NUdf::TDataType<NUdf::TUuid>::Id;
+}
+
+bool IsTimestamp64ArgType(const ITypeInfoHelper1& typeHelper, const TType* argType) {
+    TDataTypeInspector argInspector(typeHelper, argType);
+    return argInspector && argInspector.GetTypeId() == NUdf::TDataType<NUdf::TTimestamp64>::Id;
+}
+
+ui64 ReadTimestampMicros(const TUnboxedValuePod& arg, bool timestamp64) {
+    const i64 micros = timestamp64 ? arg.Get<i64>() : static_cast<i64>(arg.Get<ui64>());
+    if (micros < 0) {
+        throw std::runtime_error("Timestamp must be non-negative");
+    }
+    return static_cast<ui64>(micros);
+}
+
+TUnboxedValue MakeRfcV7UuidValue(const IValueBuilder* valueBuilder, ui64 timestampMs) {
+    const auto bytes = NUuidKeyGen::MakeRfcV7YdbBytes(timestampMs);
+    return valueBuilder->NewString(TStringRef(
+        reinterpret_cast<const char*>(bytes.data()),
+        bytes.size()));
 }
 
 // Returns a Uuid value as 16 raw bytes in the internal format, which is Microsoft-style mixed endian GUID.
@@ -292,6 +366,156 @@ private:
     TSourcePosition Pos_;
 };
 
+class TNewV7: public TBoxedValue {
+public:
+    using TTypeAwareMarker = bool;
+
+    explicit TNewV7(TSourcePosition pos)
+        : Pos_(pos)
+    {
+    }
+
+    static const TStringRef& Name() {
+        static auto name = TStringRef::Of("newV7");
+        return name;
+    }
+
+    static bool DeclareSignature(
+        const TStringRef& name,
+        TType* userType,
+        IFunctionTypeInfoBuilder& builder,
+        bool typesOnly)
+    {
+        if (Name() != name) {
+            return false;
+        }
+
+        if (!userType) {
+            builder.SetError("Missing user type.");
+            return true;
+        }
+
+        builder.UserType(userType);
+        const auto typeHelper = builder.TypeInfoHelper();
+        const auto userTypeInspector = TTupleTypeInspector(*typeHelper, userType);
+        if (!userTypeInspector || userTypeInspector.GetElementsCount() < 1) {
+            builder.SetError("Invalid user type.");
+            return true;
+        }
+
+        const auto argsTypeTuple = userTypeInspector.GetElementType(0);
+        const auto argsTypeInspector = TTupleTypeInspector(*typeHelper, argsTypeTuple);
+        if (!argsTypeInspector) {
+            builder.SetError("Invalid user type - expected tuple.");
+            return true;
+        }
+
+        const auto argCount = argsTypeInspector.GetElementsCount();
+        auto argsBuilder = builder.Args(argCount);
+        for (ui32 i = 0; i < argCount; ++i) {
+            argsBuilder->Add(argsTypeInspector.GetElementType(i));
+        }
+        argsBuilder->Done().Returns<TUuid>();
+
+        if (!typesOnly) {
+            builder.Implementation(new TNewV7(GetSourcePosition(builder)));
+        }
+        return true;
+    }
+
+private:
+    TUnboxedValue Run(const IValueBuilder* valueBuilder, const TUnboxedValuePod* args) const final {
+        Y_UNUSED(args);
+        try {
+            return MakeRfcV7UuidValue(valueBuilder, MilliSeconds());
+        } catch (const std::exception& e) {
+            UdfTerminate((TStringBuilder() << valueBuilder->WithCalleePosition(Pos_) << " " << e.what()).data());
+        }
+    }
+
+    TSourcePosition Pos_;
+};
+
+template <bool Timestamp64>
+class TNewV7At: public TBoxedValue {
+public:
+    using TTypeAwareMarker = bool;
+
+    explicit TNewV7At(TSourcePosition pos)
+        : Pos_(pos)
+    {
+    }
+
+    static const TStringRef& Name() {
+        static auto name = TStringRef::Of("newV7At");
+        return name;
+    }
+
+    static bool DeclareSignature(
+        const TStringRef& name,
+        TType* userType,
+        IFunctionTypeInfoBuilder& builder,
+        bool typesOnly)
+    {
+        if (Name() != name) {
+            return false;
+        }
+
+        if (!userType) {
+            builder.SetError("Missing user type.");
+            return true;
+        }
+
+        builder.UserType(userType);
+        const auto typeHelper = builder.TypeInfoHelper();
+        const auto userTypeInspector = TTupleTypeInspector(*typeHelper, userType);
+        if (!userTypeInspector || userTypeInspector.GetElementsCount() < 1) {
+            builder.SetError("Invalid user type.");
+            return true;
+        }
+
+        const auto argsTypeTuple = userTypeInspector.GetElementType(0);
+        const auto argsTypeInspector = TTupleTypeInspector(*typeHelper, argsTypeTuple);
+        if (!argsTypeInspector) {
+            builder.SetError("Invalid user type - expected tuple.");
+            return true;
+        }
+
+        const auto argCount = argsTypeInspector.GetElementsCount();
+        if (argCount < 1) {
+            builder.SetError("Expected timestamp argument.");
+            return true;
+        }
+        if (IsTimestamp64ArgType(*typeHelper, argsTypeInspector.GetElementType(0)) != Timestamp64) {
+            return false;
+        }
+
+        auto argsBuilder = builder.Args(argCount);
+        for (ui32 i = 0; i < argCount; ++i) {
+            argsBuilder->Add(argsTypeInspector.GetElementType(i));
+        }
+        argsBuilder->Done().Returns<TUuid>();
+
+        if (!typesOnly) {
+            builder.Implementation(new TNewV7At(GetSourcePosition(builder)));
+        }
+        return true;
+    }
+
+private:
+    TUnboxedValue Run(const IValueBuilder* valueBuilder, const TUnboxedValuePod* args) const final {
+        try {
+            const ui64 timestampUs = ReadTimestampMicros(args[0], Timestamp64);
+            const ui64 timestampMs = timestampUs / 1000;
+            return MakeRfcV7UuidValue(valueBuilder, timestampMs);
+        } catch (const std::exception& e) {
+            UdfTerminate((TStringBuilder() << valueBuilder->WithCalleePosition(Pos_) << " " << e.what()).data());
+        }
+    }
+
+    TSourcePosition Pos_;
+};
+
 class TUuidModule: public IUdfModule {
 public:
     TStringRef Name() const {
@@ -306,6 +530,8 @@ public:
         static const TString newChronoPrefixPolyArgs = BuildPrefixPolyArgs("Unexpected arguments for Uuid::newChronoPrefix");
         static const TString newShardedPolyArgs = BuildNoPrefixPolyArgs("Unexpected arguments for Uuid::newSharded");
         static const TString newShardedPrefixPolyArgs = BuildPrefixPolyArgs("Unexpected arguments for Uuid::newShardedPrefix");
+        static const TString newV7PolyArgs = BuildNoPrefixPolyArgs("Unexpected arguments for Uuid::newV7");
+        static const TString newV7AtPolyArgs = BuildTimestampPolyArgs("Unexpected arguments for Uuid::newV7At");
 
         auto newChrono = sink.Add(TNewUuid<false, false>::Name());
         newChrono->SetTypeAwareness();
@@ -322,6 +548,14 @@ public:
         auto newShardedPrefix = sink.Add(TNewUuid<true, true>::Name());
         newShardedPrefix->SetTypeAwareness();
         newShardedPrefix->SetPolyArgs(TStringRef(newShardedPrefixPolyArgs));
+
+        auto newV7 = sink.Add(TNewV7::Name());
+        newV7->SetTypeAwareness();
+        newV7->SetPolyArgs(TStringRef(newV7PolyArgs));
+
+        auto newV7At = sink.Add(TNewV7At<false>::Name());
+        newV7At->SetTypeAwareness();
+        newV7At->SetPolyArgs(TStringRef(newV7AtPolyArgs));
     }
 
     void BuildFunctionTypeInfo(
@@ -339,7 +573,10 @@ public:
                 || TNewUuid<false, true, true>::DeclareSignature(name, userType, builder, typesOnly)
                 || TNewUuid<true, false>::DeclareSignature(name, userType, builder, typesOnly)
                 || TNewUuid<true, true, false>::DeclareSignature(name, userType, builder, typesOnly)
-                || TNewUuid<true, true, true>::DeclareSignature(name, userType, builder, typesOnly);
+                || TNewUuid<true, true, true>::DeclareSignature(name, userType, builder, typesOnly)
+                || TNewV7::DeclareSignature(name, userType, builder, typesOnly)
+                || TNewV7At<false>::DeclareSignature(name, userType, builder, typesOnly)
+                || TNewV7At<true>::DeclareSignature(name, userType, builder, typesOnly);
             if (!found) {
                 builder.SetError(TStringBuilder() << "Unknown function: " << TStringBuf(name));
             }

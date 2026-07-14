@@ -416,6 +416,17 @@ Y_UNIT_TEST_SUITE(SubColumnsArrayAccessor) {
         }
     }
 
+    Y_UNIT_TEST(JsonPathAccessorTopLevelNull) {
+        auto accessor = CreateTrivialArrayAccessor("null");
+
+        NKikimr::NArrow::NAccessor::NSubColumns::TJsonPathAccessorTrie jsonPathAccessorTrie;
+        UNIT_ASSERT(jsonPathAccessorTrie.Insert("$.a", accessor, NSubColumns::EValueType::BinaryJson).IsSuccess());
+
+        CheckValueByPath(jsonPathAccessorTrie, "$.a", std::nullopt);
+        CheckValueByPath(jsonPathAccessorTrie, "$.a.b", std::nullopt);
+        CheckValueByPath(jsonPathAccessorTrie, "$.a.b.c", std::nullopt);
+    }
+
     Y_UNIT_TEST(JsonPathAccessorArray) {
         auto accessor = CreateTrivialArrayAccessor(R"(["a", 1, true, false, null, {"a": "b"}, {}, [1,2], []])");
 

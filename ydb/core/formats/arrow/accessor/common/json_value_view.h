@@ -41,7 +41,7 @@ private:
     static TStringBuf ProjectBool(bool value);
 
     EKind Kind;
-    // One of these fields is filled, depending ok Kind.
+    // One of these fields is filled, depending on Kind.
     TStringBuf Bytes;
     double Number = 0;
     bool Bool = false;

@@ -3,6 +3,7 @@
 #include "kqp_worker_common.h"
 #include "kqp_query_state.h"
 #include "kqp_query_stats.h"
+#include "kqp_user_facing_tracing.h"
 
 #include <ydb/core/kqp/common/buffer/buffer.h>
 #include <ydb/core/kqp/common/buffer/events.h>
@@ -1604,6 +1605,17 @@ public:
             }
 
             request.StatsMode = queryState->GetStatsMode();
+            if (queryState->UserSpan) {
+                // User-facing tracing forces stats so the phase builder gets timings;
+                // collection depth scales with the trace level (BASIC/FULL/PROFILE).
+                const ui8 level = queryState->UserSpan.GetTraceId().GetVerbosity();
+                const auto userMode = level >= 11 ? Ydb::Table::QueryStatsCollection::STATS_COLLECTION_PROFILE
+                                    : level >= 6  ? Ydb::Table::QueryStatsCollection::STATS_COLLECTION_FULL
+                                    :               Ydb::Table::QueryStatsCollection::STATS_COLLECTION_BASIC;
+                if (userMode > request.StatsMode) {
+                    request.StatsMode = userMode;
+                }
+            }
             request.ProgressStatsPeriod = queryState->GetProgressStatsPeriod();
             request.QueryType = queryState->GetType();
             request.OutputChunkMaxSize = queryState->GetOutputChunkMaxSize();
@@ -3304,6 +3316,7 @@ public:
                 if (QueryState->KqpSessionSpan) {
                     QueryState->KqpSessionSpan.EndOk();
                 }
+                FinishUserFacingSpan(*QueryState, /*success*/ true, Ydb::StatusIds::StatusCode_Name(status));
                 LWTRACK(KqpSessionReplySuccess, QueryState->Orbit, record.GetArena() ? record.GetArena()->SpaceUsed() : 0);
             }
         } else {
@@ -3311,6 +3324,7 @@ public:
                 if (QueryState->KqpSessionSpan) {
                     QueryState->KqpSessionSpan.EndError(response.DebugString());
                 }
+                FinishUserFacingSpan(*QueryState, /*success*/ false, Ydb::StatusIds::StatusCode_Name(status));
                 LWTRACK(KqpSessionReplyError, QueryState->Orbit, TStringBuilder() << status);
             }
         }

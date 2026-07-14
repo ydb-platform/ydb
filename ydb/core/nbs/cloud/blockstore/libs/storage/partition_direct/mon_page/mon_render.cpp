@@ -1,11 +1,15 @@
 #include "mon_render.h"
 
+#include <ydb/core/base/services/blobstorage_service_id.h>
+
 #include <library/cpp/monlib/service/pages/templates.h>
+#include <library/cpp/string_utils/quote/quote.h>
 
 #include <util/generic/map.h>
 #include <util/stream/str.h>
 #include <util/string/builder.h>
 #include <util/string/cast.h>
+#include <util/string/printf.h>
 #include <util/string/subst.h>
 
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
@@ -50,16 +54,47 @@ const char* PageTitle(EMonPage page)
     return "";
 }
 
-void RenderDDiskIdCell(
-    IOutputStream& str,
-    const TString& ddiskId,
-    const TString& pageUrl)
+// Mon page of the DDisk actor behind the id; the "/node/<id>" prefix makes the
+// link work from any node's mon. The path format mirrors
+// TDDiskActor::RegisterMonPage.
+TString MakeDDiskMonPageUrl(const NKikimr::NBsController::TDDiskId& ddiskId)
 {
-    if (pageUrl.empty()) {
-        str << HtmlEscape(ddiskId);
-        return;
-    }
-    str << "<a href='" << pageUrl << "'>" << HtmlEscape(ddiskId) << "</a>";
+    return TStringBuilder()
+           << "/node/" << ddiskId.NodeId
+           << Sprintf(
+                  "/actors/ddisks/ddisk_p%09" PRIu32 "_s%09" PRIu32,
+                  ddiskId.PDiskId,
+                  ddiskId.DDiskSlotId);
+}
+
+void RenderDDiskLink(
+    IOutputStream& str,
+    const NKikimr::NBsController::TDDiskId& ddiskId)
+{
+    str << "<a href='" << MakeDDiskMonPageUrl(ddiskId) << "'>"
+        << HtmlEscape(ddiskId.ToString()) << "</a>";
+}
+
+// Mon page of the persistent buffer behind the id: the node's "Persistent
+// Buffer" page filtered to this pbuffer's service actor (its "pb" filter
+// matches ToString of the well-known service id).
+TString MakePBufferMonPageUrl(const NKikimr::NBsController::TDDiskId& pbufferId)
+{
+    const auto serviceId = NKikimr::MakeBlobStoragePersistentBufferId(
+        pbufferId.NodeId,
+        pbufferId.PDiskId,
+        pbufferId.DDiskSlotId);
+    return TStringBuilder()
+           << "/node/" << pbufferId.NodeId << "/actors/persistent_buffer?pb="
+           << CGIEscapeRet(serviceId.ToString());
+}
+
+void RenderPBufferLink(
+    IOutputStream& str,
+    const NKikimr::NBsController::TDDiskId& pbufferId)
+{
+    str << "<a href='" << MakePBufferMonPageUrl(pbufferId) << "'>"
+        << HtmlEscape(pbufferId.ToString()) << "</a>";
 }
 
 // "6 Online" or "4 Online / 2 Sufferer".
@@ -329,7 +364,7 @@ void RenderDbgDetail(
                 for (const auto& host: dbg.Hosts) {
                     TABLER () {
                         TABLED () {
-                            str << (int)host.Index;
+                            str << PrintHostIndex(host.Index);
                         }
                         TABLED () {
                             str << ToString(host.State);
@@ -384,19 +419,15 @@ void RenderDbgDetail(
                 for (const auto& connection: dbg.Connections) {
                     TABLER () {
                         TABLED () {
-                            str << (int)connection.HostIndex;
+                            str << PrintHostIndex(connection.HostIndex);
                         }
                         TABLED () {
-                            RenderDDiskIdCell(
-                                str,
-                                connection.DDiskId,
-                                connection.DDiskPageUrl);
+                            RenderDDiskLink(str, connection.DDiskId);
                         }
                         TABLED () {
-                            RenderDDiskIdCell(
-                                str,
-                                connection.PBufferId,
-                                connection.PBufferPageUrl);
+                            if (connection.PBufferId) {
+                                RenderPBufferLink(str, *connection.PBufferId);
+                            }
                         }
                         TABLED () {
                             str << connection.DDiskSession;

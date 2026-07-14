@@ -52,7 +52,6 @@ PEERDIR(
     contrib/libs/opentelemetry-proto
 
     library/cpp/cgiparam
-    library/cpp/string_utils/quote
 )
 
 END()

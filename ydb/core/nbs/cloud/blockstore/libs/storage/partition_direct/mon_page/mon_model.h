@@ -6,6 +6,8 @@
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/oracle.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/vchunk_config.h>
 
+#include <ydb/core/mind/bscontroller/types.h>
+
 #include <util/generic/string.h>
 #include <util/generic/vector.h>
 #include <util/system/types.h>
@@ -51,10 +53,8 @@ struct THostSnapshot
 struct TConnectionSnapshot
 {
     THostIndex HostIndex = InvalidHostIndex;
-    TString DDiskId;
-    TString DDiskPageUrl;
-    TString PBufferId;
-    TString PBufferPageUrl;
+    NKikimr::NBsController::TDDiskId DDiskId;
+    std::optional<NKikimr::NBsController::TDDiskId> PBufferId;
     TString DDiskSession;
     bool PBufferConnected = false;
 };

@@ -46,10 +46,8 @@ Y_UNIT_TEST_SUITE(TMonRenderTest)
         };
         TConnectionSnapshot locked{
             .HostIndex = 0,
-            .DDiskId = "1:1000:17",
-            .DDiskPageUrl = "/ddisk-page",
-            .PBufferId = "1:1000:18",
-            .PBufferPageUrl = "/pbuffer-page",
+            .DDiskId = {/*nodeId*/ 1, /*pdiskId*/ 1000, /*ddiskSlotId*/ 17},
+            .PBufferId = {{/*nodeId*/ 1, /*pdiskId*/ 1000, /*ddiskSlotId*/ 18}},
             .DDiskSession = "Locked",
             .PBufferConnected = true,
         };
@@ -133,6 +131,8 @@ Y_UNIT_TEST_SUITE(TMonRenderTest)
             html,
             "WriteToPBuffer");   // operation column
         UNIT_ASSERT_STRING_CONTAINS(html, "back to DBGs");
+        // Host indexes render in the log format ("H0"), not as raw ui8 bytes.
+        UNIT_ASSERT_STRING_CONTAINS(html, "<td>H0</td>");
         // The add-host form: POST with parameters both in the URL (read by
         // the tablet) and as hidden fields (read by the mon proxy router).
         UNIT_ASSERT_STRING_CONTAINS(html, "<form method='post'");
@@ -149,12 +149,17 @@ Y_UNIT_TEST_SUITE(TMonRenderTest)
         UNIT_ASSERT_STRING_CONTAINS(html, "Add host");
         UNIT_ASSERT_STRING_CONTAINS(html, "Connections");
         UNIT_ASSERT_STRING_CONTAINS(html, "DDisk session");
+        // The DDisk id links to its actor page on the owning node (1).
         UNIT_ASSERT_STRING_CONTAINS(
             html,
-            "<a href='/ddisk-page'>1:1000:17</a>");
+            "<a href='/node/1/actors/ddisks/ddisk_p000001000_s000000017'>"
+            "1:1000:17</a>");
+        // The PBuffer id links to the node's Persistent Buffer page filtered
+        // to this pbuffer's service actor.
         UNIT_ASSERT_STRING_CONTAINS(
             html,
-            "<a href='/pbuffer-page'>1:1000:18</a>");
+            "/node/1/actors/persistent_buffer?pb=");
+        UNIT_ASSERT_STRING_CONTAINS(html, ">1:1000:18</a>");
         UNIT_ASSERT_STRING_CONTAINS(html, "Locked");
         UNIT_ASSERT_STRING_CONTAINS(html, "yes");
     }

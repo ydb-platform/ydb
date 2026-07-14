@@ -24,37 +24,40 @@ SRCS(
 )
 
 PEERDIR(
-    library/cpp/threading/future
-    library/cpp/svnversion
-    library/cpp/yson/node
     library/cpp/yson
     ydb/library/yql/dq/constraints
     ydb/library/yql/dq/expr_nodes
-    ydb/library/yql/dq/tasks
+    ydb/library/yql/dq/opt
     ydb/library/yql/dq/transform
     ydb/library/yql/dq/type_ann
+    ydb/library/yql/providers/common/http_gateway
     ydb/library/yql/providers/dq/api/protos
     ydb/library/yql/providers/dq/common
     ydb/library/yql/providers/dq/expr_nodes
     ydb/library/yql/providers/dq/opt
     ydb/library/yql/providers/dq/planner
-    ydb/public/lib/yson_value
     ydb/public/sdk/cpp/src/client/driver
-    yql/essentials/providers/result/expr_nodes
     yql/essentials/ast
     yql/essentials/core
+    yql/essentials/core/cbo
     yql/essentials/core/dq_integration
     yql/essentials/core/dq_integration/transform
+    yql/essentials/core/expr_nodes
+    yql/essentials/core/file_storage
     yql/essentials/core/issue
+    yql/essentials/core/services
+    yql/essentials/core/type_ann
+    yql/essentials/minikql
+    yql/essentials/minikql/computation
     yql/essentials/providers/common/activation
     yql/essentials/providers/common/config/transformer
     yql/essentials/providers/common/gateway
     yql/essentials/providers/common/metrics
     yql/essentials/providers/common/proto
-    yql/essentials/providers/common/schema/expr
+    yql/essentials/providers/common/provider
     yql/essentials/providers/common/transform
-    yql/essentials/minikql
-    yql/essentials/public/issue
+    yql/essentials/providers/result/expr_nodes
+    yql/essentials/utils/log
 )
 
 YQL_LAST_ABI_VERSION()

@@ -57,7 +57,6 @@ public:
     void ForEachForeignEndpoint(const TEndpointElectorSafe::THandleCb& cb, const void* tag) const;
     TBalancingPolicy::TImpl::EPolicyType GetBalancingPolicyType() const;
     std::string GetEndpoint() const;
-    void SetCredentialsProvider(std::shared_ptr<ICredentialsProvider> credentialsProvider);
     bool AreClientTlsCredentialsValid() const;
     const std::string& GetClientTlsValidationDetail() const;
 
@@ -78,11 +77,15 @@ public:
     NThreading::TPromise<void> DiscoveryCompletedPromise;
 
 private:
-    NThreading::TFuture<void> CredentialsReady;
-    std::shared_ptr<ICredentialsProvider> CredentialsProvider;
+    struct TCredentials {
+        std::shared_ptr<ICredentialsProvider> Provider;
 #ifndef YDB_GRPC_UNSECURE_AUTH
-    std::shared_ptr<grpc::CallCredentials> CallCredentials;
+        std::shared_ptr<grpc::CallCredentials> CallCredentials;
 #endif
+    };
+
+    NThreading::TFuture<void> CredentialsReady;
+    NThreading::TFuture<TCredentials> Credentials;
     mutable std::once_flag ClientTlsValidationOnceFlag_;
     mutable bool ClientTlsCredentialsValid_ = true;
     mutable std::string ClientTlsValidationDetail_;

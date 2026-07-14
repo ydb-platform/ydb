@@ -7,8 +7,6 @@
 
 #include <library/cpp/string_utils/quote/quote.h>
 
-#include <util/generic/yexception.h>
-
 #include <thread>
 #include <unordered_map>
 
@@ -61,32 +59,19 @@ TDbDriverState::TDbDriverState(
     Log.SetFormatter(GetPrefixLogFormatter(GetDatabaseLogPrefix(Database)));
 }
 
-void TDbDriverState::SetCredentialsProvider(std::shared_ptr<ICredentialsProvider> credentialsProvider) {
-#ifndef YDB_GRPC_UNSECURE_AUTH
-    auto callCredentials = grpc::MetadataCredentialsFromPlugin(
-        std::unique_ptr<grpc::MetadataCredentialsPlugin>(new TYdbAuthenticator(credentialsProvider)));
-#endif
-    std::atomic_store(&CredentialsProvider, std::move(credentialsProvider));
-#ifndef YDB_GRPC_UNSECURE_AUTH
-    std::atomic_store(&CallCredentials, std::move(callCredentials));
-#endif
-}
-
 void TDbDriverState::InitCredentials(
     std::shared_ptr<ICredentialsProviderFactory> credentialsProviderFactory
 ) {
-    std::weak_ptr<TDbDriverState> weakSelf = shared_from_this();
-    std::weak_ptr<ICoreFacility> facility = weakSelf;
-
-    CredentialsReady = credentialsProviderFactory->CreateProviderAsync(std::move(facility)).Apply(
-        [weakSelf](const NThreading::TFuture<TCredentialsProviderPtr>& future) {
-            auto provider = future.GetValue();
-            auto self = weakSelf.lock();
-            if (!self) {
-                ythrow yexception() << "Driver state was destroyed before credentials were initialized";
-            }
-            self->SetCredentialsProvider(std::move(provider));
+    Credentials = credentialsProviderFactory->CreateProviderAsync(weak_from_this()).Apply(
+        [](const NThreading::TFuture<TCredentialsProviderPtr>& future) {
+            TCredentials result{future.GetValue()};
+#ifndef YDB_GRPC_UNSECURE_AUTH
+            result.CallCredentials = grpc::MetadataCredentialsFromPlugin(
+                std::unique_ptr<grpc::MetadataCredentialsPlugin>(new TYdbAuthenticator(result.Provider)));
+#endif
+            return result;
         });
+    CredentialsReady = Credentials.IgnoreResult();
 }
 
 NThreading::TFuture<void> TDbDriverState::GetCredentialsReady() const {
@@ -94,12 +79,12 @@ NThreading::TFuture<void> TDbDriverState::GetCredentialsReady() const {
 }
 
 std::shared_ptr<ICredentialsProvider> TDbDriverState::GetCredentialsProvider() const {
-    return std::atomic_load(&CredentialsProvider);
+    return Credentials.HasValue() ? Credentials.GetValue().Provider : nullptr;
 }
 
 #ifndef YDB_GRPC_UNSECURE_AUTH
 std::shared_ptr<grpc::CallCredentials> TDbDriverState::GetCallCredentials() const {
-    return std::atomic_load(&CallCredentials);
+    return Credentials.HasValue() ? Credentials.GetValue().CallCredentials : nullptr;
 }
 #endif
 

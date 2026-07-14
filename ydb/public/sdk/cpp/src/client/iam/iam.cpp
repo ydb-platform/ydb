@@ -171,19 +171,19 @@ private:
         auto promise = NThreading::NewPromise<TCredentialsProviderPtr>();
         auto createProvider = [params = std::move(params), promise]() mutable {
             try {
-                promise.SetValue(std::make_shared<TIAMCredentialsProvider>(params));
+                promise.TrySetValue(std::make_shared<TIAMCredentialsProvider>(params));
             } catch (...) {
-                promise.SetException(std::current_exception());
+                promise.TrySetException(std::current_exception());
             }
         };
-        if (auto core = facility.lock()) {
-            try {
+        try {
+            if (auto core = facility.lock()) {
                 core->PostToResponseQueue(std::move(createProvider));
-            } catch (...) {
-                promise.SetException(std::current_exception());
+            } else {
+                createProvider();
             }
-        } else {
-            createProvider();
+        } catch (...) {
+            promise.TrySetException(std::current_exception());
         }
         return promise.GetFuture();
     }

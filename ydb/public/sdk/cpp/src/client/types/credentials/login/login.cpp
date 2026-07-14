@@ -49,6 +49,7 @@ public:
 private:
     void PrepareToken();
     void RequestToken();
+    void FinishRequest(Ydb::Auth::LoginResponse* response, TPlainStatus status, bool facilityAvailable);
     bool IsOk() const;
     void ParseToken();
     std::string GetToken() const;
@@ -65,7 +66,6 @@ private:
     TLoginCredentialsParams Params_;
     EState State_ = EState::Empty;
     std::mutex Mutex_;
-    std::condition_variable Notify_;
     std::atomic<ui64> TokenReceived_ = 1;
     std::atomic<ui64> TokenParsed_ = 0;
     std::optional<std::string> Token_;
@@ -75,7 +75,6 @@ private:
     TPlainStatus Status_;
     Ydb::Auth::LoginResponse Response_;
     NThreading::TPromise<void> TokenReadyPromise_;
-    bool TokenReadySet_ = false;
 };
 
 TLoginCredentialsProvider::TLoginCredentialsProvider(std::weak_ptr<ICoreFacility> facility, TLoginCredentialsParams params)
@@ -128,41 +127,8 @@ void TLoginCredentialsProvider::RequestToken() {
         TokenRequestAt_ = {};
 
         auto responseCb = [facility = Facility_, this](Ydb::Auth::LoginResponse* resp, TPlainStatus status) {
-            std::optional<std::string> error;
-            bool setTokenReady = false;
             auto strongFacility = facility.lock();
-            {
-                std::lock_guard<std::mutex> lock(Mutex_);
-                if (strongFacility) {
-                    Status_ = std::move(status);
-                    if (resp != nullptr) {
-                        Response_ = std::move(*resp);
-                    }
-                    State_ = EState::Done;
-                    TokenReceived_++;
-                    ParseToken();
-                    error = Error_;
-                } else {
-                    State_ = EState::Done;
-                    error = "Login credentials provider response facility is not available";
-                    Token_.reset();
-                    Error_ = error;
-                    TokenReceived_++;
-                    TokenParsed_ = TokenReceived_.load();
-                }
-                if (!TokenReadySet_) {
-                    TokenReadySet_ = true;
-                    setTokenReady = true;
-                }
-            }
-            Notify_.notify_all();
-            if (setTokenReady) {
-                if (error) {
-                    TokenReadyPromise_.SetException(std::make_exception_ptr(yexception() << *error));
-                } else {
-                    TokenReadyPromise_.SetValue();
-                }
-            }
+            FinishRequest(resp, std::move(status), static_cast<bool>(strongFacility));
         };
 
         Ydb::Auth::LoginRequest request;
@@ -175,39 +141,43 @@ void TLoginCredentialsProvider::RequestToken() {
             strongFacility, std::move(request), std::move(responseCb), &Ydb::Auth::V1::AuthService::Stub::AsyncLogin,
             rpcSettings);
     } else {
-        bool setTokenReady = false;
-        {
-            std::lock_guard<std::mutex> lock(Mutex_);
-            State_ = EState::Done;
+        FinishRequest(nullptr, {}, false);
+    }
+}
+
+void TLoginCredentialsProvider::FinishRequest(
+    Ydb::Auth::LoginResponse* response,
+    TPlainStatus status,
+    bool facilityAvailable)
+{
+    std::optional<std::string> error;
+    {
+        std::lock_guard lock(Mutex_);
+        State_ = EState::Done;
+        ++TokenReceived_;
+        if (facilityAvailable) {
+            Status_ = std::move(status);
+            if (response) {
+                Response_ = std::move(*response);
+            }
+            ParseToken();
+        } else {
             Token_.reset();
             Error_ = "Login credentials provider response facility is not available";
-            TokenReceived_++;
             TokenParsed_ = TokenReceived_.load();
-            if (!TokenReadySet_) {
-                TokenReadySet_ = true;
-                setTokenReady = true;
-            }
         }
-        Notify_.notify_all();
-        if (setTokenReady) {
-            TokenReadyPromise_.SetException(std::make_exception_ptr(yexception() << "Login credentials provider response facility is not available"));
-        }
+        error = Error_;
+    }
+    if (error) {
+        TokenReadyPromise_.TrySetException(std::make_exception_ptr(yexception() << *error));
+    } else {
+        TokenReadyPromise_.TrySetValue();
     }
 }
 
 void TLoginCredentialsProvider::PrepareToken() {
-    std::unique_lock<std::mutex> lock(Mutex_);
-    if (State_ == EState::Empty) {
-        State_ = EState::Requesting;
-        lock.unlock();
-        RequestToken();
-        lock.lock();
-    }
-    if (State_ == EState::Requesting) {
-        Notify_.wait(lock, [&] {
-            return State_ == EState::Done;
-        });
-    }
+    PrepareTokenAsync().Wait();
+    std::lock_guard lock(Mutex_);
     ParseToken();
 }
 
@@ -216,7 +186,7 @@ NThreading::TFuture<void> TLoginCredentialsProvider::PrepareTokenAsync() {
     auto future = TokenReadyPromise_.GetFuture();
     {
         std::unique_lock<std::mutex> lock(Mutex_);
-        if (!TokenReadySet_ && State_ == EState::Empty) {
+        if (State_ == EState::Empty) {
             State_ = EState::Requesting;
             requestToken = true;
         }
@@ -309,12 +279,8 @@ std::shared_ptr<ICredentialsProvider> TLoginCredentialsProviderFactory::CreatePr
 
 NThreading::TFuture<TCredentialsProviderPtr> TLoginCredentialsProviderFactory::CreateProviderAsync(std::weak_ptr<ICoreFacility> facility) const {
     auto provider = std::make_shared<TLoginCredentialsProvider>(std::move(facility), Params_);
-    auto ready = provider->PrepareTokenAsync();
-    TCredentialsProviderPtr result = std::move(provider);
-    return ready.Apply([result = std::move(result)](const NThreading::TFuture<void>& future) mutable {
-        future.GetValue();
-        return result;
-    });
+    TCredentialsProviderPtr result = provider;
+    return provider->PrepareTokenAsync().Return(std::move(result));
 }
 
 std::shared_ptr<ICredentialsProviderFactory> CreateLoginCredentialsProviderFactory(TLoginCredentialsParams params) {

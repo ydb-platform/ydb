@@ -4,7 +4,6 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/common_client/ssl_credentials.h>
 
 #include "actions.h"
-#include "credentials_ready.h"
 #include "params.h"
 
 #include <ydb/public/api/grpc/ydb_discovery_v1.grpc.pb.h>
@@ -20,6 +19,12 @@
 #include <condition_variable>
 #include <mutex>
 #include <optional>
+
+#if defined(_asan_enabled_)
+#define YDB_ASAN_SIZE_ATTRIBUTES __attribute__((nodebug))
+#else
+#define YDB_ASAN_SIZE_ATTRIBUTES
+#endif
 
 namespace NYdb::inline Dev {
 
@@ -147,53 +152,19 @@ public:
 
     static void SetGrpcCompressionAlgorithm(NYdbGrpc::TGRpcClientConfig& config, EGrpcCompressionAlgorithm algorithm);
 
-    template <typename TCallbackFactory>
-    bool MaybeDeferUntilCredentialsReady(
+    using TCredentialsWaitResult = std::optional<TPlainStatus>;
+    using TCredentialsCallback = std::function<void(TCredentialsWaitResult)>;
+
+    NThreading::TFuture<void> CredentialsReadyToWaitFor(
         const TDbDriverStatePtr& dbState,
         const TRpcRequestSettings& requestSettings,
+        const IQueueClientContextPtr& context) const;
+
+    void DeferUntilCredentialsReady(
+        const TRpcRequestSettings& requestSettings,
         IQueueClientContextPtr& context,
-        TCallbackFactory&& callbackFactory)
-    {
-        if (!requestSettings.UseAuth) {
-            return false;
-        }
-
-        auto credentialsReady = dbState->GetCredentialsReady();
-        IQueueClientContextPtr waitContext;
-        if (!credentialsReady.IsReady()) {
-            TryCreateContext(context);
-            waitContext = context;
-        }
-        auto scheduleContext = context;
-
-        return NDeferredCredentials::DeferUntilReady(
-            std::move(credentialsReady),
-            requestSettings.Deadline,
-            std::forward<TCallbackFactory>(callbackFactory),
-            [this, scheduleContext, stopState = StopState_](std::function<void(bool)>&& cb, TDeadline deadline) {
-                TSdkCallbackGuard guard(stopState);
-                if (!guard.IsEntered()) {
-                    cb(false);
-                    return;
-                }
-                const auto now = TDeadline::Clock::now();
-                const auto timeout = deadline.GetTimePoint() <= now
-                    ? TDuration::Zero()
-                    : TDuration::MicroSeconds(std::chrono::duration_cast<std::chrono::microseconds>(
-                        deadline.GetTimePoint() - now).count());
-                ScheduleCallback(timeout, std::move(cb), scheduleContext);
-            },
-            [waitContext = std::move(waitContext)](TSimpleCb&& cb) {
-                if (!waitContext) {
-                    return false;
-                }
-                waitContext->SubscribeCancel(std::move(cb));
-                return true;
-            },
-            [context] {
-                return context && context->IsCancelled();
-            });
-    }
+        NThreading::TFuture<void> credentialsReady,
+        TCredentialsCallback callback);
 
     template<typename TService>
     std::pair<std::unique_ptr<TServiceConnection<TService>>, TEndpointKey> GetServiceConnection(
@@ -326,6 +297,7 @@ public:
         TRequestWrapper& operator=(TRequestWrapper&& other) = default;
 
         template<typename TService, typename TResponse>
+        YDB_ASAN_SIZE_ATTRIBUTES
         void DoRequest(
             std::unique_ptr<TServiceConnection<TService>>& serviceConnection,
             NYdbGrpc::TAdvancedResponseCallback<TResponse>&& responseCbLow,
@@ -347,6 +319,7 @@ public:
     };
 
     template<typename TService, typename TRequest, typename TResponse>
+    YDB_ASAN_SIZE_ATTRIBUTES
     void Run(
         TRequestWrapper<TRequest>&& requestWrapper,
         TResponseCb<TResponse>&& userResponseCb,
@@ -359,10 +332,11 @@ public:
         using TConnection = std::unique_ptr<TServiceConnection<TService>>;
         Y_ABORT_UNLESS(dbState);
 
-        if (MaybeDeferUntilCredentialsReady(dbState, requestSettings, context, [&]() mutable {
-            return [this, requestWrapper = std::move(requestWrapper), userResponseCb = std::move(userResponseCb),
-                    rpc, dbState, requestSettings, context = std::move(context)]
-                (std::optional<TPlainStatus> status) mutable {
+        if (auto ready = CredentialsReadyToWaitFor(dbState, requestSettings, context); ready.Initialized()) {
+            DeferUntilCredentialsReady(requestSettings, context, std::move(ready),
+                [this, requestWrapper = std::move(requestWrapper), userResponseCb = std::move(userResponseCb),
+                 rpc, dbState, requestSettings, context = std::move(context)]
+                (std::optional<TPlainStatus> status) YDB_ASAN_SIZE_ATTRIBUTES mutable {
                     if (status) {
                         userResponseCb(nullptr, std::move(*status));
                         return;
@@ -374,8 +348,7 @@ public:
                         std::move(dbState),
                         requestSettings,
                         std::move(context));
-                };
-        })) {
+                });
             return;
         }
 
@@ -604,6 +577,7 @@ public:
             TResponse>::TAsyncRequest;
 
     template<class TService, class TRequest, class TResponse, class TCallback>
+    YDB_ASAN_SIZE_ATTRIBUTES
     void StartReadStream(
         const TRequest& request,
         TCallback responseCb,
@@ -616,9 +590,10 @@ public:
         using TConnection = std::unique_ptr<TServiceConnection<TService>>;
         using TProcessor = typename NYdbGrpc::IStreamRequestReadProcessor<TResponse>::TPtr;
 
-        if (MaybeDeferUntilCredentialsReady(dbState, requestSettings, context, [&]() mutable {
-            return [this, request, responseCb = std::move(responseCb), rpc, dbState, requestSettings, context = std::move(context)]
-                (std::optional<TPlainStatus> status) mutable {
+        if (auto ready = CredentialsReadyToWaitFor(dbState, requestSettings, context); ready.Initialized()) {
+            DeferUntilCredentialsReady(requestSettings, context, std::move(ready),
+                [this, request, responseCb = std::move(responseCb), rpc, dbState, requestSettings, context = std::move(context)]
+                (std::optional<TPlainStatus> status) YDB_ASAN_SIZE_ATTRIBUTES mutable {
                     if (status) {
                         responseCb(std::move(*status), nullptr);
                         return;
@@ -630,8 +605,7 @@ public:
                         std::move(dbState),
                         requestSettings,
                         std::move(context));
-                };
-        })) {
+                });
             return;
         }
 
@@ -711,6 +685,7 @@ public:
     }
 
     template<class TService, class TRequest, class TResponse, class TCallback>
+    YDB_ASAN_SIZE_ATTRIBUTES
     void StartBidirectionalStream(
         TCallback connectedCallback,
         TStreamRpc<TService, TRequest, TResponse, NYdbGrpc::TStreamRequestReadWriteProcessor> rpc,
@@ -722,9 +697,10 @@ public:
         using TConnection = std::unique_ptr<TServiceConnection<TService>>;
         using TProcessor = typename NYdbGrpc::IStreamRequestReadWriteProcessor<TRequest, TResponse>::TPtr;
 
-        if (MaybeDeferUntilCredentialsReady(dbState, requestSettings, context, [&]() mutable {
-            return [this, connectedCallback = std::move(connectedCallback), rpc, dbState, requestSettings, context = std::move(context)]
-                (std::optional<TPlainStatus> status) mutable {
+        if (auto ready = CredentialsReadyToWaitFor(dbState, requestSettings, context); ready.Initialized()) {
+            DeferUntilCredentialsReady(requestSettings, context, std::move(ready),
+                [this, connectedCallback = std::move(connectedCallback), rpc, dbState, requestSettings, context = std::move(context)]
+                (std::optional<TPlainStatus> status) YDB_ASAN_SIZE_ATTRIBUTES mutable {
                     if (status) {
                         connectedCallback(std::move(*status), nullptr);
                         return;
@@ -735,8 +711,7 @@ public:
                         std::move(dbState),
                         requestSettings,
                         std::move(context));
-                };
-        })) {
+                });
             return;
         }
 
@@ -854,6 +829,7 @@ private:
     }
 
     template <typename TService, typename TCallback>
+    YDB_ASAN_SIZE_ATTRIBUTES
     void WithServiceConnection(TCallback callback, TDbDriverStatePtr dbState,
         const TEndpointKey& preferredEndpoint, TRpcRequestSettings::TEndpointPolicy endpointPolicy)
     {
@@ -1019,3 +995,5 @@ struct TGRpcConnectionsDeleter {
 };
 
 } // namespace NYdb
+
+#undef YDB_ASAN_SIZE_ATTRIBUTES

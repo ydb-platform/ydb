@@ -11,7 +11,6 @@ FORK_SUBTESTS()
 
 PEERDIR(
     ydb/public/sdk/cpp/src/client/driver
-    ydb/public/sdk/cpp/src/client/impl/internal/grpc_connections
     ydb/public/sdk/cpp/src/client/table
 )
 

@@ -84,6 +84,44 @@ namespace {
     };
 }
 
+namespace {
+
+using TCredentialsWaitResult = TGRpcConnectionsImpl::TCredentialsWaitResult;
+
+TPlainStatus InitFailedStatus(const std::exception* e = nullptr) {
+    TStringBuilder message;
+    message << "Credentials provider initialization failed";
+    if (e) {
+        message << ". " << e->what();
+    }
+    return TPlainStatus(EStatus::CLIENT_UNAUTHENTICATED, message);
+}
+
+TPlainStatus InitCancelledStatus() {
+    return TPlainStatus(EStatus::CLIENT_CANCELLED, "Client is stopped");
+}
+
+TCredentialsWaitResult ReadyResult(const NThreading::TFuture<void>& future) {
+    try {
+        future.GetValue();
+        return {};
+    } catch (const std::exception& e) {
+        return InitFailedStatus(&e);
+    } catch (...) {
+        return InitFailedStatus();
+    }
+}
+
+bool ScheduledSuccessfully(const NThreading::TFuture<bool>& future) {
+    try {
+        return future.GetValue();
+    } catch (...) {
+        return false;
+    }
+}
+
+} // anonymous namespace
+
 bool TDriverStopState::TryEnterCallback() noexcept {
     std::unique_lock lock(Mutex_);
     if (Stopped_) {
@@ -141,6 +179,102 @@ bool TSdkCallbackGuard::IsEntered() const noexcept {
     return Entered_;
 }
 
+NThreading::TFuture<void> TGRpcConnectionsImpl::CredentialsReadyToWaitFor(
+    const TDbDriverStatePtr& dbState,
+    const TRpcRequestSettings& requestSettings,
+    const IQueueClientContextPtr& context) const
+{
+    if (!requestSettings.UseAuth) {
+        return {};
+    }
+    auto ready = dbState->GetCredentialsReady();
+    return ready.HasValue() && !(context && context->IsCancelled())
+        ? NThreading::TFuture<void>{}
+        : ready;
+}
+
+void TGRpcConnectionsImpl::DeferUntilCredentialsReady(
+    const TRpcRequestSettings& requestSettings,
+    IQueueClientContextPtr& context,
+    NThreading::TFuture<void> credentialsReady,
+    TCredentialsCallback callback)
+{
+    auto cancelled = NThreading::NewPromise<void>();
+    if (!credentialsReady.IsReady()) {
+        TryCreateContext(context);
+        if (context) {
+            context->SubscribeCancel([cancelled]() mutable {
+                cancelled.TrySetValue();
+            });
+        } else {
+            cancelled.SetValue();
+        }
+    } else if (context && context->IsCancelled()) {
+        cancelled.SetValue();
+    }
+
+    auto scheduleContext = context;
+    auto schedule = [this, scheduleContext, stopState = StopState_](TDeadline deadline) {
+        TSdkCallbackGuard guard(stopState);
+        if (!guard.IsEntered()) {
+            return NThreading::MakeFuture(false);
+        }
+        const auto now = TDeadline::Clock::now();
+        const auto timeout = deadline.GetTimePoint() <= now
+            ? TDuration::Zero()
+            : TDuration::MicroSeconds(std::chrono::duration_cast<std::chrono::microseconds>(
+                deadline.GetTimePoint() - now).count());
+        return ScheduleFuture(timeout, scheduleContext);
+    };
+
+    NThreading::TFuture<TCredentialsWaitResult> wait;
+    if (credentialsReady.IsReady()) {
+        auto status = ReadyResult(credentialsReady);
+        wait = NThreading::MakeFuture(status || !cancelled.HasValue()
+            ? std::move(status)
+            : TCredentialsWaitResult(InitCancelledStatus()));
+    } else {
+        auto result = NThreading::NewPromise<TCredentialsWaitResult>();
+        wait = result.GetFuture();
+        credentialsReady.Subscribe([result](const NThreading::TFuture<void>& future) mutable {
+            result.TrySetValue(ReadyResult(future));
+        });
+        cancelled.GetFuture().Subscribe([result](const NThreading::TFuture<void>&) mutable {
+            result.TrySetValue(InitCancelledStatus());
+        });
+        if (requestSettings.Deadline != TDeadline::Max()) {
+            try {
+                schedule(requestSettings.Deadline).Subscribe(
+                    [result](const NThreading::TFuture<bool>& future) mutable {
+                        result.TrySetValue(ScheduledSuccessfully(future)
+                            ? TPlainStatus(EStatus::CLIENT_DEADLINE_EXCEEDED,
+                                "Request deadline exceeded while waiting for credentials")
+                            : InitCancelledStatus());
+                    });
+            } catch (...) {
+                result.TrySetValue(InitCancelledStatus());
+            }
+        }
+    }
+
+    wait.Subscribe([callback = std::move(callback), schedule = std::move(schedule)]
+        (const NThreading::TFuture<TCredentialsWaitResult>& future) mutable {
+        NThreading::TFuture<bool> scheduled;
+        try {
+            scheduled = schedule(TDeadline::Now());
+        } catch (...) {
+            callback(InitCancelledStatus());
+            return;
+        }
+        scheduled.Subscribe([callback = std::move(callback), status = future.GetValue()]
+            (const NThreading::TFuture<bool>& future) mutable {
+            callback(ScheduledSuccessfully(future)
+                ? std::move(status)
+                : TCredentialsWaitResult(InitCancelledStatus()));
+        });
+    });
+}
+
 bool IsTokenCorrect(const std::string& in) {
     for (char c : in) {
         if (!(IsAsciiAlnum(c) || IsAsciiPunct(c) || c == ' ')) {
@@ -153,7 +287,9 @@ bool IsTokenCorrect(const std::string& in) {
 std::string GetAuthInfo(TDbDriverStatePtr p) {
     try {
         auto credentialsProvider = p->GetCredentialsProvider();
-        Y_ABORT_UNLESS(credentialsProvider);
+        if (!credentialsProvider) {
+            throw TAuthenticationError("Credentials provider is not initialized");
+        }
         auto token = credentialsProvider->GetAuthInfo();
         if (!IsTokenCorrect(token)) {
             throw TAuthenticationError("token is incorrect, illegal characters found");

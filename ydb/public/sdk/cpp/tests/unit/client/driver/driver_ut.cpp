@@ -3,10 +3,6 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/exceptions/exceptions.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/type_switcher.h>
 
-#define INCLUDE_YDB_INTERNAL_H
-#include <ydb/public/sdk/cpp/src/client/impl/internal/grpc_connections/credentials_ready.h>
-#undef INCLUDE_YDB_INTERNAL_H
-
 #include <ydb/public/api/grpc/ydb_discovery_v1.grpc.pb.h>
 #include <ydb/public/api/grpc/ydb_table_v1.grpc.pb.h>
 
@@ -114,49 +110,65 @@ namespace {
         std::atomic_int& ProviderCount_;
     };
 
-    void AssertCancelled(const NDeferredCredentials::TWaitResult& status) {
-        UNIT_ASSERT(status);
-        UNIT_ASSERT_VALUES_EQUAL(status->Status, EStatus::CLIENT_CANCELLED);
-    }
+    class TDeferredCredentialsFactory final : public ICredentialsProviderFactory {
+    public:
+        TDeferredCredentialsFactory()
+            : Provider_(NThreading::NewPromise<TCredentialsProviderPtr>())
+        {}
+
+        TCredentialsProviderPtr CreateProvider() const override {
+            return CreateInsecureCredentialsProviderFactory()->CreateProvider();
+        }
+
+        NThreading::TFuture<TCredentialsProviderPtr> CreateProviderAsync(std::weak_ptr<ICoreFacility>) const override {
+            return Provider_.GetFuture();
+        }
+
+        void SetReady() {
+            Provider_.SetValue(CreateProvider());
+        }
+
+    private:
+        NThreading::TPromise<TCredentialsProviderPtr> Provider_;
+    };
 
 } // namespace
 
 Y_UNIT_TEST_SUITE(DeferredCredentialsTest) {
-    Y_UNIT_TEST(SchedulerCancellationIsReportedOnce) {
-        using namespace NDeferredCredentials;
+    Y_UNIT_TEST(RequestWaitsForCredentials) {
+        auto factory = std::make_shared<TDeferredCredentialsFactory>();
+        auto driver = TDriver(TDriverConfig()
+            .SetEndpoint("localhost:100")
+            .SetCredentialsProviderFactory(factory));
+        auto result = TTableClient(driver).CreateSession();
 
-        auto credentialsReady = NThreading::NewPromise<void>();
-        std::function<void()> cancel;
-        std::function<void(bool)> scheduled;
-        TWaitResult result;
-        size_t callbackCount = 0;
+        UNIT_ASSERT(!result.Wait(TDuration::MilliSeconds(100)));
+        factory->SetReady();
+        UNIT_ASSERT(result.Wait(TDuration::Seconds(10)));
+        UNIT_ASSERT_VALUES_EQUAL(result.GetValue().GetStatus(), EStatus::TRANSPORT_UNAVAILABLE);
+    }
 
-        UNIT_ASSERT(DeferUntilReady(
-            credentialsReady.GetFuture(),
-            TDeadline::Max(),
-            [&] {
-                return [&](TWaitResult status) {
-                    ++callbackCount;
-                    result = std::move(status);
-                };
-            },
-            [&](auto&& callback, TDeadline) {
-                scheduled = std::forward<decltype(callback)>(callback);
-            },
-            [&](auto&& callback) {
-                cancel = std::forward<decltype(callback)>(callback);
-                return true;
-            },
-            [] { return false; }));
+    Y_UNIT_TEST(RequestDeadlineWhileWaitingForCredentials) {
+        auto factory = std::make_shared<TDeferredCredentialsFactory>();
+        auto driver = TDriver(TDriverConfig()
+            .SetEndpoint("localhost:100")
+            .SetCredentialsProviderFactory(factory));
+        auto result = TTableClient(driver).CreateSession(
+            TCreateSessionSettings().ClientTimeout(TDuration::MilliSeconds(100))).GetValueSync();
 
-        credentialsReady.SetValue();
-        UNIT_ASSERT(scheduled);
-        UNIT_ASSERT(cancel);
-        cancel();
-        scheduled(false);
+        UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::CLIENT_DEADLINE_EXCEEDED);
+    }
 
-        UNIT_ASSERT_VALUES_EQUAL(callbackCount, 1);
-        AssertCancelled(result);
+    Y_UNIT_TEST(DriverStopCancelsCredentialsWait) {
+        auto factory = std::make_shared<TDeferredCredentialsFactory>();
+        auto driver = TDriver(TDriverConfig()
+            .SetEndpoint("localhost:100")
+            .SetCredentialsProviderFactory(factory));
+        auto result = TTableClient(driver).CreateSession();
+
+        driver.Stop(true);
+        UNIT_ASSERT(result.Wait(TDuration::Seconds(10)));
+        UNIT_ASSERT_VALUES_EQUAL(result.GetValue().GetStatus(), EStatus::CLIENT_CANCELLED);
     }
 }
 

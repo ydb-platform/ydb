@@ -18,6 +18,7 @@
 #include <string>
 #include <condition_variable>
 #include <mutex>
+#include <utility>
 
 namespace NYdb::inline Dev {
 
@@ -170,10 +171,7 @@ private:
                     return;
                 }
                 NeedStop_ = true;
-                if (!FirstTokenReadySet_) {
-                    FirstTokenReadySet_ = true;
-                    setStoppedException = true;
-                }
+                setStoppedException = MarkFirstTokenReadyLocked();
                 TokenReady_.notify_all();
                 if (Context_.has_value()) {
                     Context_->TryCancel();
@@ -191,14 +189,16 @@ private:
     private:
         using SysDuration = SysClock::duration;
 
+        bool MarkFirstTokenReadyLocked() {
+            return !std::exchange(FirstTokenReadySet_, true);
+        }
+
         void FailFirstToken(std::string error) {
             bool setException = false;
             {
                 std::lock_guard guard(Lock_);
-                if (!FirstTokenReadySet_) {
-                    FirstTokenReadySet_ = true;
+                if ((setException = MarkFirstTokenReadyLocked())) {
                     LastRequestError_ = error;
-                    setException = true;
                 }
             }
             if (setException) {
@@ -251,17 +251,15 @@ private:
                 }
 
                 if (auto self = weakSelf.lock()) {
-                    std::optional<std::string> firstTokenError;
+                    bool failFirstToken;
                     {
                         std::lock_guard guard(self->Lock_);
-                        if (!self->FirstTokenReadySet_) {
-                            self->FirstTokenReadySet_ = true;
-                            firstTokenError = "IAM-token provider response facility is not available";
-                        }
+                        failFirstToken = self->MarkFirstTokenReadyLocked();
                         self->ResetContextImpl();
                     }
-                    if (firstTokenError) {
-                        self->FirstTokenReady_.SetException(std::make_exception_ptr(yexception() << *firstTokenError));
+                    if (failFirstToken) {
+                        self->FirstTokenReady_.SetException(std::make_exception_ptr(
+                            yexception() << "IAM-token provider response facility is not available"));
                     }
                 }
             };
@@ -278,8 +276,7 @@ private:
                     LastRequestError_ = TStringBuilder()
                         << "Last request error was at " << FormatSysTimeUtcIsoMicros(now)
                         << ". Failed to prepare IAM request: " << CurrentExceptionMessage();
-                    if (!FirstTokenReadySet_) {
-                        FirstTokenReadySet_ = true;
+                    if (MarkFirstTokenReadyLocked()) {
                         firstTokenError = LastRequestError_;
                     }
                     ResetContextImpl();
@@ -352,8 +349,7 @@ private:
                     LastRequestError_ = TStringBuilder()
                         << "Last request error was at " << FormatSysTimeUtcIsoMicros(now)
                         << ". Failed to prepare IAM request context: " << CurrentExceptionMessage();
-                    if (!FirstTokenReadySet_) {
-                        FirstTokenReadySet_ = true;
+                    if (MarkFirstTokenReadyLocked()) {
                         firstTokenError = LastRequestError_;
                     }
                     ResetContextImpl();
@@ -379,7 +375,6 @@ private:
 
         void ProcessIamResponse(grpc::Status&& status, TResponse&& result) {
             bool setFirstTokenReady = false;
-            std::optional<std::string> firstTokenError;
 
             {
                 std::lock_guard guard(Lock_);
@@ -391,10 +386,6 @@ private:
                         << " Message: \"" << status.error_message()
                         << "\" iam-endpoint: \"" << IamEndpoint_.Endpoint << "\"";
 
-                    if (!FirstTokenReadySet_) {
-                        FirstTokenReadySet_ = true;
-                        firstTokenError = LastRequestError_;
-                    }
                     RescheduleOnFailure();
                 } else {
                     LastRequestError_ = "";
@@ -403,10 +394,7 @@ private:
                     const SysTimePoint expiresAt = SysClock::from_time_t(result.expires_at().seconds());
                     RescheduleOnSuccess(expiresAt);
 
-                    if (!FirstTokenReadySet_) {
-                        FirstTokenReadySet_ = true;
-                        setFirstTokenReady = true;
-                    }
+                    setFirstTokenReady = MarkFirstTokenReadyLocked();
                     TokenReady_.notify_all();
                 }
 
@@ -415,8 +403,6 @@ private:
 
             if (setFirstTokenReady) {
                 FirstTokenReady_.SetValue();
-            } else if (firstTokenError) {
-                FirstTokenReady_.SetException(std::make_exception_ptr(yexception() << *firstTokenError));
             }
         }
 
@@ -524,6 +510,26 @@ private:
     TCredentialsProviderPtr Inner_;
 };
 
+namespace NPrivate {
+
+template <typename TProvider, typename TParams>
+NThreading::TFuture<TCredentialsProviderPtr> CreateGrpcIamCredentialsProviderAsync(
+    const TParams& params,
+    std::weak_ptr<ICoreFacility> facility,
+    std::shared_ptr<ICoreFacility> ownedFacility = {})
+{
+    auto inner = std::make_shared<TProvider>(params, std::move(facility), false);
+    auto ready = inner->GetReadyFuture();
+    TCredentialsProviderPtr provider = std::move(inner);
+    if (ownedFacility) {
+        provider = std::make_shared<TOwningFacilityCredentialsProvider>(
+            std::move(ownedFacility), std::move(provider));
+    }
+    return ready.Return(std::move(provider));
+}
+
+} // namespace NPrivate
+
 template<typename TRequest, typename TResponse, typename TService>
 class TIamJwtCredentialsProvider : public TGrpcIamCredentialsProvider<TRequest, TResponse, TService> {
 public:
@@ -570,16 +576,8 @@ public:
 
     NThreading::TFuture<TCredentialsProviderPtr> CreateProviderAsync() const override {
         auto facility = CreateSimpleCoreFacility();
-        auto inner = std::make_shared<TIamJwtCredentialsProvider<TRequest, TResponse, TService>>(
-            Params_, std::weak_ptr<ICoreFacility>(facility), false);
-        auto ready = inner->GetReadyFuture();
-        TCredentialsProviderPtr provider = std::make_shared<TOwningFacilityCredentialsProvider>(
-            std::move(facility), std::move(inner));
-
-        return ready.Apply([provider = std::move(provider)](const NThreading::TFuture<void>& future) mutable {
-            future.GetValue();
-            return provider;
-        });
+        return NPrivate::CreateGrpcIamCredentialsProviderAsync<
+            TIamJwtCredentialsProvider<TRequest, TResponse, TService>>(Params_, facility, facility);
     }
 
     TCredentialsProviderPtr CreateProvider(std::weak_ptr<ICoreFacility> facility) const override {
@@ -598,15 +596,8 @@ public:
     }
 
     NThreading::TFuture<TCredentialsProviderPtr> CreateProviderAsync(std::weak_ptr<ICoreFacility> facility) const override {
-        auto inner = std::make_shared<TIamJwtCredentialsProvider<TRequest, TResponse, TService>>(
-            Params_, std::move(facility), false);
-        auto ready = inner->GetReadyFuture();
-        TCredentialsProviderPtr provider = std::move(inner);
-
-        return ready.Apply([provider = std::move(provider)](const NThreading::TFuture<void>& future) mutable {
-            future.GetValue();
-            return provider;
-        });
+        return NPrivate::CreateGrpcIamCredentialsProviderAsync<
+            TIamJwtCredentialsProvider<TRequest, TResponse, TService>>(Params_, std::move(facility));
     }
 
 private:
@@ -633,16 +624,8 @@ public:
 
     NThreading::TFuture<TCredentialsProviderPtr> CreateProviderAsync() const override {
         auto facility = CreateSimpleCoreFacility();
-        auto inner = std::make_shared<TIamOAuthCredentialsProvider<TRequest, TResponse, TService>>(
-            Params_, std::weak_ptr<ICoreFacility>(facility), false);
-        auto ready = inner->GetReadyFuture();
-        TCredentialsProviderPtr provider = std::make_shared<TOwningFacilityCredentialsProvider>(
-            std::move(facility), std::move(inner));
-
-        return ready.Apply([provider = std::move(provider)](const NThreading::TFuture<void>& future) mutable {
-            future.GetValue();
-            return provider;
-        });
+        return NPrivate::CreateGrpcIamCredentialsProviderAsync<
+            TIamOAuthCredentialsProvider<TRequest, TResponse, TService>>(Params_, facility, facility);
     }
 
     TCredentialsProviderPtr CreateProvider(std::weak_ptr<ICoreFacility> facility) const override {
@@ -658,15 +641,8 @@ public:
     }
 
     NThreading::TFuture<TCredentialsProviderPtr> CreateProviderAsync(std::weak_ptr<ICoreFacility> facility) const override {
-        auto inner = std::make_shared<TIamOAuthCredentialsProvider<TRequest, TResponse, TService>>(
-            Params_, std::move(facility), false);
-        auto ready = inner->GetReadyFuture();
-        TCredentialsProviderPtr provider = std::move(inner);
-
-        return ready.Apply([provider = std::move(provider)](const NThreading::TFuture<void>& future) mutable {
-            future.GetValue();
-            return provider;
-        });
+        return NPrivate::CreateGrpcIamCredentialsProviderAsync<
+            TIamOAuthCredentialsProvider<TRequest, TResponse, TService>>(Params_, std::move(facility));
     }
 
 private:

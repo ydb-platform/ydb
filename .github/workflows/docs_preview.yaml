@@ -4,12 +4,12 @@ on:
   workflow_run:
     workflows:
       - Build documentation
-      - Rebuild documentation
     types:
       - completed
 
 jobs:
   post-build:
+    if: github.event.workflow_run.conclusion == 'success'
     permissions: write-all
     concurrency:
       group: preview-documentation-${{ github.event.workflow_run.id }}
@@ -18,7 +18,6 @@ jobs:
     steps:
       - name: Upload
         uses: diplodoc-platform/docs-upload-action@v1
-        if: github.event.workflow_run.conclusion == 'success'
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           storage-endpoint: ${{ vars.DOCS_AWS_ENDPOINT }}

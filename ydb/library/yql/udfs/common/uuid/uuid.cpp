@@ -11,15 +11,16 @@
 // Use as primary keys when you want:
 //   - newChrono: chronological clustering by creation time;
 //   - newSharded: shard spread via random prefix + time locality within a prefix.
-//   - newV7: RFC 9562 UUID v7 for external interoperability (non-sortable in YDB);
-//   - newV7At: RFC 9562 UUID v7 with a fixed Timestamp/Timestamp64.
-//   - extractTs / extractTs64: read the embedded v7 timestamp (microseconds) or NULL.
 // Prefix variants accept Uint64 or Uuid as the first argument; the Uuid overload
 // reuses the top PrefixBits of the source value as the generated key prefix.
 // For plain random IDs without sort semantics, use RandomUuid() instead.
-//
 // Assemble bytes in YDB internal (Microsoft GUID) layout and return as Uuid.
 // No RFC↔YDB conversion: generators already write sort-order-aware bytes.
+//
+// In addition, the module contains functions for generating RFC 9562 UUID v7 values:
+//  - newV7: generate a v7 UUID value from the current timestamp.
+//  - newV7At: generate a v7 UUID value from a specific timestamp.
+//  - extractTs, extractTs64: extract the timestamp from a v7 UUID value.
 
 using namespace NYql;
 using namespace NYql::NUdf;

@@ -12,7 +12,10 @@
 namespace NKikimr::NOlap::NCompaction::NSubColumns {
 
 std::shared_ptr<NArrow::NAccessor::IChunkedArray> TMergedBuilder::MaybeDictionaryEncode(
-    const std::shared_ptr<NArrow::NAccessor::IChunkedArray>& accessor, const ui32 filledRecordsCount) const {
+    const std::shared_ptr<NArrow::NAccessor::IChunkedArray>& accessor, const ui32 filledRecordsCount, const EValueType valueType) const {
+    if (!NArrow::NAccessor::NSubColumns::DictionaryApplicableForValueType(valueType)) {
+        return accessor;
+    }
     const auto enumerateNotNull = [&accessor](const auto& consumer) {
         auto chunked = accessor->GetChunkedArray();
         for (int c = 0; c < chunked->num_chunks(); ++c) {
@@ -60,11 +63,11 @@ void TMergedBuilder::FlushData() {
     TDictStats::TBuilder statsBuilder;
     for (ui32 idx = 0; idx < ColumnBuilders.size(); ++idx) {
         if (ColumnBuilders[idx].GetFilledRecordsCount()) {
+            const auto valueType = ResultColumnStats.GetValueType(idx);
             auto accessor = ColumnBuilders[idx].Finish(RecordIndex);
-            accessor = MaybeDictionaryEncode(accessor, ColumnBuilders[idx].GetFilledRecordsCount());
-            // For now compaction reencodes all columns into BinaryJson
+            accessor = MaybeDictionaryEncode(accessor, ColumnBuilders[idx].GetFilledRecordsCount(), valueType);
             statsBuilder.Add(ResultColumnStats.GetColumnName(idx), ColumnBuilders[idx].GetFilledRecordsCount(),
-                ColumnBuilders[idx].GetFilledRecordsSize(), accessor->GetType(), NArrow::NAccessor::NSubColumns::EValueType::BinaryJson);
+                ColumnBuilders[idx].GetFilledRecordsSize(), accessor->GetType(), valueType);
             arrays.emplace_back(std::move(accessor));
         }
     }
@@ -78,12 +81,16 @@ void TMergedBuilder::FlushData() {
 void TMergedBuilder::Initialize() {
     ColumnBuilders.clear();
     for (ui32 i = 0; i < ResultColumnStats.GetColumnsCount(); ++i) {
+        const auto valueType = ResultColumnStats.GetValueType(i);
         switch (ResultColumnStats.GetAccessorType(i)) {
             case NArrow::NAccessor::IChunkedArray::EType::Array:
-                ColumnBuilders.emplace_back(TPlainBuilder(0, 0));
+                ColumnBuilders.emplace_back(
+                    TPlainRuntimeBuilder(NArrow::NAccessor::NSubColumns::GetArrowTypeForValueType(valueType)), valueType);
                 break;
             case NArrow::NAccessor::IChunkedArray::EType::SparsedArray:
-                ColumnBuilders.emplace_back(TSparsedBuilder(nullptr, 0, 0));
+                // Native scalars are never sparsed, so a sparsed column is always binary-backed.
+                AFL_VERIFY(valueType == EValueType::BinaryJson || valueType == EValueType::String)("value_type", (ui32)valueType);
+                ColumnBuilders.emplace_back(TSparsedBuilder(nullptr, 0, 0), valueType);
                 break;
             case NArrow::NAccessor::IChunkedArray::EType::Undefined:
             case NArrow::NAccessor::IChunkedArray::EType::SerializedChunkedArray:

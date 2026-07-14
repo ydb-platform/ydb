@@ -58,10 +58,10 @@ _DIGEST_NOTIFICATION_CONFIG = os.path.normpath(
 _STABLE_BRANCHES_CONFIG = '.github/config/stable_tests_branches.json'
 
 
-def _grace_inherited_debug_line(line, grace_until):
+def _grace_inherited_debug_line(line, branch, config_since, grace_until):
     return (
-        f"{line} # GRACE: inherited mute (no monitor data yet, "
-        f"until {grace_until.isoformat()})"
+        f"{line} # GRACE: inherited mute ({branch}, config since "
+        f"{config_since.isoformat()}, until {grace_until.isoformat()}, no monitor data yet)"
     )
 
 
@@ -149,7 +149,7 @@ def _git_branch_added_to_stable_config(branch, repo_root):
 
 
 def _apply_stable_branch_grace(branch, inherited_muted_ya_path, all_muted_ya, to_delete, repo_root):
-    inactive = all_muted_ya, to_delete, frozenset(), None
+    inactive = all_muted_ya, to_delete, frozenset(), None, None
     added = _git_branch_added_to_stable_config(branch, repo_root)
     if added is None:
         return inactive
@@ -181,6 +181,7 @@ def _apply_stable_branch_grace(branch, inherited_muted_ya_path, all_muted_ya, to
         sorted(set(all_muted_ya) | inherited),
         sorted(set(to_delete) - inherited),
         frozenset(inherited),
+        added,
         grace_until,
     )
 
@@ -1010,14 +1011,17 @@ def apply_and_add_mutes(
             all_data, lambda test: mute_check(test.get('suite_folder'), test.get('test_name')) if mute_check else True, use_wildcards=True, resolution='muted_ya'
         )
         grace_inherited = frozenset()
+        grace_config_since = None
         grace_until = None
         if branch and inherited_muted_ya_path and repo_root:
-            all_muted_ya, to_delete, grace_inherited, grace_until = _apply_stable_branch_grace(
-                branch,
-                inherited_muted_ya_path,
-                all_muted_ya,
-                to_delete,
-                repo_root,
+            all_muted_ya, to_delete, grace_inherited, grace_config_since, grace_until = (
+                _apply_stable_branch_grace(
+                    branch,
+                    inherited_muted_ya_path,
+                    all_muted_ya,
+                    to_delete,
+                    repo_root,
+                )
             )
 
         write_file_set(os.path.join(output_path, 'to_delete.txt'), to_delete, to_delete_debug)
@@ -1040,8 +1044,14 @@ def apply_and_add_mutes(
                 wildcard_key = create_test_string(test, use_wildcards=True)
                 wildcard_to_chunks[wildcard_key].append(test)
         for line in grace_inherited:
-            if line not in test_debug_dict and grace_until is not None:
-                test_debug_dict[line] = _grace_inherited_debug_line(line, grace_until)
+            if (
+                line not in test_debug_dict
+                and grace_config_since is not None
+                and grace_until is not None
+            ):
+                test_debug_dict[line] = _grace_inherited_debug_line(
+                    line, branch, grace_config_since, grace_until
+                )
         # Build wildcard-level debug strings.
         for wildcard, chunks in wildcard_to_chunks.items():
             N = len(chunks)

@@ -409,7 +409,8 @@ public:
                 if (locked) {
                     lockState.CollectedRows.emplace_back(row, modified);
                 } else {
-                    AFL_ENSURE(modified); // Row wasn't locked, because it was deleted before locking.
+                    // skipped absent row
+                    AFL_ENSURE(!modified);
                 }
             });
 

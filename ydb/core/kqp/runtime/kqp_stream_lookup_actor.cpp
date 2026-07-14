@@ -1107,7 +1107,8 @@ private:
                         UnmodifiedOutputRows.emplace_back(std::move(row));
                         hasUnmodifiedRows = true;
                     } else {
-                        AFL_ENSURE(modified); // Row wasn't locked, because it was deleted before locking.
+                        // skipped absent row
+                        AFL_ENSURE(!modified);
                         hasSkippedRows = true;
                     }
                 });

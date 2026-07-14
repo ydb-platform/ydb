@@ -1937,8 +1937,7 @@ private:
             return false;
         }
 
-        // Filter out absent rows based on lock result (SkipAbsent for UPDATE/DELETE ON).
-        // The lock result only contains rows that were actually locked; absent rows were skipped.
+        // Filter out absent rows based on lock result (SkipAbsent).
         std::vector<TOwnedCellVec> lockedKeyStorage;
         lockInfo.LockActor->ExtractResult(Cookie, [&](const TOwnedCellVec& row, bool /*modified*/) {
             lockedKeyStorage.emplace_back(row);
@@ -1964,17 +1963,15 @@ private:
 
         ProcessBatches.clear();
         auto filteredBatch = rowsBatcher->Flush();
-        //const bool hasFilteredRows = filteredBatch->GetRowsCount() > 0;
-        //if (hasFilteredRows) {
-            ProcessBatches.push_back(std::move(filteredBatch));
-        //}
+        ProcessBatches.push_back(std::move(filteredBatch));
         ProcessCells.clear();
         KeyToIndexes.clear();
 
-        //if (!hasFilteredRows) {
-        //    State = EState::WRITING;
-        //    return true;
-        //}
+        if (ProcessBatches.back()->GetRowsCount() == 0) {
+            ProcessBatches.clear();
+            State = EState::WRITING;
+            return true;
+        }
 
         if (NeedLookup()) {
             return StartMainTableLookup();

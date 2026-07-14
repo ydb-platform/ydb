@@ -305,7 +305,7 @@ void TKqpStreamLockWorker::AddLockResult(ui64 requestId, NEvents::TDataEvents::T
         const bool skippedAbsent = skippedAbsentSet.contains(i);
         AFL_ENSURE(locked || skippedAbsent);
         batchInfo.LockedFlags[i] = locked;
-        batchInfo.ModifiedFlags[i] = modifiedSet.contains(i) || skippedAbsent;
+        batchInfo.ModifiedFlags[i] = modifiedSet.contains(i);
     }
 
     batchInfo.LockResultReceived = true;

@@ -103,7 +103,7 @@ TTerminal::TTerminal(size_t terminalID,
 
 NQuery::TTxSettings TTerminal::ChooseTxMode() const {
     double totalWeight = TxModeWeightSerializable + TxModeWeightSnapshot + TxModeWeightReadCommitted;
-    double randomValue = RandomNumber(0, static_cast<size_t>(totalWeight * 100)) / 100.0;
+    double randomValue = ::RandomNumber<double>() * totalWeight; // randomValue in [0; totalWeight)
     double cumulative = TxModeWeightSerializable;
     if (randomValue <= cumulative) {
         return NQuery::TTxSettings::SerializableRW();

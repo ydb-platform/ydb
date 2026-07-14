@@ -274,9 +274,9 @@ void TCommandTPCCRun::Config(TConfig& config) {
                 throw yexception() << "Invalid transaction mode: " << value
                     << ". Valid values are: serializable-rw, snapshot-rw, read-committed-rw";
             }).DefaultValue("serializable-rw")
-            .ChoicesWithCompletion({{"serializable-rw", "Serializable read-write"},
-                                    {"snapshot-rw", "Snapshot read-write"},
-                                    {"read-committed-rw", "Read Committed read-write"}});
+            .Completer(NLastGetopt::NComp::Choice({{"serializable-rw", "Serializable read-write"},
+                                                   {"snapshot-rw", "Snapshot read-write"},
+                                                   {"read-committed-rw", "Read Committed read-write"}}));
 
     auto txModeWeightSerializableOpt = config.Opts->AddLongOption(
         "tx-mode-weight-serializable",
@@ -317,6 +317,12 @@ void TCommandTPCCRun::Config(TConfig& config) {
 }
 
 int TCommandTPCCRun::Run(TConfig& connectionConfig) {
+    if (RunConfig->TxModeWeightSerializable < 0.0
+        || RunConfig->TxModeWeightSnapshot < 0.0
+        || RunConfig->TxModeWeightReadCommitted < 0.0) {
+        Cout << "Run failed: --tx-mode-weight-* values must be non-negative" << Endl;
+        return 1;
+    }
     double totalWeight = RunConfig->TxModeWeightSerializable
         + RunConfig->TxModeWeightSnapshot
         + RunConfig->TxModeWeightReadCommitted;
@@ -329,6 +335,7 @@ int TCommandTPCCRun::Run(TConfig& connectionConfig) {
         Cout << "Run failed: --tx-mode-weight-* options are only valid with --tx-mode mixed" << Endl;
         return 1;
     }
+
     RunConfig->SetFullPath(connectionConfig);
     try {
         NTPCC::RunSync(connectionConfig, *RunConfig);

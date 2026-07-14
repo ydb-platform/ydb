@@ -11,6 +11,8 @@
 // Use as primary keys when you want:
 //   - newChrono: chronological clustering by creation time;
 //   - newSharded: shard spread via random prefix + time locality within a prefix.
+// Prefix variants accept Uint64 or Uuid as the first argument; the Uuid overload
+// reuses the top PrefixBits of the source value as the generated key prefix.
 // For plain random IDs without sort semantics, use RandomUuid() instead.
 //
 // Assemble bytes in YDB internal (Microsoft GUID) layout and return as Uuid.
@@ -22,6 +24,12 @@ using namespace NYql::NUdf;
 namespace {
 
 constexpr ui32 MaxDepArgs = 32;
+
+enum class EPrefixArgType {
+    None,
+    Uint64,
+    Uuid,
+};
 
 TString BuildDepArgKindsPredicate(TStringBuf argName) {
     return TStringBuilder() << R"(
@@ -53,11 +61,12 @@ TString BuildAndDepArgKindsPredicate(ui32 depCount, ui32 firstArgIndex = 0) {
     return sb;
 }
 
-TString BuildCallableTypeWithUniversalDeps(ui32 depCount, bool hasPrefix) {
+TString BuildCallableTypeWithUniversalDeps(ui32 depCount, EPrefixArgType prefixArg) {
     TStringBuilder sb;
     sb << "[CallableType;[];[];[";
-    if (hasPrefix) {
-        sb << "[[DataType;Uint64]";
+    if (prefixArg != EPrefixArgType::None) {
+        const TStringBuf prefixTypeName = prefixArg == EPrefixArgType::Uuid ? "Uuid" : "Uint64";
+        sb << "[[DataType;" << prefixTypeName << "]";
         for (ui32 i = 0; i < depCount; ++i) {
             sb << ";[UniversalType]";
         }
@@ -85,21 +94,24 @@ void AppendNoPrefixPolyArgRule(TStringBuilder& sb, ui32 depCount) {
     } else {
         sb << BuildAndDepArgKindsPredicate(depCount);
     }
-    sb << "; {type=" << BuildCallableTypeWithUniversalDeps(depCount, /*hasPrefix=*/false) << "}]";
+    sb << "; {type=" << BuildCallableTypeWithUniversalDeps(depCount, EPrefixArgType::None) << "}]";
 }
 
-void AppendPrefixPolyArgRule(TStringBuilder& sb, ui32 depCount) {
+void AppendPrefixPolyArgRule(TStringBuilder& sb, ui32 depCount, EPrefixArgType prefixArg) {
+    Y_ENSURE(prefixArg != EPrefixArgType::None);
+    const TStringBuf prefixTypeName = prefixArg == EPrefixArgType::Uuid ? "Uuid" : "Uint64";
+
     sb << "[";
     if (depCount == 0) {
-        sb << "{cmd=type;arg=T0;value=[DataType;Uint64]}";
+        sb << "{cmd=type;arg=T0;value=[DataType;" << prefixTypeName << "]}";
     } else {
-        sb << "{cmd=and;value=[{cmd=type;arg=T0;value=[DataType;Uint64]}";
+        sb << "{cmd=and;value=[{cmd=type;arg=T0;value=[DataType;" << prefixTypeName << "]}";
         for (ui32 i = 0; i < depCount; ++i) {
             sb << ";" << BuildDepArgKindsPredicate(TStringBuilder() << "T" << (i + 1));
         }
         sb << "]}";
     }
-    sb << "; {type=" << BuildCallableTypeWithUniversalDeps(depCount, /*hasPrefix=*/true) << "}]";
+    sb << "; {type=" << BuildCallableTypeWithUniversalDeps(depCount, prefixArg) << "}]";
 }
 
 TString BuildNoPrefixPolyArgs(TStringBuf errorMessage) {
@@ -130,14 +142,35 @@ TString BuildPrefixPolyArgs(TStringBuf errorMessage) {
             sb << ";";
         }
         first = false;
-        AppendPrefixPolyArgRule(sb, depCount);
+        AppendPrefixPolyArgRule(sb, depCount, EPrefixArgType::Uuid);
+        sb << ";";
+        AppendPrefixPolyArgRule(sb, depCount, EPrefixArgType::Uint64);
     }
     if (!first) {
         sb << ";";
     }
-    AppendPrefixPolyArgRule(sb, 0);
+    AppendPrefixPolyArgRule(sb, 0, EPrefixArgType::Uuid);
+    sb << ";";
+    AppendPrefixPolyArgRule(sb, 0, EPrefixArgType::Uint64);
     sb << "; [{cmd=error;message=\"" << errorMessage << "\"}; {}]]";
     return sb;
+}
+
+ui64 ReadPrefixArg(const TUnboxedValuePod& arg, bool prefixFromUuid) {
+    if (prefixFromUuid) {
+        const auto ref = arg.AsStringRef();
+        if (ref.Size() != NKikimr::NUuid::UUID_LEN) {
+            throw std::runtime_error("Expected Uuid value of 16 bytes");
+        }
+        return NUuidKeyGen::ExtractPrefixFromUuidBytes(
+            reinterpret_cast<const ui8*>(ref.Data()));
+    }
+    return arg.Get<ui64>();
+}
+
+bool IsUuidArgType(const ITypeInfoHelper1& typeHelper, const TType* argType) {
+    TDataTypeInspector argInspector(typeHelper, argType);
+    return argInspector && argInspector.GetTypeId() == NUdf::TDataType<NUdf::TUuid>::Id;
 }
 
 // Returns a Uuid value as 16 raw bytes in the internal format, which is Microsoft-style mixed endian GUID.
@@ -156,11 +189,11 @@ TUnboxedValue MakeUuidValue(const IValueBuilder* valueBuilder, bool isSharded, u
         bytes.size()));
 }
 
-// IsSharded=true  → prefix-first layout with second-granularity timestamp.
-// IsSharded=false → timestamp-first internal byte layout.
-// HasPrefix=true  → caller supplies prefix (e.g. RandomNumber() once per batch);
-//                   keys target a single partition range.
-template <bool IsSharded, bool HasPrefix>
+// IsSharded=true       → prefix-first layout with second-granularity timestamp.
+// IsSharded=false      → timestamp-first internal byte layout.
+// HasPrefix=true       → caller supplies prefix (Uint64 or Uuid as first argument).
+// PrefixFromUuid=true  → take top PrefixBits from the source Uuid MSB.
+template <bool IsSharded, bool HasPrefix, bool PrefixFromUuid = false>
 class TNewUuid: public TBoxedValue {
 public:
     using TTypeAwareMarker = bool;
@@ -226,6 +259,9 @@ public:
                 builder.SetError("Expected at least prefix argument.");
                 return true;
             }
+            if (IsUuidArgType(*typeHelper, argsTypeInspector.GetElementType(0)) != PrefixFromUuid) {
+                return false;
+            }
         }
 
         auto argsBuilder = builder.Args(argCount);
@@ -245,7 +281,7 @@ private:
         try {
             ui64 prefix = 0;
             if constexpr (HasPrefix) {
-                prefix = args[0].Get<ui64>();
+                prefix = ReadPrefixArg(args[0], PrefixFromUuid);
             }
             return MakeUuidValue(valueBuilder, IsSharded, prefix, HasPrefix);
         } catch (const std::exception& e) {
@@ -299,9 +335,11 @@ public:
         try {
             const bool typesOnly = (flags & TFlags::TypesOnly);
             const bool found = TNewUuid<false, false>::DeclareSignature(name, userType, builder, typesOnly)
-                || TNewUuid<false, true>::DeclareSignature(name, userType, builder, typesOnly)
+                || TNewUuid<false, true, false>::DeclareSignature(name, userType, builder, typesOnly)
+                || TNewUuid<false, true, true>::DeclareSignature(name, userType, builder, typesOnly)
                 || TNewUuid<true, false>::DeclareSignature(name, userType, builder, typesOnly)
-                || TNewUuid<true, true>::DeclareSignature(name, userType, builder, typesOnly);
+                || TNewUuid<true, true, false>::DeclareSignature(name, userType, builder, typesOnly)
+                || TNewUuid<true, true, true>::DeclareSignature(name, userType, builder, typesOnly);
             if (!found) {
                 builder.SetError(TStringBuilder() << "Unknown function: " << TStringBuf(name));
             }

@@ -274,4 +274,46 @@ Y_UNIT_TEST_SUITE(TUuidSortOrder) {
         const auto bytes = MakeShardedUuidBytes(kTestShardedPrefix, MilliSeconds() / 1000, true);
         AssertUuidStringFormat(UuidBytesToDisplayString(bytes));
     }
+
+    Y_UNIT_TEST(ExtractPrefixFromUuidBytesMatchesUint64Prefix) {
+        const ui64 prefixParam = kTestChronoPrefix;
+        const ui64 timestampMs = 1'700'000'000'000ULL;
+        SetRandomSeed(42);
+        const auto withUint64Prefix = MakeChronoUuidBytes(prefixParam, timestampMs, true);
+
+        const ui64 extractedPrefix = ExtractPrefixFromUuidBytes(withUint64Prefix.data());
+        UNIT_ASSERT_VALUES_EQUAL(extractedPrefix, prefixParam & PrefixParamMask);
+
+        SetRandomSeed(42);
+        const auto withUuidPrefix = MakeChronoUuidBytes(extractedPrefix, timestampMs, true);
+        UNIT_ASSERT_VALUES_EQUAL(withUint64Prefix, withUuidPrefix);
+    }
+
+    Y_UNIT_TEST(ChronoUuidPrefixMatchesUint64Prefix) {
+        const ui64 prefixParam = kTestChronoPrefix;
+        const ui64 timestampMs = 1'700'000'000'000ULL;
+        SetRandomSeed(55);
+        const auto prefixUuid = MakeChronoUuidBytes(prefixParam, timestampMs, true);
+
+        SetRandomSeed(55);
+        const auto fromUint64 = MakeChronoUuidBytes(prefixParam, timestampMs, true);
+        SetRandomSeed(55);
+        const auto fromUuid = MakeChronoUuidBytes(
+            ExtractPrefixFromUuidBytes(prefixUuid.data()), timestampMs, true);
+        UNIT_ASSERT_VALUES_EQUAL(fromUint64, fromUuid);
+    }
+
+    Y_UNIT_TEST(ShardedUuidPrefixMatchesUint64Prefix) {
+        const ui64 prefixParam = kTestShardedPrefix;
+        const ui64 epochSeconds = 1'700'000'000ULL;
+        SetRandomSeed(66);
+        const auto prefixUuid = MakeShardedUuidBytes(prefixParam, epochSeconds, true);
+
+        SetRandomSeed(66);
+        const auto fromUint64 = MakeShardedUuidBytes(prefixParam, epochSeconds, true);
+        SetRandomSeed(66);
+        const auto fromUuid = MakeShardedUuidBytes(
+            ExtractPrefixFromUuidBytes(prefixUuid.data()), epochSeconds, true);
+        UNIT_ASSERT_VALUES_EQUAL(fromUint64, fromUuid);
+    }
 }

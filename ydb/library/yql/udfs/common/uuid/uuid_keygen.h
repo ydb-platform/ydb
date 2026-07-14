@@ -66,6 +66,12 @@ inline ui64 PrefixParamToMsb(ui64 prefix) {
     return (prefix & PrefixParamMask) << (64 - PrefixBits);
 }
 
+// Read the top PrefixBits of the UUID MSB (YDB internal byte layout).
+inline ui64 ExtractPrefixFromUuidBytes(const ui8* data) {
+    const ui64 msb = ReadBe64(data);
+    return (msb & PrefixMsbMask) >> (64 - PrefixBits);
+}
+
 // Embed Unix epoch seconds (mod 2^30) into the MSB bit field that follows
 // the prefix in YDB internal byte order. Field position shifts with PrefixBits
 // so prefix and timestamp do not overlap.

@@ -643,7 +643,7 @@ public:
             cFunc(TEvents::TEvWakeup::EventType, HandleTimeout);
             cFunc(TEvents::TEvPoison::EventType, PassAway);
             default:
-                YDB_LOG_CRIT_CTX(*TlsActivationContext, "NSysView::TPartitionStatsScan: unexpected event 0x%08x",
+                YDB_LOG_CRIT_CTX(*TlsActivationContext, "NSysView::TPartitionStatsScan: unexpected event",
                     {"eventType", ev->GetTypeRewrite()});
         }
     }

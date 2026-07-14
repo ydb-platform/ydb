@@ -39,7 +39,7 @@ public:
             cFunc(TEvents::TEvWakeup::EventType, TBase::HandleTimeout);
             cFunc(TEvents::TEvPoison::EventType, PassAway);
             default:
-                YDB_LOG_CRIT_CTX(*TlsActivationContext, "NSysView::NAuth::TUsersScan: unexpected event 0x%08x",
+                YDB_LOG_CRIT_CTX(*TlsActivationContext, "NSysView::NAuth::TUsersScan: unexpected event",
                     {"eventType", ev->GetTypeRewrite()});
         }
     }

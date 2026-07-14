@@ -157,7 +157,7 @@ public:
             hFunc(NKqp::TEvKqp::TEvListSessionsResponse, Handle);
             hFunc(NKqp::TEvKqp::TEvListProxyNodesResponse, Handle);
             default:
-                YDB_LOG_CRIT_CTX(*TlsActivationContext, "NSysView::TSessionsScan: unexpected event 0x%08x",
+                YDB_LOG_CRIT_CTX(*TlsActivationContext, "NSysView::TSessionsScan: unexpected event",
                     {"eventType", ev->GetTypeRewrite()});
         }
     }

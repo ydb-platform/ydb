@@ -82,7 +82,7 @@ public:
             hFunc(TEvents::TEvUndelivered, ResendToOwnerAndDie);
             hFunc(NKqp::TEvKqpCompute::TEvScanInitActor, Handle);
             default:
-                YDB_LOG_CRIT_CTX(*TlsActivationContext, "NSysView: unexpected event 0x%08x",
+                YDB_LOG_CRIT_CTX(*TlsActivationContext, "NSysView: unexpected event",
                     {"eventType", ev->GetTypeRewrite()});
         }
     }

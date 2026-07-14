@@ -339,7 +339,7 @@ private:
             cFunc(TEvents::TEvWakeup::EventType, HandleTimeout);
             cFunc(TEvents::TEvPoison::EventType, this->PassAway);
             default:
-                YDB_LOG_CRIT_CTX_COMP(*TlsActivationContext, NKikimrServices::SYSTEM_VIEWS, "NSysView::TScanActorBase: unexpected event 0x%08x",
+                YDB_LOG_CRIT_CTX_COMP(*TlsActivationContext, NKikimrServices::SYSTEM_VIEWS, "NSysView::TScanActorBase: unexpected event",
                     {"eventType", ev->GetTypeRewrite()});
         }
     }
@@ -352,7 +352,7 @@ private:
             cFunc(TEvents::TEvWakeup::EventType, HandleTimeout);
             cFunc(TEvents::TEvPoison::EventType, this->PassAway);
             default:
-                YDB_LOG_CRIT_CTX_COMP(*TlsActivationContext, NKikimrServices::SYSTEM_VIEWS, "NSysView::TScanActorBase: unexpected event 0x%08x",
+                YDB_LOG_CRIT_CTX_COMP(*TlsActivationContext, NKikimrServices::SYSTEM_VIEWS, "NSysView::TScanActorBase: unexpected event",
                     {"eventType", ev->GetTypeRewrite()});
         }
     }
@@ -365,7 +365,7 @@ private:
             cFunc(TEvents::TEvWakeup::EventType, HandleTimeout);
             cFunc(TEvents::TEvPoison::EventType, this->PassAway);
             default:
-                YDB_LOG_CRIT_CTX_COMP(*TlsActivationContext, NKikimrServices::SYSTEM_VIEWS, "NSysView::TScanActorBase: unexpected event 0x%08x",
+                YDB_LOG_CRIT_CTX_COMP(*TlsActivationContext, NKikimrServices::SYSTEM_VIEWS, "NSysView::TScanActorBase: unexpected event",
                     {"eventType", ev->GetTypeRewrite()});
         }
     }

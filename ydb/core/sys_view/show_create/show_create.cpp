@@ -77,7 +77,7 @@ public:
             hFunc(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult, Handle);
             sFunc(NKqp::TEvKqpCompute::TEvScanDataAck, HandleAck);
             default:
-                YDB_LOG_CRIT_CTX(*TlsActivationContext, "NSysView::TScanActorBase: unexpected event 0x%08x",
+                YDB_LOG_CRIT_CTX(*TlsActivationContext, "NSysView::TScanActorBase: unexpected event",
                     {"eventType", ev->GetTypeRewrite()});
         }
     }
@@ -88,7 +88,7 @@ public:
             hFunc(NSequenceProxy::TEvSequenceProxy::TEvGetSequenceResult, Handle);
             sFunc(NKqp::TEvKqpCompute::TEvScanDataAck, HandleAck);
             default:
-                YDB_LOG_CRIT_CTX(*TlsActivationContext, "NSysView::TScanActorBase: unexpected event 0x%08x",
+                YDB_LOG_CRIT_CTX(*TlsActivationContext, "NSysView::TScanActorBase: unexpected event",
                     {"eventType", ev->GetTypeRewrite()});
         }
     }

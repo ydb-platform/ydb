@@ -169,7 +169,7 @@ public:
             hFunc(NKqp::TEvKqp::TEvListProxyNodesResponse, Handle);
             hFunc(TEvPrivate::TEvNodeRequestTimeout, HandleNodeRequestTimeout);
             default:
-                YDB_LOG_CRIT_CTX(*TlsActivationContext, "NSysView::TCompileCacheQueriesScan: unexpected event 0x%08x",
+                YDB_LOG_CRIT_CTX(*TlsActivationContext, "NSysView::TCompileCacheQueriesScan: unexpected event",
                     {"eventType", ev->GetTypeRewrite()});
         }
     }

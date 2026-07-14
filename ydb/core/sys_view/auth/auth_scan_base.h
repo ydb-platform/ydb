@@ -76,7 +76,7 @@ public:
             cFunc(TEvents::TEvWakeup::EventType, TBase::HandleTimeout);
             cFunc(TEvents::TEvPoison::EventType, PassAway);
             default:
-                YDB_LOG_CRIT_CTX_COMP(*TlsActivationContext, NKikimrServices::SYSTEM_VIEWS, "NSysView::NAuth::TAuthScanBase: unexpected event 0x%08x",
+                YDB_LOG_CRIT_CTX_COMP(*TlsActivationContext, NKikimrServices::SYSTEM_VIEWS, "NSysView::NAuth::TAuthScanBase: unexpected event",
                     {"eventType", ev->GetTypeRewrite()});
         }
     }

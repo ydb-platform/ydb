@@ -4,9 +4,9 @@
 #include <yql/essentials/providers/common/metrics/metrics_registry.h>
 #include <yql/essentials/utils/yql_panic.h>
 
-#include <contrib/ydb/library/yql/providers/dq/actors/execution_helpers.h>
+#include <ydb/library/yql/providers/dq/actors/execution_helpers.h>
 
-#include <contrib/ydb/library/grpc/server/actors/logger.h>
+#include <ydb/library/grpc/server/actors/logger.h>
 
 #include <utility>
 

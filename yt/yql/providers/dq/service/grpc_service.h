@@ -1,18 +1,18 @@
 #pragma once
 
-#include <contrib/ydb/library/yql/providers/dq/interface/yql_dq_task_preprocessor.h>
+#include <ydb/library/yql/providers/dq/interface/yql_dq_task_preprocessor.h>
 
-#include <contrib/ydb/library/yql/providers/dq/api/grpc/api.grpc.pb.h>
-#include <contrib/ydb/library/yql/providers/dq/api/protos/service.pb.h>
+#include <ydb/library/yql/providers/dq/api/grpc/api.grpc.pb.h>
+#include <ydb/library/yql/providers/dq/api/protos/service.pb.h>
 
 #include <yql/essentials/minikql/mkql_function_registry.h>
 
-#include <contrib/ydb/library/grpc/server/grpc_request.h>
-#include <contrib/ydb/library/grpc/server/grpc_server.h>
+#include <ydb/library/grpc/server/grpc_request.h>
+#include <ydb/library/grpc/server/grpc_server.h>
 
-#include <contrib/ydb/library/actors/core/actorsystem.h>
-#include <contrib/ydb/library/actors/core/event_local.h>
-#include <contrib/ydb/library/actors/core/events.h>
+#include <ydb/library/actors/core/actorsystem.h>
+#include <ydb/library/actors/core/event_local.h>
+#include <ydb/library/actors/core/events.h>
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 #include <library/cpp/threading/future/future.h>
 

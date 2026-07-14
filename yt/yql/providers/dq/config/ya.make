@@ -6,7 +6,7 @@ SRCS(
 )
 
 PEERDIR(
-    contrib/ydb/public/api/protos/annotations
+    ydb/public/api/protos/annotations
 )
 
 IF (NOT PY_PROTOS_FOR)

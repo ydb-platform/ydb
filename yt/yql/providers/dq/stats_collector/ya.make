@@ -10,8 +10,8 @@ SRCS(
 )
 
 PEERDIR(
-    contrib/ydb/library/actors/core
-    contrib/ydb/library/actors/helpers
+    ydb/library/actors/core
+    ydb/library/actors/helpers
     library/cpp/monlib/dynamic_counters
 )
 

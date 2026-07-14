@@ -8,24 +8,24 @@ SRCS(
 )
 
 PEERDIR(
-    contrib/ydb/library/actors/core
-    contrib/ydb/library/actors/dnsresolver
-    contrib/ydb/library/actors/interconnect
+    ydb/library/actors/core
+    ydb/library/actors/dnsresolver
+    ydb/library/actors/interconnect
     library/cpp/build_info
-    contrib/ydb/library/grpc/server
-    contrib/ydb/library/grpc/server/actors
+    ydb/library/grpc/server
+    ydb/library/grpc/server/actors
     library/cpp/svnversion
     library/cpp/threading/future
     yql/essentials/sql
-    contrib/ydb/public/api/protos
+    ydb/public/api/protos
     yql/essentials/providers/common/metrics
-    contrib/ydb/library/yql/providers/dq/actors
-    contrib/ydb/library/yql/providers/dq/api/grpc
-    contrib/ydb/library/yql/providers/dq/common
-    contrib/ydb/library/yql/providers/dq/counters
-    contrib/ydb/library/yql/providers/dq/interface
-    contrib/ydb/library/yql/providers/dq/worker_manager
-    contrib/ydb/library/yql/providers/dq/worker_manager/interface
+    ydb/library/yql/providers/dq/actors
+    ydb/library/yql/providers/dq/api/grpc
+    ydb/library/yql/providers/dq/common
+    ydb/library/yql/providers/dq/counters
+    ydb/library/yql/providers/dq/interface
+    ydb/library/yql/providers/dq/worker_manager
+    ydb/library/yql/providers/dq/worker_manager/interface
     yt/yql/providers/dq/config
 )
 

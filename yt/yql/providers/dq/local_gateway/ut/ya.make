@@ -7,10 +7,10 @@ SRCS(
 PEERDIR(
     yql/essentials/public/udf/service/stub
     yql/essentials/sql/pg_dummy
-    contrib/ydb/library/yql/dq/comp_nodes/no_llvm
-    contrib/ydb/library/yql/dq/runtime
+    ydb/library/yql/dq/comp_nodes/no_llvm
+    ydb/library/yql/dq/runtime
     yt/yql/providers/dq/local_gateway
-    contrib/ydb/library/yql/dq/transform
+    ydb/library/yql/dq/transform
     yql/essentials/providers/common/comp_nodes
     yql/essentials/minikql
     yql/essentials/minikql/invoke_builtins/no_llvm

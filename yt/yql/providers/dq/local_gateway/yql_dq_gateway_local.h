@@ -1,9 +1,9 @@
 #pragma once
 
-#include <contrib/ydb/library/actors/core/actorsystem.h>
-#include <contrib/ydb/library/yql/providers/dq/provider/yql_dq_gateway.h>
-#include <contrib/ydb/library/yql/providers/dq/interface/yql_dq_task_preprocessor.h>
-#include <contrib/ydb/library/yql/dq/actors/compute/dq_compute_actor_async_io_factory.h>
+#include <ydb/library/actors/core/actorsystem.h>
+#include <ydb/library/yql/providers/dq/provider/yql_dq_gateway.h>
+#include <ydb/library/yql/providers/dq/interface/yql_dq_task_preprocessor.h>
+#include <ydb/library/yql/dq/actors/compute/dq_compute_actor_async_io_factory.h>
 #include <yql/essentials/providers/common/metrics/metrics_registry.h>
 
 namespace NActors {

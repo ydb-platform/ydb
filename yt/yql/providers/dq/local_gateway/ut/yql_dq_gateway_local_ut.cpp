@@ -1,10 +1,10 @@
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <yt/yql/providers/dq/local_gateway/yql_dq_gateway_local.h>
-#include <contrib/ydb/library/yql/dq/transform/yql_common_dq_transform.h>
+#include <ydb/library/yql/dq/transform/yql_common_dq_transform.h>
 #include <yql/essentials/minikql/mkql_function_registry.h>
 #include <yql/essentials/minikql/invoke_builtins/mkql_builtins.h>
-#include <contrib/ydb/library/yql/dq/comp_nodes/yql_common_dq_factory.h>
+#include <ydb/library/yql/dq/comp_nodes/yql_common_dq_factory.h>
 #include <yql/essentials/providers/common/comp_nodes/yql_factory.h>
 #include <yql/essentials/minikql/comp_nodes/mkql_factories.h>
 #include <yql/essentials/minikql/mkql_function_registry.h>
@@ -27,10 +27,10 @@ std::pair<TIntrusivePtr<IDqGateway>,TIntrusivePtr<NMiniKQL::IFunctionRegistry>> 
     Y_UNUSED(dqTaskTransformFactory);
 
     return {CreateLocalDqGateway(
-        funcRegistry.Get(),
-        dqCompFactory,
-        dqTaskTransformFactory,
-        dqTaskPreprocessorFactories,
+        funcRegistry.Get(), 
+        dqCompFactory, 
+        dqTaskTransformFactory, 
+        dqTaskPreprocessorFactories, 
         /*enableSpilling = */ false,
         MakeIntrusive<NYql::NDq::TDqAsyncIoFactory>()), funcRegistry};
 }

@@ -1,6 +1,6 @@
 #pragma once
 
-#include <contrib/ydb/library/actors/core/actorsystem.h>
+#include <ydb/library/actors/core/actorsystem.h>
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 
 namespace NActors {

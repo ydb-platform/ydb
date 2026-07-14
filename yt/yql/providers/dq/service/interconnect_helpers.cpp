@@ -3,7 +3,7 @@
 
 #include "grpc_service.h"
 
-#include <contrib/ydb/library/actors/helpers/selfping_actor.h>
+#include <ydb/library/actors/helpers/selfping_actor.h>
 
 #include <yql/essentials/utils/log/log.h>
 #include <yql/essentials/utils/backtrace/backtrace.h>
@@ -11,15 +11,15 @@
 
 #include <yql/essentials/minikql/invoke_builtins/mkql_builtins.h>
 
-#include <contrib/ydb/library/actors/core/executor_pool_basic.h>
-#include <contrib/ydb/library/actors/core/scheduler_basic.h>
-#include <contrib/ydb/library/actors/core/scheduler_actor.h>
-#include <contrib/ydb/library/actors/dnsresolver/dnsresolver.h>
-#include <contrib/ydb/library/actors/interconnect/interconnect.h>
-#include <contrib/ydb/library/actors/interconnect/interconnect_common.h>
-#include <contrib/ydb/library/actors/interconnect/interconnect_tcp_proxy.h>
-#include <contrib/ydb/library/actors/interconnect/interconnect_tcp_server.h>
-#include <contrib/ydb/library/actors/interconnect/poller/poller_actor.h>
+#include <ydb/library/actors/core/executor_pool_basic.h>
+#include <ydb/library/actors/core/scheduler_basic.h>
+#include <ydb/library/actors/core/scheduler_actor.h>
+#include <ydb/library/actors/dnsresolver/dnsresolver.h>
+#include <ydb/library/actors/interconnect/interconnect.h>
+#include <ydb/library/actors/interconnect/interconnect_common.h>
+#include <ydb/library/actors/interconnect/interconnect_tcp_proxy.h>
+#include <ydb/library/actors/interconnect/interconnect_tcp_server.h>
+#include <ydb/library/actors/interconnect/poller/poller_actor.h>
 #include <library/cpp/yson/node/node_io.h>
 
 #include <util/stream/file.h>
@@ -277,11 +277,11 @@ namespace NYql::NDqs {
         auto* sa = response->ai_addr;
         Y_ABORT_UNLESS(sa->sa_family == family);
         switch (family) {
-        case AF_INET6:
+        case AF_INET6: 
             inet_ntop(AF_INET6, &(((struct sockaddr_in6*)sa)->sin6_addr),
                     &buffer[0], buffer.size() - 1);
             break;
-        case AF_INET:
+        case AF_INET: 
             inet_ntop(AF_INET, &(((struct sockaddr_in*)sa)->sin_addr),
                     &buffer[0], buffer.size() - 1);
             break;
@@ -308,7 +308,7 @@ namespace NYql::NDqs {
             ? *maybeTokenFile
             : home + "/.yt/token";
 
-        TString token = NFs::Exists(tokenFile)
+        TString token = NFs::Exists(tokenFile) 
             ? TFileInput(tokenFile).ReadLine()
             : "";
 

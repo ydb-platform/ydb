@@ -1,5 +1,5 @@
 #pragma once
-#include <contrib/ydb/library/actors/core/actorsystem.h>
+#include <ydb/library/actors/core/actorsystem.h>
 
 namespace NYql::NDqs {
 

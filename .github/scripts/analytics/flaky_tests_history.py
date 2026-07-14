@@ -89,9 +89,9 @@ def determine_start_date(ydb_wrapper, test_runs_table, flaky_tests_table, build_
     
     Logic:
     1. If start_date_override is provided, use it (must be <= end_date)
-    2. If history exists, use max_date_window from history (but not after end_date)
-    3. If no history, check test_runs_table for min_run_date
-    4. Default to 30 days ago from end_date
+    2. If history exists, continue from max(date_window) (incremental; no cold-start cap)
+    3. If no history, check test_runs_table for min_run_date, capped at DEFAULT_DAYS_BACK
+    4. Default cold start to DEFAULT_DAYS_BACK ago from end_date
     """
     end_date = end_date_override if end_date_override else datetime.date.today()
     default_start_date = end_date - datetime.timedelta(days=DEFAULT_DAYS_BACK)
@@ -106,13 +106,8 @@ def determine_start_date(ydb_wrapper, test_runs_table, flaky_tests_table, build_
     max_date_window = get_max_date_from_history(ydb_wrapper, flaky_tests_table, build_type, branch)
     
     if max_date_window is not None:
-        # Clamp max_date_window to not exceed end_date before comparison
-        max_date_clamped = min(max_date_window, end_date)
-        # Use max_date_clamped if it's greater than default_start_date
-        if max_date_clamped > default_start_date:
-            start_date = max_date_clamped
-        else:
-            start_date = default_start_date
+        # Incremental resume: continue from the last stored day (do not apply cold-start lookback).
+        start_date = min(max_date_window, end_date)
         return start_date, end_date
     
     # No history exists, check test_runs_table for min date

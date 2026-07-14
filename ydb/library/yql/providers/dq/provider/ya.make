@@ -1,15 +1,12 @@
 LIBRARY()
 
 SRCS(
-    yql_dq_control.cpp
-    yql_dq_control.h
     yql_dq_datasink_constraints.cpp
     yql_dq_datasink_type_ann.cpp
     yql_dq_datasink_type_ann.h
     yql_dq_datasource_constraints.cpp
     yql_dq_datasource_type_ann.cpp
     yql_dq_datasource_type_ann.h
-    yql_dq_gateway.cpp
     yql_dq_gateway.h
     yql_dq_provider.cpp
     yql_dq_provider.h
@@ -27,27 +24,19 @@ SRCS(
 )
 
 PEERDIR(
-    library/cpp/threading/future
-    library/cpp/threading/task_scheduler
     library/cpp/yson
-    library/cpp/yson/node
     ydb/library/yql/dq/constraints
     ydb/library/yql/dq/expr_nodes
     ydb/library/yql/dq/opt
     ydb/library/yql/dq/transform
     ydb/library/yql/dq/type_ann
     ydb/library/yql/providers/common/http_gateway
-    ydb/library/yql/providers/dq/actors
-    ydb/library/yql/providers/dq/api/grpc
     ydb/library/yql/providers/dq/api/protos
     ydb/library/yql/providers/dq/common
-    ydb/library/yql/providers/dq/config
     ydb/library/yql/providers/dq/expr_nodes
     ydb/library/yql/providers/dq/opt
     ydb/library/yql/providers/dq/planner
-    ydb/public/lib/yson_value
     ydb/public/sdk/cpp/src/client/driver
-    ydb/public/sdk/cpp/src/library/grpc/client
     yql/essentials/ast
     yql/essentials/core
     yql/essentials/core/cbo
@@ -68,8 +57,6 @@ PEERDIR(
     yql/essentials/providers/common/provider
     yql/essentials/providers/common/transform
     yql/essentials/providers/result/expr_nodes
-    yql/essentials/utils/backtrace
-    yql/essentials/utils/failure_injector
     yql/essentials/utils/log
 )
 
@@ -79,8 +66,4 @@ END()
 
 RECURSE(
     exec
-)
-
-RECURSE_FOR_TESTS(
-    ut
 )

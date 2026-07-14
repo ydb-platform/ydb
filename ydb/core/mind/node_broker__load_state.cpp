@@ -2,6 +2,8 @@
 
 #include <ydb/core/protos/counters_node_broker.pb.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::NODE_BROKER
+
 namespace NKikimr {
 namespace NNodeBroker {
 
@@ -16,7 +18,7 @@ public:
 
     bool Execute(TTransactionContext &txc, const TActorContext &ctx) override
     {
-        LOG_DEBUG(ctx, NKikimrServices::NODE_BROKER, "TTxLoadState Execute");
+        YDB_LOG_DEBUG_CTX(ctx, "TTxLoadState Execute");
 
         DbChanges = Self->Dirty.DbLoadState(txc, ctx);
         return DbChanges.Ready;
@@ -24,7 +26,7 @@ public:
 
     void Complete(const TActorContext &ctx) override
     {
-        LOG_DEBUG(ctx, NKikimrServices::NODE_BROKER, "TTxLoadState Complete");
+        YDB_LOG_DEBUG_CTX(ctx, "TTxLoadState Complete");
         Self->Execute(Self->CreateTxMigrateState(std::move(DbChanges)));
     }
 

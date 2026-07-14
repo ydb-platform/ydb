@@ -6354,6 +6354,38 @@ TRuntimeNode TProgramBuilder::BlockWay(TRuntimeNode variant) {
     return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
 }
 
+TRuntimeNode TProgramBuilder::BlockVariant(TRuntimeNode item, ui32 tupleIndex, TType* variantType) {
+    if constexpr (RuntimeVersion < 81) {
+        THROW yexception() << "Runtime version (" << RuntimeVersion << ") too old for " << __func__;
+    }
+    auto itemBlockType = AS_TYPE(TBlockType, item.GetStaticType());
+    auto varType = AS_TYPE(TVariantType, variantType);
+    auto underlying = AS_TYPE(TTupleType, varType->GetUnderlyingType());
+    MKQL_ENSURE(tupleIndex < underlying->GetElementsCount(), "Wrong tuple index");
+
+    auto returnType = NewBlockType(variantType, itemBlockType->GetShape());
+    TCallableBuilder callableBuilder(Env_, __func__, returnType);
+    callableBuilder.Add(item);
+    callableBuilder.Add(NewDataLiteral<ui32>(tupleIndex));
+    return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
+}
+
+TRuntimeNode TProgramBuilder::BlockVariant(TRuntimeNode item, const std::string_view& memberName, TType* variantType) {
+    if constexpr (RuntimeVersion < 81) {
+        THROW yexception() << "Runtime version (" << RuntimeVersion << ") too old for " << __func__;
+    }
+    auto itemBlockType = AS_TYPE(TBlockType, item.GetStaticType());
+    auto varType = AS_TYPE(TVariantType, variantType);
+    auto underlying = AS_TYPE(TStructType, varType->GetUnderlyingType());
+    auto structIndex = underlying->GetMemberIndex(memberName);
+
+    auto returnType = NewBlockType(variantType, itemBlockType->GetShape());
+    TCallableBuilder callableBuilder(Env_, __func__, returnType);
+    callableBuilder.Add(item);
+    callableBuilder.Add(NewDataLiteral<ui32>(structIndex));
+    return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
+}
+
 TRuntimeNode TProgramBuilder::BlockIf(TRuntimeNode condition, TRuntimeNode thenBranch, TRuntimeNode elseBranch) {
     const auto conditionType = AS_TYPE(TBlockType, condition.GetStaticType());
     MKQL_ENSURE(AS_TYPE(TDataType, conditionType->GetItemType())->GetSchemeType() == NUdf::TDataType<bool>::Id,

@@ -9,7 +9,6 @@ RECURSE(
     deprecated/persqueue_v0
     discovery
     dynamic_config
-    ext_index
     fq
     kesus
     keyvalue

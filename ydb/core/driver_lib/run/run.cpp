@@ -450,6 +450,7 @@ public:
         const auto& securityConfig(Config.GetDomainsConfig().GetSecurityConfig());
         appData->EnforceUserTokenRequirement = securityConfig.GetEnforceUserTokenRequirement();
         appData->EnforceUserTokenCheckRequirement = securityConfig.GetEnforceUserTokenCheckRequirement();
+        appData->AlwaysSetSystemOwner = securityConfig.GetAlwaysSetSystemOwner();
         if (securityConfig.AdministrationAllowedSIDsSize() > 0) {
             TVector<TString> administrationAllowedSIDs(securityConfig.GetAdministrationAllowedSIDs().begin(), securityConfig.GetAdministrationAllowedSIDs().end());
             appData->AdministrationAllowedSIDs = std::move(administrationAllowedSIDs);
@@ -2132,10 +2133,6 @@ TIntrusivePtr<TServiceInitializersList> TKikimrRunner::CreateServiceInitializers
 
     if (serviceMask.EnableMetadataProvider) {
         sil->AddServiceInitializer(new TMetadataProviderInitializer(runConfig));
-    }
-
-    if (serviceMask.EnableExternalIndex) {
-        sil->AddServiceInitializer(new TExternalIndexInitializer(runConfig));
     }
 
     if (serviceMask.EnableCompDiskLimiter) {

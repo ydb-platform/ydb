@@ -3622,6 +3622,24 @@ namespace NSchemeShardUT_Private {
         return TestForgetSetColumnConstraint(runtime, TTestTxConfig::SchemeShard, txId, dbName, operationId, expectedStatus);
     }
 
+    NKikimrSetColumnConstraint::TEvCancelResponse TestCancelSetColumnConstraint(
+        TTestActorRuntime& runtime,
+        ui64 schemeShard,
+        ui64 txId,
+        const TString& dbName,
+        ui64 operationId)
+    {
+        auto request = MakeHolder<TEvSetColumnConstraint::TEvCancelRequest>(txId, dbName, operationId);
+
+        auto sender = runtime.AllocateEdgeActor();
+        ForwardToTablet(runtime, schemeShard, sender, request.Release());
+
+        TAutoPtr<IEventHandle> handle;
+        auto* event = runtime.GrabEdgeEvent<TEvSetColumnConstraint::TEvCancelResponse>(handle);
+        UNIT_ASSERT(event);
+        return event->Record;
+    }
+
     void TestCheckColumnsNotNull(
         TTestActorRuntime& runtime,
         const TString& tablePath,

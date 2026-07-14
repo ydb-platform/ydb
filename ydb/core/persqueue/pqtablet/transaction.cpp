@@ -4,6 +4,7 @@
 #include <ydb/core/persqueue/pqtablet/common/event_helpers.h>
 
 #include <ydb/library/wilson_ids/wilson.h>
+#include <ydb/library/yverify_stream/yverify_stream.h>
 
 #define TX_ENSURE(condition) AFL_ENSURE(condition)("TxId", TxId)("State", NKikimrPQ::TTransaction_EState_Name(State))
 
@@ -104,12 +105,15 @@ void TDistributedTransaction::InitPartitions(const google::protobuf::RepeatedPtr
     Partitions.clear();
 
     for (auto& o : operations) {
-        if (!o.HasCommitOffsetsBegin()) {
+        NKikimrPQ::TPartitionOperation operation = o;
+        EnsureCanonical(operation);
+
+        if (IsWriteTxOperation(operation)) {
             HasWriteOperations = true;
         }
 
-        Operations.push_back(o);
-        Partitions.insert(o.GetPartitionId());
+        Operations.push_back(std::move(operation));
+        Partitions.insert(Operations.back().GetPartitionId());
     }
 }
 
@@ -185,6 +189,9 @@ void TDistributedTransaction::OnProposeTransaction(const NKikimrPQ::TDataTransac
     }
 
     InitPartitions(txBody.GetOperations());
+
+    Y_VALIDATE(!(txBody.HasWriteId() && !HasWriteOperations),
+        "TDataTransaction has WriteId but no write operation");
 
     if (txBody.HasWriteId() && HasWriteOperations) {
         WriteId = GetWriteId(txBody);
@@ -450,7 +457,12 @@ NKikimrPQ::TTransaction TDistributedTransaction::Serialize(EState state) {
         TX_ENSURE(false);
     }
 
-    tx.MutableOperations()->Add(Operations.begin(), Operations.end());
+    tx.MutableOperations()->Reserve(Operations.size());
+    for (const auto& operation : Operations) {
+        NKikimrPQ::TPartitionOperation persisted = operation;
+        DowngradeToLegacy(persisted);
+        *tx.MutableOperations()->Add() = std::move(persisted);
+    }
     if (SelfDecision != NKikimrTx::TReadSetData::DECISION_UNKNOWN) {
         tx.SetPredicate(SelfDecision == NKikimrTx::TReadSetData::DECISION_COMMIT);
     }

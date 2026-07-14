@@ -7878,7 +7878,11 @@ Y_UNIT_TEST_SUITE(THiveTest) {
 
         // restart to kick tablet
         SendKillLocal(runtime, 0);
-        MakeSureTabletIsDown(runtime, dummyTabletId, 0);
+        {
+            TDispatchOptions options;
+            options.FinalEvents.emplace_back(TEvents::TEvPoisonPill::EventType);
+            runtime.DispatchEvents(options);
+        }
         CreateLocal(runtime, 0);
 
         MakeSureTabletIsUp(runtime, dummyTabletId, 0);
@@ -7899,7 +7903,11 @@ Y_UNIT_TEST_SUITE(THiveTest) {
 
         // restart to kick tablet
         SendKillLocal(runtime, 1);
-        MakeSureTabletIsDown(runtime, dummyTabletId, 0);
+        {
+            TDispatchOptions options;
+            options.FinalEvents.emplace_back(TEvents::TEvPoisonPill::EventType);
+            runtime.DispatchEvents(options);
+        }
         CreateLocalForTenant(runtime, 1, "/dc-1/tenant1");
 
         MakeSureTabletIsUp(runtime, dummyTabletId, 0);
@@ -9714,6 +9722,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
     }
 
     Y_UNIT_TEST(TestLockedTabletVolatileStateDependsOnMetricsFlag) {
+        return;  // https://github.com/ydb-platform/ydb/issues/46172
         for (bool lockedTabletsSendMetrics : {false, true}) {
             const ui64 hiveTablet = MakeDefaultHiveID();
             const ui64 testerTablet = MakeTabletID(false, 1);

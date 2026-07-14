@@ -69,6 +69,8 @@ namespace NActors {
         Params = params;
         Proxy->Metrics->SetPeerScopeId(Params.PeerScopeId);
         Proxy->Metrics->SetConnected(0);
+        DirectSession = std::make_shared<TDirectSessionV1>(TActivationContext::ActorSystem(), SelfId(), Proxy->PeerNodeId);
+        ReceiveContext->DirectSession = DirectSession;
         auto destroyCallback = [as = TActivationContext::ActorSystem(), id = Proxy->Common->DestructorId](THolder<IEventBase> event) {
             as->Send(id, event.Release());
         };
@@ -79,6 +81,12 @@ namespace NActors {
         LOG_INFO(*TlsActivationContext, NActorsServices::INTERCONNECT_STATUS, "[%u] session created", Proxy->PeerNodeId);
         SetPrefix(Sprintf("Session %s [node %" PRIu32 "]", SelfId().ToString().data(), Proxy->PeerNodeId));
         SendUpdateToWhiteboard();
+    }
+
+    void TInterconnectSessionTCP::HandleProcessDirectSessionQueue() {
+        // Runs on the shared session/input-session mailbox thread, so applying registration commands
+        // here does not race with incoming-event dispatch.
+        DirectSession->ApplyPendingCommands();
     }
 
     std::optional<ui8> TInterconnectSessionTCP::GetXDCFlags() const noexcept {
@@ -140,6 +148,10 @@ namespace NActors {
 
         IActor::InvokeOtherActor(*Proxy, &TInterconnectProxyTCP::UnregisterSession, this);
         ShutdownSocket(std::move(reason));
+
+        // disconnect the direct interface so racing user threads observe a clean shutdown; the handle
+        // itself stays published in ReceiveContext for the input session's whole lifetime
+        DirectSession->Shutdown();
 
         ReceiveContext->Terminated = true; // prevent further message generation by receiving actor
         for (const auto& kv : Subscribers) {
@@ -258,7 +270,7 @@ namespace NActors {
         LOG_DEBUG_IC_SESSION("ICS12", "subscribe for session state for %s", msg->Event->Sender.ToString().data());
         UpdateSubscriber(msg->Event->Sender, msg->Event->Cookie, msg->ActivityIndex, std::move(msg->EventTypeName),
             std::move(msg->StackTrace));
-        Send(msg->Event->Sender, new TEvInterconnect::TEvNodeConnected(Proxy->PeerNodeId), 0, msg->Event->Cookie);
+        Send(msg->Event->Sender, new TEvInterconnect::TEvNodeConnected(Proxy->PeerNodeId, DirectSession), 0, msg->Event->Cookie);
 
         EnqueueForward(TAutoPtr<IEventHandle>(msg->Event.Release()));
     }
@@ -291,7 +303,7 @@ namespace NActors {
     void TInterconnectSessionTCP::Subscribe(STATEFN_SIG) {
         LOG_DEBUG_IC_SESSION("ICS04", "subscribe for session state for %s", ev->Sender.ToString().data());
         UpdateSubscriber(ev->Sender, ev->Cookie);
-        Send(ev->Sender, new TEvInterconnect::TEvNodeConnected(Proxy->PeerNodeId), 0, ev->Cookie);
+        Send(ev->Sender, new TEvInterconnect::TEvNodeConnected(Proxy->PeerNodeId, DirectSession), 0, ev->Cookie);
     }
 
     void TInterconnectSessionTCP::Unsubscribe(STATEFN_SIG) {

@@ -684,6 +684,20 @@
             "uri": "https://{canondata_backend}/1847551/58f37c8e1b8c74f66657e94c231b8acc11b82bf5/resource.tar.gz#test.test_lambda-lambda_brief-default.txt-Results_/results.txt"
         }
     ],
+    "test.test[linear-if_linear_twice_in_both_branches-default.txt-Debug]": [
+        {
+            "checksum": "41993fe20b4f15ef2964581cd0f57e44",
+            "size": 631,
+            "uri": "https://{canondata_backend}/1946324/b4f63cb7ec60aa50b4d8903ccb3b1f3b9fac4583/resource.tar.gz#test.test_linear-if_linear_twice_in_both_branches-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[linear-if_linear_twice_in_both_branches-default.txt-Results]": [
+        {
+            "checksum": "b50b7b740b36f915e45f3eba23d37b2e",
+            "size": 2056,
+            "uri": "https://{canondata_backend}/1809005/e6e1ac9266e442cd0da0012651506d2f9b18600f/resource.tar.gz#test.test_linear-if_linear_twice_in_both_branches-default.txt-Results_/results.txt"
+        }
+    ],
     "test.test[linear-mutdict_pop-default.txt-Debug]": [
         {
             "checksum": "05a9fedf4542bd0ff6e3270e803360d6",

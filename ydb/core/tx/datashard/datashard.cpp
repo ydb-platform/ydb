@@ -4473,7 +4473,7 @@ void TDataShard::Handle(TEvSchemeShard::TEvDescribeSchemeResult::TPtr ev, const 
 
     YDB_LOG_DEBUG_CTX(ctx, "Got scheme resolve result",
         {"tabletID", TabletID()},
-        {"rec", rec});
+        {"rec", rec.ShortDebugString()});
 
     ui64 pathId = rec.GetPathId();
     if (!TableInfos.contains(pathId)) {

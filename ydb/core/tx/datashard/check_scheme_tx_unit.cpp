@@ -410,7 +410,7 @@ bool TCheckSchemeTxUnit::CheckSchemeTx(TActiveTransaction *activeTx)
         YDB_LOG_ERROR_CTX(TActivationContext::AsActorContext(), "Unknown scheme tx type detected at tablet txId txBody",
             {"#_DataShard.TabletID", DataShard.TabletID()},
             {"#_activeTx->GetTxId", activeTx->GetTxId()},
-            {"tx", tx});
+            {"tx", tx.ShortDebugString()});
         BuildResult(activeTx, NKikimrTxDataShard::TEvProposeTransactionResult::ERROR);
     }
 

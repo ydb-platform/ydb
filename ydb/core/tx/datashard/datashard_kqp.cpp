@@ -357,7 +357,7 @@ void KqpFillOutReadSets(TOutputOpData::TOutReadSets& outReadSets, const NKikimrD
 
         for (auto& lock : brokenLocks) {
             YDB_LOG_TRACE("Found broken",
-                {"lock", lock});
+                {"lock", lock.ShortDebugString()});
             if (useGenericReadSets) {
                 decision = NKikimrTx::TReadSetData::DECISION_ABORT;
             } else {
@@ -373,7 +373,7 @@ void KqpFillOutReadSets(TOutputOpData::TOutReadSets& outReadSets, const NKikimrD
             YDB_LOG_TRACE("Send locks from",
                 {"tabletId", tabletId},
                 {"dstTabletId", dstTabletId},
-                {"locks", validateLocksResult});
+                {"locks", validateLocksResult.ShortDebugString()});
 
             auto key = std::make_pair(tabletId, dstTabletId);
             if (useGenericReadSets) {
@@ -457,7 +457,7 @@ void KqpEraseLocks(ui64 origin, const NKikimrDataEvents::TKqpLocks* kqpLocks, TS
         }
 
         YDB_LOG_TRACE("KqpEraseLock",
-            {"lockProto", lockProto});
+            {"lockProto", lockProto.ShortDebugString()});
 
         auto lockKey = MakeLockKey(lockProto);
         sysLocks.EraseLock(lockKey);
@@ -476,7 +476,7 @@ void KqpCommitLocks(ui64 origin, const NKikimrDataEvents::TKqpLocks* kqpLocks, T
             }
 
             YDB_LOG_TRACE("KqpCommitLock",
-                {"lockProto", lockProto});
+                {"lockProto", lockProto.ShortDebugString()});
 
             auto lockKey = MakeLockKey(lockProto);
             sysLocks.CommitLock(lockKey);

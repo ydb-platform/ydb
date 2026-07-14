@@ -304,6 +304,8 @@ public:
     TRuntimeNode BlockGuess(TRuntimeNode variant, ui32 tupleIndex);
     TRuntimeNode BlockGuess(TRuntimeNode variant, const std::string_view& memberName);
     TRuntimeNode BlockWay(TRuntimeNode variant);
+    TRuntimeNode BlockVariant(TRuntimeNode item, ui32 tupleIndex, TType* variantType);
+    TRuntimeNode BlockVariant(TRuntimeNode item, const std::string_view& memberName, TType* variantType);
     TRuntimeNode BlockIf(TRuntimeNode condition, TRuntimeNode thenBranch, TRuntimeNode elseBranch);
     TRuntimeNode BlockJust(TRuntimeNode data);
 

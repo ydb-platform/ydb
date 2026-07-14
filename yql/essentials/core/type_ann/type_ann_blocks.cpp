@@ -24,6 +24,41 @@ const TTypeAnnotationNode* MakeBlockOrScalarType(const TTypeAnnotationNode* bloc
     }
 }
 
+const TTypeAnnotationNode* ResolveVariantAlternativeType(TStringBuf selectorContent, TPositionHandle selectorPos, const TVariantExprType& variantType, TExprContext& ctx) {
+    if (variantType.GetUnderlyingType()->GetKind() == ETypeAnnotationKind::Tuple) {
+        auto tupleType = variantType.GetUnderlyingType()->Cast<TTupleExprType>();
+        ui32 index = 0;
+        if (!TryFromString(selectorContent, index)) {
+            ctx.AddError(TIssue(ctx.GetPosition(selectorPos),
+                                TStringBuilder() << "Failed to convert to integer: " << selectorContent));
+            return nullptr;
+        }
+        if (index >= tupleType->GetSize()) {
+            ctx.AddError(TIssue(ctx.GetPosition(selectorPos),
+                                TStringBuilder() << "Index out of range. Index: " << index << ", size: " << tupleType->GetSize()));
+            return nullptr;
+        }
+        return tupleType->GetItems()[index];
+    } else {
+        auto structType = variantType.GetUnderlyingType()->Cast<TStructExprType>();
+        auto memberPos = FindOrReportMissingMember(selectorContent, selectorPos, *structType, ctx);
+        if (!memberPos) {
+            return nullptr;
+        }
+        return structType->GetItems()[*memberPos]->GetItemType();
+    }
+}
+
+bool EnsurePayloadMatchesAlternative(const TExprNode& payloadNode, const TTypeAnnotationNode& blockPayloadItemType,
+                                     const TTypeAnnotationNode& alternativeType, TExprContext& ctx) {
+    if (IsSameAnnotation(blockPayloadItemType, alternativeType)) {
+        return true;
+    }
+    ctx.AddError(TIssue(ctx.GetPosition(payloadNode.Pos()),
+                        TStringBuilder() << "Payload type mismatch: expected " << alternativeType << " but got " << blockPayloadItemType));
+    return false;
+}
+
 } // namespace
 
 IGraphTransformer::TStatus AsScalarWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
@@ -378,28 +413,12 @@ IGraphTransformer::TStatus BlockGuessWrapper(const TExprNode::TPtr& input, TExpr
         return IGraphTransformer::TStatus::Error;
     }
 
-    const TTypeAnnotationNode* alternativeType = nullptr;
-    if (variantType->GetUnderlyingType()->GetKind() == ETypeAnnotationKind::Tuple) {
-        auto tupleType = variantType->GetUnderlyingType()->Cast<TTupleExprType>();
-        ui32 index = 0;
-        if (!TryFromString(input->Child(1)->Content(), index)) {
-            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()),
-                                     TStringBuilder() << "Failed to convert to integer: " << input->Child(1)->Content()));
-            return IGraphTransformer::TStatus::Error;
-        }
-        if (index >= tupleType->GetSize()) {
-            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()),
-                                     TStringBuilder() << "Index out of range. Index: " << index << ", size: " << tupleType->GetSize()));
-            return IGraphTransformer::TStatus::Error;
-        }
-        alternativeType = tupleType->GetItems()[index];
-    } else {
-        auto structType = variantType->GetUnderlyingType()->Cast<TStructExprType>();
-        auto pos = FindOrReportMissingMember(input->Child(1)->Content(), input->Pos(), *structType, ctx.Expr);
-        if (!pos) {
-            return IGraphTransformer::TStatus::Error;
-        }
-        alternativeType = structType->GetItems()[*pos]->GetItemType();
+    const TTypeAnnotationNode* alternativeType = ResolveVariantAlternativeType(input->Child(1)->Content(),
+                                                                               input->Child(1)->Pos(),
+                                                                               *variantType,
+                                                                               ctx.Expr);
+    if (!alternativeType) {
+        return IGraphTransformer::TStatus::Error;
     }
 
     auto optionalAlternativeType = ctx.Expr.MakeType<TOptionalExprType>(alternativeType);
@@ -440,6 +459,46 @@ IGraphTransformer::TStatus BlockWayWrapper(const TExprNode::TPtr& input, TExprNo
         wayType = ctx.Expr.MakeType<TOptionalExprType>(wayType);
     }
     input->SetTypeAnn(MakeBlockOrScalarType(wayType, isScalar, ctx.Expr));
+    return IGraphTransformer::TStatus::Ok;
+}
+
+IGraphTransformer::TStatus BlockVariantWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+    Y_UNUSED(output);
+    if (!EnsureArgsCount(*input, 3, ctx.Expr)) {
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    auto payloadNode = input->Child(0);
+    if (!EnsureBlockOrScalarType(*payloadNode, ctx.Expr)) {
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    if (!EnsureAtom(*input->Child(1), ctx.Expr)) {
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    if (auto status = EnsureTypeRewrite(input->ChildRef(2), ctx.Expr); status != IGraphTransformer::TStatus::Ok) {
+        return status;
+    }
+    auto variantType = input->Child(2)->GetTypeAnn()->Cast<TTypeExprType>()->GetType();
+    if (!EnsureVariantType(input->Child(2)->Pos(), *variantType, ctx.Expr)) {
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    const TTypeAnnotationNode* payloadItemType = ResolveVariantAlternativeType(input->Child(1)->Content(),
+                                                                               input->Child(1)->Pos(),
+                                                                               *variantType->Cast<TVariantExprType>(), ctx.Expr);
+    if (!payloadItemType) {
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    bool payloadIsScalar;
+    const TTypeAnnotationNode* blockPayloadItemType = GetBlockItemType(*payloadNode->GetTypeAnn(), payloadIsScalar);
+    if (!EnsurePayloadMatchesAlternative(*payloadNode, *blockPayloadItemType, *payloadItemType, ctx.Expr)) {
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    input->SetTypeAnn(MakeBlockOrScalarType(variantType, payloadIsScalar, ctx.Expr));
     return IGraphTransformer::TStatus::Ok;
 }
 

@@ -72,4 +72,11 @@ SELECT
     Substring(CAST(Uuid::newV7At($ts) AS String), 14, 1) = '7'
     AS v7_at_string_format;
 
+$fixed_ts = CAST(1700000000123000ul AS Timestamp);
+$fixed_ts64 = CAST(1700000000123000l AS Timestamp64);
+SELECT Uuid::extractTs(Uuid::newV7At($fixed_ts)) = $fixed_ts AS v7_extract_ts_roundtrip;
+SELECT Uuid::extractTs64(Uuid::newV7At($fixed_ts64)) = $fixed_ts64 AS v7_extract_ts64_roundtrip;
+SELECT Uuid::extractTs(Uuid::newChrono()) IS NULL AS v7_extract_ts_chrono_null;
+SELECT Uuid::extractTs(Uuid::newSharded()) IS NULL AS v7_extract_ts_sharded_null;
+
 SELECT $p != 0ul OR $p == 0ul AS prefix_is_uint64;

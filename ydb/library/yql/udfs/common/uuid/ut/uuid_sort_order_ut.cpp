@@ -366,4 +366,44 @@ Y_UNIT_TEST_SUITE(TUuidSortOrder) {
         UNIT_ASSERT_VALUES_EQUAL(bytes[6], 0x08);
         UNIT_ASSERT_VALUES_EQUAL(bytes[7], 0x07);
     }
+
+    Y_UNIT_TEST(ExtractV7TimestampRoundtrip) {
+        const ui64 timestampMs = 1'700'000'000'123ULL;
+        const ui64 expectedMicros = timestampMs * 1000;
+        SetRandomSeed(42);
+        const auto bytes = MakeRfcV7YdbBytes(timestampMs);
+        const auto extracted = ExtractV7TimestampMicrosFromYdbBytes(bytes.data());
+        UNIT_ASSERT(extracted.Defined());
+        UNIT_ASSERT_VALUES_EQUAL(*extracted, expectedMicros);
+    }
+
+    Y_UNIT_TEST(ExtractV7TimestampReturnsNothingForChrono) {
+        SetRandomSeed(42);
+        const auto bytes = MakeChronoUuidBytes(0, MilliSeconds(), false);
+        const auto extracted = ExtractV7TimestampMicrosFromYdbBytes(bytes.data());
+        UNIT_ASSERT(!extracted.Defined());
+    }
+
+    Y_UNIT_TEST(ExtractV7TimestampReturnsNothingForSharded) {
+        SetRandomSeed(42);
+        const auto bytes = MakeShardedUuidBytes(0, MilliSeconds() / 1000, false);
+        const auto extracted = ExtractV7TimestampMicrosFromYdbBytes(bytes.data());
+        UNIT_ASSERT(!extracted.Defined());
+    }
+
+    Y_UNIT_TEST(ExtractV7TimestampFromParsedUuidString) {
+        const ui64 timestampMs = 1'700'000'000'456ULL;
+        SetRandomSeed(42);
+        const auto bytes = MakeRfcV7YdbBytes(timestampMs);
+        const TString uuidString = UuidBytesToDisplayString(bytes);
+
+        ui16 dw[8] = {};
+        UNIT_ASSERT(NKikimr::NUuid::ParseUuidToArray(uuidString, dw, false));
+        std::array<ui8, NKikimr::NUuid::UUID_LEN> parsed{};
+        std::memcpy(parsed.data(), dw, sizeof(dw));
+
+        const auto extracted = ExtractV7TimestampMicrosFromYdbBytes(parsed.data());
+        UNIT_ASSERT(extracted.Defined());
+        UNIT_ASSERT_VALUES_EQUAL(*extracted, timestampMs * 1000);
+    }
 }

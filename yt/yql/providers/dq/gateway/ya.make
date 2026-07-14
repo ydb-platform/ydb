@@ -22,6 +22,7 @@ PEERDIR(
     yql/essentials/utils/backtrace
     yql/essentials/utils/failure_injector
     yql/essentials/utils/log
+    yt/yql/providers/dq/config
 )
 
 YQL_LAST_ABI_VERSION()

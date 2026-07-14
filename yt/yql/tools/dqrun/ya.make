@@ -22,23 +22,20 @@ IF (NOT OS_WINDOWS)
     )
 
     PEERDIR(
-        yt/yql/tools/dqrun/lib
-
-        yt/yql/providers/yt/codec/codegen
-        yt/yql/providers/yt/comp_nodes/llvm16
-        yt/yql/providers/yt/comp_nodes/dq/llvm16
-        yql/essentials/minikql/invoke_builtins/llvm16
+        library/cpp/lfalloc/alloc_profiler
+        ydb/library/yql/dq/comp_nodes/llvm16
+        ydb/library/yql/providers/pq/gateway/dummy
+        ydb/library/yql/udfs/common/clickhouse/client
+        ydb/public/sdk/cpp/src/client/persqueue_public/codecs
         yql/essentials/minikql/comp_nodes/llvm16
+        yql/essentials/minikql/invoke_builtins/llvm16
         yql/essentials/parser/pg_wrapper
         yql/essentials/public/udf/service/exception_policy
         yql/essentials/sql/pg
-
-        library/cpp/lfalloc/alloc_profiler
-
-        ydb/library/yql/udfs/common/clickhouse/client
-        ydb/library/yql/dq/comp_nodes/llvm16
-        ydb/library/yql/providers/pq/gateway/dummy
-        ydb/public/sdk/cpp/src/client/persqueue_public/codecs
+        yt/yql/providers/yt/codec/codegen
+        yt/yql/providers/yt/comp_nodes/dq/llvm16
+        yt/yql/providers/yt/comp_nodes/llvm16
+        yt/yql/tools/dqrun/lib
     )
 
     YQL_LAST_ABI_VERSION()

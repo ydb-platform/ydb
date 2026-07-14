@@ -1,4 +1,6 @@
-#include <yt/yql/providers/dq/gateway/yql_dq_gateway_factory.h>
+#include "yql_dq_gateway_factory.h"
+
+#include <yt/yql/providers/dq/config/config.pb.h>
 
 #include <yql/essentials/providers/common/provider/yql_provider_names.h>
 #include <ydb/library/yql/providers/dq/api/grpc/api.grpc.pb.h>
@@ -788,6 +790,14 @@ private:
 
 TIntrusivePtr<IDqGateway> CreateDqGateway(const TString& host, int port) {
     return new TDqGateway(host, port, "", "");
+}
+
+TIntrusivePtr<IDqGateway> CreateDqGateway(const NProto::TDqConfig& config) {
+    return new TDqGateway("localhost", config.GetPort(),
+        config.GetYtBackends()[0].GetVanillaJobLite(),
+        config.GetYtBackends()[0].GetVanillaJobLiteMd5(),
+        TDuration::MilliSeconds(config.GetOpenSessionTimeoutMs()),
+        TDuration::MilliSeconds(config.GetRequestTimeoutMs()));
 }
 
 } // namespace NYql

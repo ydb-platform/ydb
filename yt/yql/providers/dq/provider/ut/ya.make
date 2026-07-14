@@ -5,20 +5,14 @@ SRCS(
 )
 
 PEERDIR(
-    ydb/library/yql/dq/actors/compute
-    ydb/library/yql/dq/comp_nodes
-    ydb/library/yql/dq/transform
-    yt/yql/providers/dq/local_gateway
-    ydb/library/yql/providers/dq/provider
-    ydb/library/yql/providers/dq/provider/exec
     library/cpp/lwtrace
     library/cpp/lwtrace/mon
     library/cpp/testing/unittest
-    yt/yql/providers/yt/codec/codegen
-    yt/yql/providers/yt/comp_nodes/llvm16
-    yt/yql/providers/yt/gateway/file
-    yt/yql/providers/yt/lib/ut_common
-    yt/yql/providers/yt/provider
+    ydb/library/yql/dq/actors/compute
+    ydb/library/yql/dq/comp_nodes
+    ydb/library/yql/dq/transform
+    ydb/library/yql/providers/dq/provider
+    ydb/library/yql/providers/dq/provider/exec
     yql/essentials/core/cbo/simple
     yql/essentials/core/facade
     yql/essentials/core/file_storage
@@ -27,6 +21,12 @@ PEERDIR(
     yql/essentials/providers/common/comp_nodes
     yql/essentials/public/udf/service/exception_policy
     yql/essentials/sql/pg
+    yt/yql/providers/dq/local_gateway
+    yt/yql/providers/yt/codec/codegen
+    yt/yql/providers/yt/comp_nodes/llvm16
+    yt/yql/providers/yt/gateway/file
+    yt/yql/providers/yt/lib/ut_common
+    yt/yql/providers/yt/provider
 )
 
 YQL_LAST_ABI_VERSION()

@@ -255,7 +255,7 @@ void TCommandTPCCRun::Config(TConfig& config) {
             .Optional().StoreTrue(&RunConfig->NoDelays);
 
     auto txModeOpt = config.Opts->AddLongOption(
-        "tx-mode", TStringBuilder() << "Transaction mode: serializable-rw, snapshot-rw, or mixed")
+        "tx-mode", TStringBuilder() << "Transaction mode: serializable-rw, snapshot-rw, or read-committed-rw")
             .OptionalArgument("STRING").StoreMappedResult(&RunConfig->TxMode, [runConfig = RunConfig](const TString& value) {
                 if (value == "serializable-rw") {
                     runConfig->MixedTxMode = false;
@@ -272,24 +272,23 @@ void TCommandTPCCRun::Config(TConfig& config) {
                     return NQuery::TTxSettings::SerializableRW();
                 }
                 throw yexception() << "Invalid transaction mode: " << value
-                    << ". Valid values are: serializable-rw, snapshot-rw, mixed";
+                    << ". Valid values are: serializable-rw, snapshot-rw, read-committed-rw";
             }).DefaultValue("serializable-rw")
             .ChoicesWithCompletion({{"serializable-rw", "Serializable read-write"},
                                     {"snapshot-rw", "Snapshot read-write"},
-                                    {"read-committed-rw", "Read Committed read-write"},
-                                    {"mixed", "Mixed mode: randomly selects isolation level per transaction"}});
+                                    {"read-committed-rw", "Read Committed read-write"}});
 
-    config.Opts->AddLongOption(
+    auto txModeWeightSerializableOpt = config.Opts->AddLongOption(
         "tx-mode-weight-serializable",
         TStringBuilder() << "Weight for serializable-rw in mixed tx mode (default: 0)")
             .RequiredArgument("FLOAT").StoreResult(&RunConfig->TxModeWeightSerializable).DefaultValue(0.0);
 
-    config.Opts->AddLongOption(
+    auto txModeWeightSnapshotOpt = config.Opts->AddLongOption(
         "tx-mode-weight-snapshot",
         TStringBuilder() << "Weight for snapshot-rw in mixed tx mode (default: 0)")
             .RequiredArgument("FLOAT").StoreResult(&RunConfig->TxModeWeightSnapshot).DefaultValue(0.0);
 
-    config.Opts->AddLongOption(
+    auto txModeWeightReadCommittedOpt = config.Opts->AddLongOption(
         "tx-mode-weight-read-committed",
         TStringBuilder() << "Weight for read-committed-rw in mixed tx mode (default: 0)")
             .RequiredArgument("FLOAT").StoreResult(&RunConfig->TxModeWeightReadCommitted).DefaultValue(0.0);
@@ -311,6 +310,9 @@ void TCommandTPCCRun::Config(TConfig& config) {
         noDelaysOpt.Hidden();
         simulateOpt.Hidden();
         simulateSelect1Opt.Hidden();
+        txModeWeightSerializableOpt.Hidden();
+        txModeWeightSnapshotOpt.Hidden();
+        txModeWeightReadCommittedOpt.Hidden();
     }
 }
 

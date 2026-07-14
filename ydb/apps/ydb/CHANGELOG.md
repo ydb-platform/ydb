@@ -1,7 +1,6 @@
 
 ## 2.33.0 ##
 
-* Added `--tx-mode mixed` option to `ydb workload tpcc run`, which randomly selects the isolation level per transaction according to weights specified with `--tx-mode-weight-serializable`, `--tx-mode-weight-snapshot`, and `--tx-mode-weight-read-committed`.
 * The `ydb` interactive AI mode can now search the YDB documentation.
 
 ## 2.32.0 ##

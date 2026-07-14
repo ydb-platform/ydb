@@ -71,14 +71,14 @@ def _git_branch_added_to_stable_config(branch, repo_root):
         )
     except OSError as exc:
         logging.warning(
-            'stable branch bootstrap grace: git log failed for branch=%s: %s',
+            'stable branch grace: git log failed for branch=%s: %s',
             branch,
             exc,
         )
         return None
     if proc.returncode != 0:
         logging.warning(
-            'stable branch bootstrap grace: git log exit %s for %s: %s',
+            'stable branch grace: git log exit %s for %s: %s',
             proc.returncode,
             _STABLE_BRANCHES_CONFIG,
             (proc.stderr or '').strip(),
@@ -97,7 +97,7 @@ def _git_branch_added_to_stable_config(branch, repo_root):
         )
         if show.returncode != 0:
             logging.warning(
-                'stable branch bootstrap grace: git show %s:%s failed with exit %s: %s',
+                'stable branch grace: git show %s:%s failed with exit %s: %s',
                 commit,
                 _STABLE_BRANCHES_CONFIG,
                 show.returncode,
@@ -120,7 +120,7 @@ def _git_branch_added_to_stable_config(branch, repo_root):
         )
         if dproc.returncode != 0:
             logging.warning(
-                'stable branch bootstrap grace: git log -1 date for commit %s failed with exit %s: %s',
+                'stable branch grace: git log -1 date for commit %s failed with exit %s: %s',
                 commit,
                 dproc.returncode,
                 (dproc.stderr or '').strip(),
@@ -133,7 +133,7 @@ def _git_branch_added_to_stable_config(branch, repo_root):
             return datetime.datetime.fromisoformat(raw).astimezone(datetime.timezone.utc).date()
         except ValueError:
             logging.warning(
-                'stable branch bootstrap grace: invalid author date for commit %s: %r',
+                'stable branch grace: invalid author date for commit %s: %r',
                 commit,
                 raw,
             )
@@ -141,7 +141,7 @@ def _git_branch_added_to_stable_config(branch, repo_root):
     return None
 
 
-def _apply_stable_branch_bootstrap_grace(branch, inherited_muted_ya_path, all_muted_ya, to_delete, repo_root):
+def _apply_stable_branch_grace(branch, inherited_muted_ya_path, all_muted_ya, to_delete, repo_root):
     added = _git_branch_added_to_stable_config(branch, repo_root)
     if added is None:
         return all_muted_ya, to_delete
@@ -154,7 +154,7 @@ def _apply_stable_branch_bootstrap_grace(branch, inherited_muted_ya_path, all_mu
             inherited = {line.strip() for line in fp if line.strip()}
     except OSError as exc:
         logging.warning(
-            'stable branch bootstrap grace: cannot read inherited mute file %s: %s',
+            'stable branch grace: cannot read inherited mute file %s: %s',
             inherited_muted_ya_path,
             exc,
         )
@@ -162,7 +162,7 @@ def _apply_stable_branch_bootstrap_grace(branch, inherited_muted_ya_path, all_mu
     if not inherited:
         return all_muted_ya, to_delete
     logging.info(
-        'stable branch bootstrap grace for %s (config since %s, %s days): keep %d inherited mute(s)',
+        'stable branch grace for %s (config since %s, %s days): keep %d inherited mute(s)',
         branch,
         added,
         grace_days,
@@ -996,7 +996,7 @@ def apply_and_add_mutes(
             all_data, lambda test: mute_check(test.get('suite_folder'), test.get('test_name')) if mute_check else True, use_wildcards=True, resolution='muted_ya'
         )
         if branch and inherited_muted_ya_path and repo_root:
-            all_muted_ya, to_delete = _apply_stable_branch_bootstrap_grace(
+            all_muted_ya, to_delete = _apply_stable_branch_grace(
                 branch,
                 inherited_muted_ya_path,
                 all_muted_ya,

@@ -52,11 +52,9 @@ bool UsesCompressedPkView(const arrow::Type::type typeId) {
         case arrow::Type::INT8:
         case arrow::Type::INT16:
         case arrow::Type::INT32:
-        case arrow::Type::INT64:
         case arrow::Type::UINT8:
         case arrow::Type::UINT16:
         case arrow::Type::UINT32:
-        case arrow::Type::UINT64:
         case arrow::Type::TIMESTAMP:
         case arrow::Type::DATE32:
         case arrow::Type::DATE64:
@@ -961,15 +959,22 @@ TString TTxMonitoring::RenderPortionsPage() {
                 return padding + height - (planStep - yMin) / (yMax - yMin) * height;
             }
 
-            function formatPk(pk, pkLabels, temporal) {
+            function formatPk(pk, portions, pkLabels) {
                 if (pkLabels && pkLabels.length) {
                     const idx = Math.round(pk);
                     if (idx >= 0 && idx < pkLabels.length) {
                         return pkLabels[idx];
                     }
                 }
-                if (temporal) {
-                    return new Date(pk / 1000).toISOString();
+                if (portions && portions.length) {
+                    for (const p of portions) {
+                        if (p.pkMin === pk && p.pkMinStr) {
+                            return p.pkMinStr;
+                        }
+                        if (p.pkMax === pk && p.pkMaxStr) {
+                            return p.pkMaxStr;
+                        }
+                    }
                 }
                 return String(pk);
             }
@@ -1014,7 +1019,7 @@ TString TTxMonitoring::RenderPortionsPage() {
                 }
             }
 
-            function drawIntersections(canvas, portions, pkLabels, temporal) {
+            function drawIntersections(canvas, portions, pkLabels) {
                 const ctx = canvas.getContext('2d');
                 const padding = 50;
                 const width = canvas.width - 2 * padding;
@@ -1093,12 +1098,12 @@ TString TTxMonitoring::RenderPortionsPage() {
                 const actualPkMax = Math.max(...portions.map(p => p.pkMax));
                 ctx.fillStyle = '#666';
                 ctx.font = '11px sans-serif';
-                ctx.fillText(formatPk(actualPkMin, pkLabels, temporal), padding, padding + height + 20);
-                const rightLabel = formatPk(actualPkMax, pkLabels, temporal);
+                ctx.fillText(formatPk(actualPkMin, portions, pkLabels), padding, padding + height + 20);
+                const rightLabel = formatPk(actualPkMax, portions, pkLabels);
                 ctx.fillText(rightLabel, padding + width - Math.min(200, rightLabel.length * 6), padding + height + 20);
             }
 
-            function drawPortions(canvas, portions, maxLevel, pkLabels, temporal, compressed) {
+            function drawPortions(canvas, portions, maxLevel, pkLabels, compressed) {
                 const ctx = canvas.getContext('2d');
                 const padding = 50;
                 const width = canvas.width - 2 * padding;
@@ -1158,8 +1163,8 @@ TString TTxMonitoring::RenderPortionsPage() {
                 ctx.font = '11px sans-serif';
                 const actualPkMin = Math.min(...portions.map(p => p.pkMin));
                 const actualPkMax = Math.max(...portions.map(p => p.pkMax));
-                ctx.fillText(formatPk(actualPkMin, pkLabels, temporal), padding, padding + height + 20);
-                const rightLabel = formatPk(actualPkMax, pkLabels, temporal);
+                ctx.fillText(formatPk(actualPkMin, portions, pkLabels), padding, padding + height + 20);
+                const rightLabel = formatPk(actualPkMax, portions, pkLabels);
                 ctx.fillText(rightLabel, padding + width - Math.min(200, rightLabel.length * 6), padding + height + 20);
                 ctx.fillText(formatPlanStep(planMin), 5, padding + height);
                 ctx.fillText(formatPlanStep(planMax), 5, padding + 10);
@@ -1197,7 +1202,6 @@ TString TTxMonitoring::RenderPortionsPage() {
 
             const portions = data.portions || [];
             const pkLabels = data.pkLabels || [];
-            const temporal = !!data.pk0Temporal;
             const compressed = !!data.compressed;
             if (window.initPlanStepRangeInputs && data.planStepFrom !== undefined) {
                 window.initPlanStepRangeInputs(data.planStepFrom, data.planStepTo, data.planStepToInf);
@@ -1207,14 +1211,12 @@ TString TTxMonitoring::RenderPortionsPage() {
                 portions,
                 data.maxCompactionLevel || 0,
                 pkLabels,
-                temporal,
                 compressed
             );
             drawIntersections(
                 document.getElementById('portions-intersections'),
                 portions,
-                pkLabels,
-                temporal
+                pkLabels
             );
         })();
         </script>)";

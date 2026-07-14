@@ -130,7 +130,11 @@ public:
         const auto& shardInfo = Self->ShardInfos.at(shardIdx);
         Y_ABORT_UNLESS(shardInfo.TabletType == ETabletType::PersQueue);
 
-        Y_ABORT_UNLESS(Self->Topics.contains(shardInfo.PathId));
+        if (!Self->Topics.contains(shardInfo.PathId)) {
+            LOG_E("Topic with pathId# " << shardInfo.PathId
+                << " not found, likely dropped concurrently, ignoring offload status");
+            return;
+        }
         const auto& topic = Self->Topics.at(shardInfo.PathId);
 
         if (!topic->Partitions.contains(partitionId)) {

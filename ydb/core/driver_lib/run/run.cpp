@@ -2135,10 +2135,6 @@ TIntrusivePtr<TServiceInitializersList> TKikimrRunner::CreateServiceInitializers
         sil->AddServiceInitializer(new TMetadataProviderInitializer(runConfig));
     }
 
-    if (serviceMask.EnableExternalIndex) {
-        sil->AddServiceInitializer(new TExternalIndexInitializer(runConfig));
-    }
-
     if (serviceMask.EnableCompDiskLimiter) {
         sil->AddServiceInitializer(new TCompDiskLimiterInitializer(runConfig));
     }

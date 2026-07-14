@@ -74,6 +74,7 @@ RECURSE_FOR_TESTS(
     ut_blob_depot
     ut_blob_depot_fat
     ut_bridge
+    ut_bsc_migration
     ut_check_integrity
     ut_comp_defrag
     ut_ddisk

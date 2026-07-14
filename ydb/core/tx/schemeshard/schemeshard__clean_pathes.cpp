@@ -129,7 +129,13 @@ struct TSchemeShard::TTxCleanDroppedPaths : public TTransactionBase<TSchemeShard
             TPathId pathId = *--itCandidate;
             Self->CleanDroppedPathsCandidates.erase(itCandidate);
             TPathElement::TPtr path = Self->PathsById.at(pathId);
-            if (path->DbRefCount == 0 && path->Dropped()) {
+            if (path->DbRefCount == 0 && path->AllChildrenCount > 0) {
+                // fail fast: a restart recomputes the counters and heals the drift
+                Y_FAIL_S("TTxCleanDroppedPaths: dropped path with children, DbRefCount is miscounted"
+                    << ", PathId# " << pathId
+                    << ", AllChildrenCount# " << path->AllChildrenCount
+                    << ", at schemeshard: " << Self->TabletID());
+            } else if (path->DbRefCount == 0 && path->Dropped()) {
                 YDB_LOG_DEBUG_CTX(ctx, "TTxCleanDroppedPaths: PersistRemovePath",
                     {"pathId", pathId},
                     {"schemeshard", Self->TabletID()});

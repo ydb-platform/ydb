@@ -2,6 +2,7 @@ LIBRARY()
 
 SRCS(
     yql_dq_control.cpp
+    yql_dq_control.h
 )
 
 PEERDIR(

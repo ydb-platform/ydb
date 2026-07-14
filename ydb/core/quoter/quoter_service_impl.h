@@ -72,7 +72,7 @@ struct TRequest {
 
     TInstant StartTime;
     EResourceOperator Operator = EResourceOperator::Unknown;
-    TInstant Deadline = TInstant::Max();
+    TDuration Deadline = TDuration::Max();
     TResourceLeafId ResourceLeaf;
 
     TRequestId PrevDeadlineRequest;
@@ -317,6 +317,9 @@ class TQuoterService : public TActorBootstrapped<TQuoterService> {
     void FailRequest(TRequest &request, TRequestId reqIdx);
     void AllowRequest(TRequest &request, TRequestId reqIdx);
     void DeadlineRequest(TRequest &request, TRequestId reqIdx);
+
+    bool ResourceInResolvingState(TRequestId reqIdx);
+    void ScheduleRequestDeadline(TRequestId reqIdx, TInstant deadline);
 
     EInitLeafStatus InitSystemLeaf(const TEvQuota::TResourceLeaf &leaf, TRequest &request, TRequestId reqIdx);
     EInitLeafStatus InitResourceLeaf(const TEvQuota::TResourceLeaf &leaf, TRequest &request, TRequestId reqIdx);

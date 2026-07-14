@@ -776,7 +776,7 @@ void TQuoterService::InitialRequestProcessing(TEvQuota::TEvRequest::TPtr &ev, co
     TRequest &request = ReqState.Get(reqIdx);
 
     request.Operator = msg->Operator;
-    request.Deadline = TInstant::Max();
+    request.Deadline = TDuration::Max();
     Y_ABORT_UNLESS(request.Operator == EResourceOperator::And); // todo: support other modes
 
     Y_ABORT_UNLESS(msg->Reqs.size() >= 1);
@@ -811,28 +811,45 @@ void TQuoterService::InitialRequestProcessing(TEvQuota::TEvRequest::TPtr &ev, co
     }
 
     if (msg->Deadline != TDuration::Max()) {
-        const TDuration delay = Min(TDuration::Days(1), msg->Deadline);
-        const TInstant now = TActivationContext::Now();
-        TryTickSchedule(now);
-        request.Deadline = TimeToGranularity(now + delay);
-
-        auto deadlineIt = ScheduleDeadline.find(request.Deadline);
-        if (deadlineIt == ScheduleDeadline.end()) {
-            TInstant deadline = request.Deadline; // allocate could invalidate request&
-            deadlineIt = ScheduleDeadline.emplace(deadline, ReqState.Allocate(TActorId(0, "placeholder"), 0)).first;
+        request.Deadline = Min(TDuration::Days(1), msg->Deadline);
+        // While a new session is being resolved, postpone scheduling the deadline
+        // so the session setup time is not accounted (see Handle(TEvProxySession)).
+        if (!ResourceInResolvingState(reqIdx)) {
+            const TInstant now = TActivationContext::Now();
+            TryTickSchedule(now);
+            ScheduleRequestDeadline(reqIdx, TimeToGranularity(now + request.Deadline));
         }
-
-        const TRequestId placeholderIdx = deadlineIt->second;
-        TRequest &placeholder = ReqState.Get(placeholderIdx);
-        TRequest &reqq = ReqState.Get(reqIdx);
-
-        if (placeholder.NextDeadlineRequest != Max<ui32>()) {
-            reqq.NextDeadlineRequest = placeholder.NextDeadlineRequest;
-            ReqState.Get(placeholder.NextDeadlineRequest).PrevDeadlineRequest = reqIdx;
-        }
-        reqq.PrevDeadlineRequest = placeholderIdx;
-        placeholder.NextDeadlineRequest = reqIdx;
     }
+}
+
+bool TQuoterService::ResourceInResolvingState(TRequestId reqIdx) {
+    const TRequest &request = ReqState.Get(reqIdx);
+    for (TResourceLeafId leafIdx = request.ResourceLeaf; leafIdx != TResourceLeafId{}; ) {
+        const TResourceLeaf &leaf = ResState.Get(leafIdx);
+        if (leaf.State == EResourceState::ResolveQuoter || leaf.State == EResourceState::ResolveResource) {
+            return true;
+        }
+        leafIdx = leaf.NextResourceLeaf;
+    }
+    return false;
+}
+
+void TQuoterService::ScheduleRequestDeadline(TRequestId reqIdx, TInstant deadline) {
+    auto deadlineIt = ScheduleDeadline.find(deadline);
+    if (deadlineIt == ScheduleDeadline.end()) {
+        deadlineIt = ScheduleDeadline.emplace(deadline, ReqState.Allocate(TActorId(0, "placeholder"), 0)).first;
+    }
+
+    const TRequestId placeholderIdx = deadlineIt->second;
+    TRequest &placeholder = ReqState.Get(placeholderIdx);
+    TRequest &reqq = ReqState.Get(reqIdx);
+
+    if (placeholder.NextDeadlineRequest != Max<ui32>()) {
+        reqq.NextDeadlineRequest = placeholder.NextDeadlineRequest;
+        ReqState.Get(placeholder.NextDeadlineRequest).PrevDeadlineRequest = reqIdx;
+    }
+    reqq.PrevDeadlineRequest = placeholderIdx;
+    placeholder.NextDeadlineRequest = reqIdx;
 }
 
 void TQuoterService::Handle(NMon::TEvHttpInfo::TPtr &ev) {
@@ -1095,6 +1112,14 @@ void TQuoterService::Handle(TEvQuota::TEvProxySession::TPtr &ev) {
             }
             // initial charge would be in first session update
             resIdx = leaf.NextResourceLeaf;
+        }
+
+        // The session is set up: schedule the postponed deadline counting from
+        // now, once no other session for this request is still being resolved.
+        if (req.Deadline != TDuration::Max() && !ResourceInResolvingState(reqId)) {
+            const TInstant now = TActivationContext::Now();
+            TryTickSchedule(now);
+            ScheduleRequestDeadline(reqId, TimeToGranularity(now + req.Deadline));
         }
     }
 

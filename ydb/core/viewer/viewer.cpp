@@ -267,8 +267,6 @@ public:
                     {"/viewer/json/sse_counter", {EViewerEndpointAccessType::Viewer}},
                     {"/viewer/groups", {EViewerEndpointAccessType::Viewer}},
                     {"/viewer/json/groups", {EViewerEndpointAccessType::Viewer}},
-                    {"/viewer/render", {EViewerEndpointAccessType::Viewer}},
-                    {"/viewer/json/render", {EViewerEndpointAccessType::Viewer}},
                     {"/viewer/cluster", {EViewerEndpointAccessType::Viewer}},
                     {"/viewer/json/cluster", {EViewerEndpointAccessType::Viewer}},
                     {"/viewer/config", {EViewerEndpointAccessType::Viewer}},
@@ -289,6 +287,8 @@ public:
                     {"/viewer/json/bscontrollerinfo", {EViewerEndpointAccessType::Administration}},
 
                     // Database-level endpoints that require explicit database parameter for strict database tokens.
+                    {"/viewer/render", {EViewerEndpointAccessType::Database, true}},
+                    {"/viewer/json/render", {EViewerEndpointAccessType::Database, true}},
                     {"/viewer/topic_data", {EViewerEndpointAccessType::Database, true}},
                     {"/viewer/json/topic_data", {EViewerEndpointAccessType::Database, true}},
                     {"/viewer/feature_flags", {EViewerEndpointAccessType::Database, true}},

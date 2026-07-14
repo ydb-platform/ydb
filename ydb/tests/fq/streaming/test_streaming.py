@@ -1571,30 +1571,83 @@ FROM `{table_name}`"""
                         test String
                     )
                 )
-                WHERE foo.bar regexp "lunch" and foo.bat.`0` > 0;
+                WHERE foo.bar regexp "lunch" and foo.bat.`0` > 0
+                      {comment_for_pushdown} OR ListLength(foo.baz) > 5
+                ;
                 $in = SELECT foo.bar AS bar, foo.baz AS baz, foo.bat AS bat, foo.bet AS bet, test FROM $in;
-                $in = SELECT * FROM $in FLATTEN LIST BY baz;
+                -- $in = SELECT * FROM $in FLATTEN LIST BY baz; -- prevents pushdown
                 INSERT INTO {out} SELECT UNWRAP(Yson::SerializeJson(Yson::From(TableRow()))) FROM $in;
             END DO;'''
 
-        query_name1 = f"test_structured_json_{local_topics!s:.1}"
-        kikimr.ydb_client.query(sql.format(query_name=query_name1, inp=inp, out=out))
+        query_name1 = f"test_structured_json1_{local_topics!s:.1}"
+        query_name2 = f"test_structured_json2_{local_topics!s:.1}"
+        kikimr.ydb_client.query(sql.format(query_name=query_name1, inp=inp, out=out, comment_for_pushdown='--'))
+        kikimr.ydb_client.query(sql.format(query_name=query_name2, inp=inp, out=out, comment_for_pushdown=''))
         path1 = f"/Root/{query_name1}"
+        path2 = f"/Root/{query_name2}"
         self.wait_completed_checkpoints(kikimr, path1)
+        self.wait_completed_checkpoints(kikimr, path2)
 
         # Check that streaming.query.tasks.count metric exists for both queries
         self.wait_streaming_query_metric(kikimr, path1, "streaming.query.tasks.count", expected_value=1)
+        self.wait_streaming_query_metric(kikimr, path2, "streaming.query.tasks.count", expected_value=1)
 
+        longstr = '23456789876543212345678987654321'  # so that it won't fit SSO/embedded
         data = [
             '{"foo":{"bar":"before lunch", "bat":[0]}}',
-            '{"foo":{"bar":"lunch time", "baz":[1,2], "bat":[1,"23456789876543212345678987654321"],"bet":{"a":1,"b23456789876543212345678987654321":2}},"test":"xyz23456789876543212345678987654321"}',
+            '{"foo":{"bar":"lunch time", "baz":[1,2], "bat":[1,"{longstr}"],"bet":{"a":1,"b{longstr}c":2}},"test":"xy{longstr}z"}',
+            '{"foo":{"bar":"after lunch", "baz":[], "bat":[2,"t{longstr}a"],"bet":{"a":2,"c{longstr}d":3}},"test":"x{longstr}yz"}',
         ]
+        data = [*map(lambda x: x.replace('{longstr}', longstr), data)]
         expected_data = [
-            '{"bar":"lunch time","bat":[1,"23456789876543212345678987654321"],"baz":1,"bet":{"a":1,"b23456789876543212345678987654321":2},"test":"xyz23456789876543212345678987654321"}',
-            '{"bar":"lunch time","bat":[1,"23456789876543212345678987654321"],"baz":2,"bet":{"a":1,"b23456789876543212345678987654321":2},"test":"xyz23456789876543212345678987654321"}',
-        ]
+            '{"bar":"lunch time","bat":[1,"{longstr}"],"baz":[1,2],"bet":{"a":1,"b{longstr}c":2},"test":"xy{longstr}z"}',
+            '{"bar":"after lunch","bat":[2,"t{longstr}a"],"baz":[],"bet":{"a":2,"c{longstr}d":3},"test":"x{longstr}yz"}',
+        ] * 2
+        expected_data = [*map(lambda x: x.replace('{longstr}', longstr), expected_data)]
+
         self.write_stream(data, endpoint=endpoint)
-        assert self.read_stream(len(expected_data), topic_path=self.output_topic, endpoint=endpoint) == expected_data
+        assert sorted(self.read_stream(len(expected_data), topic_path=self.output_topic, endpoint=endpoint)) == sorted(expected_data)
+
+        def collect_plan_nodes(plan, nodeType):
+            if plan.get("Node Type", None) == nodeType:
+                yield plan
+            for sub_plan in plan.get("Plans", []):
+                yield from collect_plan_nodes(sub_plan, nodeType)
+
+        # verify pushdown in query1
+        pushdown_key = "Filter (shared reading)"
+        result_sets = kikimr.ydb_client.query(
+            f"""SELECT Plan FROM `.sys/streaming_queries` WHERE Path = "{path1}";"""
+        )
+        assert len(result_sets) == 1
+        assert len(result_sets[0].rows) == 1
+
+        sources = 0
+        for source in collect_plan_nodes(json.loads(result_sets[0].rows[0]["Plan"])["Plan"], "Source"):
+            for operator in source.get("Operators", []):
+                if operator.get("SourceType", None) == "pq":
+                    assert pushdown_key in operator
+                    filter = operator[pushdown_key]
+                    assert "`bar`" in filter
+                    assert "`bat`" in filter
+                    sources += 1
+        assert sources > 0
+
+        # verify no pushdown in query2
+        result_sets = kikimr.ydb_client.query(
+            f"""SELECT Plan FROM `.sys/streaming_queries` WHERE Path = "{path2}";"""
+        )
+        assert len(result_sets) == 1
+        assert len(result_sets[0].rows) == 1
+
+        sources = 0
+        for source in collect_plan_nodes(json.loads(result_sets[0].rows[0]["Plan"])["Plan"], "Source"):
+            for operator in source.get("Operators", []):
+                if operator.get("SourceType", None) == "pq":
+                    assert pushdown_key not in operator
+                    sources += 1
+        assert sources > 0
 
         sql = R'''DROP STREAMING QUERY `{query_name}`;'''
         kikimr.ydb_client.query(sql.format(query_name=query_name1))
+        kikimr.ydb_client.query(sql.format(query_name=query_name2))

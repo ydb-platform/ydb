@@ -12,4 +12,5 @@
 - Обзор способов переноса данных из [Microsoft SQL Server](from/mssql/index.md)
 - Обзор способов переноса данных из [ClickHouse](from/clickhouse/index.md)
 - Обзор способов переноса данных из [Oracle Database](from/oracle/index.md)
-- Импорт из [CSV](../../reference/ydb-cli/export-import/import-file.md) и [Parquet](../../reference/ydb-cli/export-import/import-file.md)
+- Импорт из [CSV](from/csv/index.md)
+- Импорт из [Parquet](from/parquet/index.md)

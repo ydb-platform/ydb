@@ -31,3 +31,13 @@ items:
   include:
     mode: link
     path: from/oracle/toc-oracle.yaml
+- name: CSV
+  href: from/csv/index.md
+  include:
+    mode: link
+    path: from/csv/toc-csv.yaml
+- name: Parquet
+  href: from/parquet/index.md
+  include:
+    mode: link
+    path: from/parquet/toc-parquet.yaml

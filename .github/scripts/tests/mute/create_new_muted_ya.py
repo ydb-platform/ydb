@@ -69,9 +69,20 @@ def _git_branch_added_to_stable_config(branch, repo_root):
             text=True,
             check=False,
         )
-    except OSError:
+    except OSError as exc:
+        logging.warning(
+            'stable branch bootstrap grace: git log failed for branch=%s: %s',
+            branch,
+            exc,
+        )
         return None
     if proc.returncode != 0:
+        logging.warning(
+            'stable branch bootstrap grace: git log exit %s for %s: %s',
+            proc.returncode,
+            _STABLE_BRANCHES_CONFIG,
+            (proc.stderr or '').strip(),
+        )
         return None
     for commit in proc.stdout.splitlines():
         commit = commit.strip()
@@ -85,6 +96,13 @@ def _git_branch_added_to_stable_config(branch, repo_root):
             check=False,
         )
         if show.returncode != 0:
+            logging.warning(
+                'stable branch bootstrap grace: git show %s:%s failed with exit %s: %s',
+                commit,
+                _STABLE_BRANCHES_CONFIG,
+                show.returncode,
+                (show.stderr or '').strip(),
+            )
             continue
         try:
             branches = json.loads(show.stdout)
@@ -101,6 +119,12 @@ def _git_branch_added_to_stable_config(branch, repo_root):
             check=False,
         )
         if dproc.returncode != 0:
+            logging.warning(
+                'stable branch bootstrap grace: git log -1 date for commit %s failed with exit %s: %s',
+                commit,
+                dproc.returncode,
+                (dproc.stderr or '').strip(),
+            )
             continue
         raw = dproc.stdout.strip()
         if raw.endswith('Z'):
@@ -108,6 +132,11 @@ def _git_branch_added_to_stable_config(branch, repo_root):
         try:
             return datetime.datetime.fromisoformat(raw).astimezone(datetime.timezone.utc).date()
         except ValueError:
+            logging.warning(
+                'stable branch bootstrap grace: invalid author date for commit %s: %r',
+                commit,
+                raw,
+            )
             continue
     return None
 
@@ -123,7 +152,12 @@ def _apply_stable_branch_bootstrap_grace(branch, inherited_muted_ya_path, all_mu
     try:
         with open(inherited_muted_ya_path, encoding='utf-8') as fp:
             inherited = {line.strip() for line in fp if line.strip()}
-    except OSError:
+    except OSError as exc:
+        logging.warning(
+            'stable branch bootstrap grace: cannot read inherited mute file %s: %s',
+            inherited_muted_ya_path,
+            exc,
+        )
         return all_muted_ya, to_delete
     if not inherited:
         return all_muted_ya, to_delete

@@ -728,7 +728,7 @@ void AssertPartitionsOnSameTablet(
     const TString& topicShortName,
     const TVector<ui32>& partitionIds)
 {
-    Y_ABORT_UNLESS(!partitionIds.empty());
+    UNIT_ASSERT(!partitionIds.empty());
 
     const auto response = server.AnnoyingClient->Ls(MakeLegacyStreamWriteTopicPath(topicShortName));
     UNIT_ASSERT(response);
@@ -739,6 +739,7 @@ void AssertPartitionsOnSameTablet(
         tabletByPartition[partition.GetPartitionId()] = partition.GetTabletId();
     }
 
+    UNIT_ASSERT(tabletByPartition.contains(partitionIds.front()));
     const ui64 expectedTabletId = tabletByPartition.at(partitionIds.front());
     for (const ui32 partitionId : partitionIds) {
         UNIT_ASSERT(tabletByPartition.contains(partitionId));

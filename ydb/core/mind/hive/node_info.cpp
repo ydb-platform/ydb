@@ -81,7 +81,7 @@ bool TNodeInfo::OnTabletChangeVolatileState(TTabletInfo* tablet, TTabletInfo::EV
             }
         } else {
             if (oldState != newState) {
-                YDB_LOG_WARN("TNodeInfo::OnTabletChangeVolatileState failed to remove tablet from draining state set",
+                YDB_LOG_WARN("TNodeInfo::OnTabletChangeVolatileState failed to remove tablet",
                     {"logPrefix", GetLogPrefix()},
                     {"nodeId", Id},
                     {"tablet", tablet->ToString()},
@@ -105,7 +105,7 @@ bool TNodeInfo::OnTabletChangeVolatileState(TTabletInfo* tablet, TTabletInfo::EV
                 LastScheduledTablet = {.TabletId = tablet->GetFullTabletId(), .UsageBefore = NodeTotalUsage};
             }
         } else {
-            YDB_LOG_WARN("TNodeInfo::OnTabletChangeVolatileState failed to insert tablet into draining state set",
+            YDB_LOG_WARN("TNodeInfo::OnTabletChangeVolatileState failed to insert tablet",
                 {"logPrefix", GetLogPrefix()},
                 {"nodeId", Id},
                 {"tablet", tablet->ToString()},

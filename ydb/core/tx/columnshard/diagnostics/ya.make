@@ -18,6 +18,7 @@ PEERDIR(
 RESOURCE(
     scan-trace-viz.js scan-trace-viz.js
     viz-global.js viz-global.js
+    plotly-2.35.2.min.js plotly-2.35.2.min.js
 )
 
 END()

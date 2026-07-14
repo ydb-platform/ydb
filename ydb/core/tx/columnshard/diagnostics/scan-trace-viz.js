@@ -15,6 +15,22 @@
         ScanFinished: {color: 'darkgreen', symbol: 'star', size: 14, y: 5},
     };
 
+    function escapeHtml(value) {
+        return String(value).replace(/[&<>"']/g, (c) => ({
+            '&': '&amp;',
+            '<': '&lt;',
+            '>': '&gt;',
+            '"': '&#34;',
+            "'": '&#39;',
+        })[c]);
+    }
+
+    function formatErrorHtml(prefix, message, traceUrl) {
+        const safeMessage = escapeHtml(message);
+        const safeTraceUrl = escapeHtml(traceUrl);
+        return `<p>${prefix}: ${safeMessage}</p><p><a href="${safeTraceUrl}">Open raw trace log</a></p>`;
+    }
+
     function parseLog(text) {
         const allEvents = [];
         for (const line of text.split('\n')) {
@@ -142,7 +158,7 @@
                 `<b>Cumulative Bytes Read</b><br>` +
                 `time: ${ev.t.toFixed(3)} ms<br>` +
                 `total read: ${(runningTotal / 1e6).toFixed(1)} MB<br>` +
-                `source ${ev.sourceId} finished<br>` +
+                `source ${escapeHtml(ev.sourceId)} finished<br>` +
                 `this source read: ${(ev.readBytes / 1e6).toFixed(1)} MB`
             );
         }
@@ -169,7 +185,7 @@
                 `<b>Active Sources</b><br>` +
                 `time: ${ev.t.toFixed(3)} ms<br>` +
                 `count: ${count}<br>` +
-                `source: ${ev.sourceId}<br>` +
+                `source: ${escapeHtml(ev.sourceId)}<br>` +
                 `blobBytes: ${(ev.blobBytes / 1e6).toFixed(1)} MB`
             );
         }
@@ -236,17 +252,19 @@
     }
 
     function formatHoverParam(key, value) {
+        const safeKey = escapeHtml(key);
+        const safeValue = escapeHtml(value);
         const num = parseFloat(value);
         if (!Number.isNaN(num)) {
             if (num > 1e6) {
-                return `${key}: ${(num / 1e6).toFixed(1)} M`;
+                return `${safeKey}: ${(num / 1e6).toFixed(1)} M`;
             }
             if (num > 1e3) {
-                return `${key}: ${(num / 1e3).toFixed(1)} K`;
+                return `${safeKey}: ${(num / 1e3).toFixed(1)} K`;
             }
-            return `${key}: ${value}`;
+            return `${safeKey}: ${safeValue}`;
         }
-        return `${key}: ${value}`;
+        return `${safeKey}: ${safeValue}`;
     }
 
     function addPlaceholderTrace(traces, xaxis, yaxis) {
@@ -362,13 +380,13 @@
             const hoverSendRows = sendResults.map((sr) =>
                 `<b>SendResult</b><br>` +
                 `time: ${sr.t.toFixed(3)} ms<br>` +
-                `sourceId: ${sr.sourceId}<br>` +
+                `sourceId: ${escapeHtml(sr.sourceId)}<br>` +
                 `rows: ${sr.rows}<br>` +
-                `bytes: ${sr.bytes}<br>` +
+                `bytes: ${escapeHtml(sr.bytes)}<br>` +
                 `cpuTimeMs: ${sr.cpuTimeMs.toFixed(1)}<br>` +
                 `waitTimeMs: ${sr.waitTimeMs.toFixed(1)}<br>` +
                 `elapsedMs: ${sr.elapsedMs.toFixed(3)}<br>` +
-                `finished: ${sr.finished}`
+                `finished: ${escapeHtml(sr.finished)}`
             );
 
             const stemX = [];
@@ -418,7 +436,7 @@
                 continue;
             }
             const hoverTexts = evs.map((e) => {
-                const parts = [`<b>${e.name}</b>`, `time: ${e.t.toFixed(3)} ms`];
+                const parts = [`<b>${escapeHtml(e.name)}</b>`, `time: ${e.t.toFixed(3)} ms`];
                 for (const [k, v] of Object.entries(e.params)) {
                     if (k === 'pathId' || k === 'tabletId' || k === 'txId' || k === 'scanId') {
                         continue;
@@ -457,7 +475,7 @@
                 line: {color: `rgba(100,100,${b},0.25)`, width: 1},
                 showlegend: false,
                 hovertext: [
-                    `<b>Source ${si.sourceId}</b><br>` +
+                    `<b>Source ${escapeHtml(si.sourceId)}</b><br>` +
                     `duration: ${duration.toFixed(1)} ms<br>` +
                     `blobBytes: ${blobMb.toFixed(1)} MB<br>` +
                     `rawBytes: ${rawMb.toFixed(1)} MB<br>` +
@@ -514,8 +532,7 @@
             return true;
         } catch (plotError) {
             const message = plotError && plotError.message ? plotError.message : String(plotError);
-            container.innerHTML =
-                `<p>Failed to render chart: ${message}</p><p><a href="${traceUrl}">Open raw trace log</a></p>`;
+            container.innerHTML = formatErrorHtml('Failed to render chart', message, traceUrl);
             return false;
         }
     }
@@ -589,8 +606,7 @@
             })
             .catch((error) => {
                 const message = error && error.message ? error.message : String(error);
-                container.innerHTML =
-                    `<p>Failed to load trace: ${message}</p><p><a href="${traceUrl}">Open raw trace log</a></p>`;
+                container.innerHTML = formatErrorHtml('Failed to load trace', message, traceUrl);
             });
     }
 

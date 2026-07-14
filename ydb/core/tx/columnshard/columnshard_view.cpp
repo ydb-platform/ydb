@@ -51,6 +51,31 @@ inline TString TEscapeHtml(const TString& in) {
     return out;
 }
 
+TString EscapeJsString(const TString& in) {
+    TString out;
+    out.reserve(in.size());
+    for (char c : in) {
+        switch (c) {
+            case '\\':
+                out += "\\\\";
+                break;
+            case '\'':
+                out += "\\'";
+                break;
+            case '\n':
+                out += "\\n";
+                break;
+            case '\r':
+                out += "\\r";
+                break;
+            default:
+                out += c;
+                break;
+        }
+    }
+    return out;
+}
+
 TString RenderLwTraceShardLogUrl(const TString& provider, const TString& probe, ui64 tabletId) {
     const TString traceId = TStringBuilder() << "." << provider << "." << probe << ".alsrt100000";
     return TStringBuilder() << "../trace?mode=log&id=" << traceId << "&f=tabletId=" << tabletId;
@@ -74,12 +99,12 @@ TString RenderScanTracesPage(ui64 tabletId, const TString& tabletIdCgi) {
     const TString traceUrl = RenderLwTraceShardLogUrl("YDB_CS_SCAN", "StartScan", tabletId);
     TStringStream html;
     html << "<h3>Traces for all scans on shard</h3>";
-    html << "<p>Trace source: <a href=\"" << traceUrl << "\">" << traceUrl << "</a></p>";
-    html << "<p><a href=\"app?TabletID=" << tabletIdCgi << "\">Back</a></p>";
-    html << "<script src=\"https://cdn.plot.ly/plotly-2.35.2.min.js\"></script>";
+    html << "<p>Trace source: <a href=\"" << TEscapeHtml(traceUrl) << "\">" << TEscapeHtml(traceUrl) << "</a></p>";
+    html << "<p><a href=\"app?TabletID=" << TEscapeHtml(tabletIdCgi) << "\">Back</a></p>";
+    html << R"(<script language="javascript" type="text/javascript" src="../columnshard/plotly-2.35.2.min.js"></script>)";
     html << R"(<script language="javascript" type="text/javascript" src="../columnshard/scan-trace-viz.js"></script>)";
     html << "<div id=\"scan-trace-viz\" style=\"width:100%;\"></div>";
-    html << "<script>renderScanTraceVisualization('" << traceUrl << "', 'scan-trace-viz');</script>";
+    html << "<script>renderScanTraceVisualization('" << EscapeJsString(traceUrl) << "', 'scan-trace-viz');</script>";
     return html.Str();
 }
 
@@ -199,7 +224,7 @@ TString TTxMonitoring::RenderMainPage() {
     html << "<h3>" << RenderLwTraceShardLinks("scan_traces", "YDB_CS_SCAN", "StartScan", Self->TabletID(), cgi.Get("TabletID"),
                           "Traces for all scans on shard")
          << "</h3>";
-    html << "<h3><a href=\"" << RenderLwTraceShardLogUrl("YDB_CS_DATA_SOURCE", "StartSourceProcessing", Self->TabletID())
+    html << "<h3><a href=\"" << TEscapeHtml(RenderLwTraceShardLogUrl("YDB_CS_DATA_SOURCE", "StartSourceProcessing", Self->TabletID()))
          << "\"> Traces for all portions on shard </a></h3>";
 
     html << "<h3>Tiering Errors</h3>";

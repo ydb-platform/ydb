@@ -1344,8 +1344,7 @@ Y_UNIT_TEST_SUITE(KqpReadCommittedPg) {
                 auto commitA = Kikimr->RunInThreadPool([&] { return txA->Commit().ExtractValueSync(); });
                 auto commitResult = runtime.WaitFuture(commitA);
 
-                // TODO: Must be success!!!!
-                UNIT_ASSERT_VALUES_EQUAL_C(commitResult.GetStatus(), EStatus::ABORTED, commitResult.GetIssues().ToString());
+                UNIT_ASSERT_VALUES_EQUAL_C(commitResult.GetStatus(), EStatus::SUCCESS, commitResult.GetIssues().ToString());
             }
 
             // Verify: row exists with Tx B's value (Tx A erased nothing)

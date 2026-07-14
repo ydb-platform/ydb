@@ -1194,7 +1194,6 @@ public:
 
     void UpdateShards() {
         for (const auto& shardInfo : ShardedWriteController->ExtractShardUpdates()) {
-            TxManager->AddShard(shardInfo.ShardId, IsOlap, TablePath);
             IKqpTransactionManager::TActionFlags flags = IKqpTransactionManager::EAction::WRITE;
             if (shardInfo.HasRead) {
                 flags |= IKqpTransactionManager::EAction::READ;
@@ -1203,6 +1202,7 @@ public:
             // This ensures TxManager tracks the correct per-query SpanId even when
             // FlushBuffers() flushes batches from multiple queries at once.
             const ui64 spanId = shardInfo.QuerySpanId != 0 ? shardInfo.QuerySpanId : CurrentQuerySpanId;
+            TxManager->AddShard(shardInfo.ShardId, IsOlap, TablePath);
             TxManager->AddAction(shardInfo.ShardId, flags, spanId);
         }
     }
@@ -1936,6 +1936,45 @@ private:
             return false;
         }
 
+        // Filter out absent rows based on lock result (SkipAbsent for UPDATE/DELETE ON).
+        // The lock result only contains rows that were actually locked; absent rows were skipped.
+        std::vector<TOwnedCellVec> lockedKeyStorage;
+        lockInfo.LockActor->ExtractResult(Cookie, [&](const TOwnedCellVec& row, bool /*modified*/) {
+            lockedKeyStorage.emplace_back(row);
+        });
+
+        TPrimaryKeysSet lockedKeys;
+        for (const auto& key : lockedKeyStorage) {
+            lockedKeys.insert(TConstArrayRef<TCell>(key));
+        }
+
+        auto rowsBatcher = CreateRowsBatcher(ProcessCells[0].size(), Alloc);
+        for (const auto& processCells : ProcessCells) {
+            const auto key = processCells.first(KeyColumnTypes.size());
+            if (lockedKeys.contains(key)) {
+                for (const auto& cell : processCells) {
+                    rowsBatcher->AddCell(cell);
+                }
+                rowsBatcher->AddRow();
+            } else {
+                Memory -= EstimateSize(processCells);
+            }
+        }
+
+        ProcessBatches.clear();
+        auto filteredBatch = rowsBatcher->Flush();
+        //const bool hasFilteredRows = filteredBatch->GetRowsCount() > 0;
+        //if (hasFilteredRows) {
+            ProcessBatches.push_back(std::move(filteredBatch));
+        //}
+        ProcessCells.clear();
+        KeyToIndexes.clear();
+
+        //if (!hasFilteredRows) {
+        //    State = EState::WRITING;
+        //    return true;
+        //}
+
         if (NeedLookup()) {
             return StartMainTableLookup();
         }
@@ -1962,6 +2001,8 @@ private:
 
     bool StartMainTableLock() {
         AFL_ENSURE(NeedLock());
+        AFL_ENSURE(ProcessCells.empty());
+        AFL_ENSURE(KeyToIndexes.empty());
         TPrimaryKeysSet primaryKeysSet = PrepareProcessCellsAndKeys();
         AFL_ENSURE(!ProcessCells.empty());
 
@@ -1975,6 +2016,8 @@ private:
 
     bool StartMainTableLookup() {
         AFL_ENSURE(NeedLookup());
+        AFL_ENSURE(ProcessCells.empty());
+        AFL_ENSURE(KeyToIndexes.empty());
         AFL_ENSURE(OperationType != NKikimrKqp::TKqpTableSinkSettings::MODE_INSERT);
         AFL_ENSURE(PathLookupInfo.at(PathId).KeyIndexes.empty());
 

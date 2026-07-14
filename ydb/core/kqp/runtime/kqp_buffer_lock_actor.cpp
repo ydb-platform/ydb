@@ -251,7 +251,6 @@ public:
             << ", shardId: " << shardId);
 
         Settings.TxManager->AddShard(shardId, false, Settings.TablePath);
-        Settings.TxManager->AddAction(shardId, IKqpTransactionManager::EAction::WRITE);
 
         auto& shardState = ShardToState[shardId];
         const bool needToCreatePipe = !shardState.HasPipe;

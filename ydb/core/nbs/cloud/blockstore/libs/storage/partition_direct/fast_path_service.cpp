@@ -40,6 +40,7 @@ namespace {
 void DumpToFile(
     const TString& diskId,
     size_t index,
+    const TString& config,
     TMap<size_t, TDBGDumpResponse> debugDumps)
 {
     TVector<TDBGDumpResponse::TVChunkDump> dumps;
@@ -63,6 +64,9 @@ void DumpToFile(
 
     auto path = TStringBuilder() << dirPath << diskId << "." << index;
     TFile file(path, EOpenModeFlag::CreateAlways);
+
+    file.Write(config.data(), config.size());
+    file.Write("\n", 1);
 
     for (const auto& [dbgIndex, dump]: debugDumps) {
         file.Write(dump.Dump.data(), dump.Dump.size());
@@ -371,6 +375,13 @@ void TFastPathService::UpdateVChunkConfig(const TVChunkConfig& cfg)
     ActorSystem->Send(PartitionActorId, event.release());
 }
 
+void TFastPathService::RequestAddHost(size_t directBlockGroupId)
+{
+    auto event = std::make_unique<TEvPartitionDirectPrivate::TEvAddHostToDBG>(
+        directBlockGroupId);
+    ActorSystem->Send(PartitionActorId, event.release());
+}
+
 ui64 TFastPathService::GenerateLsn()
 {
     const ui64 lsn = ++SequenceGenerator;
@@ -387,6 +398,32 @@ TFastPathServiceInfo TFastPathService::GetMonInfo() const
         .TotalVChunks = Regions.size() * (RegionSize / vchunkSize),
         .DbgCount = DirectBlockGroups.size(),
     };
+}
+
+NThreading::TFuture<TVector<TDbgSnapshot>> TFastPathService::GatherMonSnapshots(
+    std::optional<size_t> dbgIndex) const
+{
+    TVector<NThreading::TFuture<TDbgSnapshot>> futures;
+    if (dbgIndex) {
+        if (*dbgIndex < DirectBlockGroups.size()) {
+            futures.push_back(DirectBlockGroups[*dbgIndex]->BuildMonSnapshot());
+        }
+    } else {
+        for (const auto& dbg: DirectBlockGroups) {
+            futures.push_back(dbg->BuildMonSnapshot());
+        }
+    }
+
+    return NThreading::WaitAll(futures).Apply(
+        [futures](const auto&)
+        {
+            TVector<TDbgSnapshot> snapshots;
+            snapshots.reserve(futures.size());
+            for (const auto& future: futures) {
+                snapshots.push_back(future.GetValue());
+            }
+            return snapshots;
+        });
 }
 
 void TFastPathService::MaybeTriggerPBufferCleanup(ui64 lsn)
@@ -446,7 +483,9 @@ void TFastPathService::FinishPBufferCleanup()
 
     CleanupGather.Active.store(false);
 
-    if (!globalMin) {
+    if (!globalMin || *globalMin == 0) {
+        // 0 is the blocking bound: some vchunk has not finished restoring its
+        // dirty map, so its records are not accounted for yet. Skip the tick.
         return;
     }
 
@@ -501,7 +540,11 @@ void TFastPathService::OnDebugDump(size_t dbgIndex, TDBGDumpResponse dump)
     }
 
     try {
-        DumpToFile(DiskId, DumpCount, std::move(DebugDumps));
+        DumpToFile(
+            DiskId,
+            DumpCount,
+            StorageConfig->Dump(),
+            std::move(DebugDumps));
     } catch (const std::exception& e) {
         LOG_ERROR(
             *ActorSystem,

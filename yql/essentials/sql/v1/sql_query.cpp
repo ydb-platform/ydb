@@ -28,8 +28,6 @@
 
 namespace NSQLTranslationV1 {
 
-using NALPDefaultAntlr4::SQLv1Antlr4Lexer;
-
 using namespace NSQLv1Generated;
 
 void FillTargetList(TTranslation& ctx, const TRule_set_target_list& node, TVector<TString>& targetList) {
@@ -2370,8 +2368,8 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
 
             TString service = Ctx_.Scoped->CurrService;
             TDeferredAtom cluster = Ctx_.Scoped->CurrCluster;
-            if (rule.HasBlock3()) {
-                if (!ClusterExpr(rule.GetBlock3().GetRule_cluster_expr2(), /*allowWildcard=*/false, service, cluster)) {
+            if (rule.HasBlock5()) {
+                if (!ClusterExpr(rule.GetBlock5().GetRule_cluster_expr2(), /*allowWildcard=*/false, service, cluster)) {
                     return false;
                 }
             }
@@ -2382,8 +2380,8 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             TNodePtr clusterNode = Ctx_.Scoped->WrapCluster(cluster, Ctx_);
 
             TTableHints hints;
-            if (rule.HasBlock4()) {
-                auto tmp = TableHintsImpl(rule.GetBlock4().GetRule_table_hints1(), service, "");
+            if (rule.HasBlock6()) {
+                auto tmp = TableHintsImpl(rule.GetBlock6().GetRule_table_hints1(), service, "");
                 if (!tmp) {
                     return false;
                 }
@@ -2392,7 +2390,7 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
 
             TString varName;
             TPosition intoPos = Ctx_.Pos();
-            if (!NamedNodeImpl(rule.GetRule_bind_parameter6(), varName, *this)) {
+            if (!NamedNodeImpl(rule.GetRule_bind_parameter4(), varName, *this)) {
                 return false;
             }
 
@@ -2565,7 +2563,9 @@ bool TSqlQuery::AlterTableAction(const TRule_alter_table_action& node, TAlterTab
         case TRule_alter_table_action::kAltAlterTableAction10: {
             // DROP INDEX
             const auto& dropIndex = node.GetAlt_alter_table_action10().GetRule_alter_table_drop_index1();
-            AlterTableDropIndex(dropIndex, params);
+            if (!AlterTableDropIndex(dropIndex, params)) {
+                return false;
+            }
             break;
         }
         case TRule_alter_table_action::kAltAlterTableAction11: {
@@ -2690,6 +2690,22 @@ bool TSqlQuery::AlterTableAction(const TRule_alter_table_action& node, TAlterTab
                 return false;
             }
 
+            break;
+        }
+        case TRule_alter_table_action::kAltAlterTableAction24: {
+            // ADD STATISTICS
+            const auto& addStatistics = node.GetAlt_alter_table_action24().GetRule_alter_table_add_statistics1();
+            if (!AlterTableAddStatistics(addStatistics, params)) {
+                return false;
+            }
+            break;
+        }
+        case TRule_alter_table_action::kAltAlterTableAction25: {
+            // DROP STATISTICS
+            const auto& dropStatistics = node.GetAlt_alter_table_action25().GetRule_alter_table_drop_statistics1();
+            if (!AlterTableDropStatistics(dropStatistics, params)) {
+                return false;
+            }
             break;
         }
         case TRule_alter_table_action::ALT_NOT_SET:
@@ -3025,8 +3041,18 @@ bool TSqlQuery::AlterTableAddIndex(const TRule_alter_table_add_index& node, TAlt
     return CreateTableIndex(node.GetRule_table_index2(), params.AddIndexes);
 }
 
-void TSqlQuery::AlterTableDropIndex(const TRule_alter_table_drop_index& node, TAlterTableParameters& params) {
+bool TSqlQuery::AlterTableDropIndex(const TRule_alter_table_drop_index& node, TAlterTableParameters& params) {
     params.DropIndexes.emplace_back(IdEx(node.GetRule_an_id3(), *this));
+    return !Ctx_.HasPendingErrors;
+}
+
+bool TSqlQuery::AlterTableAddStatistics(const TRule_alter_table_add_statistics& node, TAlterTableParameters& params) {
+    return CreateTableStatistics(node.GetRule_table_statistics2(), params.AddStatistics);
+}
+
+bool TSqlQuery::AlterTableDropStatistics(const TRule_alter_table_drop_statistics& node, TAlterTableParameters& params) {
+    params.DropStatistics.emplace_back(IdEx(node.GetRule_an_id3(), *this));
+    return !Ctx_.HasPendingErrors;
 }
 
 void TSqlQuery::AlterTableRenameTo(const TRule_alter_table_rename_to& node, TAlterTableParameters& params) {

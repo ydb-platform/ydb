@@ -1,0 +1,159 @@
+#include "ic_storage_transport_test_adapter.h"
+
+#include <ydb/core/nbs/cloud/blockstore/libs/common/constants.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/storage_transport/ic_storage_transport_actor.h>
+
+#include <ydb/core/base/blobstorage.h>
+
+#include <ydb/library/actors/core/interconnect.h>
+
+namespace NYdb::NBS::NBlockStore::NStorage::NTransport::NTestLib {
+
+using namespace NActors;
+using namespace NKikimr;
+
+////////////////////////////////////////////////////////////////////////////////
+
+TICStorageTransportTestAdapter::TICStorageTransportTestAdapter(
+    TTestActorRuntime* runtime)
+    : TICStorageTransportTestAdapter(
+          runtime,
+          // Register the real transport actor inside the runtime and address
+          // it directly from the TICStorageTransport base.
+          runtime->Register(
+              std::make_unique<TICStorageTransportActor>("disk", 0).release(),
+              0))
+{}
+
+TICStorageTransportTestAdapter::TICStorageTransportTestAdapter(
+    TTestActorRuntime* runtime,
+    TActorId transportActorId)
+    : TICStorageTransport(runtime->GetActorSystem(0), transportActorId)
+    , Runtime(runtime)
+    , NodeId(runtime->GetNodeId(0))
+    , EdgeActor(runtime->AllocateEdgeActor(0))
+    , TransportActorId(transportActorId)
+{
+    DDiskIds.reserve(DirectBlockGroupHostCount);
+    PBufferIds.reserve(DirectBlockGroupHostCount);
+    for (ui32 i = 0; i < DirectBlockGroupHostCount; ++i) {
+        DDiskIds.emplace_back(NodeId, 1, i);
+        PBufferIds.emplace_back(NodeId, 2, i);
+    }
+
+    for (const auto& ddiskId: DDiskIds) {
+        RegisterStub(EConnectionType::DDisk, ddiskId);
+    }
+    for (const auto& pbufferId: PBufferIds) {
+        RegisterStub(EConnectionType::PBuffer, pbufferId);
+    }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+TICStorageTransportTestAdapter::TKey TICStorageTransportTestAdapter::MakeKey(
+    EConnectionType type,
+    const TDDiskId& ddiskId)
+{
+    return TKey{
+        .ConnectionType = static_cast<int>(type),
+        .PDiskId = ddiskId.PDiskId,
+        .DDiskSlotId = ddiskId.DDiskSlotId};
+}
+
+TDDiskStubStatePtr TICStorageTransportTestAdapter::FindState(
+    EConnectionType type,
+    const TDDiskId& ddiskId) const
+{
+    const auto* state = Stubs.FindPtr(MakeKey(type, ddiskId));
+    Y_ABORT_UNLESS(state, "no stub registered for the requested connection");
+    return *state;
+}
+
+void TICStorageTransportTestAdapter::RegisterStub(
+    EConnectionType type,
+    const TDDiskId& ddiskId)
+{
+    auto state = MakeIntrusive<TDDiskStubState>();
+    auto actorId = Runtime->Register(
+        std::make_unique<TDDiskStubActor>(state).release(),
+        0);
+
+    TActorId serviceId;
+    switch (type) {
+        case EConnectionType::DDisk:
+            serviceId = MakeBlobStorageDDiskId(
+                ddiskId.NodeId,
+                ddiskId.PDiskId,
+                ddiskId.DDiskSlotId);
+            break;
+        case EConnectionType::PBuffer:
+            serviceId = MakeBlobStoragePersistentBufferId(
+                ddiskId.NodeId,
+                ddiskId.PDiskId,
+                ddiskId.DDiskSlotId);
+            break;
+    }
+
+    Runtime->RegisterService(serviceId, actorId, 0);
+    Stubs[MakeKey(type, ddiskId)] = std::move(state);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+void TICStorageTransportTestAdapter::SetPendingConnect(
+    EConnectionType type,
+    const TDDiskId& ddiskId)
+{
+    auto state = FindState(type, ddiskId);
+    auto guard = Guard(state->Lock);
+    state->PendingConnect = true;
+}
+
+void TICStorageTransportTestAdapter::SetPendingReadFromDDisk(
+    EConnectionType type,
+    const TDDiskId& ddiskId)
+{
+    auto state = FindState(type, ddiskId);
+    auto guard = Guard(state->Lock);
+    state->PendingRead = true;
+}
+
+void TICStorageTransportTestAdapter::SetPendingWriteToDDisk(
+    EConnectionType type,
+    const TDDiskId& ddiskId)
+{
+    auto state = FindState(type, ddiskId);
+    auto guard = Guard(state->Lock);
+    state->PendingWrite = true;
+}
+
+TVector<NKikimr::NDDisk::TQueryCredentials>
+TICStorageTransportTestAdapter::GetConnectCredentials(
+    EConnectionType type,
+    const TDDiskId& ddiskId) const
+{
+    auto state = FindState(type, ddiskId);
+    auto guard = Guard(state->Lock);
+    return state->ConnectCredentials;
+}
+
+void TICStorageTransportTestAdapter::FireDisconnect(
+    EConnectionType type,
+    const TDDiskId& ddiskId,
+    ui32 nodeId)
+{
+    Y_UNUSED(type);
+    Y_UNUSED(ddiskId);
+
+    auto request = std::make_unique<IEventHandle>(
+        TransportActorId,
+        EdgeActor,
+        std::make_unique<TEvInterconnect::TEvNodeDisconnected>(nodeId)
+            .release());
+    Runtime->Send(request.release(), 0, true);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+}   // namespace NYdb::NBS::NBlockStore::NStorage::NTransport::NTestLib

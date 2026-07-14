@@ -61,6 +61,7 @@ struct TTransaction {
         : Tx(tx)
         , Predicate(predicate)
         , SupportivePartitionActor(tx->SupportivePartitionActor)
+        , DeferredFinalizeOp(tx->DeferredFinalizeOp)
         , CalcPredicateSpan(std::move(tx->Span))
         , CalcPredicateTimestamp(calcPredicateTimestamp)
     {
@@ -113,6 +114,8 @@ struct TTransaction {
     TSimpleSharedPtr<TEvPQ::TEvTxCalcPredicate> Tx;
     TMaybe<bool> Predicate;
     TActorId SupportivePartitionActor;
+    NKikimrPQ::TPartitionOperation::TWriteOp::TDeferredPublicationApi::EOp DeferredFinalizeOp =
+        NKikimrPQ::TPartitionOperation::TWriteOp::TDeferredPublicationApi::Unspecified;
 
 
     TSimpleSharedPtr<TEvPQ::TEvChangePartitionConfig> ChangeConfig;
@@ -267,6 +270,7 @@ private:
     void Handle(TEvPQ::TEvSubDomainStatus::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPQ::TEvUpdateReadMetrics::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPQ::TEvConsumerBatchProcessorMetrics::TPtr& ev, const TActorContext& ctx);
+    void Handle(NBatching::TEvProcessBatchKeysResult::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPQ::TEvRunCompaction::TPtr& ev);
     void Handle(TEvPQ::TEvForceCompaction::TPtr& ev);
     void Handle(TEvPQ::TEvExclusiveLockAcquired::TPtr& ev);
@@ -635,6 +639,7 @@ private:
             HFuncTraced(TEvPQ::TBroadcastPartitionError, Handle);
             HFuncTraced(TEvPQ::TEvUpdateReadMetrics, Handle);
             HFuncTraced(TEvPQ::TEvConsumerBatchProcessorMetrics, Handle);
+            HFuncTraced(NBatching::TEvProcessBatchKeysResult, Handle);
             HFuncTraced(TEvPQ::TEvGetPartitionClientInfo, Handle);
             HFuncTraced(TEvPQ::TEvTxCalcPredicate, HandleOnInit);
             HFuncTraced(TEvPQ::TEvProposePartitionConfig, HandleOnInit);
@@ -714,6 +719,7 @@ private:
             HFuncTraced(TEvPQ::TEvSplitMessageGroup, HandleOnIdle);
             HFuncTraced(TEvPQ::TEvUpdateReadMetrics, Handle);
             HFuncTraced(TEvPQ::TEvConsumerBatchProcessorMetrics, Handle);
+            HFuncTraced(NBatching::TEvProcessBatchKeysResult, Handle);
             HFuncTraced(TEvPQ::TEvPartitionScaleStatusChanged, Handle);
             HFuncTraced(TEvPersQueue::TEvProposeTransaction, Handle);
             HFuncTraced(TEvPQ::TEvTxCalcPredicate, Handle);

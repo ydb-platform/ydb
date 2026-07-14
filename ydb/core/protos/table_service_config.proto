@@ -39,7 +39,7 @@ message TTableServiceConfig {
 
         optional uint64 MaxTotalChannelBuffersSize = 11 [default = 2147483648]; // 2 GB
         optional uint64 MinChannelBufferSize = 12 [default = 2048];             // 2 KB
-        optional uint32 MaxChannelCountPerNode = 31 [default = 7300];
+        optional uint32 MaxChannelCountPerNode = 31 [default = 9000];
 
         reserved 13;
         reserved 14;
@@ -218,6 +218,10 @@ message TTableServiceConfig {
         optional uint64 MaxTotalBytesQuotaStreamLookup = 10 [default = 2684354560]; // 5_MB * 512
         optional uint64 MaxInFlightReadsStreamLookup = 11 [default = 50];
         optional uint64 MaxBytesPerFetchStreamLookup = 12 [default = 268435456]; // 256_MB
+
+        // Per-actor memory controls for pessimistic locks issued by StreamLookupActor
+        // (LOCK_AND_LOOKUP strategy under READ_COMMITTED_RW isolation).
+        optional uint64 MaxInFlightLocksStreamLookup = 13 [default = 50];
     }
 
     message TIteratorReadQuotaSettings {
@@ -547,7 +551,7 @@ message TTableServiceConfig {
     optional bool EnableStrictSerializableIsolation = 136 [default = false, (InvalidateCompileCache) = true];
 
     // Remove KqpSequencer from query plan for tables with DEFAULT columns during write operations.
-    optional bool EnableCompileTimeDefaults = 137 [default = false, (InvalidateCompileCache) = true];
+    optional bool EnableCompileTimeDefaults = 137 [default = true, (InvalidateCompileCache) = true];
 
     // Cluster default for automatic secondary-index selection in index lookup joins.
     // Overridable per session via PRAGMA ydb.EnableAutoIndexSelectionForIndexLookupJoin.

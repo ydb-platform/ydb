@@ -13,8 +13,28 @@
 #include <cfloat>
 #include <utility>
 
+#include <util/generic/guid.h>
+
 namespace NKikimr {
 namespace NMiniKQL {
+
+namespace {
+
+TGUID ParseUuid(TStringBuf str) {
+    TGUID guid;
+    Y_ABORT_UNLESS(GetGuid(str, guid), "invalid uuid literal");
+    return guid;
+}
+
+const TGUID UuidLo = ParseUuid("aaaaaaaa-aaaaaaaa-aaaaaaaa-aaaaaaaa");
+const TGUID UuidMid = ParseUuid("bbbbbbbb-bbbbbbbb-bbbbbbbb-bbbbbbbb");
+const TGUID UuidHi = ParseUuid("cccccccc-cccccccc-cccccccc-cccccccc");
+
+const NTest::TTestDyNumber DyNumberLo{"-123.45e3"};
+const NTest::TTestDyNumber DyNumberMid{"0"};
+const NTest::TTestDyNumber DyNumberHi{"150e2"};
+
+} // namespace
 
 Y_UNIT_TEST_SUITE(TMiniKQLCompareTest) {
 Y_UNIT_TEST_LLVM(SqlString) {
@@ -625,6 +645,118 @@ Y_UNIT_TEST_LLVM(TestAggrMinMaxFloats) {
 
     UNIT_ASSERT(!iterator.Next(item));
     UNIT_ASSERT(!iterator.Next(item));
+}
+
+Y_UNIT_TEST_LLVM(TestUuidMinMax) {
+    TSetup<LLVM> setup;
+    TProgramBuilder& pb = *setup.PgmBuilder;
+
+    const auto list = NTest::ConvertValueToLiteralNode(pb, TVector<TGUID>{UuidLo, UuidMid, UuidHi});
+    const auto pgmReturn = pb.FlatMap(list,
+                                      [&](TRuntimeNode left) {
+                                          return pb.Map(list,
+                                                        [&](TRuntimeNode right) {
+                                                            return pb.NewTuple({pb.Min(left, right), pb.Max(left, right)});
+                                                        });
+                                      });
+
+    const auto graph = setup.BuildGraph(pgmReturn);
+    using TRow = std::tuple<TGUID, TGUID>;
+    AssertUnboxedValueElementEqual(graph->GetValue(), TVector<TRow>{
+                                                          TRow{UuidLo, UuidLo},
+                                                          TRow{UuidLo, UuidMid},
+                                                          TRow{UuidLo, UuidHi},
+                                                          TRow{UuidLo, UuidMid},
+                                                          TRow{UuidMid, UuidMid},
+                                                          TRow{UuidMid, UuidHi},
+                                                          TRow{UuidLo, UuidHi},
+                                                          TRow{UuidMid, UuidHi},
+                                                          TRow{UuidHi, UuidHi},
+                                                      });
+}
+
+Y_UNIT_TEST_LLVM(TestDyNumberMinMax) {
+    TSetup<LLVM> setup;
+    TProgramBuilder& pb = *setup.PgmBuilder;
+
+    const auto list = NTest::ConvertValueToLiteralNode(pb, TVector<NTest::TTestDyNumber>{DyNumberLo, DyNumberMid, DyNumberHi});
+    const auto pgmReturn = pb.FlatMap(list,
+                                      [&](TRuntimeNode left) {
+                                          return pb.Map(list,
+                                                        [&](TRuntimeNode right) {
+                                                            return pb.NewTuple({pb.Min(left, right), pb.Max(left, right)});
+                                                        });
+                                      });
+
+    const auto graph = setup.BuildGraph(pgmReturn);
+    using TRow = std::tuple<NTest::TTestDyNumber, NTest::TTestDyNumber>;
+    AssertUnboxedValueElementEqual(graph->GetValue(), TVector<TRow>{
+                                                          TRow{DyNumberLo, DyNumberLo},
+                                                          TRow{DyNumberLo, DyNumberMid},
+                                                          TRow{DyNumberLo, DyNumberHi},
+                                                          TRow{DyNumberLo, DyNumberMid},
+                                                          TRow{DyNumberMid, DyNumberMid},
+                                                          TRow{DyNumberMid, DyNumberHi},
+                                                          TRow{DyNumberLo, DyNumberHi},
+                                                          TRow{DyNumberMid, DyNumberHi},
+                                                          TRow{DyNumberHi, DyNumberHi},
+                                                      });
+}
+
+Y_UNIT_TEST_LLVM(TestAggrUuidMinMax) {
+    TSetup<LLVM> setup;
+    TProgramBuilder& pb = *setup.PgmBuilder;
+
+    const auto list = NTest::ConvertValueToLiteralNode(pb, TVector<TGUID>{UuidLo, UuidMid, UuidHi});
+    const auto pgmReturn = pb.FlatMap(list,
+                                      [&](TRuntimeNode left) {
+                                          return pb.Map(list,
+                                                        [&](TRuntimeNode right) {
+                                                            return pb.NewTuple({pb.AggrMin(left, right), pb.AggrMax(left, right)});
+                                                        });
+                                      });
+
+    const auto graph = setup.BuildGraph(pgmReturn);
+    using TRow = std::tuple<TGUID, TGUID>;
+    AssertUnboxedValueElementEqual(graph->GetValue(), TVector<TRow>{
+                                                          TRow{UuidLo, UuidLo},
+                                                          TRow{UuidLo, UuidMid},
+                                                          TRow{UuidLo, UuidHi},
+                                                          TRow{UuidLo, UuidMid},
+                                                          TRow{UuidMid, UuidMid},
+                                                          TRow{UuidMid, UuidHi},
+                                                          TRow{UuidLo, UuidHi},
+                                                          TRow{UuidMid, UuidHi},
+                                                          TRow{UuidHi, UuidHi},
+                                                      });
+}
+
+Y_UNIT_TEST_LLVM(TestAggrDyNumberMinMax) {
+    TSetup<LLVM> setup;
+    TProgramBuilder& pb = *setup.PgmBuilder;
+
+    const auto list = NTest::ConvertValueToLiteralNode(pb, TVector<NTest::TTestDyNumber>{DyNumberLo, DyNumberMid, DyNumberHi});
+    const auto pgmReturn = pb.FlatMap(list,
+                                      [&](TRuntimeNode left) {
+                                          return pb.Map(list,
+                                                        [&](TRuntimeNode right) {
+                                                            return pb.NewTuple({pb.AggrMin(left, right), pb.AggrMax(left, right)});
+                                                        });
+                                      });
+
+    const auto graph = setup.BuildGraph(pgmReturn);
+    using TRow = std::tuple<NTest::TTestDyNumber, NTest::TTestDyNumber>;
+    AssertUnboxedValueElementEqual(graph->GetValue(), TVector<TRow>{
+                                                          TRow{DyNumberLo, DyNumberLo},
+                                                          TRow{DyNumberLo, DyNumberMid},
+                                                          TRow{DyNumberLo, DyNumberHi},
+                                                          TRow{DyNumberLo, DyNumberMid},
+                                                          TRow{DyNumberMid, DyNumberMid},
+                                                          TRow{DyNumberMid, DyNumberHi},
+                                                          TRow{DyNumberLo, DyNumberHi},
+                                                          TRow{DyNumberMid, DyNumberHi},
+                                                          TRow{DyNumberHi, DyNumberHi},
+                                                      });
 }
 } // Y_UNIT_TEST_SUITE(TMiniKQLCompareTest)
 

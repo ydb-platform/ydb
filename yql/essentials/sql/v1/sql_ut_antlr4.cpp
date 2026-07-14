@@ -348,7 +348,7 @@ Y_UNIT_TEST(TopLevelWithCluster) {
     settings.LangVer = ::NYql::NFeature::Materialize.MinLangVer;
 
     auto res = SqlToYqlWithSettings(R"sql(
-        MATERIALIZE plato.Input ON plato INTO $result;
+        MATERIALIZE plato.Input INTO $result ON plato;
         SELECT * FROM $result;
     )sql", settings);
     UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
@@ -587,6 +587,39 @@ Y_UNIT_TEST(PreserveSortForTopLevelOnly2) {
     TWordCountHive elementStat = {{"Sort"}};
     auto prog = VerifyProgram(res, elementStat);
     UNIT_ASSERT_VALUES_EQUAL_C(elementStat["Sort"], 0, prog);
+}
+
+Y_UNIT_TEST(SingleHint) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = ::NYql::NFeature::Materialize.MinLangVer;
+
+    auto res = SqlToYqlWithSettings(R"sql(
+        USE plato;
+        MATERIALIZE Input INTO $result WITH hint1;
+        SELECT * FROM $result;
+    )sql", settings);
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TWordCountHive elementStat = {{"hint1"}};
+    auto prog = VerifyProgram(res, elementStat);
+    UNIT_ASSERT_VALUES_EQUAL_C(elementStat["hint1"], 1, prog);
+}
+
+Y_UNIT_TEST(MultiHints) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = ::NYql::NFeature::Materialize.MinLangVer;
+
+    auto res = SqlToYqlWithSettings(R"sql(
+        USE plato;
+        MATERIALIZE Input INTO $result WITH (hint1, hint2);
+        SELECT * FROM $result;
+    )sql", settings);
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TWordCountHive elementStat = {{"hint1"}, {"hint2"}};
+    auto prog = VerifyProgram(res, elementStat);
+    UNIT_ASSERT_VALUES_EQUAL_C(elementStat["hint1"], 1, prog);
+    UNIT_ASSERT_VALUES_EQUAL_C(elementStat["hint2"], 1, prog);
 }
 
 } // Y_UNIT_TEST_SUITE(MaterializeStatement)

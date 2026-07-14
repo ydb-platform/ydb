@@ -9,7 +9,6 @@ RECURSE(
     deprecated/persqueue_v0
     discovery
     dynamic_config
-    ext_index
     fq
     kesus
     keyvalue
@@ -17,6 +16,7 @@ RECURSE(
     local_discovery
     maintenance
     metadata
+    udf_store
     monitoring
     persqueue_cluster_discovery
     persqueue_v1

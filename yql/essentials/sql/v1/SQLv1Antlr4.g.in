@@ -450,7 +450,7 @@ combine_core:
   ON expr USING using_call_expr
 ;
 
-materialize_stmt: MATERIALIZE named_single_source (ON cluster_expr)? table_hints? INTO bind_parameter;
+materialize_stmt: MATERIALIZE named_single_source INTO bind_parameter (ON cluster_expr)? table_hints?;
 
 // ISO/IEC 9075-2:2016(E) 7.7 <row pattern recognition clause>
 row_pattern_recognition_clause: MATCH_RECOGNIZE LPAREN
@@ -745,6 +745,7 @@ create_table_entry:
   | family_entry
   | changefeed
   | an_id_schema
+  | table_statistics
 ;
 
 create_backup_collection_stmt: CREATE backup_collection create_backup_collection_entries? WITH LPAREN backup_collection_settings RPAREN;
@@ -823,6 +824,8 @@ alter_table_action:
   | alter_table_alter_column_set_default
   | alter_table_alter_column_drop_default
   | alter_table_alter_column_set_encoding
+  | alter_table_add_statistics
+  | alter_table_drop_statistics
 ;
 
 alter_external_table_stmt: ALTER EXTERNAL TABLE simple_table_ref alter_external_table_action (COMMA alter_external_table_action)*;
@@ -854,6 +857,8 @@ alter_table_set_table_setting_compat: SET LPAREN alter_table_setting_entry (COMM
 alter_table_reset_table_setting: RESET LPAREN an_id (COMMA an_id)* RPAREN;
 alter_table_add_index: ADD table_index;
 alter_table_drop_index: DROP INDEX an_id;
+alter_table_add_statistics: ADD table_statistics;
+alter_table_drop_statistics: DROP STATISTICS an_id;
 alter_table_rename_to: RENAME TO an_id_table;
 alter_table_rename_index_to: RENAME INDEX an_id TO an_id;
 alter_table_add_changefeed: ADD changefeed;
@@ -922,6 +927,13 @@ index_setting_value:
     | bool_value
     | real
 ;
+
+table_statistics: STATISTICS an_id
+    ON LPAREN an_id_schema (COMMA an_id_schema)* RPAREN
+    with_statistics_types?
+;
+
+with_statistics_types: WITH LPAREN an_id_or_type (COMMA an_id_or_type)* COMMA? RPAREN;
 
 with_compact_settings: WITH LPAREN compact_setting_entry (COMMA compact_setting_entry)* COMMA? RPAREN;
 compact_setting_entry: an_id EQUALS compact_setting_value;
@@ -1656,6 +1668,7 @@ keyword_as_compat:
   | SEQUENCE
   | SOURCE
   | START
+  | STATISTICS
   | STREAMING
   | SUBQUERY
   | SUBSET
@@ -1896,6 +1909,7 @@ keyword_compat: (
   | SEQUENCE
   | SOURCE
   | START
+  | STATISTICS
   | STREAMING
   | SUBQUERY
   | SUBSET
@@ -2286,6 +2300,7 @@ SECRET: S E C R E T;
 SEQUENCE: S E Q U E N C E;
 SOURCE: S O U R C E;
 START: S T A R T;
+STATISTICS: S T A T I S T I C S;
 STREAM: S T R E A M;
 STREAMING: S T R E A M I N G;
 STRUCT: S T R U C T;

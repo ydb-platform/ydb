@@ -2582,6 +2582,34 @@
             "uri": "https://{canondata_backend}/1942100/698d95eec1cbd4e4ada1a8da105c203a7a12bb85/resource.tar.gz#test_sql2yql.test_blocks-topg_/sql.yql"
         }
     ],
+    "test_sql2yql.test[blocks-way_struct]": [
+        {
+            "checksum": "6b66d8126261ec2053dbd50bf74d2ac3",
+            "size": 1296,
+            "uri": "https://{canondata_backend}/1942100/c38ccc50189cdaa26f2f3d8f0a953e5969a15d24/resource.tar.gz#test_sql2yql.test_blocks-way_struct_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[blocks-way_struct_optional]": [
+        {
+            "checksum": "2d736bec415c455cd068e1e43c29dc81",
+            "size": 1380,
+            "uri": "https://{canondata_backend}/1942100/c38ccc50189cdaa26f2f3d8f0a953e5969a15d24/resource.tar.gz#test_sql2yql.test_blocks-way_struct_optional_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[blocks-way_tuple]": [
+        {
+            "checksum": "699166fffce51eb2763f2445329da4e1",
+            "size": 1353,
+            "uri": "https://{canondata_backend}/212715/63ba6fed8803fdfa6e131c8a31dfe0b76423c6cf/resource.tar.gz#test_sql2yql.test_blocks-way_tuple_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[blocks-way_tuple_optional]": [
+        {
+            "checksum": "8d182adec0556e49330f668996346681",
+            "size": 1363,
+            "uri": "https://{canondata_backend}/212715/63ba6fed8803fdfa6e131c8a31dfe0b76423c6cf/resource.tar.gz#test_sql2yql.test_blocks-way_tuple_optional_/sql.yql"
+        }
+    ],
     "test_sql2yql.test[blocks-xor]": [
         {
             "checksum": "879bea5e15aa53dc4f3444f0fa17de49",
@@ -6012,6 +6040,20 @@
             "uri": "https://{canondata_backend}/1942100/698d95eec1cbd4e4ada1a8da105c203a7a12bb85/resource.tar.gz#test_sql2yql.test_linear-fail_dyn_linear_/sql.yql"
         }
     ],
+    "test_sql2yql.test[linear-fail_if_linear_different_branches]": [
+        {
+            "checksum": "0d91cbdee4f12ec76cb4677de0d47939",
+            "size": 1688,
+            "uri": "https://{canondata_backend}/1924537/4416f2f54dac42bd2192f63b6f05037627335178/resource.tar.gz#test_sql2yql.test_linear-fail_if_linear_different_branches_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[linear-fail_if_strict_linear_different_branches]": [
+        {
+            "checksum": "1c884f4ef3af802c656edcfb14768c31",
+            "size": 1694,
+            "uri": "https://{canondata_backend}/1917492/704319f702070e372c133a70dd7f64714fbd19b3/resource.tar.gz#test_sql2yql.test_linear-fail_if_strict_linear_different_branches_/sql.yql"
+        }
+    ],
     "test_sql2yql.test[linear-fail_lambda_arg]": [
         {
             "checksum": "6cbb03ff32f7d84e8098050848b9f01e",
@@ -6066,6 +6108,27 @@
             "checksum": "fe29d05b6f9f2095e09592680b8e45f9",
             "size": 1484,
             "uri": "https://{canondata_backend}/1942100/698d95eec1cbd4e4ada1a8da105c203a7a12bb85/resource.tar.gz#test_sql2yql.test_linear-good_struct_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[linear-if_linear_in_both_branches]": [
+        {
+            "checksum": "ff5ddb2ee2f9c05e0feff987b7207e51",
+            "size": 1344,
+            "uri": "https://{canondata_backend}/1924537/4416f2f54dac42bd2192f63b6f05037627335178/resource.tar.gz#test_sql2yql.test_linear-if_linear_in_both_branches_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[linear-if_linear_twice_in_both_branches]": [
+        {
+            "checksum": "b26287e2ddd2f5ce7f439e325013a50f",
+            "size": 1563,
+            "uri": "https://{canondata_backend}/1881367/650e85c09001ebdb1b71f11f2a11188332b8189a/resource.tar.gz#test_sql2yql.test_linear-if_linear_twice_in_both_branches_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[linear-if_strict_linear_in_both_branches]": [
+        {
+            "checksum": "779a30f9a43d73a408a08739b5844240",
+            "size": 1350,
+            "uri": "https://{canondata_backend}/1917492/704319f702070e372c133a70dd7f64714fbd19b3/resource.tar.gz#test_sql2yql.test_linear-if_strict_linear_in_both_branches_/sql.yql"
         }
     ],
     "test_sql2yql.test[linear-linear_destroy]": [
@@ -14388,6 +14451,26 @@
             "uri": "file://test_sql_format.test_blocks-topg_/formatted.sql"
         }
     ],
+    "test_sql_format.test[blocks-way_struct]": [
+        {
+            "uri": "file://test_sql_format.test_blocks-way_struct_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[blocks-way_struct_optional]": [
+        {
+            "uri": "file://test_sql_format.test_blocks-way_struct_optional_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[blocks-way_tuple]": [
+        {
+            "uri": "file://test_sql_format.test_blocks-way_tuple_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[blocks-way_tuple_optional]": [
+        {
+            "uri": "file://test_sql_format.test_blocks-way_tuple_optional_/formatted.sql"
+        }
+    ],
     "test_sql_format.test[blocks-xor]": [
         {
             "uri": "file://test_sql_format.test_blocks-xor_/formatted.sql"
@@ -16838,6 +16921,16 @@
             "uri": "file://test_sql_format.test_linear-fail_dyn_linear_/formatted.sql"
         }
     ],
+    "test_sql_format.test[linear-fail_if_linear_different_branches]": [
+        {
+            "uri": "file://test_sql_format.test_linear-fail_if_linear_different_branches_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[linear-fail_if_strict_linear_different_branches]": [
+        {
+            "uri": "file://test_sql_format.test_linear-fail_if_strict_linear_different_branches_/formatted.sql"
+        }
+    ],
     "test_sql_format.test[linear-fail_lambda_arg]": [
         {
             "uri": "file://test_sql_format.test_linear-fail_lambda_arg_/formatted.sql"
@@ -16876,6 +16969,21 @@
     "test_sql_format.test[linear-good_struct]": [
         {
             "uri": "file://test_sql_format.test_linear-good_struct_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[linear-if_linear_in_both_branches]": [
+        {
+            "uri": "file://test_sql_format.test_linear-if_linear_in_both_branches_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[linear-if_linear_twice_in_both_branches]": [
+        {
+            "uri": "file://test_sql_format.test_linear-if_linear_twice_in_both_branches_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[linear-if_strict_linear_in_both_branches]": [
+        {
+            "uri": "file://test_sql_format.test_linear-if_strict_linear_in_both_branches_/formatted.sql"
         }
     ],
     "test_sql_format.test[linear-linear_destroy]": [

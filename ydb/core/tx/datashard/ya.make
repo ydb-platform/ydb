@@ -83,6 +83,7 @@ SRCS(
     datashard__write.cpp
     datashard_active_transaction.cpp
     datashard_active_transaction.h
+    datashard_direct_import.cpp
     datashard_cdc_stream_common.cpp
     datashard_cdc_stream_common.h
     datashard_change_receiving.cpp
@@ -248,7 +249,7 @@ RESOURCE(
 
 PEERDIR(
     contrib/libs/zstd
-    library/cpp/containers/absl_flat_hash
+    library/cpp/containers/absl
     library/cpp/containers/stack_vector
     library/cpp/digest/md5
     library/cpp/html/pcdata
@@ -307,8 +308,10 @@ IF (OS_WINDOWS)
     )
 ELSE()
     SRCS(
+        export_parquet.cpp
         export_s3_buffer.cpp
         export_s3_uploader.cpp
+        export_ydb_dump.cpp
         import_s3.cpp
     )
 ENDIF()

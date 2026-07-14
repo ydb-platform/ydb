@@ -466,7 +466,7 @@ private:
         if (ev->Get()->Success) {
             LOG_D("Cleanup completed, tables exists: " << ev->Get()->TablesExists);
         } else {
-            LOG_C("Failed to cleanup tables, issues: " << ev->Get()->Issues.ToOneLineString());
+            LOG_D("Failed to cleanup tables, issues: " << ev->Get()->Issues.ToOneLineString());
         }
 
         TablesCreationStatus = ETablesCreationStatus::NotStarted;

@@ -469,7 +469,7 @@ Y_UNIT_TEST_SUITE(TPersQueueMirrorer) {
         }
     }
 
-    void SkipMessagesWithObsoleteTimestampImpl(TMaybe<TDuration> retentionPeriod, const ui32 dstTopicPrefillSize) {
+    void SkipMessagesWithObsoleteTimestampImpl(TMaybe<TDuration> retentionPeriod, const ui32 dstTopicPrefillSize, TExplicitType<bool> withRestart) {
         NKikimrConfig::TFeatureFlags ff;
         ff.SetEnableSkipMessagesWithObsoleteTimestamp(true);
 
@@ -637,6 +637,13 @@ Y_UNIT_TEST_SUITE(TPersQueueMirrorer) {
         }
         UNIT_ASSERT_C(committed, "mirror_consumer did not commit all skipped messages within timeout");
 
+        if (withRestart) {
+            server.KillTopicPqTablets("/Root/PQ/" + dstTopicFullName);
+            Sleep(TDuration::Seconds(1));
+        }
+
+        const TInstant allCommitedTimestamp = TInstant::Now();
+
         // Read from the destination topic; nothing must be there except the prefill messages
         auto dstReader = topicClient.CreateReadSession(
             NYdb::NTopic::TReadSessionSettings()
@@ -644,23 +651,37 @@ Y_UNIT_TEST_SUITE(TPersQueueMirrorer) {
                 .ConsumerName("reader")
         );
 
+        NYdb::NTopic::TPartitionSession::TPtr session;
         size_t messageCount = 0;
         TInstant dstDeadline = TInstant::Max();
-        while (TInstant::Now() < dstDeadline) {
-            if (!dstReader->WaitEvent().Wait(dstDeadline)) {
-                break;
-            }
+        TInstant lastStatusRequest = TInstant::Zero();
+        bool actualWriteTimeHighWatermark = false;
+        while (TInstant::Now() < dstDeadline || !actualWriteTimeHighWatermark) {
+            dstReader->WaitEvent().Wait(Min(dstDeadline, TDuration::MilliSeconds(100).ToDeadLine()));
             auto event = dstReader->GetEvent(false);
             if (!event) {
+                if (TInstant::Now() - lastStatusRequest > TDuration::Seconds(1) && session) {
+                    lastStatusRequest = TInstant::Now();
+                    session->RequestStatus();
+                }
                 continue;
             }
             if (auto* data = std::get_if<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent>(&*event)) {
                 messageCount += data->GetMessagesCount();
             } else if (auto* start = std::get_if<NYdb::NTopic::TReadSessionEvent::TStartPartitionSessionEvent>(&*event)) {
+                session = start->GetPartitionSession();
                 start->Confirm();
                 dstDeadline = TDuration::Seconds(10).ToDeadLine();
             } else if (auto* stop = std::get_if<NYdb::NTopic::TReadSessionEvent::TStopPartitionSessionEvent>(&*event)) {
+                session.Reset();
                 stop->Confirm();
+            } else if (auto* status = std::get_if<NYdb::NTopic::TReadSessionEvent::TPartitionSessionStatusEvent>(&*event)) {
+                Cerr << "Status event:"
+                    << " " << status->DebugString()
+                    << " " << LabeledOutput(allCommitedTimestamp)
+                    << " " << "diff_ms=" << (allCommitedTimestamp - status->GetWriteTimeHighWatermark()).MilliSeconds()
+                    << "\n";
+                actualWriteTimeHighWatermark = (status->GetWriteTimeHighWatermark() >= allCommitedTimestamp);
             } else if (std::get_if<NYdb::NTopic::TSessionClosedEvent>(&*event)) {
                 break;
             }
@@ -670,19 +691,35 @@ Y_UNIT_TEST_SUITE(TPersQueueMirrorer) {
     }
 
     Y_UNIT_TEST(SkipMessagesWithObsoleteTimestamp) {
-        SkipMessagesWithObsoleteTimestampImpl(Nothing(), 0);
+        SkipMessagesWithObsoleteTimestampImpl(Nothing(), 0, false);
     }
 
     Y_UNIT_TEST(SkipMessagesWithObsoleteTimestampWithRetention) {
-        SkipMessagesWithObsoleteTimestampImpl(TDuration::Seconds(1), 0);
+        SkipMessagesWithObsoleteTimestampImpl(TDuration::Seconds(1), 0, false);
     }
 
     Y_UNIT_TEST(SkipMessagesWithObsoleteTimestampInNonEmptyDestinationTopic) {
-        SkipMessagesWithObsoleteTimestampImpl(Nothing(), 250);
+        SkipMessagesWithObsoleteTimestampImpl(Nothing(), 250, false);
     }
 
     Y_UNIT_TEST(SkipMessagesWithObsoleteTimestampWithRetentionInNonEmptyDestinationTopic) {
-        SkipMessagesWithObsoleteTimestampImpl(TDuration::Seconds(1), 250);
+        SkipMessagesWithObsoleteTimestampImpl(TDuration::Seconds(1), 250, false);
+    }
+
+    Y_UNIT_TEST(SkipMessagesWithObsoleteTimestampWithRestart) {
+        SkipMessagesWithObsoleteTimestampImpl(Nothing(), 0, true);
+    }
+
+    Y_UNIT_TEST(SkipMessagesWithObsoleteTimestampWithRetentionWithRestart) {
+        SkipMessagesWithObsoleteTimestampImpl(TDuration::Seconds(1), 0, true);
+    }
+
+    Y_UNIT_TEST(SkipMessagesWithObsoleteTimestampInNonEmptyDestinationTopicWithRestart) {
+        SkipMessagesWithObsoleteTimestampImpl(Nothing(), 250, true);
+    }
+
+    Y_UNIT_TEST(SkipMessagesWithObsoleteTimestampWithRetentionInNonEmptyDestinationTopicWithRestart) {
+        SkipMessagesWithObsoleteTimestampImpl(TDuration::Seconds(1), 250, true);
     }
 
 }

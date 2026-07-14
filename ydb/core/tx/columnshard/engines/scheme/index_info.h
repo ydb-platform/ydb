@@ -16,6 +16,7 @@
 #include <ydb/core/tx/columnshard/common/snapshot.h>
 #include <ydb/core/tx/columnshard/data_accessor/abstract/constructor.h>
 #include <ydb/core/tx/columnshard/engines/scheme/abstract/column_ids.h>
+#include <ydb/core/tx/data_events/common/modification_type.h>
 
 #include <ydb/library/formats/arrow/transformer/abstract.h>
 
@@ -36,6 +37,10 @@ class TSkipIndex;
 }
 
 namespace NIndexes::NMax {
+class TIndexMeta;
+}
+
+namespace NIndexes::NMinMax {
 class TIndexMeta;
 }
 
@@ -69,6 +74,18 @@ public:
     }
 };
 
+struct TInsertOptionsPolicy {
+    std::optional<bool> BuildIndexesEnabled;
+    std::optional<ui64> BuildIndexesMinBlobBytes;
+
+    bool IsConfigured() const {
+        return BuildIndexesEnabled || BuildIndexesMinBlobBytes;
+    }
+
+    bool MeetsMinBlobBytes(ui64 totalBlobBytes) const;
+    bool ShouldBuildIndexesOnInsert(NEvWrite::EModificationType mType, ui64 totalBlobBytes) const;
+};
+
 struct TIndexInfo: public IIndexInfo {
 public:
     using TColumns = THashMap<ui32, NTable::TColumn>;
@@ -91,6 +108,7 @@ private:
     std::shared_ptr<NStorageOptimizer::IOptimizerPlannerConstructor> CompactionPlannerConstructor;
     std::shared_ptr<NDataAccessorControl::IManagerConstructor> MetadataManagerConstructor;
     std::optional<TString> ScanReaderPolicyName;
+    TInsertOptionsPolicy InsertOptions;
 
     TPresetId PresetId;
     ui64 Version = 0;
@@ -247,6 +265,10 @@ public:
         return SchemeNeedActualization;
     }
 
+    const TInsertOptionsPolicy& GetInsertOptions() const {
+        return InsertOptions;
+    }
+
     std::set<TString> GetUsedStorageIds(const TString& portionTierName) const {
         if (portionTierName && portionTierName != IStoragesManager::DefaultStorageId) {
             return { portionTierName };
@@ -382,6 +404,7 @@ public:
     std::vector<std::shared_ptr<NIndexes::TSkipIndex>> FindSkipIndexes(
         const NIndexes::NRequest::TOriginalDataAddress& originalDataAddress, const NArrow::NSSA::TIndexCheckOperation& op) const;
     std::shared_ptr<NIndexes::NMax::TIndexMeta> GetIndexMetaMax(const ui32 columnId) const;
+    std::shared_ptr<NIndexes::NMinMax::TIndexMeta> GetIndexMetaMinMax(const ui32 columnId) const;
     std::shared_ptr<NIndexes::NCountMinSketch::TIndexMeta> GetIndexMetaCountMinSketch(const std::set<ui32>& columnIds) const;
 
     [[nodiscard]] TConclusionStatus ReuseIndexChunks(std::vector<std::shared_ptr<IPortionDataChunk>> chunks, const ui32 indexId,

@@ -40,6 +40,7 @@ public:
 
 class TQueryFromFileIterator {
     TFile DataFile;
+    const TString DataFileName;
     TQueryBuilder Query;
 
     const i64 BufferMaxSize;
@@ -49,6 +50,7 @@ class TQueryFromFileIterator {
     const i64 MaxRowsPerQuery; // 0 for inf
     const i64 MaxBytesPerQuery; // 0 for inf
 
+    i64 CurrentLineNo;
     TStringBuf LinesBunch;
 
     void TryReadNextLines();
@@ -60,6 +62,7 @@ public:
     TQueryFromFileIterator(const TString& path, const TString& dataFileName, std::vector<TColumn> columns, i64 buffSize,
             i64 maxRowsPerQuery, i64 maxBytesPerQuery)
       : DataFile(dataFileName, OpenExisting | RdOnly)
+      , DataFileName(dataFileName)
       , Query(path, std::move(columns))
       , BufferMaxSize(buffSize)
       , IoBuff(TString::Uninitialized(BufferMaxSize))
@@ -69,6 +72,7 @@ public:
       // If MaxBytesPerQuery is not specified use 2MiB as default value. Since size of each row is rounded up
       // to nearest multiple of 1024 this effectively limits number of rows in query in case of small rows
       , MaxBytesPerQuery(maxBytesPerQuery ? maxBytesPerQuery : BufferMaxSize)
+      , CurrentLineNo(0)
     {}
 
     bool Empty() const {

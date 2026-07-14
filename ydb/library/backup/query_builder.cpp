@@ -10,6 +10,9 @@
 #include <util/string/builder.h>
 #include <library/cpp/string_utils/quote/quote.h>
 
+#include <limits>
+#include <cmath>
+
 namespace NYdb::NBackup {
 
 static constexpr i64 METERING_ROW_PRECISION = 1024;
@@ -66,6 +69,40 @@ TInstant TryParse(const TStringBuf& buf) {
 template<>
 bool TryParse(const TStringBuf& buf) {
     return TryParse<ui32>(buf) ? true : false;
+}
+
+template<>
+float TryParse(const TStringBuf& buf) {
+    if (buf == "nan" || buf == "-nan") {
+        return std::numeric_limits<float>::quiet_NaN();
+    }
+    if (buf == "inf") {
+        return std::numeric_limits<float>::infinity();
+    }
+    if (buf == "-inf") {
+        return -std::numeric_limits<float>::infinity();
+    }
+    float tmp;
+    TMemoryInput stream(buf);
+    stream >> tmp;
+    return tmp;
+}
+
+template<>
+double TryParse(const TStringBuf& buf) {
+    if (buf == "nan" || buf == "-nan") {
+        return std::numeric_limits<double>::quiet_NaN();
+    }
+    if (buf == "inf") {
+        return std::numeric_limits<double>::infinity();
+    }
+    if (buf == "-inf") {
+        return -std::numeric_limits<double>::infinity();
+    }
+    double tmp;
+    TMemoryInput stream(buf);
+    stream >> tmp;
+    return tmp;
 }
 
 void TQueryBuilder::AddPrimitiveMember(EPrimitiveType type, TStringBuf buf) {
@@ -262,7 +299,12 @@ void TQueryBuilder::AddLine(TStringBuf line) {
         Y_ENSURE(tok, "Empty token on line");
         TTypeParser type(col.Type);
         Value.AddMember(col.Name);
-        AddMemberFromString(type, TString{col.Name}, tok);
+        try {
+            AddMemberFromString(type, TString{col.Name}, tok);
+        } catch (const std::exception& e) {
+            throw yexception() << "Failed to parse value " << TString{tok}.Quote()
+                << " for column " << col.Name.Quote() << ": " << e.what();
+        }
     }
     Value.EndStruct();
 }
@@ -326,7 +368,12 @@ std::conditional_t<GetValue, TValue, TParams> TQueryFromFileIterator::ReadNext()
         if (line.empty()) {
             continue;
         }
-        Query.AddLine(line);
+        ++CurrentLineNo;
+        try {
+            Query.AddLine(line);
+        } catch (const std::exception& e) {
+            throw yexception() << DataFileName << ":" << CurrentLineNo << ": " << e.what();
+        }
         ++querySizeRows;
         querySizeBytes += AlignUp<i64>(line.size(), METERING_ROW_PRECISION);
         if (MaxRowsPerQuery > 0 && querySizeRows >= MaxRowsPerQuery

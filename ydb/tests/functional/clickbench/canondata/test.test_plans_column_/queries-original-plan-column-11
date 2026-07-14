@@ -60,8 +60,7 @@
                                                 "PlanNodeId": 5,
                                                 "Plans": [
                                                     {
-                                                        "Blocks": "True",
-                                                        "HashFunc": "HashV2",
+                                                        "HashFunc": "HashV1",
                                                         "KeyColumns": [
                                                             "MobilePhone",
                                                             "MobilePhoneModel"
@@ -97,8 +96,7 @@
                                                                 "PlanNodeId": 3,
                                                                 "Plans": [
                                                                     {
-                                                                        "Blocks": "True",
-                                                                        "HashFunc": "HashV2",
+                                                                        "HashFunc": "HashV1",
                                                                         "KeyColumns": [
                                                                             "MobilePhone",
                                                                             "MobilePhoneModel",

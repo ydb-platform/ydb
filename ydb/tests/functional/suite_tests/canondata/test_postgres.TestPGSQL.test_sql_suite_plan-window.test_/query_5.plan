@@ -109,7 +109,7 @@
                                                                         "PlanNodeId": 4,
                                                                         "Plans": [
                                                                             {
-                                                                                "HashFunc": "HashV2",
+                                                                                "HashFunc": "HashV1",
                                                                                 "KeyColumns": [
                                                                                     "depname"
                                                                                 ],

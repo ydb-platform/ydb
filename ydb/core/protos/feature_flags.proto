@@ -111,7 +111,7 @@ message TFeatureFlags {
     optional bool EnableDataShardVolatileTransactions = 85 [default = true];
     optional bool EnableTopicServiceTx = 86 [default = true, deprecated = true]; // deprecated: always true
     optional bool EnableLLVMCache = 87 [default = false];
-    optional bool EnableExternalDataSources = 88 [default = true];
+    optional bool EnableExternalDataSources = 88 [default = false];
     optional bool EnableTopicDiskSubDomainQuota = 89 [default = true, (RequireRestart) = true];
     optional bool EnableSeparationComputeActorsFromRead = 90 [default = true];
     reserved 91; // EnablePQConfigTransactionsAtSchemeShard
@@ -139,7 +139,7 @@ message TFeatureFlags {
     optional bool EnableServerlessExclusiveDynamicNodes = 113 [default = false];
     optional bool EnableAccessServiceBulkAuthorization = 114 [default = true];
     optional bool EnableAddColumsWithDefaults = 115 [default = true];
-    optional bool EnableReplaceIfExistsForExternalEntities = 116 [ default = true];
+    optional bool EnableReplaceIfExistsForExternalEntities = 116 [ default = false];
     optional bool EnableCMSRequestPriorities = 117 [default = true];
     optional bool EnableKeyvalueLogBatching = 118 [default = false];
     optional bool EnableLocalDBFlatIndex = 119 [default = true];
@@ -149,11 +149,11 @@ message TFeatureFlags {
     optional bool EnableBackupService = 123 [default = false];
     optional bool EnableVolatileTransactionArbiters = 124 [default = true];
     optional bool EnableGraphShard = 125 [default = false];
-    optional bool EnableExternalSourceSchemaInference = 126 [default = true];
+    optional bool EnableExternalSourceSchemaInference = 126 [default = false];
     optional bool EnableDbMetadataCache = 127 [default = false];
     optional bool EnableTableDatetime64 = 128 [default = true];
     optional bool EnableResourcePools = 129 [default = true];
-    optional bool EnableColumnStatistics = 130 [default = true];
+    optional bool EnableColumnStatistics = 130 [default = false];
     optional bool EnableSingleCompositeActionGroup = 131 [default = false];
     optional bool EnableResourcePoolsOnServerless = 132 [default = false];
     optional bool EnableVectorIndex = 133 [default = true];
@@ -235,7 +235,7 @@ message TFeatureFlags {
     optional bool EnableStreamingQueries = 206 [default = true];
     optional bool EnableTinyDisks = 207 [default = false];
     optional bool EnableMetricsLevel = 208 [default = true];
-    optional bool EnableCompileCacheView = 209 [default = true];
+    optional bool EnableCompileCacheView = 209 [default = false];
     optional bool EnableSecureScriptExecutions = 210 [default = false];
     optional bool EnableColumnshardBool = 211 [default = true];
     optional bool EnableTopicMessageLevelParallelism = 212 [default = false];
@@ -297,7 +297,7 @@ message TFeatureFlags {
     optional bool EnableNodeShutdownHints = 257 [default = false];
     optional bool EnableTopicPartitionSplitBasedOnMessages = 258 [default = false];
     reserved 259; // ForbidDiscoveryInnerDbPaths
-    optional bool EnableStreamingQueryDisposition = 260 [default = true];
+    optional bool EnableStreamingQueryDisposition = 260 [default = false];
     // Skip persisting partition rows that are not affected by a split/merge operation.
     optional bool EnableSplitMergePartialPersistence = 261 [default = true];
     optional bool EnableLocalMinMaxIndex = 262 [default = true];
@@ -308,7 +308,7 @@ message TFeatureFlags {
     optional bool EnableJsonIndexAutoSelect = 267 [default = false];
     optional bool ForbidRequestsToStaticNodesWithoutDatabase = 268 [default = true];
     optional bool EnableTabletDevUiSecurePath = 269 [default = false];
-    optional bool EnableExtraSidsControlForHttpViewer = 270 [default = true];
+    optional bool EnableExtraSidsControlForHttpViewer = 270 [default = false];
     // Use TablePartitionsByShardIdx (keyed by ShardIdx) instead of TablePartitions
     // (keyed by positional index) for local tables.  When ON, split/merge writes only
     // O(k) rows (src+dst shards) instead of O(N) rows (all partitions after srcFirstIdx).
@@ -319,13 +319,13 @@ message TFeatureFlags {
     optional bool EnableTopicWriteOffsetDeltaInKeys = 275 [default = false];
     optional bool EnableTablePartitionsConsistencyCheck = 276 [default = true];
     optional bool EnableKqpConstraintsTransformer = 277 [default = true];
-    optional bool EnableLocalIndexAsSchemeObject = 278 [default = true];
+    optional bool EnableLocalIndexAsSchemeObject = 278 [default = false];
     optional bool EnableDataShardDetailedMetrics = 279 [default = false];
     optional bool EnableCompactFulltextIndex = 280 [default = false];
     optional bool EnableVDiskWaitForRecoveryLogCutOnLocalSyncDataReplay = 281 [default = false];
     optional bool EnableFulltextIndexPrefix = 282 [default = false];
-    optional bool EnableAccessServiceV2Interface = 283 [default = true, (RequireRestart) = true];
-    optional bool EnableAnalyzeLongRunningOperation = 284 [default = true];
+    optional bool EnableAccessServiceV2Interface = 283 [default = false, (RequireRestart) = true];
+    optional bool EnableAnalyzeLongRunningOperation = 284 [default = false];
     optional bool EnableTopicRetentionDeleteLastBlob = 285 [default = false];
     optional bool EnableTopicDeferredPublish = 286 [default = false];
     optional bool EnableConfiguredBootstrapper = 287 [default = false, (RequireRestart) = true];

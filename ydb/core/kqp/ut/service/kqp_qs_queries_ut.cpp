@@ -3403,6 +3403,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
             .SetEnableTempTables(true);
         serverSettings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
         serverSettings.AppConfig.MutableTableServiceConfig()->SetEnableCreateTableAs(true);
+        serverSettings.AppConfig.MutableTableServiceConfig()->SetEnableDataShardCreateTableAs(true);
         serverSettings.AppConfig.MutableTableServiceConfig()->SetEnableAstCache(false);
         serverSettings.AppConfig.MutableTableServiceConfig()->SetEnablePerStatementQueryExecution(false);
 
@@ -3482,6 +3483,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
         serverSettings.AppConfig.MutableTableServiceConfig()->SetEnableAstCache(true);
         serverSettings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
         serverSettings.AppConfig.MutableTableServiceConfig()->SetEnableCreateTableAs(true);
+        serverSettings.AppConfig.MutableTableServiceConfig()->SetEnableDataShardCreateTableAs(true);
         serverSettings.AppConfig.MutableTableServiceConfig()->SetEnablePerStatementQueryExecution(true);
 
         TKikimrRunner kikimr(serverSettings);
@@ -3525,6 +3527,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
             .SetEnableTempTables(true);
         serverSettings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
         serverSettings.AppConfig.MutableTableServiceConfig()->SetEnableCreateTableAs(true);
+        serverSettings.AppConfig.MutableTableServiceConfig()->SetEnableDataShardCreateTableAs(true);
 
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetQueryClient();

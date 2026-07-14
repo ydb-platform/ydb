@@ -1884,7 +1884,7 @@ Y_UNIT_TEST_SUITE(SetNotNullTest) {
 
         blocker.Stop();
 
-        auto cancelResponse = TestCancelSetColumnConstraint(runtime, TTestTxConfig::SchemeShard, root, setConstraintTxId);
+        auto cancelResponse = TestCancelSetColumnConstraint(runtime, TTestTxConfig::SchemeShard, 0, root, setConstraintTxId);
         UNIT_ASSERT_VALUES_EQUAL_C(
             cancelResponse.GetStatus(),
             Ydb::StatusIds::SUCCESS,
@@ -2011,7 +2011,7 @@ Y_UNIT_TEST_SUITE(SetNotNullTest) {
         TString root = "/MyRoot";
 
         auto cancelResponse = TestCancelSetColumnConstraint(
-            runtime, TTestTxConfig::SchemeShard, root, 999999);
+            runtime, TTestTxConfig::SchemeShard, 0, root, 999999);
 
         UNIT_ASSERT_VALUES_EQUAL_C(
             cancelResponse.GetStatus(),
@@ -2034,7 +2034,7 @@ Y_UNIT_TEST_SUITE(SetNotNullTest) {
         TString wrongRoot = "/NonExistentDB";
 
         auto cancelResponse = TestCancelSetColumnConstraint(
-            runtime, TTestTxConfig::SchemeShard, wrongRoot, 100);
+            runtime, TTestTxConfig::SchemeShard, 0, wrongRoot, 100);
 
         UNIT_ASSERT_VALUES_EQUAL_C(
             cancelResponse.GetStatus(),
@@ -2140,7 +2140,7 @@ Y_UNIT_TEST_SUITE(SetNotNullTest) {
                 runtime.WaitFor("block event at " + stage.StageName, [&]{ return blocker->size() > 0; });
 
                 // Try to cancel while at this stage - should be rejected
-                auto cancelResponse = TestCancelSetColumnConstraint(runtime, TTestTxConfig::SchemeShard, root, setConstraintTxId);
+                auto cancelResponse = TestCancelSetColumnConstraint(runtime, TTestTxConfig::SchemeShard, 0, root, setConstraintTxId);
                 UNIT_ASSERT_VALUES_EQUAL_C(
                     cancelResponse.GetStatus(),
                     Ydb::StatusIds::PRECONDITION_FAILED,
@@ -2157,7 +2157,7 @@ Y_UNIT_TEST_SUITE(SetNotNullTest) {
             } else {
                 env.TestWaitNotification(runtime, setConstraintTxId, TTestTxConfig::SchemeShard);
 
-                auto cancelResponse = TestCancelSetColumnConstraint(runtime, TTestTxConfig::SchemeShard, root, setConstraintTxId);
+                auto cancelResponse = TestCancelSetColumnConstraint(runtime, TTestTxConfig::SchemeShard, 0, root, setConstraintTxId);
                 UNIT_ASSERT_VALUES_EQUAL_C(
                     cancelResponse.GetStatus(),
                     Ydb::StatusIds::PRECONDITION_FAILED,
@@ -2233,7 +2233,7 @@ Y_UNIT_TEST_SUITE(SetNotNullTest) {
         UNIT_ASSERT_C(delayedValidateRequest, "Failed to intercept TEvValidateRowConditionRequest");
 
         auto cancelResponse1 = TestCancelSetColumnConstraint(
-            runtime, TTestTxConfig::SchemeShard, root, setConstraintTxId);
+            runtime, TTestTxConfig::SchemeShard, 0, root, setConstraintTxId);
 
         UNIT_ASSERT_VALUES_EQUAL_C(
             cancelResponse1.GetStatus(),
@@ -2241,7 +2241,7 @@ Y_UNIT_TEST_SUITE(SetNotNullTest) {
             cancelResponse1.ShortDebugString());
 
         auto cancelResponse2 = TestCancelSetColumnConstraint(
-            runtime, TTestTxConfig::SchemeShard, root, setConstraintTxId);
+            runtime, TTestTxConfig::SchemeShard, 0, root, setConstraintTxId);
 
         UNIT_ASSERT_VALUES_EQUAL_C(
             cancelResponse2.GetStatus(),
@@ -2363,7 +2363,7 @@ Y_UNIT_TEST_SUITE(SetNotNullTest) {
                 dataShardBlocker->Stop();
             }
 
-            auto cancelResponse = TestCancelSetColumnConstraint(runtime, TTestTxConfig::SchemeShard, root, setConstraintTxId);
+            auto cancelResponse = TestCancelSetColumnConstraint(runtime, TTestTxConfig::SchemeShard, 0, root, setConstraintTxId);
             UNIT_ASSERT_VALUES_EQUAL_C(
                 cancelResponse.GetStatus(),
                 Ydb::StatusIds::SUCCESS,

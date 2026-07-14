@@ -3625,11 +3625,12 @@ namespace NSchemeShardUT_Private {
     NKikimrSetColumnConstraint::TEvCancelResponse TestCancelSetColumnConstraint(
         TTestActorRuntime& runtime,
         ui64 schemeShard,
+        ui64 txId,
         const TString& dbName,
         ui64 operationId)
     {
-        auto request = MakeHolder<TEvSetColumnConstraint::TEvCancelRequest>(dbName, operationId);
-        
+        auto request = MakeHolder<TEvSetColumnConstraint::TEvCancelRequest>(txId, dbName, operationId);
+
         auto sender = runtime.AllocateEdgeActor();
         ForwardToTablet(runtime, schemeShard, sender, request.Release());
 

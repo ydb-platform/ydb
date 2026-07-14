@@ -55,23 +55,6 @@ T GetResponse(const TFuture<TFuture<T>>& outer, TDuration timeout = WaitTimeout)
     return outer.GetValue(timeout).GetValue(timeout);
 }
 
-TVector<ui64> ReadAllDDiskSeqNos(
-    const TExecutorPtr& executor,
-    const std::shared_ptr<TDirectBlockGroup>& dbg)
-{
-    return RunOnExecutor(
-               executor,
-               [&]
-               {
-                   TVector<ui64> result;
-                   for (size_t i = 0; i < DirectBlockGroupHostCount; ++i) {
-                       result.push_back(dbg->GetDDiskSessionSeqNo(i));
-                   }
-                   return result;
-               })
-        .GetValue(WaitTimeout);
-}
-
 // Resolves pending connect promises in the half-open range [from, to)
 void ResolveConnects(
     TVector<TStorageTransportMock::TConnectPromise>& promises,
@@ -81,30 +64,6 @@ void ResolveConnects(
     for (size_t i = from; i < to; ++i) {
         promises[i].SetValue(TStorageTransportMock::MakeConnectResult());
     }
-}
-
-struct TBlockedDetectedState
-{
-    bool DDiskSessionBroken = false;
-    bool BlockedGenerationDetected = false;
-};
-
-TBlockedDetectedState GetBlockedDetected(
-    const TExecutorPtr& executor,
-    const std::shared_ptr<TDirectBlockGroup>& dbg,
-    THostIndex hostIndex)
-{
-    return RunOnExecutor(
-               executor,
-               [dbg, hostIndex]
-               {
-                   return TBlockedDetectedState{
-                       .DDiskSessionBroken =
-                           dbg->IsDDiskSessionBroken(hostIndex),
-                       .BlockedGenerationDetected =
-                           dbg->IsBlockedGenerationDetected()};
-               })
-        .GetValue(WaitTimeout);
 }
 
 }   // namespace
@@ -778,7 +737,7 @@ Y_UNIT_TEST_SUITE(TDirectBlockGroupTest)
             E_REJECTED,
             GetResponse(pendingRead).Error.GetCode());
 
-        const auto state = GetBlockedDetected(executor, dbg, 0);
+        const auto state = GetBlockedDetected(executor, dbg, 0, WaitTimeout);
         UNIT_ASSERT(state.DDiskSessionBroken);
         UNIT_ASSERT(state.BlockedGenerationDetected);
 
@@ -826,7 +785,7 @@ Y_UNIT_TEST_SUITE(TDirectBlockGroupTest)
             E_REJECTED,
             GetResponse(pendingWrite).Error.GetCode());
 
-        const auto state = GetBlockedDetected(executor, dbg, 0);
+        const auto state = GetBlockedDetected(executor, dbg, 0, WaitTimeout);
         UNIT_ASSERT(state.DDiskSessionBroken);
         UNIT_ASSERT(state.BlockedGenerationDetected);
 
@@ -865,7 +824,7 @@ Y_UNIT_TEST_SUITE(TDirectBlockGroupTest)
             E_REJECTED,
             GetResponse(pendingRead).Error.GetCode());
 
-        const auto state = GetBlockedDetected(executor, dbg, 0);
+        const auto state = GetBlockedDetected(executor, dbg, 0, WaitTimeout);
         UNIT_ASSERT(state.DDiskSessionBroken);
         UNIT_ASSERT(state.BlockedGenerationDetected);
 
@@ -912,7 +871,8 @@ Y_UNIT_TEST_SUITE(TDirectBlockGroupTest)
         UNIT_ASSERT_VALUES_EQUAL(1, flushResponse.Errors.size());
         UNIT_ASSERT_VALUES_EQUAL(E_REJECTED, flushResponse.Errors[0].GetCode());
 
-        const auto state = GetBlockedDetected(executor, dbg, ddiskHost);
+        const auto state =
+            GetBlockedDetected(executor, dbg, ddiskHost, WaitTimeout);
         UNIT_ASSERT(state.DDiskSessionBroken);
         UNIT_ASSERT(state.BlockedGenerationDetected);
 
@@ -955,7 +915,7 @@ Y_UNIT_TEST_SUITE(TDirectBlockGroupTest)
         }
 
         // Barrier on the executor to make sure all callbacks have run.
-        const auto state = GetBlockedDetected(executor, dbg, 0);
+        const auto state = GetBlockedDetected(executor, dbg, 0, WaitTimeout);
         UNIT_ASSERT(state.DDiskSessionBroken);
         UNIT_ASSERT(state.BlockedGenerationDetected);
 
@@ -984,7 +944,7 @@ Y_UNIT_TEST_SUITE(TDirectBlockGroupTest)
             1,
             NKikimrBlobStorage::NDDisk::TReplyStatus::BLOCKED));
 
-        const auto state = GetBlockedDetected(executor, dbg, 0);
+        const auto state = GetBlockedDetected(executor, dbg, 0, WaitTimeout);
         UNIT_ASSERT(state.BlockedGenerationDetected);
 
         const size_t connectsBefore =
@@ -1064,7 +1024,7 @@ Y_UNIT_TEST_SUITE(TDirectBlockGroupTest)
             UNIT_ASSERT_VALUES_UNEQUAL(S_OK, response.Error.GetCode());
         }
 
-        const auto state = GetBlockedDetected(executor, dbg, 0);
+        const auto state = GetBlockedDetected(executor, dbg, 0, WaitTimeout);
         UNIT_ASSERT(!state.DDiskSessionBroken);
         UNIT_ASSERT(!state.BlockedGenerationDetected);
         UNIT_ASSERT_VALUES_EQUAL(0, service.BlockedGenerationCount);
@@ -1186,7 +1146,7 @@ Y_UNIT_TEST_SUITE(TDDiskSessionSeqNoTest)
         DrainExecutor(executor);
         UNIT_ASSERT(!initialReady.HasValue());
 
-        const auto values = ReadAllDDiskSeqNos(executor, dbg);
+        const auto values = ReadAllDDiskSeqNos(executor, dbg, WaitTimeout);
         for (size_t i = 0; i < DirectBlockGroupHostCount; ++i) {
             UNIT_ASSERT_VALUES_EQUAL(0, values[i]);
         }
@@ -1242,7 +1202,7 @@ Y_UNIT_TEST_SUITE(TDDiskSessionSeqNoTest)
         WaitReady(initialReady);
 
         // All sessions confirmed at seq_no=1.
-        for (const auto seqNo: ReadAllDDiskSeqNos(executor, dbg)) {
+        for (const auto seqNo: ReadAllDDiskSeqNos(executor, dbg, WaitTimeout)) {
             UNIT_ASSERT_VALUES_EQUAL(1, seqNo);
         }
 
@@ -1268,7 +1228,7 @@ Y_UNIT_TEST_SUITE(TDDiskSessionSeqNoTest)
         reconnectPromise.SetValue(TStorageTransportMock::MakeConnectResult());
         DrainExecutor(executor);
 
-        const auto values = ReadAllDDiskSeqNos(executor, dbg);
+        const auto values = ReadAllDDiskSeqNos(executor, dbg, WaitTimeout);
         UNIT_ASSERT_VALUES_EQUAL(2, values[0]);
         for (size_t i = 1; i < DirectBlockGroupHostCount; ++i) {
             UNIT_ASSERT_VALUES_EQUAL(1, values[i]);
@@ -1306,19 +1266,15 @@ Y_UNIT_TEST_SUITE(TDDiskSessionSeqNoTest)
         secondConnect.SetValue(TStorageTransportMock::MakeConnectResult());
         DrainExecutor(executor);
 
-        auto afterNew = RunOnExecutor(
-            executor,
-            [&] { return dbg->GetDDiskSessionSeqNo(0); });
-        UNIT_ASSERT_VALUES_EQUAL(2, afterNew.GetValue(WaitTimeout));
+        auto afterNew = GetDDiskSessionSeqNo(executor, dbg, 0, WaitTimeout);
+        UNIT_ASSERT_VALUES_EQUAL(2, afterNew);
 
         // resolve the stale connect. It must be ignored.
         firstConnect.SetValue(TStorageTransportMock::MakeConnectResult());
         DrainExecutor(executor);
 
-        auto afterStale = RunOnExecutor(
-            executor,
-            [&] { return dbg->GetDDiskSessionSeqNo(0); });
-        UNIT_ASSERT_VALUES_EQUAL(2, afterStale.GetValue(WaitTimeout));
+        auto afterStale = GetDDiskSessionSeqNo(executor, dbg, 0, WaitTimeout);
+        UNIT_ASSERT_VALUES_EQUAL(2, afterStale);
     }
 }
 

@@ -48,7 +48,7 @@ struct IPartitionDirectService
 
     // Called when DDisk replied BLOCKED, meaning DDisk has already
     // seen a newer tablet generation. The current tablet instance must suicide.
-    virtual void OnBlockedGeneration(const TString& reason) = 0;
+    virtual void StopTablet(const TString& reason) = 0;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

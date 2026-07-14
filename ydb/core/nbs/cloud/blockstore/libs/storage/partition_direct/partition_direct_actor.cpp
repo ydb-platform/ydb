@@ -435,7 +435,7 @@ void TPartitionActor::HandleFastPathServiceStopped(
 }
 
 void TPartitionActor::HandlePoisonByBlockedGeneration(
-    const TEvPartitionDirectPrivate::TEvPoisonByBlockedGeneration::TPtr& ev,
+    const TEvPartitionDirectPrivate::TEvPoison::TPtr& ev,
     const NActors::TActorContext& ctx)
 {
     const auto* msg = ev->Get();
@@ -710,7 +710,7 @@ STFUNC(TPartitionActor::StateWork)
             HandleFastPathServiceStopped);
 
         HFunc(
-            TEvPartitionDirectPrivate::TEvPoisonByBlockedGeneration,
+            TEvPartitionDirectPrivate::TEvPoison,
             HandlePoisonByBlockedGeneration);
 
         HFunc(NMon::TEvRemoteHttpInfo, HandleHttpInfo);

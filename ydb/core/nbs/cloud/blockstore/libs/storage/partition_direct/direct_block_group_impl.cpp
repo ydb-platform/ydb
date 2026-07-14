@@ -1315,27 +1315,6 @@ ui64 TDirectBlockGroup::GetHostPBufferUsedSize(THostIndex hostIndex) const
     return result;
 }
 
-ui64 TDirectBlockGroup::GetDDiskSessionSeqNo(size_t index) const
-{
-    Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
-    Y_ABORT_UNLESS(index < DDiskConnections.size());
-    return DDiskConnections[index].ConfirmedSessionSeqNo;
-}
-
-bool TDirectBlockGroup::IsDDiskSessionBroken(size_t hostIndex) const
-{
-    Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
-    Y_ABORT_UNLESS(hostIndex < DDiskConnections.size());
-    return DDiskConnections[hostIndex].SessionState ==
-           EDDiskSessionState::Broken;
-}
-
-bool TDirectBlockGroup::IsBlockedGenerationDetected() const
-{
-    Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
-    return BlockedGenerationDetected;
-}
-
 void TDirectBlockGroup::DoEstablishConnections()
 {
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
@@ -1789,7 +1768,7 @@ void TDirectBlockGroup::HandleBlockedGeneration(
         reason.c_str());
 
     // No retry/reconnect: signal the actor to suicide.
-    Service->OnBlockedGeneration(reason);
+    Service->StopTablet(reason);
 }
 
 TDBGDumpResponse TDirectBlockGroup::DoDebugPrintDirtyMap()

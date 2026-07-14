@@ -73,14 +73,12 @@ struct TEvPartitionDirectPrivate
 
     // DDisk replied BLOCKED: the current tablet generation is stale, so the
     // tablet must suicide. Carries diagnostics coordinates and a reason string.
-    struct TEvPoisonByBlockedGeneration
-        : public NActors::TEventLocal<
-              TEvPoisonByBlockedGeneration,
-              EvPoisonByBlockedGeneration>
+    struct TEvPoison
+        : public NActors::TEventLocal<TEvPoison, EvPoisonByBlockedGeneration>
     {
         const TString Reason;
 
-        explicit TEvPoisonByBlockedGeneration(TString reason)
+        explicit TEvPoison(TString reason)
             : Reason(std::move(reason))
         {}
     };

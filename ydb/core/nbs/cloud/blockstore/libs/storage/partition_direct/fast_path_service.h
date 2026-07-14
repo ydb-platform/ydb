@@ -112,7 +112,7 @@ public:
 
     ui64 GenerateLsn() override;
 
-    void OnBlockedGeneration(const TString& reason) override;
+    void StopTablet(const TString& reason) override;
 
     // Read-only info for the monitoring UI.
     [[nodiscard]] TFastPathServiceInfo GetMonInfo() const;

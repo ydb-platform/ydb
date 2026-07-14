@@ -144,12 +144,8 @@ public:
     ui64 GetHostPBufferUsedSize(THostIndex hostIndex) const override;
     void QueryAddHost() override;
 
-    // Own methods (not part of any interface).
-    ui64 GetDDiskSessionSeqNo(size_t index) const;
-    bool IsDDiskSessionBroken(size_t hostIndex) const;
-    bool IsBlockedGenerationDetected() const;
-
 private:
+    friend struct TDBGFixture;
     using TEvSyncResult = NKikimrBlobStorage::NDDisk::TEvSyncResult;
     using EConnectionType = NTransport::THostConnection::EConnectionType;
     using TDDiskIdToHostIndex =

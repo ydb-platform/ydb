@@ -161,7 +161,7 @@ private:
         const NActors::TActorContext& ctx);
 
     void HandlePoisonByBlockedGeneration(
-        const TEvPartitionDirectPrivate::TEvPoisonByBlockedGeneration::TPtr& ev,
+        const TEvPartitionDirectPrivate::TEvPoison::TPtr& ev,
         const NActors::TActorContext& ctx);
 
     void HandleAddHostToDBG(

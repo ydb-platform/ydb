@@ -60,7 +60,7 @@ public:
         return ++LsnGenerator;
     }
 
-    void OnBlockedGeneration(const TString& reason) override
+    void StopTablet(const TString& reason) override
     {
         Y_UNUSED(reason);
         ++BlockedGenerationCount;

@@ -62,7 +62,7 @@ struct TPartitionDirectServiceMock: public IPartitionDirectService
         return ++LsnGenerator;
     }
 
-    void OnBlockedGeneration(const TString& reason) override
+    void StopTablet(const TString& reason) override
     {
         ++BlockedGenerationCount;
         LastBlockedReason = reason;

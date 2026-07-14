@@ -389,11 +389,10 @@ ui64 TFastPathService::GenerateLsn()
     return lsn;
 }
 
-void TFastPathService::OnBlockedGeneration(const TString& reason)
+void TFastPathService::StopTablet(const TString& reason)
 {
     // Just forward the signal to the actor thread.
-    auto event = std::make_unique<
-        TEvPartitionDirectPrivate::TEvPoisonByBlockedGeneration>(reason);
+    auto event = std::make_unique<TEvPartitionDirectPrivate::TEvPoison>(reason);
     ActorSystem->Send(PartitionActorId, event.release());
 }
 

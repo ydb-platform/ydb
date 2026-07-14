@@ -80,3 +80,34 @@ Each `DDiskTestList` entry contains one or more `DDiskLoad` sources.
 - `IsReadLoad` - if `true`, run read load; if `false`, run write load.
 - `SQPoll` / `IOPoll` - enable io_uring SQPOLL / IOPOLL for direct I/O.
 
+### Parameters for `InterconnectTestList`
+These describe network load generated through the actors library interconnect
+subsystem (`ydb/library/actors/interconnect/load.h`), reusing the same
+`TInterconnectLoad` load actor used by the `InterconnectLoad` load type of the
+regular YDB load actor service. Since the stress tool runs a single node, the
+load actor and its counterpart (the load responder) both live in the same
+process; traffic is routed through loopback using `NodeHops`, so no real
+network connection is required to generate and measure interconnect traffic.
+
+Each `InterconnectTestList` entry contains one or more `InterconnectLoad`
+sources, run sequentially. Detailed periodic throughput/RTT statistics are
+logged to stderr via the `INTERCONNECT_SPEED_TEST` log component at `NOTICE`
+level; the tool's own result table only prints a short summary row per test.
+
+#### Parameters for `InterconnectLoad`
+- `Tag` - a unique numeric identifier for the load source.
+- `Name` - a human readable name for the load, shown in the results table.
+- `DurationSeconds` - the duration of the load application in seconds.
+- `InFlyMax` - the maximum number of concurrently in-flight messages.
+- `NodeHops` - the sequence of node ids the message is routed through before
+  coming back to the load actor. For a single-node run use `[1]` (loopback to
+  the local node).
+- `SizeMin` / `SizeMax` - the min/max payload size in bytes for each message.
+- `IntervalMinUs` / `IntervalMaxUs` - min/max interval between sent messages,
+  in microseconds; `0/0` means messages are sent as fast as `InFlyMax` allows.
+- `SoftLoad` - if `true`, keeps a steady send rate regardless of response
+  latency; if `false`, waits for a response (or timeout) before scheduling the
+  next send interval.
+- `UseProtobufWithPayload` - if `true`, stores the payload in a separate rope
+  buffer instead of inline in the protobuf message.
+

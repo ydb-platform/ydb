@@ -13,12 +13,13 @@ namespace NKikimr::NOlap::NCompaction::NSubColumns {
 class TMergedBuilder {
 private:
     using TSparsedBuilder = NArrow::NAccessor::TSparsedArray::TSparsedBuilder<arrow::BinaryType>;
-    using TPlainBuilder = NArrow::NAccessor::TTrivialArray::TPlainBuilder<arrow::BinaryType>;
     using TColumnsData = NArrow::NAccessor::NSubColumns::TColumnsData;
     using TOthersData = NArrow::NAccessor::NSubColumns::TOthersData;
     using TSettings = NArrow::NAccessor::NSubColumns::TSettings;
     using TDictStats = NArrow::NAccessor::NSubColumns::TDictStats;
     using TSubColumnsArray = NArrow::NAccessor::TSubColumnsArray;
+    using TGeneralIterator = NArrow::NAccessor::NSubColumns::TGeneralIterator;
+    using EValueType = NArrow::NAccessor::NSubColumns::EValueType;
 
     const TDictStats ResultColumnStats;
     const TChunkMergeContext& Context;
@@ -28,71 +29,115 @@ private:
     const TSettings Settings;
     const TRemapColumns& Remapper;
 
+    // A plain array builder whose element type is chosen at construction type.
+    // Commonality with TPlainBuilder to be refactored.
+    class TPlainRuntimeBuilder {
+    private:
+        std::unique_ptr<arrow::ArrayBuilder> Builder;
+        std::optional<ui32> LastRecordIndex;
+
+        void AppendGapNulls(const ui32 recordIndex) {
+            if (LastRecordIndex) {
+                AFL_VERIFY(*LastRecordIndex < recordIndex)("last", LastRecordIndex)("index", recordIndex);
+                NArrow::TStatusValidator::Validate(Builder->AppendNulls(recordIndex - *LastRecordIndex - 1));
+            } else {
+                NArrow::TStatusValidator::Validate(Builder->AppendNulls(recordIndex));
+            }
+            LastRecordIndex = recordIndex;
+        }
+
+    public:
+        TPlainRuntimeBuilder(const std::shared_ptr<arrow::DataType>& type)
+            : Builder(NArrow::MakeBuilder(type))
+        {
+        }
+
+        void AddNativeValue(const ui32 recordIndex, const arrow::Array& array, const i64 position) {
+            AFL_VERIFY(Builder->type()->id() == array.type_id())("builder", Builder->type()->ToString())("array", array.type()->ToString());
+            AppendGapNulls(recordIndex);
+            AFL_VERIFY(NArrow::Append(*Builder, array, position));
+        }
+
+        void AddBinaryValue(const ui32 recordIndex, const TStringBuf value) {
+            AFL_VERIFY(Builder->type()->id() == arrow::Type::BINARY)("type", Builder->type()->ToString());
+            AppendGapNulls(recordIndex);
+            AFL_VERIFY(NArrow::Append<arrow::BinaryType>(*Builder, arrow::util::string_view(value.data(), value.size())));
+        }
+
+        std::shared_ptr<NArrow::NAccessor::IChunkedArray> Finish(const ui32 recordsCount) {
+            if (LastRecordIndex) {
+                AFL_VERIFY(*LastRecordIndex < recordsCount)("last", LastRecordIndex)("count", recordsCount);
+                NArrow::TStatusValidator::Validate(Builder->AppendNulls(recordsCount - *LastRecordIndex - 1));
+            } else {
+                NArrow::TStatusValidator::Validate(Builder->AppendNulls(recordsCount));
+            }
+            return std::make_shared<NArrow::NAccessor::TTrivialArray>(NArrow::FinishBuilder(std::move(Builder)));
+        }
+    };
+
     class TGeneralAccessorBuilder {
     private:
-        std::variant<TSparsedBuilder, TPlainBuilder> Builder;
+        std::variant<TSparsedBuilder, TPlainRuntimeBuilder> Builder;
+        const EValueType TargetValueType;
         YDB_READONLY(ui32, FilledRecordsCount, 0);
         YDB_READONLY(ui64, FilledRecordsSize, 0);
 
     public:
-        TGeneralAccessorBuilder(TSparsedBuilder&& builder)
+        TGeneralAccessorBuilder(TSparsedBuilder&& builder, const EValueType targetValueType)
             : Builder(std::move(builder))
+            , TargetValueType(targetValueType)
         {
         }
 
-        TGeneralAccessorBuilder(TPlainBuilder&& builder)
+        TGeneralAccessorBuilder(TPlainRuntimeBuilder&& builder, const EValueType targetValueType)
             : Builder(std::move(builder))
+            , TargetValueType(targetValueType)
         {
         }
 
-        void AddRecord(const ui32 recordIndex, const std::string_view value) {
+        // Returns the number of value bytes actually stored, since a re-encoded value's stored size differs from its size in the source.
+        ui32 AddRecord(const ui32 recordIndex, const TGeneralIterator& it) {
+            const bool passthrough = it.GetValueType() == TargetValueType;
+
             struct TVisitor {
-            private:
                 const ui32 RecordIndex;
-                const std::string_view Value;
+                const TGeneralIterator& It;
+                const bool Passthrough;
 
-            public:
-                void operator()(TSparsedBuilder& builder) const {
-                    builder.AddRecord(RecordIndex, Value);
+                ui32 operator()(TSparsedBuilder& builder) const {
+                    // Sparsed columns are always binary-backed, so the passthrough value is its storage bytes.
+                    if (Passthrough) {
+                        builder.AddRecord(RecordIndex, It.GetStorageView());
+                        return It.GetValueSize();
+                    } else {
+                        const auto bj = It.GetValueAsBinaryJson();
+                        builder.AddRecord(RecordIndex, TStringBuf(bj.data(), bj.size()));
+                        return bj.size();
+                    }
                 }
 
-                void operator()(TPlainBuilder& builder) const {
-                    builder.AddRecord(RecordIndex, Value);
-                }
-
-                TVisitor(const ui32 recordIndex, const std::string_view value)
-                    : RecordIndex(recordIndex)
-                    , Value(value)
-                {
+                ui32 operator()(TPlainRuntimeBuilder& builder) const {
+                    if (Passthrough) {
+                        builder.AddNativeValue(RecordIndex, It.GetArray(), It.GetLocalIndex());
+                        return It.GetValueSize();
+                    } else {
+                        const auto bj = It.GetValueAsBinaryJson();
+                        builder.AddBinaryValue(RecordIndex, TStringBuf(bj.data(), bj.size()));
+                        return bj.size();
+                    }
                 }
             };
 
-            std::visit(TVisitor(recordIndex, value), Builder);
+            const ui32 storedSize = std::visit(TVisitor{ recordIndex, it, passthrough }, Builder);
             ++FilledRecordsCount;
-            FilledRecordsSize += value.size();
+            FilledRecordsSize += storedSize;
+            return storedSize;
         }
 
         std::shared_ptr<NArrow::NAccessor::IChunkedArray> Finish(const ui32 recordsCount) {
-            struct TVisitor {
-            private:
-                const ui32 RecordsCount;
-
-            public:
-                std::shared_ptr<NArrow::NAccessor::IChunkedArray> operator()(TSparsedBuilder& builder) const {
-                    return builder.Finish(RecordsCount);
-                }
-
-                std::shared_ptr<NArrow::NAccessor::IChunkedArray> operator()(TPlainBuilder& builder) const {
-                    return builder.Finish(RecordsCount);
-                }
-
-                TVisitor(const ui32 recordsCount)
-                    : RecordsCount(recordsCount)
-                {
-                }
-            };
-
-            return std::visit(TVisitor(recordsCount), Builder);
+            return std::visit([recordsCount](auto& builder) {
+                return builder.Finish(recordsCount);
+            }, Builder);
         }
     };
 
@@ -104,7 +149,7 @@ private:
     void Initialize();
 
     std::shared_ptr<NArrow::NAccessor::IChunkedArray> MaybeDictionaryEncode(
-        const std::shared_ptr<NArrow::NAccessor::IChunkedArray>& accessor, const ui32 filledRecordsCount) const;
+        const std::shared_ptr<NArrow::NAccessor::IChunkedArray>& accessor, const ui32 filledRecordsCount, const EValueType valueType) const;
 
 public:
     TMergedBuilder(const NArrow::NAccessor::NSubColumns::TDictStats& columnStats, const TChunkMergeContext& context, const TSettings& settings,
@@ -125,15 +170,17 @@ public:
 
     void FinishRecord();
 
-    void AddColumnKV(const ui32 commonKeyIndex, const std::string_view value) {
+    ui32 AddColumnKV(const ui32 commonKeyIndex, const TGeneralIterator& iter) {
         AFL_VERIFY(commonKeyIndex < ColumnBuilders.size());
-        ColumnBuilders[commonKeyIndex].AddRecord(RecordIndex, value);
-        SumValuesSize += value.size();
+        const ui32 storedSize = ColumnBuilders[commonKeyIndex].AddRecord(RecordIndex, iter);
+        SumValuesSize += storedSize;
+        return storedSize;
     }
 
-    void AddOtherKV(const ui32 commonKeyIndex, const std::string_view value) {
+    ui32 AddOtherKV(const ui32 commonKeyIndex, const std::string_view value) {
         OthersBuilder->Add(RecordIndex, commonKeyIndex, value);
         SumValuesSize += value.size();
+        return value.size();
     }
 };
 

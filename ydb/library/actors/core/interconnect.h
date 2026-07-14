@@ -23,6 +23,8 @@ namespace NActors {
                 Module = 20,
                 Rack = 30,
                 Unit = 40,
+                // value 50 is used for PDisk domain mapping
+                // DiskScope = 50,
             };
         };
 

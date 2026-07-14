@@ -34,6 +34,7 @@ from mute.constants import (
     get_manual_unmute_min_runs,
     get_manual_unmute_window_days,
     get_mute_window_days,
+    get_stable_branch_grace_days,
     get_unmute_window_days,
 )
 from mute.naming import mute_file_line_to_tests_monitor_full_name
@@ -65,96 +66,154 @@ def _grace_inherited_debug_line(line, branch, config_since, grace_until):
     )
 
 
-def _git_branch_added_to_stable_config(branch, repo_root):
-    if not branch or branch == 'main':
-        return None
+def _run_git(args, repo_root, context):
     try:
         proc = subprocess.run(
-            ['git', 'log', '--format=%H', '--reverse', '--', _STABLE_BRANCHES_CONFIG],
+            ['git', *args],
             cwd=repo_root,
             capture_output=True,
             text=True,
             check=False,
         )
     except OSError as exc:
-        logging.warning(
-            'stable branch grace: git log failed for branch=%s: %s',
-            branch,
-            exc,
-        )
+        logging.warning('stable branch grace: %s failed: %s', context, exc)
         return None
     if proc.returncode != 0:
         logging.warning(
-            'stable branch grace: git log exit %s for %s: %s',
+            'stable branch grace: %s exit %s: %s',
+            context,
             proc.returncode,
-            _STABLE_BRANCHES_CONFIG,
             (proc.stderr or '').strip(),
         )
         return None
-    for commit in proc.stdout.splitlines():
-        commit = commit.strip()
-        if not commit:
-            continue
-        show = subprocess.run(
-            ['git', 'show', f'{commit}:{_STABLE_BRANCHES_CONFIG}'],
-            cwd=repo_root,
-            capture_output=True,
-            text=True,
-            check=False,
+    return proc.stdout
+
+
+def _branch_present_in_config_blob(blob, branch):
+    try:
+        branches = json.loads(blob)
+    except (json.JSONDecodeError, TypeError):
+        return False
+    names = {str(b).strip() for b in branches if str(b).strip()}
+    return branch in names
+
+
+def _commit_author_date(commit, repo_root):
+    raw = _run_git(
+        ['log', '-1', '--format=%aI', commit],
+        repo_root,
+        f'git log -1 date for commit {commit}',
+    )
+    if raw is None:
+        return None
+    raw = raw.strip()
+    if raw.endswith('Z'):
+        raw = raw[:-1] + '+00:00'
+    try:
+        return datetime.datetime.fromisoformat(raw).astimezone(datetime.timezone.utc).date()
+    except ValueError:
+        logging.warning('stable branch grace: invalid author date for commit %s: %r', commit, raw)
+        return None
+
+
+def _git_branch_added_to_stable_config(branch, repo_root):
+    """Calendar date the branch first appeared in ``_STABLE_BRANCHES_CONFIG``.
+
+    Uses ``git log -S`` (pickaxe) on the exact JSON-quoted branch string to jump
+    straight to the (typically one) commit(s) that changed its occurrence count,
+    instead of walking and ``git show``-ing every commit that ever touched the
+    config file — the latter does not scale with the file's edit history since
+    it re-runs, unbounded, on every scheduled ``update_muted_ya`` invocation for
+    every branch/build_type in the matrix.
+    """
+    if not branch or branch == 'main':
+        return None
+    needle = '-S' + json.dumps(branch)
+    stdout = _run_git(
+        ['log', '--format=%H', '--reverse', needle, '--', _STABLE_BRANCHES_CONFIG],
+        repo_root,
+        f'git log -S for branch={branch}',
+    )
+    if stdout is None:
+        return None
+    candidates = [c.strip() for c in stdout.splitlines() if c.strip()]
+    if not candidates:
+        # Pickaxe found no add/remove edge for this exact string (e.g. shallow
+        # checkout, or the branch has always been present since the earliest
+        # commit in this history) — fall back to the full per-commit scan so we
+        # don't silently disable grace on an unexpected git quirk.
+        return _git_branch_added_to_stable_config_full_scan(branch, repo_root)
+    for commit in candidates:
+        blob = _run_git(
+            ['show', f'{commit}:{_STABLE_BRANCHES_CONFIG}'],
+            repo_root,
+            f'git show {commit}:{_STABLE_BRANCHES_CONFIG}',
         )
-        if show.returncode != 0:
-            logging.warning(
-                'stable branch grace: git show %s:%s failed with exit %s: %s',
-                commit,
-                _STABLE_BRANCHES_CONFIG,
-                show.returncode,
-                (show.stderr or '').strip(),
-            )
+        if blob is None or not _branch_present_in_config_blob(blob, branch):
             continue
-        try:
-            branches = json.loads(show.stdout)
-            names = {str(b).strip() for b in branches if str(b).strip()}
-        except (json.JSONDecodeError, TypeError):
-            continue
-        if branch not in names:
-            continue
-        dproc = subprocess.run(
-            ['git', 'log', '-1', '--format=%aI', commit],
-            cwd=repo_root,
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-        if dproc.returncode != 0:
-            logging.warning(
-                'stable branch grace: git log -1 date for commit %s failed with exit %s: %s',
-                commit,
-                dproc.returncode,
-                (dproc.stderr or '').strip(),
-            )
-            continue
-        raw = dproc.stdout.strip()
-        if raw.endswith('Z'):
-            raw = raw[:-1] + '+00:00'
-        try:
-            return datetime.datetime.fromisoformat(raw).astimezone(datetime.timezone.utc).date()
-        except ValueError:
-            logging.warning(
-                'stable branch grace: invalid author date for commit %s: %r',
-                commit,
-                raw,
-            )
-            continue
+        added = _commit_author_date(commit, repo_root)
+        if added is not None:
+            return added
     return None
 
 
-def _apply_stable_branch_grace(branch, inherited_muted_ya_path, all_muted_ya, to_delete, repo_root):
-    inactive = all_muted_ya, to_delete, frozenset(), None, None
+def _git_branch_added_to_stable_config_full_scan(branch, repo_root):
+    """Slow-path fallback: check every commit touching the config file in order."""
+    stdout = _run_git(
+        ['log', '--format=%H', '--reverse', '--', _STABLE_BRANCHES_CONFIG],
+        repo_root,
+        f'git log fallback scan for branch={branch}',
+    )
+    if stdout is None:
+        return None
+    for commit in stdout.splitlines():
+        commit = commit.strip()
+        if not commit:
+            continue
+        blob = _run_git(
+            ['show', f'{commit}:{_STABLE_BRANCHES_CONFIG}'],
+            repo_root,
+            f'git show {commit}:{_STABLE_BRANCHES_CONFIG}',
+        )
+        if blob is None or not _branch_present_in_config_blob(blob, branch):
+            continue
+        added = _commit_author_date(commit, repo_root)
+        if added is not None:
+            return added
+    return None
+
+
+def _debug_line_test_string(debug_line):
+    """Recover the raw ``testsuite testcase`` prefix from a ``create_debug_string`` line."""
+    return debug_line.split(' # ', 1)[0]
+
+
+def _apply_stable_branch_grace(
+    branch,
+    inherited_muted_ya_path,
+    all_muted_ya,
+    all_muted_ya_debug,
+    to_delete,
+    to_delete_debug,
+    repo_root,
+):
+    """Keep inherited ``muted_ya`` lines for a new stable branch during its grace window.
+
+    Returns ``(all_muted_ya, all_muted_ya_debug, to_delete, to_delete_debug,
+    grace_inherited, grace_config_since, grace_until)``. The two ``*_debug``
+    lists are adjusted in lock-step with their raw counterparts so that
+    ``write_file_set`` keeps producing a matching number of lines in
+    ``foo.txt``/``foo_debug.txt`` (mismatched counts previously made the
+    "Removed from mute" / "muted_ya" debug artifacts misleading whenever grace
+    actually kicked in — e.g. a test protected from deletion by grace would
+    still show up in ``to_delete_debug.txt`` as if it had been removed).
+    """
+    inactive = all_muted_ya, all_muted_ya_debug, to_delete, to_delete_debug, frozenset(), None, None
     added = _git_branch_added_to_stable_config(branch, repo_root)
     if added is None:
         return inactive
     today = datetime.datetime.now(datetime.timezone.utc).date()
-    grace_days = get_unmute_window_days()
+    grace_days = get_stable_branch_grace_days()
     grace_until = added + datetime.timedelta(days=grace_days - 1)
     if today > grace_until:
         return inactive
@@ -170,16 +229,44 @@ def _apply_stable_branch_grace(branch, inherited_muted_ya_path, all_muted_ya, to
         return inactive
     if not inherited:
         return inactive
+
+    # to_delete: drop debug lines for entries grace just pulled back out of to_delete
+    # (matched by their raw "testsuite testcase" prefix, so wildcard delete patterns —
+    # whose debug line is rendered from one concrete chunk rather than the pattern
+    # itself — are conservatively left as-is rather than mismatched).
+    removed_from_delete = set(to_delete) & inherited
+    new_to_delete = sorted(set(to_delete) - inherited)
+    new_to_delete_debug = sorted(
+        d for d in to_delete_debug if _debug_line_test_string(d) not in removed_from_delete
+    )
+
+    # muted_ya: add a synthetic debug line for every inherited entry that grace newly
+    # restores (i.e. was not already present — and therefore not already described).
+    newly_added = inherited - set(all_muted_ya)
+    already_described = {_debug_line_test_string(d) for d in all_muted_ya_debug}
+    grace_debug_lines = [
+        _grace_inherited_debug_line(line, branch, added, grace_until)
+        for line in sorted(newly_added)
+        if line not in already_described
+    ]
+    new_all_muted_ya = sorted(set(all_muted_ya) | inherited)
+    new_all_muted_ya_debug = sorted(list(all_muted_ya_debug) + grace_debug_lines)
+
     logging.info(
-        'stable branch grace for %s (config since %s, until %s): keep %d inherited mute(s)',
+        'stable branch grace for %s (config since %s, until %s): keep %d inherited mute(s) '
+        '(%d newly restored, %d protected from zero-run delete)',
         branch,
         added,
         grace_until,
         len(inherited),
+        len(newly_added),
+        len(removed_from_delete),
     )
     return (
-        sorted(set(all_muted_ya) | inherited),
-        sorted(set(to_delete) - inherited),
+        new_all_muted_ya,
+        new_all_muted_ya_debug,
+        new_to_delete,
+        new_to_delete_debug,
         frozenset(inherited),
         added,
         grace_until,
@@ -1014,14 +1101,22 @@ def apply_and_add_mutes(
         grace_config_since = None
         grace_until = None
         if branch and inherited_muted_ya_path and repo_root:
-            all_muted_ya, to_delete, grace_inherited, grace_config_since, grace_until = (
-                _apply_stable_branch_grace(
-                    branch,
-                    inherited_muted_ya_path,
-                    all_muted_ya,
-                    to_delete,
-                    repo_root,
-                )
+            (
+                all_muted_ya,
+                all_muted_ya_debug,
+                to_delete,
+                to_delete_debug,
+                grace_inherited,
+                grace_config_since,
+                grace_until,
+            ) = _apply_stable_branch_grace(
+                branch,
+                inherited_muted_ya_path,
+                all_muted_ya,
+                all_muted_ya_debug,
+                to_delete,
+                to_delete_debug,
+                repo_root,
             )
 
         write_file_set(os.path.join(output_path, 'to_delete.txt'), to_delete, to_delete_debug)

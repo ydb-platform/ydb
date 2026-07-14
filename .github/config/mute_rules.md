@@ -33,7 +33,7 @@
 
 ### New stable branch grace
 
-For **7 days** after a branch first appears in [stable_tests_branches.json](./stable_tests_branches.json) (date from git history; `main` excluded), inherited `muted_ya` lines are kept and not dropped via zero-run delete. Unmute/mute rules still apply when monitor data exists. Grace length matches `unmute_window_days`.
+For **7 days** after a branch first appears in [stable_tests_branches.json](./stable_tests_branches.json) (date from git history; `main` excluded), inherited `muted_ya` lines are kept and not dropped via zero-run delete. Unmute/mute rules still apply when monitor data exists. Grace length is its own setting: `stable_branch_grace_days`.
 
 ---
 

@@ -136,20 +136,20 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader<TSettings>> {
     void Handle(NHttp::TEvHttpProxy::TEvHttpIncomingResponse::TPtr& ev) {
         const auto& msg = *ev->Get();
 
-        EXPORT_LOG_D("Handle NHttp::TEvHttpProxy::TEvHttpIncomingResponse"
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::DATASHARD_BACKUP, "[Export] [" << LogPrefix() << "] ""Handle NHttp::TEvHttpProxy::TEvHttpIncomingResponse"
             << ": self# " << this->SelfId()
             << ", status# " << (msg.Response ? msg.Response->Status : "null")
             << ", body# " << (msg.Response ? msg.Response->Body : "null"));
 
         if (!msg.Response || !msg.Response->Status.StartsWith("200")) {
-            EXPORT_LOG_E("Error at 'GetProxy'"
+            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::DATASHARD_BACKUP, "[Export] [" << LogPrefix() << "] ""Error at 'GetProxy'"
                 << ": self# " << this->SelfId()
                 << ", error# " << msg.GetError());
             return RetryOrFinish(Aws::S3::S3Error({Aws::S3::S3Errors::SERVICE_UNAVAILABLE, true}));
         }
 
         if (msg.Response->Body.find('<') != TStringBuf::npos) {
-            EXPORT_LOG_E("Error at 'GetProxy'"
+            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::DATASHARD_BACKUP, "[Export] [" << LogPrefix() << "] ""Error at 'GetProxy'"
                 << ": self# " << this->SelfId()
                 << ", error# " << "invalid body"
                 << ", body# " << msg.Response->Body);
@@ -160,7 +160,7 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader<TSettings>> {
         ProxyResolved = true;
 
         const auto& cfg = GetS3StorageConfig()->GetConfig();
-        EXPORT_LOG_N("Using proxy: "
+        LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::DATASHARD_BACKUP, "[Export] [" << LogPrefix() << "] ""Using proxy: "
             << (cfg.proxyScheme == Aws::Http::Scheme::HTTPS ? "https://" : "http://")
             << cfg.proxyHost << ":" << cfg.proxyPort);
 
@@ -314,7 +314,7 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader<TSettings>> {
     void HandleScheme(TEvExternalStorage::TEvPutObjectResponse::TPtr& ev) {
         const auto& result = ev->Get()->Result;
 
-        EXPORT_LOG_D("HandleScheme TEvExternalStorage::TEvPutObjectResponse"
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::DATASHARD_BACKUP, "[Export] [" << LogPrefix() << "] ""HandleScheme TEvExternalStorage::TEvPutObjectResponse"
             << ": self# " << this->SelfId()
             << ", result# " << result);
 
@@ -338,7 +338,7 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader<TSettings>> {
     void HandlePermissions(TEvExternalStorage::TEvPutObjectResponse::TPtr& ev) {
         const auto& result = ev->Get()->Result;
 
-        EXPORT_LOG_D("HandleMetadata TEvExternalStorage::TEvPutObjectResponse"
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::DATASHARD_BACKUP, "[Export] [" << LogPrefix() << "] ""HandleMetadata TEvExternalStorage::TEvPutObjectResponse"
             << ": self# " << this->SelfId()
             << ", result# " << result);
 
@@ -362,7 +362,7 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader<TSettings>> {
     void HandleChangefeed(TEvExternalStorage::TEvPutObjectResponse::TPtr& ev) {
         const auto& result = ev->Get()->Result;
 
-        EXPORT_LOG_D("HandleChangefeed TEvExternalStorage::TEvPutObjectResponse"
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::DATASHARD_BACKUP, "[Export] [" << LogPrefix() << "] ""HandleChangefeed TEvExternalStorage::TEvPutObjectResponse"
             << ": self# " << this->SelfId()
             << ", result# " << result);
 
@@ -385,7 +385,7 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader<TSettings>> {
     void HandleTopic(TEvExternalStorage::TEvPutObjectResponse::TPtr& ev) {
         const auto& result = ev->Get()->Result;
 
-        EXPORT_LOG_D("HandleTopic TEvExternalStorage::TEvPutObjectResponse"
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::DATASHARD_BACKUP, "[Export] [" << LogPrefix() << "] ""HandleTopic TEvExternalStorage::TEvPutObjectResponse"
             << ": self# " << this->SelfId()
             << ", result# " << result);
 
@@ -409,7 +409,7 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader<TSettings>> {
     void HandleMetadata(TEvExternalStorage::TEvPutObjectResponse::TPtr& ev) {
         const auto& result = ev->Get()->Result;
 
-        EXPORT_LOG_D("HandleMetadata TEvExternalStorage::TEvPutObjectResponse"
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::DATASHARD_BACKUP, "[Export] [" << LogPrefix() << "] ""HandleMetadata TEvExternalStorage::TEvPutObjectResponse"
             << ": self# " << this->SelfId()
             << ", result# " << result);
 
@@ -437,7 +437,7 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader<TSettings>> {
     void HandleChecksum(TEvExternalStorage::TEvPutObjectResponse::TPtr& ev) {
         const auto& result = ev->Get()->Result;
 
-        EXPORT_LOG_D("HandleChecksum TEvExternalStorage::TEvPutObjectResponse"
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::DATASHARD_BACKUP, "[Export] [" << LogPrefix() << "] ""HandleChecksum TEvExternalStorage::TEvPutObjectResponse"
             << ": self# " << this->SelfId()
             << ", result# " << result);
 
@@ -449,7 +449,7 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader<TSettings>> {
     }
 
     void Handle(TEvExportScan::TEvReady::TPtr& ev) {
-        EXPORT_LOG_D("Handle TEvExportScan::TEvReady"
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::DATASHARD_BACKUP, "[Export] [" << LogPrefix() << "] ""Handle TEvExportScan::TEvReady"
             << ": self# " << this->SelfId()
             << ", sender# " << ev->Sender);
 
@@ -466,13 +466,13 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader<TSettings>> {
     }
 
     void Handle(TEvBuffer::TPtr& ev) {
-        EXPORT_LOG_D("Handle TEvExportScan::TEvBuffer"
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::DATASHARD_BACKUP, "[Export] [" << LogPrefix() << "] ""Handle TEvExportScan::TEvBuffer"
             << ": self# " << this->SelfId()
             << ", sender# " << ev->Sender
             << ", msg# " << ev->Get()->ToString());
 
         if (ev->Sender != Scanner) {
-            EXPORT_LOG_W("Received buffer from unknown scanner"
+            LOG_WARN_S(*TlsActivationContext, NKikimrServices::DATASHARD_BACKUP, "[Export] [" << LogPrefix() << "] ""Received buffer from unknown scanner"
                 << ": self# " << this->SelfId()
                 << ", sender# " << ev->Sender
                 << ", scanner# " << Scanner);
@@ -509,7 +509,7 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader<TSettings>> {
     void HandleData(TEvExternalStorage::TEvPutObjectResponse::TPtr& ev) {
         const auto& result = ev->Get()->Result;
 
-        EXPORT_LOG_D("HandleData TEvExternalStorage::TEvPutObjectResponse"
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::DATASHARD_BACKUP, "[Export] [" << LogPrefix() << "] ""HandleData TEvExternalStorage::TEvPutObjectResponse"
             << ": self# " << this->SelfId()
             << ", result# " << result);
 
@@ -534,7 +534,7 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader<TSettings>> {
     void Handle(TEvDataShard::TEvS3Upload::TPtr& ev) {
         auto& upload = ev->Get()->Upload;
 
-        EXPORT_LOG_D("Handle TEvDataShard::TEvS3Upload"
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::DATASHARD_BACKUP, "[Export] [" << LogPrefix() << "] ""Handle TEvDataShard::TEvS3Upload"
             << ": self# " << this->SelfId()
             << ", upload# " << upload);
 
@@ -593,7 +593,7 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader<TSettings>> {
     void Handle(TEvExternalStorage::TEvCreateMultipartUploadResponse::TPtr& ev) {
         const auto& result = ev->Get()->Result;
 
-        EXPORT_LOG_D("Handle TEvExternalStorage::TEvCreateMultipartUploadResponse"
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::DATASHARD_BACKUP, "[Export] [" << LogPrefix() << "] ""Handle TEvExternalStorage::TEvCreateMultipartUploadResponse"
             << ": self# " << this->SelfId()
             << ", result# " << result);
 
@@ -607,7 +607,7 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader<TSettings>> {
     void Handle(TEvExternalStorage::TEvUploadPartResponse::TPtr& ev) {
         const auto& result = ev->Get()->Result;
 
-        EXPORT_LOG_D("Handle TEvExternalStorage::TEvUploadPartResponse"
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::DATASHARD_BACKUP, "[Export] [" << LogPrefix() << "] ""Handle TEvExternalStorage::TEvUploadPartResponse"
             << ": self# " << this->SelfId()
             << ", result# " << result);
 
@@ -638,7 +638,7 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader<TSettings>> {
     void Handle(TEvExternalStorage::TEvCompleteMultipartUploadResponse::TPtr& ev) {
         const auto& result = ev->Get()->Result;
 
-        EXPORT_LOG_D("Handle TEvExternalStorage::TEvCompleteMultipartUploadResponse"
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::DATASHARD_BACKUP, "[Export] [" << LogPrefix() << "] ""Handle TEvExternalStorage::TEvCompleteMultipartUploadResponse"
             << ": self# " << this->SelfId()
             << ", result# " << result);
 
@@ -666,7 +666,7 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader<TSettings>> {
     void Handle(TEvExternalStorage::TEvAbortMultipartUploadResponse::TPtr& ev) {
         const auto& result = ev->Get()->Result;
 
-        EXPORT_LOG_D("Handle TEvExternalStorage::TEvAbortMultipartUploadResponse"
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::DATASHARD_BACKUP, "[Export] [" << LogPrefix() << "] ""Handle TEvExternalStorage::TEvAbortMultipartUploadResponse"
             << ": self# " << this->SelfId()
             << ", result# " << result);
 
@@ -692,7 +692,7 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader<TSettings>> {
             return true;
         }
 
-        EXPORT_LOG_E("Error at '" << marker << "'"
+        LOG_ERROR_S(*TlsActivationContext, NKikimrServices::DATASHARD_BACKUP, "[Export] [" << LogPrefix() << "] ""Error at '" << marker << "'"
             << ": self# " << this->SelfId()
             << ", error# " << result);
         RetryOrFinish(result.GetError());
@@ -719,7 +719,7 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader<TSettings>> {
     }
 
     void Finish(bool success = true, const TString& error = TString()) {
-        EXPORT_LOG_I("Finish"
+        LOG_INFO_S(*TlsActivationContext, NKikimrServices::DATASHARD_BACKUP, "[Export] [" << LogPrefix() << "] ""Finish"
             << ": self# " << this->SelfId()
             << ", success# " << success
             << ", error# " << error
@@ -816,7 +816,7 @@ public:
     }
 
     void Bootstrap() {
-        EXPORT_LOG_D("Bootstrap"
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::DATASHARD_BACKUP, "[Export] [" << LogPrefix() << "] ""Bootstrap"
             << ": self# " << this->SelfId()
             << ", attempt# " << Attempt);
 

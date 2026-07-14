@@ -61,7 +61,7 @@ private:
     void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
         const auto& result = ev->Get()->Request;
 
-        LOG_D("HandleUserTable TEvTxProxySchemeCache::TEvNavigateKeySetResult"
+        LOG_DEBUG_S (*TlsActivationContext, NKikimrServices::CHANGE_EXCHANGE, GetLogPrefix() <<"HandleUserTable TEvTxProxySchemeCache::TEvNavigateKeySetResult"
             << ": result# " << (result ? result->ToString(*AppData()->TypeRegistry) : "nullptr"));
 
         if (!AsDerived()->CheckNotEmpty(result)) {
@@ -127,7 +127,7 @@ private:
     void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
         const auto& result = ev->Get()->Request;
 
-        LOG_D("HandleTargetTable TEvTxProxySchemeCache::TEvNavigateKeySetResult"
+        LOG_DEBUG_S (*TlsActivationContext, NKikimrServices::CHANGE_EXCHANGE, GetLogPrefix() <<"HandleTargetTable TEvTxProxySchemeCache::TEvNavigateKeySetResult"
             << ": result# " << (result ? result->ToString(*AppData()->TypeRegistry) : "nullptr"));
 
         if (!AsDerived()->CheckNotEmpty(result)) {
@@ -223,7 +223,7 @@ private:
     void Handle(TEvTxProxySchemeCache::TEvResolveKeySetResult::TPtr& ev) {
         const auto& result = ev->Get()->Request;
 
-        LOG_D("HandleKeys TEvTxProxySchemeCache::TEvResolveKeySetResult"
+        LOG_DEBUG_S (*TlsActivationContext, NKikimrServices::CHANGE_EXCHANGE, GetLogPrefix() <<"HandleKeys TEvTxProxySchemeCache::TEvResolveKeySetResult"
             << ": result# " << (result ? result->ToString(*AppData()->TypeRegistry) : "nullptr"));
 
         if (!AsDerived()->CheckNotEmpty(result)) {
@@ -245,7 +245,7 @@ private:
         }
 
         if (!entry.KeyDescription->GetPartitions()) {
-            LOG_W("Empty partitions list"
+            LOG_WARN_S  (*TlsActivationContext, NKikimrServices::CHANGE_EXCHANGE, GetLogPrefix() <<"Empty partitions list"
                 << ": entry# " << entry.ToString(*AppData()->TypeRegistry));
             return AsDerived()->Retry();
         }

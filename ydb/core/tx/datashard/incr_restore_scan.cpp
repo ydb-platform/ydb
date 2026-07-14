@@ -95,7 +95,7 @@ public:
     }
 
     void Start(TEvIncrementalRestoreScan::TEvServe::TPtr& ev) {
-        LOG_D("Handle TEvIncrementalRestoreScan::TEvServe " << ev->Get()->ToString());
+        LOG_DEBUG_S (*TlsActivationContext, NKikimrServices::CHANGE_EXCHANGE, GetLogPrefix() <<"Handle TEvIncrementalRestoreScan::TEvServe " << ev->Get()->ToString());
 
         // Store/update the actorId on each command receipt (handles SchemeShard restarts)
         OperatorActorId = ev->Sender;
@@ -104,7 +104,7 @@ public:
     }
 
     void Handle(NChangeExchange::TEvChangeExchange::TEvRequestRecords::TPtr& ev) {
-        LOG_D("Handle " << ev->Get()->ToString());
+        LOG_DEBUG_S (*TlsActivationContext, NKikimrServices::CHANGE_EXCHANGE, GetLogPrefix() <<"Handle " << ev->Get()->ToString());
 
         TVector<TChangeRecord::TPtr> records(::Reserve(ev->Get()->Records.size()));
 
@@ -118,7 +118,7 @@ public:
     }
 
     void Handle(NChangeExchange::TEvChangeExchange::TEvRemoveRecords::TPtr& ev) {
-        LOG_D("Handle " << ev->Get()->ToString());
+        LOG_DEBUG_S (*TlsActivationContext, NKikimrServices::CHANGE_EXCHANGE, GetLogPrefix() <<"Handle " << ev->Get()->ToString());
 
         for (auto recordId : ev->Get()->Records) {
             PendingRecords.erase(recordId);
@@ -128,7 +128,7 @@ public:
     }
 
     void Handle(TEvIncrementalRestoreScan::TEvFinished::TPtr& ev) {
-        LOG_D("Handle TEvIncrementalRestoreScan::TEvFinished " << ev->Get()->ToString());
+        LOG_DEBUG_S (*TlsActivationContext, NKikimrServices::CHANGE_EXCHANGE, GetLogPrefix() <<"Handle TEvIncrementalRestoreScan::TEvFinished " << ev->Get()->ToString());
 
         Driver->Touch(EScan::Final);
     }
@@ -151,7 +151,7 @@ public:
     }
 
     EScan Seek(TLead& lead, ui64) override {
-        LOG_D("Seek");
+        LOG_DEBUG_S (*TlsActivationContext, NKikimrServices::CHANGE_EXCHANGE, GetLogPrefix() <<"Seek");
 
         if (LastKey) {
             lead.To(ValueTags, LastKey->GetCells(), ESeek::Upper);
@@ -179,7 +179,7 @@ public:
     }
 
     EScan Exhausted() override {
-        LOG_D("Exhausted");
+        LOG_DEBUG_S (*TlsActivationContext, NKikimrServices::CHANGE_EXCHANGE, GetLogPrefix() <<"Exhausted");
 
         NoMoreData = true;
 
@@ -192,14 +192,14 @@ public:
     }
 
     TAutoPtr<IDestructable> Finish(EStatus status) override {
-        LOG_D("Finish " << status);
+        LOG_DEBUG_S (*TlsActivationContext, NKikimrServices::CHANGE_EXCHANGE, GetLogPrefix() <<"Finish " << status);
 
         const bool success = IsScanSuccess(status);
         const auto endStatus = MapScanStatus(status);
         if (!success) {
             // Error propagation: see github.com/ydb-platform/ydb/issues/18797
             // DS classifies cause (EndStatus); SS owns retry policy.
-            LOG_E("IncrementalRestoreScan finished with error status: " << status
+            LOG_ERROR_S (*TlsActivationContext, NKikimrServices::CHANGE_EXCHANGE, GetLogPrefix() <<"IncrementalRestoreScan finished with error status: " << status
                   << " endStatus=" << static_cast<int>(endStatus));
         }
 

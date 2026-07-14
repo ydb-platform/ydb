@@ -33,19 +33,19 @@ class TCdcPartitionWorker: public TActorBootstrapped<TCdcPartitionWorker> {
     }
 
     void Ack() {
-        LOG_I("Send ack");
+        LOG_INFO_S  (*TlsActivationContext, NKikimrServices::CHANGE_EXCHANGE, GetLogPrefix() <<"Send ack");
         Send(Parent, new TEvChangeExchange::TEvSplitAck());
         PassAway();
     }
 
     void Leave() {
-        LOG_I("Leave");
+        LOG_INFO_S  (*TlsActivationContext, NKikimrServices::CHANGE_EXCHANGE, GetLogPrefix() <<"Leave");
         Send(Parent, new TEvents::TEvGone());
         PassAway();
     }
 
     void Handle(TEvPersQueue::TEvResponse::TPtr& ev) {
-        LOG_D("Handle " << ev->Get()->ToString());
+        LOG_DEBUG_S (*TlsActivationContext, NKikimrServices::CHANGE_EXCHANGE, GetLogPrefix() <<"Handle " << ev->Get()->ToString());
 
         const auto& response = ev->Get()->Record;
 
@@ -69,14 +69,14 @@ class TCdcPartitionWorker: public TActorBootstrapped<TCdcPartitionWorker> {
 
     void Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev) {
         if (ev->Get()->TabletId == TabletId && ev->Get()->Status != NKikimrProto::OK) {
-            LOG_W("Pipe connection error");
+            LOG_WARN_S  (*TlsActivationContext, NKikimrServices::CHANGE_EXCHANGE, GetLogPrefix() <<"Pipe connection error");
             Leave();
         }
     }
 
     void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr& ev) {
         if (ev->Get()->TabletId == TabletId) {
-            LOG_W("Pipe disconnected");
+            LOG_WARN_S  (*TlsActivationContext, NKikimrServices::CHANGE_EXCHANGE, GetLogPrefix() <<"Pipe disconnected");
             Leave();
         }
     }
@@ -172,7 +172,7 @@ class TCdcWorker
     }
 
     void Ack() {
-        LOG_I("Send ack");
+        LOG_INFO_S  (*TlsActivationContext, NKikimrServices::CHANGE_EXCHANGE, GetLogPrefix() <<"Send ack");
         Send(Parent, new TEvChangeExchange::TEvSplitAck());
         PassAway();
     }
@@ -205,12 +205,12 @@ class TCdcWorker
     }
 
     void LogCritAndRetry(const TString& error) {
-        LOG_C(error);
+        LOG_CRIT_S  (*TlsActivationContext, NKikimrServices::CHANGE_EXCHANGE, GetLogPrefix() << error);
         Retry();
     }
 
     void LogWarnAndRetry(const TString& error) {
-        LOG_W(error);
+        LOG_WARN_S  (*TlsActivationContext, NKikimrServices::CHANGE_EXCHANGE, GetLogPrefix() << error);
         Retry();
     }
 
@@ -270,7 +270,7 @@ class TCdcWorker
     void HandleCdcStream(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
         const auto& result = ev->Get()->Request;
 
-        LOG_D("Handle TEvTxProxySchemeCache::TEvNavigateKeySetResult"
+        LOG_DEBUG_S (*TlsActivationContext, NKikimrServices::CHANGE_EXCHANGE, GetLogPrefix() <<"Handle TEvTxProxySchemeCache::TEvNavigateKeySetResult"
             << ": result# " << (result ? result->ToString(*AppData()->TypeRegistry) : "nullptr"));
 
         if (!CheckNotEmpty(result)) {
@@ -296,7 +296,7 @@ class TCdcWorker
         }
 
         if (entry.Self && entry.Self->Info.GetPathState() == NKikimrSchemeOp::EPathStateDrop) {
-            LOG_N("Auto-ack (stream is planned to drop)");
+            LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::CHANGE_EXCHANGE, GetLogPrefix() <<"Auto-ack (stream is planned to drop)");
             return Ack();
         }
 
@@ -329,7 +329,7 @@ class TCdcWorker
     void HandleTopic(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
         const auto& result = ev->Get()->Request;
 
-        LOG_D("Handle TEvTxProxySchemeCache::TEvNavigateKeySetResult"
+        LOG_DEBUG_S (*TlsActivationContext, NKikimrServices::CHANGE_EXCHANGE, GetLogPrefix() <<"Handle TEvTxProxySchemeCache::TEvNavigateKeySetResult"
             << ": result# " << (result ? result->ToString(*AppData()->TypeRegistry) : "nullptr"));
 
         if (!CheckNotEmpty(result)) {
@@ -369,7 +369,7 @@ class TCdcWorker
                 workers.emplace(partitionId, it->second);
                 Workers.erase(it);
             } else {
-                LOG_T("Register new worker"
+                LOG_TRACE_S (*TlsActivationContext, NKikimrServices::CHANGE_EXCHANGE, GetLogPrefix() <<"Register new worker"
                     << ": partitionId# " << partitionId);
 
                 const auto worker = Register(new TCdcPartitionWorker(SelfId(), partitionId, tabletId, SrcTabletId, DstTabletIds));
@@ -383,7 +383,7 @@ class TCdcWorker
             const auto& worker = kv.second;
 
             if (worker) {
-                LOG_T("Kill stale worker"
+                LOG_TRACE_S (*TlsActivationContext, NKikimrServices::CHANGE_EXCHANGE, GetLogPrefix() <<"Kill stale worker"
                     << ": partitionId# " << partitionId);
 
                 Send(worker, new TEvents::TEvPoisonPill());
@@ -395,7 +395,7 @@ class TCdcWorker
             return Ack();
         }
 
-        LOG_I("Wait " << Pending.size() << " worker(s)");
+        LOG_INFO_S  (*TlsActivationContext, NKikimrServices::CHANGE_EXCHANGE, GetLogPrefix() <<"Wait " << Pending.size() << " worker(s)");
 
         Workers = std::move(workers);
         Become(&TThis::StateWork);
@@ -406,16 +406,16 @@ class TCdcWorker
     }
 
     void Handle(TEvChangeExchange::TEvSplitAck::TPtr& ev) {
-        LOG_D("Handle " << ev->Get()->ToString());
+        LOG_DEBUG_S (*TlsActivationContext, NKikimrServices::CHANGE_EXCHANGE, GetLogPrefix() <<"Handle " << ev->Get()->ToString());
 
         auto it = Pending.find(ev->Sender);
         if (it == Pending.end()) {
-            LOG_W("Split ack from unknown worker"
+            LOG_WARN_S  (*TlsActivationContext, NKikimrServices::CHANGE_EXCHANGE, GetLogPrefix() <<"Split ack from unknown worker"
                 << ": worker# " << ev->Sender);
             return;
         }
 
-        LOG_N("Split ack"
+        LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::CHANGE_EXCHANGE, GetLogPrefix() <<"Split ack"
             << ": worker# " << it->first
             << ", partition# " << it->second);
 
@@ -428,16 +428,16 @@ class TCdcWorker
     }
 
     void Handle(TEvents::TEvGone::TPtr& ev) {
-        LOG_D("Handle " << ev->Get()->ToString());
+        LOG_DEBUG_S (*TlsActivationContext, NKikimrServices::CHANGE_EXCHANGE, GetLogPrefix() <<"Handle " << ev->Get()->ToString());
 
         auto it = Pending.find(ev->Sender);
         if (it == Pending.end()) {
-            LOG_W("Unknown worker has gone"
+            LOG_WARN_S  (*TlsActivationContext, NKikimrServices::CHANGE_EXCHANGE, GetLogPrefix() <<"Unknown worker has gone"
                 << ": worker# " << ev->Sender);
             return;
         }
 
-        LOG_I("Worker has gone"
+        LOG_INFO_S  (*TlsActivationContext, NKikimrServices::CHANGE_EXCHANGE, GetLogPrefix() <<"Worker has gone"
             << ": worker# " << it->first
             << ", partition# " << it->second);
 
@@ -537,22 +537,22 @@ class TChangeExchageSplit: public TActorBootstrapped<TChangeExchageSplit> {
     }
 
     void Ack() {
-        LOG_I("Send ack");
+        LOG_INFO_S  (*TlsActivationContext, NKikimrServices::CHANGE_EXCHANGE, GetLogPrefix() <<"Send ack");
         Send(DataShard.ActorId, new TEvChangeExchange::TEvSplitAck());
         PassAway();
     }
 
     void Handle(TEvChangeExchange::TEvSplitAck::TPtr& ev) {
-        LOG_D("Handle " << ev->Get()->ToString());
+        LOG_DEBUG_S (*TlsActivationContext, NKikimrServices::CHANGE_EXCHANGE, GetLogPrefix() <<"Handle " << ev->Get()->ToString());
 
         auto it = Pending.find(ev->Sender);
         if (it == Pending.end()) {
-            LOG_W("Split ack from unknown worker"
+            LOG_WARN_S  (*TlsActivationContext, NKikimrServices::CHANGE_EXCHANGE, GetLogPrefix() <<"Split ack from unknown worker"
                 << ": worker# " << ev->Sender);
             return;
         }
 
-        LOG_N("Split ack"
+        LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::CHANGE_EXCHANGE, GetLogPrefix() <<"Split ack"
             << ": worker# " << ev->Sender);
 
         Workers.at(it->second).ActorId = TActorId();
@@ -592,7 +592,7 @@ public:
 
     void Bootstrap() {
         if (!Workers) {
-            LOG_N("Auto-ack (no active worker)");
+            LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::CHANGE_EXCHANGE, GetLogPrefix() <<"Auto-ack (no active worker)");
             return Ack();
         }
 
@@ -600,7 +600,7 @@ public:
             const auto& pathId = kv.first;
             auto& worker = kv.second;
 
-            LOG_D("Register worker"
+            LOG_DEBUG_S (*TlsActivationContext, NKikimrServices::CHANGE_EXCHANGE, GetLogPrefix() <<"Register worker"
                 << ": pathId# " << pathId);
             Pending.emplace(RegisterWorker(pathId, worker), pathId);
         }

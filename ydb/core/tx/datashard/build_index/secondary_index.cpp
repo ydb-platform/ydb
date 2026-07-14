@@ -170,7 +170,7 @@ protected:
 
     template <typename TAddRow>
     EScan FeedImpl([[maybe_unused]] TArrayRef<const TCell> key, const TRow& /*row*/, TAddRow&& addRow) {
-        // LOG_T("Feed key " << DebugPrintPoint(KeyTypes, key, *AppData()->TypeRegistry) << " " << Debug());
+        // LOG_TRACE_S(*TlsActivationContext, NKikimrServices::BUILD_INDEX, "Feed key " << DebugPrintPoint(KeyTypes, key, *AppData()->TypeRegistry) << " " << Debug());
 
         addRow();
 
@@ -199,7 +199,7 @@ public:
     TInitialState Prepare(IDriver* driver, TIntrusiveConstPtr<TScheme>) override {
         TActivationContext::AsActorContext().RegisterWithSameMailbox(this);
 
-        LOG_I("Prepare " << Debug());
+        LOG_INFO_S(*TlsActivationContext, NKikimrServices::BUILD_INDEX, "Prepare " << Debug());
 
         Driver = driver;
 
@@ -207,7 +207,7 @@ public:
     }
 
     EScan Seek(TLead& lead, ui64 seq) override {
-        LOG_T("Seek no " << seq << " " << Debug());
+        LOG_TRACE_S(*TlsActivationContext, NKikimrServices::BUILD_INDEX, "Seek no " << seq << " " << Debug());
         if (seq) {
             if (!WriteBuf.IsEmpty()) {
                 return EScan::Sleep;
@@ -272,9 +272,9 @@ public:
         UploadStatusToMessage(progress->Record);
 
         if (progress->Record.GetStatus() == NKikimrIndexBuilder::DONE) {
-            LOG_N("Done " << Debug() << " " << progress->Record.ShortDebugString());
+            LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::BUILD_INDEX, "Done " << Debug() << " " << progress->Record.ShortDebugString());
         } else {
-            LOG_E("Failed " << Debug() << " " << progress->Record.ShortDebugString());
+            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::BUILD_INDEX, "Failed " << Debug() << " " << progress->Record.ShortDebugString());
         }
         this->Send(ProgressActorId, progress.Release());
 
@@ -309,7 +309,7 @@ public:
     }
 
     EScan PageFault() override {
-        LOG_T("Page fault"
+        LOG_TRACE_S(*TlsActivationContext, NKikimrServices::BUILD_INDEX, "Page fault"
               << " ReadBuf empty: " << ReadBuf.IsEmpty()
               << " WriteBuf empty: " << WriteBuf.IsEmpty()
               << " " << Debug());
@@ -328,12 +328,12 @@ protected:
             HFunc(TEvTxUserProxy::TEvUploadRowsResponse, Handle);
             CFunc(TEvents::TSystem::Wakeup, HandleWakeup);
             default:
-                LOG_E("TBuildIndexScan: StateWork unexpected event type: " << ev->GetTypeRewrite() << " event: " << ev->ToString());
+                LOG_ERROR_S(*TlsActivationContext, NKikimrServices::BUILD_INDEX, "TBuildIndexScan: StateWork unexpected event type: " << ev->GetTypeRewrite() << " event: " << ev->ToString());
         }
     }
 
     void HandleWakeup(const NActors::TActorContext& /*ctx*/) {
-        LOG_D("Retry upload " << Debug());
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::BUILD_INDEX, "Retry upload " << Debug());
 
         if (!WriteBuf.IsEmpty()) {
             RetryUpload();
@@ -341,7 +341,7 @@ protected:
     }
 
     void Handle(TEvTxUserProxy::TEvUploadRowsResponse::TPtr& ev, const TActorContext& ctx) {
-        LOG_D("Handle TEvUploadRowsResponse "
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::BUILD_INDEX, "Handle TEvUploadRowsResponse "
               << Debug()
               << " Uploader: " << Uploader.ToString()
               << " ev->Sender: " << ev->Sender.ToString());
@@ -389,13 +389,13 @@ protected:
         }
 
         if (RetryCount < ScanSettings.GetMaxBatchRetries() && UploadStatus.IsRetriable()) {
-            LOG_N("Got retriable error, " << Debug());
+            LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::BUILD_INDEX, "Got retriable error, " << Debug());
 
             ctx.Schedule(GetRetryWakeupTimeoutBackoff(RetryCount), new TEvents::TEvWakeup());
             return;
         }
 
-        LOG_N("Got error, abort scan, " << Debug());
+        LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::BUILD_INDEX, "Got error, abort scan, " << Debug());
 
         Driver->Touch(EScan::Final);
     }
@@ -411,7 +411,7 @@ protected:
             RetryCount = 0;
         }
 
-        LOG_D("Upload, last key " << DebugPrintPoint(KeyTypes, WriteBuf.GetLastKey().GetCells(), *AppData()->TypeRegistry) << " " << Debug());
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::BUILD_INDEX, "Upload, last key " << DebugPrintPoint(KeyTypes, WriteBuf.GetLastKey().GetCells(), *AppData()->TypeRegistry) << " " << Debug());
 
         auto actor = NTxProxy::CreateUploadRowsInternal(
             this->SelfId(),
@@ -844,7 +844,7 @@ void TDataShard::HandleSafe(TEvDataShard::TEvBuildIndexCreateRequest::TPtr& ev, 
         auto response = MakeHolder<TEvDataShard::TEvBuildIndexProgressResponse>();
         FillScanResponseCommonFields(*response, request.GetId(), TabletID(), seqNo);
 
-        LOG_N("Starting TBuildIndexScan TabletId: " << TabletID()
+        LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::BUILD_INDEX, "Starting TBuildIndexScan TabletId: " << TabletID()
             << " " << request.ShortDebugString()
             << " row version " << rowVersion);
 
@@ -862,7 +862,7 @@ void TDataShard::HandleSafe(TEvDataShard::TEvBuildIndexCreateRequest::TPtr& ev, 
         };
         auto trySendBadRequest = [&] {
             if (response->Record.GetStatus() == NKikimrIndexBuilder::EBuildStatus::BAD_REQUEST) {
-                LOG_E("Rejecting TBuildIndexScan bad request TabletId: " << TabletID()
+                LOG_ERROR_S(*TlsActivationContext, NKikimrServices::BUILD_INDEX, "Rejecting TBuildIndexScan bad request TabletId: " << TabletID()
                     << " " << request.ShortDebugString()
                     << " with response " << response->Record.ShortDebugString());
                 ctx.Send(ev->Sender, std::move(response));

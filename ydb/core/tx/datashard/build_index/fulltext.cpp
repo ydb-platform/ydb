@@ -151,7 +151,7 @@ public:
             RequestedRange = TableRange;
         }
 
-        LOG_I("Create " << Debug());
+        LOG_INFO_S(*TlsActivationContext, NKikimrServices::BUILD_INDEX, "Create " << Debug());
 
         Y_ENSURE(Request.settings().columns().size() == 1);
         TextColumn = Request.settings().columns().at(0).column();
@@ -313,7 +313,7 @@ public:
     TInitialState Prepare(IDriver* driver, TIntrusiveConstPtr<TScheme>) final
     {
         TActivationContext::AsActorContext().RegisterWithSameMailbox(this);
-        LOG_I("Prepare " << Debug());
+        LOG_INFO_S(*TlsActivationContext, NKikimrServices::BUILD_INDEX, "Prepare " << Debug());
 
         Driver = driver;
         Uploader.SetOwner(SelfId());
@@ -323,7 +323,7 @@ public:
 
     EScan Seek(TLead& lead, ui64 seq) final
     {
-        LOG_T("Seek " << seq << " " << Debug());
+        LOG_TRACE_S(*TlsActivationContext, NKikimrServices::BUILD_INDEX, "Seek " << seq << " " << Debug());
 
         if (seq) {
             return Uploader.CanFinish()
@@ -349,7 +349,7 @@ public:
 
     EScan Feed(TArrayRef<const TCell> key, const TRow& row) final
     {
-        // LOG_T("Feed " << Debug());
+        // LOG_TRACE_S(*TlsActivationContext, NKikimrServices::BUILD_INDEX, "Feed " << Debug());
 
         ++ReadRows;
         ReadBytes += CountRowCellBytes(key, *row);
@@ -585,7 +585,7 @@ public:
 
     EScan PageFault() final
     {
-        LOG_T("PageFault " << Debug());
+        LOG_TRACE_S(*TlsActivationContext, NKikimrServices::BUILD_INDEX, "PageFault " << Debug());
         return EScan::Feed;
     }
 
@@ -594,9 +594,9 @@ public:
         FlushAllTokens();
 
         if (JsonErrors > 0) {
-            LOG_W("Invalid JSON encountered in " << JsonErrors << " rows " << Debug());
+            LOG_WARN_S(*TlsActivationContext, NKikimrServices::BUILD_INDEX, "Invalid JSON encountered in " << JsonErrors << " rows " << Debug());
         }
-        LOG_D("Exhausted ReadRows: " << ReadRows
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::BUILD_INDEX, "Exhausted ReadRows: " << ReadRows
             << " DocCount: " << DocCount
             << " posting added: " << PostingEntriesAdded
             << " docs added: " << DocsEntriesAdded
@@ -628,12 +628,12 @@ public:
         Uploader.Finish(record, status);
 
         if (Response->Record.GetStatus() == NKikimrIndexBuilder::DONE) {
-            LOG_N("Done " << Debug()
+            LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::BUILD_INDEX, "Done " << Debug()
                 << " posting added: " << PostingEntriesAdded
                 << " docs added: " << DocsEntriesAdded
                 << " " << Response->Record.ShortDebugString());
         } else {
-            LOG_E("Failed " << Debug()
+            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::BUILD_INDEX, "Failed " << Debug()
                 << " posting added: " << PostingEntriesAdded
                 << " docs added: " << DocsEntriesAdded
                 << " " << Response->Record.ShortDebugString());
@@ -666,21 +666,21 @@ protected:
             HFunc(TEvTxUserProxy::TEvUploadRowsResponse, Handle);
             CFunc(TEvents::TSystem::Wakeup, HandleWakeup);
             default:
-                LOG_E("StateWork unexpected event type: " << ev->GetTypeRewrite()
+                LOG_ERROR_S(*TlsActivationContext, NKikimrServices::BUILD_INDEX, "StateWork unexpected event type: " << ev->GetTypeRewrite()
                     << " event: " << ev->ToString() << " " << Debug());
         }
     }
 
     void HandleWakeup(const NActors::TActorContext& /*ctx*/)
     {
-        LOG_D("Retry upload " << Debug());
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::BUILD_INDEX, "Retry upload " << Debug());
 
         Uploader.RetryUpload();
     }
 
     void Handle(TEvTxUserProxy::TEvUploadRowsResponse::TPtr& ev, const TActorContext& ctx)
     {
-        LOG_D("Handle TEvUploadRowsResponse " << Debug()
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::BUILD_INDEX, "Handle TEvUploadRowsResponse " << Debug()
             << " posting added: " << PostingEntriesAdded
             << " docs added: " << DocsEntriesAdded
             << " ev->Sender: " << ev->Sender.ToString());
@@ -721,12 +721,12 @@ protected:
         }
 
         if (auto retryAfter = Uploader.GetRetryAfter(); retryAfter) {
-            LOG_N("Got retriable error, " << Debug() << " " << Uploader.GetUploadStatus().ToString());
+            LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::BUILD_INDEX, "Got retriable error, " << Debug() << " " << Uploader.GetUploadStatus().ToString());
             ctx.Schedule(*retryAfter, new TEvents::TEvWakeup());
             return;
         }
 
-        LOG_N("Got error, abort scan, " << Debug() << " " << Uploader.GetUploadStatus().ToString());
+        LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::BUILD_INDEX, "Got error, abort scan, " << Debug() << " " << Uploader.GetUploadStatus().ToString());
 
         Driver->Touch(EScan::Final);
     }
@@ -779,7 +779,7 @@ void TDataShard::HandleSafe(TEvDataShard::TEvBuildFulltextIndexRequest::TPtr& ev
         auto response = MakeHolder<TEvDataShard::TEvBuildFulltextIndexResponse>();
         FillScanResponseCommonFields(*response, id, TabletID(), seqNo);
 
-        LOG_N("Starting TBuildFulltextIndexScan TabletId: " << TabletID()
+        LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::BUILD_INDEX, "Starting TBuildFulltextIndexScan TabletId: " << TabletID()
             << " " << request.ShortDebugString()
             << " row version " << rowVersion);
 
@@ -797,7 +797,7 @@ void TDataShard::HandleSafe(TEvDataShard::TEvBuildFulltextIndexRequest::TPtr& ev
         };
         auto trySendBadRequest = [&] {
             if (response->Record.GetStatus() == NKikimrIndexBuilder::EBuildStatus::BAD_REQUEST) {
-                LOG_E("Rejecting TBuildFulltextIndexScan bad request TabletId: " << TabletID()
+                LOG_ERROR_S(*TlsActivationContext, NKikimrServices::BUILD_INDEX, "Rejecting TBuildFulltextIndexScan bad request TabletId: " << TabletID()
                     << " " << request.ShortDebugString()
                     << " with response " << response->Record.ShortDebugString());
                 ctx.Send(ev->Sender, std::move(response));

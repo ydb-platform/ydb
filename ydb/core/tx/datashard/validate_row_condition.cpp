@@ -40,7 +40,7 @@ public:
             columnNames.push_back(col);
         }
         ScanTags = BuildTags(tableInfo, std::move(columnNames));
-        LOG_I("Create TValidateRowConditionScan"
+        LOG_INFO_S(*TlsActivationContext, NKikimrServices::BUILD_INDEX,"Create TValidateRowConditionScan"
             << " id# " << Request.GetId()
             << " tabletId# " << TabletId
             << " notNullColumns# " << Request.NotNullColumnsSize());
@@ -99,17 +99,17 @@ public:
         }
 
         if (Status == NKikimrSetColumnConstraint::EValidateStatus::DONE && IsValid) {
-            LOG_N("TValidateRowConditionScan: Done (valid)"
+            LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::BUILD_INDEX,"TValidateRowConditionScan: Done (valid)"
                 << " id# " << Request.GetId()
                 << " tabletId# " << TabletId
                 << " scanStatus# " << (int)scanStatus);
         } else if (!IsValid) {
-            LOG_N("TValidateRowConditionScan: Done (invalid, NULL found)"
+            LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::BUILD_INDEX,"TValidateRowConditionScan: Done (invalid, NULL found)"
                 << " id# " << Request.GetId()
                 << " tabletId# " << TabletId
                 << " scanStatus# " << (int)scanStatus);
         } else {
-            LOG_E("TValidateRowConditionScan: Failed"
+            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::BUILD_INDEX,"TValidateRowConditionScan: Failed"
                 << " id# " << Request.GetId()
                 << " tabletId# " << TabletId
                 << " buildStatus# " << (int)Status
@@ -175,7 +175,7 @@ void TDataShard::HandleSafe(TEvDataShard::TEvValidateRowConditionRequest::TPtr& 
     auto rowVersion = GetMvccTxVersion(EMvccTxMode::ReadOnly);
     TScanRecord::TSeqNo seqNo = {record.GetSeqNoGeneration(), record.GetSeqNoRound()};
 
-    LOG_D("HandleSafe TEvValidateRowConditionRequest"
+    LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::BUILD_INDEX,"HandleSafe TEvValidateRowConditionRequest"
         << " id# " << id
         << " tabletId# " << record.GetTabletId()
         << " ownerId# " << record.GetOwnerId()
@@ -184,7 +184,7 @@ void TDataShard::HandleSafe(TEvDataShard::TEvValidateRowConditionRequest::TPtr& 
         << " rowVersion# " << rowVersion);
 
     if (VolatileTxManager.HasVolatileTxsAtSnapshot(rowVersion)) {
-        LOG_D("HandleSafe TEvValidateRowConditionRequest: waiting for volatile txs"
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::BUILD_INDEX,"HandleSafe TEvValidateRowConditionRequest: waiting for volatile txs"
             << " id# " << id
             << " rowVersion# " << rowVersion);
         VolatileTxManager.AttachWaitingSnapshotEvent(rowVersion, std::unique_ptr<IEventHandle>(ev.Release()));
@@ -205,7 +205,7 @@ void TDataShard::HandleSafe(TEvDataShard::TEvValidateRowConditionRequest::TPtr& 
     };
 
     if (record.GetTabletId() != TabletID()) {
-        LOG_E("HandleSafe TEvValidateRowConditionRequest: wrong shard"
+        LOG_ERROR_S(*TlsActivationContext, NKikimrServices::BUILD_INDEX,"HandleSafe TEvValidateRowConditionRequest: wrong shard"
             << " id# " << id
             << " expected# " << TabletID()
             << " got# " << record.GetTabletId());
@@ -215,7 +215,7 @@ void TDataShard::HandleSafe(TEvDataShard::TEvValidateRowConditionRequest::TPtr& 
 
     const auto tableId = TTableId(record.GetOwnerId(), record.GetPathId());
     if (!GetUserTables().contains(tableId.PathId.LocalPathId)) {
-        LOG_E("HandleSafe TEvValidateRowConditionRequest: unknown table"
+        LOG_ERROR_S(*TlsActivationContext, NKikimrServices::BUILD_INDEX,"HandleSafe TEvValidateRowConditionRequest: unknown table"
             << " id# " << id
             << " localPathId# " << tableId.PathId.LocalPathId);
         sendResponse(NKikimrSetColumnConstraint::EValidateStatus::BAD_REQUEST, TStringBuilder() << "Unknown table id: " << tableId.PathId.LocalPathId);
@@ -223,7 +223,7 @@ void TDataShard::HandleSafe(TEvDataShard::TEvValidateRowConditionRequest::TPtr& 
     }
 
     if (!IsStateActive()) {
-        LOG_E("HandleSafe TEvValidateRowConditionRequest: shard not active"
+        LOG_ERROR_S(*TlsActivationContext, NKikimrServices::BUILD_INDEX,"HandleSafe TEvValidateRowConditionRequest: shard not active"
             << " id# " << id
             << " tabletId# " << TabletID());
         sendResponse(NKikimrSetColumnConstraint::EValidateStatus::BAD_REQUEST, TStringBuilder() << "Shard " << TabletID() << " is not ready for requests");
@@ -232,7 +232,7 @@ void TDataShard::HandleSafe(TEvDataShard::TEvValidateRowConditionRequest::TPtr& 
 
     const auto& userTable = *GetUserTables().at(tableId.PathId.LocalPathId);
 
-    LOG_I("HandleSafe TEvValidateRowConditionRequest: starting scan"
+    LOG_INFO_S(*TlsActivationContext, NKikimrServices::BUILD_INDEX,"HandleSafe TEvValidateRowConditionRequest: starting scan"
         << " id# " << id
         << " tabletId# " << TabletID()
         << " localTid# " << userTable.LocalTid);

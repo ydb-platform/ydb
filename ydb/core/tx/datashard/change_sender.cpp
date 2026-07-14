@@ -69,7 +69,7 @@ class TChangeSender: public TActor<TChangeSender> {
     }
 
     void Handle(NChangeExchange::TEvChangeExchange::TEvEnqueueRecords::TPtr& ev) {
-        LOG_D("Handle " << ev->Get()->ToString());
+        LOG_DEBUG_S (*TlsActivationContext, NKikimrServices::CHANGE_EXCHANGE, GetLogPrefix() <<"Handle " << ev->Get()->ToString());
         auto& records = ev->Get()->Records;
 
         if (!IsActive()) {
@@ -102,7 +102,7 @@ class TChangeSender: public TActor<TChangeSender> {
     }
 
     void Handle(TEvChangeExchange::TEvAddSender::TPtr& ev) {
-        LOG_D("Handle " << ev->Get()->ToString());
+        LOG_DEBUG_S (*TlsActivationContext, NKikimrServices::CHANGE_EXCHANGE, GetLogPrefix() <<"Handle " << ev->Get()->ToString());
 
         const auto& msg = *ev->Get();
 
@@ -110,14 +110,14 @@ class TChangeSender: public TActor<TChangeSender> {
         if (it != Senders.end()) {
             Y_ENSURE(it->second.UserTableId == msg.UserTableId);
             Y_ENSURE(it->second.Type == msg.Type);
-            LOG_W("Trying to add duplicate sender"
+            LOG_WARN_S  (*TlsActivationContext, NKikimrServices::CHANGE_EXCHANGE, GetLogPrefix() <<"Trying to add duplicate sender"
                 << ": userTableId# " << msg.UserTableId
                 << ", type# " << msg.Type
                 << ", pathId# " << msg.PathId);
             return;
         }
 
-        LOG_N("Add sender"
+        LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::CHANGE_EXCHANGE, GetLogPrefix() <<"Add sender"
             << ": userTableId# " << msg.UserTableId
             << ", type# " << msg.Type
             << ", pathId# " << msg.PathId);
@@ -129,17 +129,17 @@ class TChangeSender: public TActor<TChangeSender> {
     }
 
     void Handle(TEvChangeExchange::TEvRemoveSender::TPtr& ev) {
-        LOG_D("Handle " << ev->Get()->ToString());
+        LOG_DEBUG_S (*TlsActivationContext, NKikimrServices::CHANGE_EXCHANGE, GetLogPrefix() <<"Handle " << ev->Get()->ToString());
         const auto& pathId = ev->Get()->PathId;
 
         auto it = Senders.find(pathId);
         if (it == Senders.end()) {
-            LOG_W("Trying to remove unknown sender"
+            LOG_WARN_S  (*TlsActivationContext, NKikimrServices::CHANGE_EXCHANGE, GetLogPrefix() <<"Trying to remove unknown sender"
                 << ": pathId# " << pathId);
             return;
         }
 
-        LOG_N("Remove sender"
+        LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::CHANGE_EXCHANGE, GetLogPrefix() <<"Remove sender"
             << ": type# " << it->second.Type
             << ", pathId# " << it->first);
 
@@ -151,7 +151,7 @@ class TChangeSender: public TActor<TChangeSender> {
     }
 
     void Handle(TEvChangeExchange::TEvActivateSender::TPtr& ev) {
-        LOG_D("Handle " << ev->Get()->ToString());
+        LOG_DEBUG_S (*TlsActivationContext, NKikimrServices::CHANGE_EXCHANGE, GetLogPrefix() <<"Handle " << ev->Get()->ToString());
 
         Become(&TThis::StateActive);
         LogPrefix.Clear();

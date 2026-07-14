@@ -154,7 +154,7 @@ public:
         , DeferredSettings(request.GetSettings())
         , DeferredRounds(request.GetNeedsRounds())
     {
-        LOG_I("Create " << Debug());
+        LOG_INFO_S(*TlsActivationContext, NKikimrServices::BUILD_INDEX, "Create " << Debug());
         NextCheckpointAtBytes = ScanSettings.GetMaxCheckpointBytes();
 
         const bool toBuild = request.GetUpload() == NKikimrTxDataShard::UPLOAD_BUILD_TO_BUILD;
@@ -221,7 +221,7 @@ public:
     TInitialState Prepare(IDriver* driver, TIntrusiveConstPtr<TScheme>) final
     {
         TActivationContext::AsActorContext().RegisterWithSameMailbox(this);
-        LOG_I("Prepare " << Debug());
+        LOG_INFO_S(*TlsActivationContext, NKikimrServices::BUILD_INDEX, "Prepare " << Debug());
 
         Driver = driver;
         Uploader.SetOwner(SelfId());
@@ -256,9 +256,9 @@ public:
         }
 
         if (Response->Record.GetStatus() == NKikimrIndexBuilder::DONE) {
-            LOG_N("Done " << Debug() << " " << Response->Record.ShortDebugString());
+            LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::BUILD_INDEX, "Done " << Debug() << " " << Response->Record.ShortDebugString());
         } else {
-            LOG_E("Failed " << Debug() << " " << Response->Record.ShortDebugString());
+            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::BUILD_INDEX, "Failed " << Debug() << " " << Response->Record.ShortDebugString());
         }
         Send(ResponseActorId, Response.Release());
 
@@ -283,13 +283,13 @@ public:
 
     EScan PageFault() final
     {
-        LOG_T("PageFault " << Debug());
+        LOG_TRACE_S(*TlsActivationContext, NKikimrServices::BUILD_INDEX, "PageFault " << Debug());
         return EScan::Feed;
     }
 
     EScan Seek(TLead& lead, ui64 seq) final
     {
-        LOG_T("Seek " << seq << " " << Debug());
+        LOG_TRACE_S(*TlsActivationContext, NKikimrServices::BUILD_INDEX, "Seek " << seq << " " << Debug());
 
         if (IsExhausted) {
             return Uploader.CanFinish()
@@ -304,7 +304,7 @@ public:
 
     EScan Feed(TArrayRef<const TCell> key, const TRow& row) final
     {
-        // LOG_T("Feed " << Debug());
+        // LOG_TRACE_S(*TlsActivationContext, NKikimrServices::BUILD_INDEX, "Feed " << Debug());
 
         ++ReadRows;
         ReadBytes += CountRowCellBytes(key, *row);
@@ -339,7 +339,7 @@ public:
 
     EScan Exhausted() final
     {
-        LOG_T("Exhausted " << Debug());
+        LOG_TRACE_S(*TlsActivationContext, NKikimrServices::BUILD_INDEX, "Exhausted " << Debug());
 
         if (!FinishPrefix()) {
             return EScan::Reset;
@@ -358,21 +358,21 @@ protected:
             HFunc(TEvTxUserProxy::TEvUploadRowsResponse, Handle);
             CFunc(TEvents::TSystem::Wakeup, HandleWakeup);
             default:
-                LOG_E("StateWork unexpected event type: " << ev->GetTypeRewrite()
+                LOG_ERROR_S(*TlsActivationContext, NKikimrServices::BUILD_INDEX, "StateWork unexpected event type: " << ev->GetTypeRewrite()
                     << " event: " << ev->ToString() << " " << Debug());
         }
     }
 
     void HandleWakeup(const NActors::TActorContext& /*ctx*/)
     {
-        LOG_D("Retry upload " << Debug());
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::BUILD_INDEX, "Retry upload " << Debug());
 
         Uploader.RetryUpload();
     }
 
     void Handle(TEvTxUserProxy::TEvUploadRowsResponse::TPtr& ev, const TActorContext& ctx)
     {
-        LOG_D("Handle TEvUploadRowsResponse " << Debug()
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::BUILD_INDEX, "Handle TEvUploadRowsResponse " << Debug()
             << " ev->Sender: " << ev->Sender.ToString());
 
         if (!Driver) {
@@ -404,12 +404,12 @@ protected:
         }
 
         if (auto retryAfter = Uploader.GetRetryAfter(); retryAfter) {
-            LOG_N("Got retriable error, " << Debug() << " " << Uploader.GetUploadStatus().ToString());
+            LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::BUILD_INDEX, "Got retriable error, " << Debug() << " " << Uploader.GetUploadStatus().ToString());
             ctx.Schedule(*retryAfter, new TEvents::TEvWakeup());
             return;
         }
 
-        LOG_N("Got error, abort scan, " << Debug() << " " << Uploader.GetUploadStatus().ToString());
+        LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::BUILD_INDEX, "Got error, abort scan, " << Debug() << " " << Uploader.GetUploadStatus().ToString());
 
         Driver->Touch(EScan::Final);
     }
@@ -445,13 +445,13 @@ protected:
         if (FinishPrefixImpl()) {
             PendingCheckpointKey = Prefix;
             StartNewPrefix();
-            LOG_T("FinishPrefix finished " << Debug());
+            LOG_TRACE_S(*TlsActivationContext, NKikimrServices::BUILD_INDEX, "FinishPrefix finished " << Debug());
             return true;
         } else {
             IsFirstPrefixFeed = false;
 
             if (IsPrefixRowsValid) {
-                LOG_T("FinishPrefix not finished, manually feeding " << PrefixRows.GetRows() << " saved rows " << Debug());
+                LOG_TRACE_S(*TlsActivationContext, NKikimrServices::BUILD_INDEX, "FinishPrefix not finished, manually feeding " << PrefixRows.GetRows() << " saved rows " << Debug());
                 for (ui64 iteration = 0; ; iteration++) {
                     for (const auto& [key, row_] : *PrefixRows.GetRowsData()) {
                         TSerializedCellVec row(row_);
@@ -460,14 +460,14 @@ protected:
                     if (FinishPrefixImpl()) {
                         PendingCheckpointKey = Prefix;
                         StartNewPrefix();
-                        LOG_T("FinishPrefix finished in " << iteration << " iterations " << Debug());
+                        LOG_TRACE_S(*TlsActivationContext, NKikimrServices::BUILD_INDEX, "FinishPrefix finished in " << iteration << " iterations " << Debug());
                         return true;
                     } else {
-                        LOG_T("FinishPrefix not finished in " << iteration << " iterations " << Debug());
+                        LOG_TRACE_S(*TlsActivationContext, NKikimrServices::BUILD_INDEX, "FinishPrefix not finished in " << iteration << " iterations " << Debug());
                     }
                 }
             } else {
-                LOG_T("FinishPrefix not finished, rescanning rows " << Debug());
+                LOG_TRACE_S(*TlsActivationContext, NKikimrServices::BUILD_INDEX, "FinishPrefix not finished, rescanning rows " << Debug());
             }
 
             return false;
@@ -673,7 +673,7 @@ void TDataShard::HandleSafe(TEvDataShard::TEvPrefixKMeansRequest::TPtr& ev, cons
         auto response = MakeHolder<TEvDataShard::TEvPrefixKMeansResponse>();
         FillScanResponseCommonFields(*response, id, TabletID(), seqNo);
 
-        LOG_N("Starting TPrefixKMeansScan TabletId: " << TabletID()
+        LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::BUILD_INDEX, "Starting TPrefixKMeansScan TabletId: " << TabletID()
             << " " << request.ShortDebugString()
             << " row version " << rowVersion);
 
@@ -691,7 +691,7 @@ void TDataShard::HandleSafe(TEvDataShard::TEvPrefixKMeansRequest::TPtr& ev, cons
         };
         auto trySendBadRequest = [&] {
             if (response->Record.GetStatus() == NKikimrIndexBuilder::EBuildStatus::BAD_REQUEST) {
-                LOG_E("Rejecting TPrefixKMeansScan bad request TabletId: " << TabletID()
+                LOG_ERROR_S(*TlsActivationContext, NKikimrServices::BUILD_INDEX, "Rejecting TPrefixKMeansScan bad request TabletId: " << TabletID()
                     << " " << request.ShortDebugString()
                     << " with response " << response->Record.ShortDebugString());
                 ctx.Send(ev->Sender, std::move(response));

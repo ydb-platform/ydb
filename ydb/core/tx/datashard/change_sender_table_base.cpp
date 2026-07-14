@@ -37,7 +37,7 @@ class TTableChangeSenderShard: public TActorBootstrapped<TTableChangeSenderShard
     }
 
     void Handle(TEvTxUserProxy::TEvGetProxyServicesResponse::TPtr& ev) {
-        LOG_D("Handle " << ev->Get()->ToString());
+        LOG_DEBUG_S (*TlsActivationContext, NKikimrServices::CHANGE_EXCHANGE, GetLogPrefix() <<"Handle " << ev->Get()->ToString());
 
         LeaderPipeCache = ev->Get()->Services.LeaderPipeCache;
         Handshake();
@@ -61,7 +61,7 @@ class TTableChangeSenderShard: public TActorBootstrapped<TTableChangeSenderShard
 
     void Handle(TDataShard::TEvPrivate::TEvReadonlyLeaseConfirmation::TPtr& ev) {
         if (ev->Cookie != LeaseConfirmationCookie) {
-            LOG_W("Readonly lease confirmation cookie mismatch"
+            LOG_WARN_S  (*TlsActivationContext, NKikimrServices::CHANGE_EXCHANGE, GetLogPrefix() <<"Readonly lease confirmation cookie mismatch"
                 << ": expected# " << LeaseConfirmationCookie
                 << ", got# " << ev->Cookie);
             return;
@@ -75,7 +75,7 @@ class TTableChangeSenderShard: public TActorBootstrapped<TTableChangeSenderShard
     }
 
     void Handshake(TEvChangeExchange::TEvStatus::TPtr& ev) {
-        LOG_D("Handshake " << ev->Get()->ToString());
+        LOG_DEBUG_S (*TlsActivationContext, NKikimrServices::CHANGE_EXCHANGE, GetLogPrefix() <<"Handshake " << ev->Get()->ToString());
 
         const auto& record = ev->Get()->Record;
         switch (record.GetStatus()) {
@@ -83,7 +83,7 @@ class TTableChangeSenderShard: public TActorBootstrapped<TTableChangeSenderShard
             LastRecordOrder = record.GetLastRecordOrder();
             return Ready();
         default:
-            LOG_E("Handshake status"
+            LOG_ERROR_S (*TlsActivationContext, NKikimrServices::CHANGE_EXCHANGE, GetLogPrefix() <<"Handshake status"
                 << ": status# " << static_cast<ui32>(record.GetStatus())
                 << ", reason# " << static_cast<ui32>(record.GetReason()));
             return Leave();
@@ -120,7 +120,7 @@ class TTableChangeSenderShard: public TActorBootstrapped<TTableChangeSenderShard
     };
 
     void Handle(NChangeExchange::TEvChangeExchange::TEvRecords::TPtr& ev) {
-        LOG_D("Handle " << ev->Get()->ToString());
+        LOG_DEBUG_S (*TlsActivationContext, NKikimrServices::CHANGE_EXCHANGE, GetLogPrefix() <<"Handle " << ev->Get()->ToString());
 
         auto records = MakeHolder<TEvChangeExchange::TEvApplyRecords>();
         records->Record.SetOrigin(DataShard.TabletId);
@@ -197,7 +197,7 @@ class TTableChangeSenderShard: public TActorBootstrapped<TTableChangeSenderShard
     }
 
     void Handle(TEvChangeExchange::TEvStatus::TPtr& ev) {
-        LOG_D("Handle " << ev->Get()->ToString());
+        LOG_DEBUG_S (*TlsActivationContext, NKikimrServices::CHANGE_EXCHANGE, GetLogPrefix() <<"Handle " << ev->Get()->ToString());
 
         const auto& record = ev->Get()->Record;
         switch (record.GetStatus()) {
@@ -206,7 +206,7 @@ class TTableChangeSenderShard: public TActorBootstrapped<TTableChangeSenderShard
             return Ready();
         // TODO: REJECT?
         default:
-            LOG_E("Apply status"
+            LOG_ERROR_S (*TlsActivationContext, NKikimrServices::CHANGE_EXCHANGE, GetLogPrefix() <<"Apply status"
                 << ": status# " << static_cast<ui32>(record.GetStatus())
                 << ", reason# " << static_cast<ui32>(record.GetReason()));
             return Leave();
@@ -225,7 +225,7 @@ class TTableChangeSenderShard: public TActorBootstrapped<TTableChangeSenderShard
         ++Attempt;
         Delay = Min(2 * Delay, MaxDelay);
 
-        LOG_N("Retry"
+        LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::CHANGE_EXCHANGE, GetLogPrefix() <<"Retry"
             << ": attempt# " << Attempt
             << ", delay# " << Delay);
 

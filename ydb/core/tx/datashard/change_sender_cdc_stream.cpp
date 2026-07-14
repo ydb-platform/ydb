@@ -59,11 +59,11 @@ class TCdcChangeSenderPartition: public TActorBootstrapped<TCdcChangeSenderParti
     }
 
     void Handle(TEvPartitionWriter::TEvInitResult::TPtr& ev) {
-        LOG_D("Handle " << ev->Get()->ToString());
+        LOG_DEBUG_S (*TlsActivationContext, NKikimrServices::CHANGE_EXCHANGE, GetLogPrefix() <<"Handle " << ev->Get()->ToString());
 
         const auto& result = *ev->Get();
         if (!result.IsSuccess()) {
-            LOG_E("Error at 'Init': " << result.GetError().ToString());
+            LOG_ERROR_S (*TlsActivationContext, NKikimrServices::CHANGE_EXCHANGE, GetLogPrefix() <<"Error at 'Init': " << result.GetError().ToString());
             return Leave();
         }
 
@@ -109,7 +109,7 @@ class TCdcChangeSenderPartition: public TActorBootstrapped<TCdcChangeSenderParti
     };
 
     void Handle(NChangeExchange::TEvChangeExchange::TEvRecords::TPtr& ev) {
-        LOG_D("Handle " << ev->Get()->ToString());
+        LOG_DEBUG_S (*TlsActivationContext, NKikimrServices::CHANGE_EXCHANGE, GetLogPrefix() <<"Handle " << ev->Get()->ToString());
         NKikimrClient::TPersQueueRequest request;
 
         for (auto recordPtr : ev->Get()->Records) {
@@ -158,24 +158,24 @@ class TCdcChangeSenderPartition: public TActorBootstrapped<TCdcChangeSenderParti
     }
 
     void Handle(TEvPartitionWriter::TEvWriteResponse::TPtr& ev) {
-        LOG_D("Handle " << ev->Get()->ToString());
+        LOG_DEBUG_S (*TlsActivationContext, NKikimrServices::CHANGE_EXCHANGE, GetLogPrefix() <<"Handle " << ev->Get()->ToString());
 
         const auto& result = *ev->Get();
         if (!result.IsSuccess()) {
-            LOG_E("Error at 'Write': " << result.DumpError());
+            LOG_ERROR_S (*TlsActivationContext, NKikimrServices::CHANGE_EXCHANGE, GetLogPrefix() <<"Error at 'Write': " << result.DumpError());
             return Leave();
         }
 
         const auto& response = result.Record.GetPartitionResponse();
         if (response.GetCookie() != Cookie) {
-            LOG_E("Cookie mismatch"
+            LOG_ERROR_S (*TlsActivationContext, NKikimrServices::CHANGE_EXCHANGE, GetLogPrefix() <<"Cookie mismatch"
                 << ": expected# " << Cookie
                 << ", got# " << response.GetCookie());
             return Leave();
         }
 
         if (response.CmdWriteResultSize() != Pending.size()) {
-            LOG_E("Write result size mismatch"
+            LOG_ERROR_S (*TlsActivationContext, NKikimrServices::CHANGE_EXCHANGE, GetLogPrefix() <<"Write result size mismatch"
                 << ": expected# " << Pending.size()
                 << ", got# " << response.CmdWriteResultSize());
             return Leave();
@@ -190,7 +190,7 @@ class TCdcChangeSenderPartition: public TActorBootstrapped<TCdcChangeSenderParti
                 continue;
             }
 
-            LOG_E("SeqNo mismatch"
+            LOG_ERROR_S (*TlsActivationContext, NKikimrServices::CHANGE_EXCHANGE, GetLogPrefix() <<"SeqNo mismatch"
                 << ": expected# " << expected
                 << ", got# " << got);
             return Leave();
@@ -230,7 +230,7 @@ class TCdcChangeSenderPartition: public TActorBootstrapped<TCdcChangeSenderParti
     }
 
     void Disconnected() {
-        LOG_D("Disconnected");
+        LOG_DEBUG_S (*TlsActivationContext, NKikimrServices::CHANGE_EXCHANGE, GetLogPrefix() <<"Disconnected");
 
         if (CurrentStateFunc() != static_cast<TReceiveFunc>(&TThis::StateInit)) {
             return Leave();
@@ -241,7 +241,7 @@ class TCdcChangeSenderPartition: public TActorBootstrapped<TCdcChangeSenderParti
     }
 
     void Lost() {
-        LOG_W("Lost");
+        LOG_WARN_S  (*TlsActivationContext, NKikimrServices::CHANGE_EXCHANGE, GetLogPrefix() <<"Lost");
         Leave();
     }
 
@@ -397,12 +397,12 @@ class TCdcChangeSenderMain
     }
 
     void LogCritAndRetry(const TString& error) {
-        LOG_C(error);
+        LOG_CRIT_S  (*TlsActivationContext, NKikimrServices::CHANGE_EXCHANGE, GetLogPrefix() << error);
         Retry();
     }
 
     void LogWarnAndRetry(const TString& error) {
-        LOG_W(error);
+        LOG_WARN_S  (*TlsActivationContext, NKikimrServices::CHANGE_EXCHANGE, GetLogPrefix() << error);
         Retry();
     }
 
@@ -471,7 +471,7 @@ class TCdcChangeSenderMain
     void HandleCdcStream(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
         const auto& result = ev->Get()->Request;
 
-        LOG_D("Handle TEvTxProxySchemeCache::TEvNavigateKeySetResult"
+        LOG_DEBUG_S (*TlsActivationContext, NKikimrServices::CHANGE_EXCHANGE, GetLogPrefix() <<"Handle TEvTxProxySchemeCache::TEvNavigateKeySetResult"
             << ": result# " << (result ? result->ToString(*AppData()->TypeRegistry) : "nullptr"));
 
         if (!CheckNotEmpty(result)) {
@@ -501,7 +501,7 @@ class TCdcChangeSenderMain
         }
 
         if (entry.Self && entry.Self->Info.GetPathState() == NKikimrSchemeOp::EPathStateDrop) {
-            LOG_D("Stream is planned to drop, waiting for the EvRemoveSender command");
+            LOG_DEBUG_S (*TlsActivationContext, NKikimrServices::CHANGE_EXCHANGE, GetLogPrefix() <<"Stream is planned to drop, waiting for the EvRemoveSender command");
 
             RemoveRecords();
             KillSenders();
@@ -541,7 +541,7 @@ class TCdcChangeSenderMain
     void HandleTopic(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
         const auto& result = ev->Get()->Request;
 
-        LOG_D("Handle TEvTxProxySchemeCache::TEvNavigateKeySetResult"
+        LOG_DEBUG_S (*TlsActivationContext, NKikimrServices::CHANGE_EXCHANGE, GetLogPrefix() <<"Handle TEvTxProxySchemeCache::TEvNavigateKeySetResult"
             << ": result# " << (result ? result->ToString(*AppData()->TypeRegistry) : "nullptr"));
 
         if (!CheckNotEmpty(result)) {
@@ -635,32 +635,32 @@ class TCdcChangeSenderMain
     }
 
     void Handle(NChangeExchange::TEvChangeExchange::TEvEnqueueRecords::TPtr& ev) {
-        LOG_D("Handle " << ev->Get()->ToString());
+        LOG_DEBUG_S (*TlsActivationContext, NKikimrServices::CHANGE_EXCHANGE, GetLogPrefix() <<"Handle " << ev->Get()->ToString());
         EnqueueRecords(std::move(ev->Get()->Records));
     }
 
     void Handle(NChangeExchange::TEvChangeExchange::TEvRecords::TPtr& ev) {
-        LOG_D("Handle " << ev->Get()->ToString());
+        LOG_DEBUG_S (*TlsActivationContext, NKikimrServices::CHANGE_EXCHANGE, GetLogPrefix() <<"Handle " << ev->Get()->ToString());
         ProcessRecords(std::move(ev->Get()->Records));
     }
 
     void Handle(NChangeExchange::TEvChangeExchange::TEvForgetRecords::TPtr& ev) {
-        LOG_D("Handle " << ev->Get()->ToString());
+        LOG_DEBUG_S (*TlsActivationContext, NKikimrServices::CHANGE_EXCHANGE, GetLogPrefix() <<"Handle " << ev->Get()->ToString());
         ForgetRecords(std::move(ev->Get()->Records));
     }
 
     void Handle(NChangeExchange::TEvChangeExchangePrivate::TEvReady::TPtr& ev) {
-        LOG_D("Handle " << ev->Get()->ToString());
+        LOG_DEBUG_S (*TlsActivationContext, NKikimrServices::CHANGE_EXCHANGE, GetLogPrefix() <<"Handle " << ev->Get()->ToString());
         OnReady(ev->Get()->PartitionId);
     }
 
     void Handle(NChangeExchange::TEvChangeExchangePrivate::TEvGone::TPtr& ev) {
-        LOG_D("Handle " << ev->Get()->ToString());
+        LOG_DEBUG_S (*TlsActivationContext, NKikimrServices::CHANGE_EXCHANGE, GetLogPrefix() <<"Handle " << ev->Get()->ToString());
         OnGone(ev->Get()->PartitionId);
     }
 
     void Handle(TEvChangeExchange::TEvRemoveSender::TPtr& ev) {
-        LOG_D("Handle " << ev->Get()->ToString());
+        LOG_DEBUG_S (*TlsActivationContext, NKikimrServices::CHANGE_EXCHANGE, GetLogPrefix() <<"Handle " << ev->Get()->ToString());
         Y_ENSURE(ev->Get()->PathId == GetChangeSenderIdentity());
 
         RemoveRecords();
@@ -668,7 +668,7 @@ class TCdcChangeSenderMain
     }
 
     void AutoRemove(NChangeExchange::TEvChangeExchange::TEvEnqueueRecords::TPtr& ev) {
-        LOG_D("Handle " << ev->Get()->ToString());
+        LOG_DEBUG_S (*TlsActivationContext, NKikimrServices::CHANGE_EXCHANGE, GetLogPrefix() <<"Handle " << ev->Get()->ToString());
         RemoveRecords(std::move(ev->Get()->Records));
     }
 

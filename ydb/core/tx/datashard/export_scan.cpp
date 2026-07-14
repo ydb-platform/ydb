@@ -114,7 +114,7 @@ class TExportScan: private NActors::IActorCallback, public IActorExceptionHandle
     void Handle(TEvExportScan::TEvReset::TPtr&) {
         Y_ENSURE(IsReady());
 
-        EXPORT_LOG_D("Handle TEvExportScan::TEvReset"
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::DATASHARD_BACKUP, "[Export] [" << LogPrefix() << "] ""Handle TEvExportScan::TEvReset"
             << ": self# " << SelfId());
 
         Stats.Reset(new TStats);
@@ -126,7 +126,7 @@ class TExportScan: private NActors::IActorCallback, public IActorExceptionHandle
     void Handle(TEvExportScan::TEvFeed::TPtr&) {
         Y_ENSURE(IsReady());
 
-        EXPORT_LOG_D("Handle TEvExportScan::TEvFeed"
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::DATASHARD_BACKUP, "[Export] [" << LogPrefix() << "] ""Handle TEvExportScan::TEvFeed"
             << ": self# " << SelfId());
 
         State.Set(ES_UPLOADER_READY).Reset(ES_BUFFER_SENT);
@@ -139,7 +139,7 @@ class TExportScan: private NActors::IActorCallback, public IActorExceptionHandle
     void Handle(TEvExportScan::TEvFinish::TPtr& ev) {
         Y_ENSURE(IsReady());
 
-        EXPORT_LOG_D("Handle TEvExportScan::TEvFinish"
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::DATASHARD_BACKUP, "[Export] [" << LogPrefix() << "] ""Handle TEvExportScan::TEvFinish"
             << ": self# " << SelfId()
             << ", msg# " << ev->Get()->ToString());
 
@@ -205,7 +205,7 @@ public:
         if (!Buffer->Collect(row)) {
             Success = false;
             Error = Buffer->GetError();
-            EXPORT_LOG_E("Error read data from table: " << Error);
+            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::DATASHARD_BACKUP, "[Export] [" << LogPrefix() << "] ""Error read data from table: " << Error);
             return EScan::Final;
         }
 

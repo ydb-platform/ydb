@@ -9,13 +9,6 @@
 namespace NKikimr::NDataShard {
 using namespace NTableIndex;
 
-#define LOG_T(stream) LOG_TRACE_S (*TlsActivationContext, NKikimrServices::BUILD_INDEX, stream)
-#define LOG_D(stream) LOG_DEBUG_S (*TlsActivationContext, NKikimrServices::BUILD_INDEX, stream)
-#define LOG_I(stream) LOG_INFO_S  (*TlsActivationContext, NKikimrServices::BUILD_INDEX, stream)
-#define LOG_W(stream) LOG_WARN_S  (*TlsActivationContext, NKikimrServices::BUILD_INDEX, stream)
-#define LOG_N(stream) LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::BUILD_INDEX, stream)
-#define LOG_E(stream) LOG_ERROR_S (*TlsActivationContext, NKikimrServices::BUILD_INDEX, stream)
-
 class TBatchRowsUploader
 {
     struct TDestination {
@@ -286,7 +279,7 @@ private:
     }
 
     void StartUploadRowsInternal() {
-        LOG_D("TBatchRowsUploader StartUploadRowsInternal " << Debug());
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::BUILD_INDEX, "TBatchRowsUploader StartUploadRowsInternal " << Debug());
 
         Y_ENSURE(Uploading);
         Y_ENSURE(!Uploading.Buffer.IsEmpty());
@@ -360,7 +353,7 @@ void FillScanResponseCommonFields(TResponse& response, ui64 scanId, ui64 tabletI
 template<typename TResponse>
 inline void FailScan(ui64 scanId, ui64 tabletId, TActorId sender, TScanRecord::TSeqNo seqNo, const std::exception& exc, const TString& logScanType)
 {
-    LOG_E("Unhandled exception " << logScanType << " TabletId: " << tabletId
+    LOG_ERROR_S(*TlsActivationContext, NKikimrServices::BUILD_INDEX, "Unhandled exception " << logScanType << " TabletId: " << tabletId
         << " " << TypeName(exc) << ": " << exc.what() << Endl
         << TBackTrace::FromCurrentException().PrintToString());
 

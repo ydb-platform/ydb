@@ -81,7 +81,7 @@ public:
         , Lead(std::move(lead))
         , Clusters(std::move(clusters))
     {
-        LOG_I("Create " << Debug());
+        LOG_INFO_S(*TlsActivationContext, NKikimrServices::BUILD_INDEX, "Create " << Debug());
 
         InForeign = request.GetSkipOverlapForeign();
 
@@ -94,7 +94,7 @@ public:
     TInitialState Prepare(IDriver* driver, TIntrusiveConstPtr<TScheme>) final
     {
         TActivationContext::AsActorContext().RegisterWithSameMailbox(this);
-        LOG_I("Prepare " << Debug());
+        LOG_INFO_S(*TlsActivationContext, NKikimrServices::BUILD_INDEX, "Prepare " << Debug());
 
         Driver = driver;
 
@@ -132,9 +132,9 @@ public:
         NYql::IssuesToMessage(Issues, record.MutableIssues());
 
         if (Response->Record.GetStatus() == NKikimrIndexBuilder::DONE) {
-            LOG_N("Done " << Debug() << " " << ToShortDebugString(Response->Record));
+            LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::BUILD_INDEX, "Done " << Debug() << " " << ToShortDebugString(Response->Record));
         } else {
-            LOG_E("Failed " << Debug() << " " << ToShortDebugString(Response->Record));
+            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::BUILD_INDEX, "Failed " << Debug() << " " << ToShortDebugString(Response->Record));
         }
         Send(ResponseActorId, Response.Release());
 
@@ -159,7 +159,7 @@ public:
 
     EScan Seek(TLead& lead, ui64 seq) final
     {
-        LOG_T("Seek " << seq << " " << Debug());
+        LOG_TRACE_S(*TlsActivationContext, NKikimrServices::BUILD_INDEX, "Seek " << seq << " " << Debug());
 
         lead = Lead;
 
@@ -168,7 +168,7 @@ public:
 
     EScan Feed(TArrayRef<const TCell> key, const TRow& row) final
     {
-        // LOG_T("Feed " << Debug());
+        // LOG_TRACE_S(*TlsActivationContext, NKikimrServices::BUILD_INDEX, "Feed " << Debug());
 
         ++ReadRows;
         ReadBytes += CountRowCellBytes(key, *row);
@@ -184,7 +184,7 @@ public:
 
     EScan Exhausted() final
     {
-        LOG_T("Exhausted " << Debug());
+        LOG_TRACE_S(*TlsActivationContext, NKikimrServices::BUILD_INDEX, "Exhausted " << Debug());
 
         return EScan::Final;
     }
@@ -193,7 +193,7 @@ protected:
     STFUNC(StateWork) {
         switch (ev->GetTypeRewrite()) {
             default:
-                LOG_E("StateWork unexpected event type: " << ev->GetTypeRewrite()
+                LOG_ERROR_S(*TlsActivationContext, NKikimrServices::BUILD_INDEX, "StateWork unexpected event type: " << ev->GetTypeRewrite()
                     << " event: " << ev->ToString() << " " << Debug());
         }
     }
@@ -282,7 +282,7 @@ void TDataShard::HandleSafe(TEvDataShard::TEvRecomputeKMeansRequest::TPtr& ev, c
         auto response = MakeHolder<TEvDataShard::TEvRecomputeKMeansResponse>();
         FillScanResponseCommonFields(*response, id, TabletID(), seqNo);
 
-        LOG_N("Starting TRecomputeKMeansScan TabletId: " << TabletID()
+        LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::BUILD_INDEX, "Starting TRecomputeKMeansScan TabletId: " << TabletID()
             << " " << ToShortDebugString(request)
             << " row version " << rowVersion);
 
@@ -300,7 +300,7 @@ void TDataShard::HandleSafe(TEvDataShard::TEvRecomputeKMeansRequest::TPtr& ev, c
         };
         auto trySendBadRequest = [&] {
             if (response->Record.GetStatus() == NKikimrIndexBuilder::EBuildStatus::BAD_REQUEST) {
-                LOG_E("Rejecting TRecomputeKMeansScan bad request TabletId: " << TabletID()
+                LOG_ERROR_S(*TlsActivationContext, NKikimrServices::BUILD_INDEX, "Rejecting TRecomputeKMeansScan bad request TabletId: " << TabletID()
                     << " " << ToShortDebugString(request)
                     << " with response " << ToShortDebugString(response->Record));
                 ctx.Send(ev->Sender, std::move(response));

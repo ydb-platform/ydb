@@ -4,6 +4,8 @@
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/protos/counters_node_broker.pb.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::NODE_BROKER
+
 namespace NKikimr {
 namespace NNodeBroker {
 
@@ -36,8 +38,11 @@ public:
         const auto &rec = Event->Get()->Record;
         auto host = rec.GetHost();
         auto port = rec.GetPort();
-        LOG_ERROR_S(ctx, NKikimrServices::NODE_BROKER,
-                    "Cannot register node " << host << ":" << port << ": " << code << ": " << reason);
+        YDB_LOG_ERROR_CTX(ctx, "TTxRegisterNode: cannot register node",
+            {"host", host},
+            {"port", port},
+            {"statusCode", code},
+            {"reason", reason});
 
         Response->Record.MutableStatus()->SetCode(code);
         Response->Record.MutableStatus()->SetReason(reason);
@@ -55,8 +60,8 @@ public:
         if (Response->Record.GetStatus().GetCode() == TStatus::OK)
             Self->FillNodeInfo(Self->Committed.Nodes.at(NodeId), *Response->Record.MutableNode());
 
-        LOG_INFO_S(ctx, NKikimrServices::NODE_BROKER,
-                    "TTxRegisterNode reply with: " << Response->Record.ShortDebugString());
+        YDB_LOG_INFO_CTX(ctx, "TTxRegisterNode: reply",
+            {"response", Response->Record.ShortDebugString()});
 
         if (ScopeId != NActors::TScopeId()) {
             auto& record = Response->Record;
@@ -74,11 +79,12 @@ public:
         ui16 port = (ui16)rec.GetPort();
         TString addr = rec.GetAddress();
 
-        LOG_DEBUG(ctx, NKikimrServices::NODE_BROKER, "TTxRegisterNode Execute");
-        LOG_INFO_S(ctx, NKikimrServices::NODE_BROKER,
-                    "Registration request from " << host << ":" << port << " "
-                    << (rec.GetFixedNodeId() ? "(fixed)" : "(not fixed)") << " "
-                    << "tenant: " << (rec.HasPath() ? rec.GetPath() : "<unspecified>"));
+        YDB_LOG_DEBUG_CTX(ctx, "TTxRegisterNode Execute");
+        YDB_LOG_INFO_CTX(ctx, "TTxRegisterNode: registration request",
+            {"host", host},
+            {"port", port},
+            {"fixedNodeIdNote", (rec.GetFixedNodeId() ? "(fixed)" : "(not fixed)")},
+            {"tenantName", (rec.HasPath() ? rec.GetPath() : "<unspecified>")});
 
         TNodeLocation loc(rec.GetLocation());
 
@@ -111,7 +117,7 @@ public:
                     << ", expected (address, resolve host) = (" << node.Address << ", " << node.ResolveHost << ")"
                     << ", got (address, resolve host) = (" << rec.GetAddress() << ", " << rec.GetResolveHost() << ")";
 
-                LOG_WARN_S(ctx, NKikimrServices::NODE_BROKER, errorText);
+                YDB_LOG_WARN_CTX(ctx, errorText);
                 return Error(TStatus::WRONG_REQUEST, errorText, ctx);
             }
 
@@ -120,7 +126,7 @@ public:
                     << ", expected = " << node.Location.ToString()
                     << ", got = " << loc.ToString();
 
-                LOG_WARN_S(ctx, NKikimrServices::NODE_BROKER, errorText);
+                YDB_LOG_WARN_CTX(ctx, errorText);
                 return Error(TStatus::WRONG_REQUEST, errorText, ctx);
             } else if (node.Location.GetBridgePileName() != loc.GetBridgePileName()) {
                 return Error(TStatus::WRONG_REQUEST, "Can't change bridge pile for the node", ctx);
@@ -202,7 +208,7 @@ public:
 
     void Complete(const TActorContext &ctx) override
     {
-        LOG_DEBUG(ctx, NKikimrServices::NODE_BROKER, "TTxRegisterNode Complete");
+        YDB_LOG_DEBUG_CTX(ctx, "TTxRegisterNode Complete");
 
         if (Response->Record.GetStatus().GetCode() != TStatus::OK) {
             return Reply(ctx);

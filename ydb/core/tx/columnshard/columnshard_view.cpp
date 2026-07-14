@@ -51,6 +51,11 @@ inline TString TEscapeHtml(const TString& in) {
     return out;
 }
 
+TString RenderLwTraceShardProbeLink(const TString& provider, const TString& probe, ui64 tabletId, const TString& title) {
+    const TString traceId = TStringBuilder() << "." << provider << "." << probe << ".alsrt100000";
+    return TStringBuilder() << "<a href=\"../trace?mode=log&id=" << traceId << "&f=tabletId=" << tabletId << "\"> " << title << " </a>";
+}
+
 bool TTxMonitoring::Execute(TTransactionContext& txc, const TActorContext&) {
     return Self->TablesManager.FillMonitoringReport(txc, JsonReport["tables_manager"]);
 }
@@ -164,6 +169,10 @@ TString TTxMonitoring::RenderMainPage() {
 
     html << "<h3><a href=\"app?page=compaction&TabletID=" << cgi.Get("TabletID") << "\"> Compaction </a></h3>";
     html << "<h3><a href=\"app?page=scan&TabletID=" << cgi.Get("TabletID") << "\"> Scan </a></h3>";
+    html << "<h3>" << RenderLwTraceShardProbeLink("YDB_CS_SCAN", "StartScan", Self->TabletID(), "Traces for all scans on shard") << "</h3>";
+    html << "<h3>"
+         << RenderLwTraceShardProbeLink("YDB_CS_DATA_SOURCE", "StartSourceProcessing", Self->TabletID(), "Traces for all portions on shard")
+         << "</h3>";
 
     html << "<h3>Tiering Errors</h3>";
     auto readErrors = Self->Counters.GetEvictionCounters().TieringErrors->GetAllReadErrors();

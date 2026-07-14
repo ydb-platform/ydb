@@ -25,10 +25,28 @@
         })[c]);
     }
 
-    function formatErrorHtml(prefix, message, traceUrl) {
-        const safeMessage = escapeHtml(message);
-        const safeTraceUrl = escapeHtml(traceUrl);
-        return `<p>${prefix}: ${safeMessage}</p><p><a href="${safeTraceUrl}">Open raw trace log</a></p>`;
+    function renderError(container, prefix, message, traceUrl) {
+        container.replaceChildren();
+        const messageParagraph = document.createElement('p');
+        messageParagraph.textContent = `${prefix}: ${message}`;
+        container.appendChild(messageParagraph);
+
+        const linkParagraph = document.createElement('p');
+        const link = document.createElement('a');
+        link.href = traceUrl;
+        link.textContent = 'Open raw trace log';
+        linkParagraph.appendChild(link);
+        container.appendChild(linkParagraph);
+    }
+
+    function minEventTime(events) {
+        let minT = Infinity;
+        for (const event of events) {
+            if (event.t < minT) {
+                minT = event.t;
+            }
+        }
+        return minT;
     }
 
     function parseLog(text) {
@@ -66,11 +84,7 @@
             }
             groups.get(scanId).push(ev);
         }
-        return [...groups.entries()].sort((a, b) => {
-            const tA = Math.min(...a[1].map((e) => e.t));
-            const tB = Math.min(...b[1].map((e) => e.t));
-            return tA - tB;
-        });
+        return [...groups.entries()].sort((a, b) => minEventTime(a[1]) - minEventTime(b[1]));
     }
 
     function normalizeScanTimes(events) {
@@ -532,7 +546,7 @@
             return true;
         } catch (plotError) {
             const message = plotError && plotError.message ? plotError.message : String(plotError);
-            container.innerHTML = formatErrorHtml('Failed to render chart', message, traceUrl);
+            renderError(container, 'Failed to render chart', message, traceUrl);
             return false;
         }
     }
@@ -606,7 +620,7 @@
             })
             .catch((error) => {
                 const message = error && error.message ? error.message : String(error);
-                container.innerHTML = formatErrorHtml('Failed to load trace', message, traceUrl);
+                renderError(container, 'Failed to load trace', message, traceUrl);
             });
     }
 

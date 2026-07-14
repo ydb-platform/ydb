@@ -3,24 +3,7 @@
 
 namespace NKikimr::NColumnShard {
 
-class TTxMonitoring: public TTransactionBase<TColumnShard> {
-public:
-    TTxMonitoring(TColumnShard* self, const NMon::TEvRemoteHttpInfo::TPtr& ev)
-        : TBase(self)
-        , HttpInfoEvent(ev)
-    {
-    }
-
-    bool Execute(TTransactionContext& txc, const TActorContext& ctx) override;
-    void Complete(const TActorContext& ctx) override;
-    //TTxType GetTxType() const override { return TXTYPE_INIT; }
-
-private:
-    NMon::TEvRemoteHttpInfo::TPtr HttpInfoEvent;
-    NJson::TJsonValue JsonReport = NJson::JSON_MAP;
-    TString RenderCompactionPage();
-    TString RenderMainPage();
-};
+namespace {
 
 inline TString TEscapeHtml(const TString& in) {
     TString out;
@@ -81,32 +64,54 @@ TString RenderLwTraceShardLogUrl(const TString& provider, const TString& probe, 
     return TStringBuilder() << "../trace?mode=log&id=" << traceId << "&f=tabletId=" << tabletId;
 }
 
-TString RenderLwTraceShardLinks(
-    const TString& vizPage, const TString& provider, const TString& probe, ui64 tabletId, const TString& tabletIdCgi, const TString& title) {
+TString RenderLwTraceShardLinks(const TString& vizPage, const TString& provider, const TString& probe, ui64 tabletId, const TString& title)
+{
+    const TString tabletIdStr = ToString(tabletId);
     const TString traceUrl = RenderLwTraceShardLogUrl(provider, probe, tabletId);
     const TString safeTitle = TEscapeHtml(title);
     const TString safeVizPage = TEscapeHtml(vizPage);
-    const TString safeTabletId = TEscapeHtml(tabletIdCgi);
     const TString safeTraceUrl = TEscapeHtml(traceUrl);
     TStringStream html;
-    html << "<a href=\"app?page=" << safeVizPage << "&amp;TabletID=" << safeTabletId << "\">" << safeTitle << "</a>";
+    html << "<a href=\"app?page=" << safeVizPage << "&amp;TabletID=" << tabletIdStr << "\">" << safeTitle << "</a>";
     html << " | ";
     html << "<a href=\"" << safeTraceUrl << "\">" << safeTitle << " (text)</a>";
     return html.Str();
 }
 
-TString RenderScanTracesPage(ui64 tabletId, const TString& tabletIdCgi) {
+TString RenderScanTracesPage(ui64 tabletId) {
+    const TString tabletIdStr = ToString(tabletId);
     const TString traceUrl = RenderLwTraceShardLogUrl("YDB_CS_SCAN", "StartScan", tabletId);
     TStringStream html;
     html << "<h3>Traces for all scans on shard</h3>";
     html << "<p>Trace source: <a href=\"" << TEscapeHtml(traceUrl) << "\">" << TEscapeHtml(traceUrl) << "</a></p>";
-    html << "<p><a href=\"app?TabletID=" << TEscapeHtml(tabletIdCgi) << "\">Back</a></p>";
+    html << "<p><a href=\"app?TabletID=" << tabletIdStr << "\">Back</a></p>";
     html << R"(<script language="javascript" type="text/javascript" src="../columnshard/plotly-2.35.2.min.js"></script>)";
     html << R"(<script language="javascript" type="text/javascript" src="../columnshard/scan-trace-viz.js"></script>)";
     html << "<div id=\"scan-trace-viz\" style=\"width:100%;\"></div>";
     html << "<script>renderScanTraceVisualization('" << EscapeJsString(traceUrl) << "', 'scan-trace-viz');</script>";
     return html.Str();
 }
+
+}   // namespace
+
+class TTxMonitoring: public TTransactionBase<TColumnShard> {
+public:
+    TTxMonitoring(TColumnShard* self, const NMon::TEvRemoteHttpInfo::TPtr& ev)
+        : TBase(self)
+        , HttpInfoEvent(ev)
+    {
+    }
+
+    bool Execute(TTransactionContext& txc, const TActorContext& ctx) override;
+    void Complete(const TActorContext& ctx) override;
+    //TTxType GetTxType() const override { return TXTYPE_INIT; }
+
+private:
+    NMon::TEvRemoteHttpInfo::TPtr HttpInfoEvent;
+    NJson::TJsonValue JsonReport = NJson::JSON_MAP;
+    TString RenderCompactionPage();
+    TString RenderMainPage();
+};
 
 bool TTxMonitoring::Execute(TTransactionContext& txc, const TActorContext&) {
     return Self->TablesManager.FillMonitoringReport(txc, JsonReport["tables_manager"]);
@@ -219,10 +224,10 @@ TString TTxMonitoring::RenderMainPage() {
         }
     }
 
-    html << "<h3><a href=\"app?page=compaction&TabletID=" << cgi.Get("TabletID") << "\"> Compaction </a></h3>";
-    html << "<h3><a href=\"app?page=scan&TabletID=" << cgi.Get("TabletID") << "\"> Scan </a></h3>";
-    html << "<h3>" << RenderLwTraceShardLinks("scan_traces", "YDB_CS_SCAN", "StartScan", Self->TabletID(), cgi.Get("TabletID"),
-                          "Traces for all scans on shard")
+    const TString tabletIdStr = ToString(Self->TabletID());
+    html << "<h3><a href=\"app?page=compaction&TabletID=" << tabletIdStr << "\"> Compaction </a></h3>";
+    html << "<h3><a href=\"app?page=scan&TabletID=" << tabletIdStr << "\"> Scan </a></h3>";
+    html << "<h3>" << RenderLwTraceShardLinks("scan_traces", "YDB_CS_SCAN", "StartScan", Self->TabletID(), "Traces for all scans on shard")
          << "</h3>";
     html << "<h3><a href=\"" << TEscapeHtml(RenderLwTraceShardLogUrl("YDB_CS_DATA_SOURCE", "StartSourceProcessing", Self->TabletID()))
          << "\"> Traces for all portions on shard </a></h3>";
@@ -281,7 +286,7 @@ bool TColumnShard::OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev, const T
     }
 
     if (cgi.Has("page") && cgi.Get("page") == "scan_traces") {
-        ctx.Send(ev->Sender, new NMon::TEvRemoteHttpInfoRes(RenderScanTracesPage(TabletID(), cgi.Get("TabletID"))));
+        ctx.Send(ev->Sender, new NMon::TEvRemoteHttpInfoRes(RenderScanTracesPage(TabletID())));
         return true;
     }
 

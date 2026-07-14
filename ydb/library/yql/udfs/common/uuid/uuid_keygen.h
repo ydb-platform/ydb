@@ -2,7 +2,6 @@
 
 #include <yql/essentials/types/uuid/uuid.h>
 
-#include <util/generic/yexception.h>
 #include <util/random/random.h>
 
 #include <algorithm>
@@ -153,44 +152,41 @@ inline std::array<ui8, NKikimr::NUuid::UUID_LEN> MakeShardedUuidBytes(ui64 prefi
 
 static constexpr ui8 RfcV7VersionByte = 0x70;
 
-inline TString RfcUuidBytesToCanonicalString(const ui8* uuid) {
-    static const char hexDigits[] = "0123456789abcdef";
-    TString result;
-    result.reserve(36);
-    auto appendByte = [&](ui8 byte) {
-        result.append(hexDigits[byte >> 4]);
-        result.append(hexDigits[byte & 0x0f]);
-    };
-    for (ui32 i = 0; i < 4; ++i) {
-        appendByte(uuid[i]);
-    }
-    result.append('-');
-    for (ui32 i = 4; i < 6; ++i) {
-        appendByte(uuid[i]);
-    }
-    result.append('-');
-    for (ui32 i = 6; i < 8; ++i) {
-        appendByte(uuid[i]);
-    }
-    result.append('-');
-    for (ui32 i = 8; i < 10; ++i) {
-        appendByte(uuid[i]);
-    }
-    result.append('-');
-    for (ui32 i = 10; i < 16; ++i) {
-        appendByte(uuid[i]);
-    }
-    return result;
+// Reorder RFC MSB (big-endian) into YDB GUID (Microsoft mixed-endian) storage.
+// Port of BaseKeyGen.reorder():
+// https://github.com/zinal/ydb-key-prefix-test/blob/bc876201/src/main/java/tech/ydb/samples/keyprefix/BaseKeyGen.java#L122
+inline ui64 ReorderRfcMsbToYdb(ui64 msb) {
+    const ui64 b0 = (msb >> 56) & 0xff;
+    const ui64 b1 = (msb >> 48) & 0xff;
+    const ui64 b2 = (msb >> 40) & 0xff;
+    const ui64 b3 = (msb >> 32) & 0xff;
+    const ui64 b4 = (msb >> 24) & 0xff;
+    const ui64 b5 = (msb >> 16) & 0xff;
+    const ui64 b6 = (msb >> 8) & 0xff;
+    const ui64 b7 = msb & 0xff;
+    return (b3 << 56) | (b2 << 48) | (b1 << 40) | (b0 << 32)
+        | (b5 << 24) | (b4 << 16) | (b7 << 8) | b6;
 }
 
-// RFC 9562 (network byte order) → YDB internal storage via canonical text parsing.
+// reorder() does not place version bits for YDB canonical layout; patch after reorder.
+inline ui64 UpdateRfcV7MsbVersionForYdb(ui64 msb) {
+    return (msb & ~0xF000ULL) | 0x7000ULL;
+}
+
+inline ui64 UpdateRfcLsbVariantForYdb(ui64 lsb) {
+    return (lsb & 0x3FFFFFFFFFFFFFFFULL) | 0x8000000000000000ULL;
+}
+
+// RFC 9562 (network byte order) → YDB internal storage.
 inline std::array<ui8, NKikimr::NUuid::UUID_LEN> RfcUuidBytesToYdbInternal(const ui8* rfc) {
-    const TString canonical = RfcUuidBytesToCanonicalString(rfc);
-    std::array<ui16, 8> dw{};
-    Y_ENSURE(NKikimr::NUuid::ParseUuidToArray(canonical, dw.data(), false),
-        "Failed to parse RFC UUID bytes");
+    ui64 msb = ReadBe64(rfc);
+    ui64 lsb = ReadBe64(rfc + 8);
+    msb = ReorderRfcMsbToYdb(msb);
+    msb = UpdateRfcV7MsbVersionForYdb(msb);
+    lsb = UpdateRfcLsbVariantForYdb(lsb);
     std::array<ui8, NKikimr::NUuid::UUID_LEN> ydb{};
-    std::memcpy(ydb.data(), dw.data(), ydb.size());
+    WriteBe64(msb, ydb.data());
+    WriteBe64(lsb, ydb.data() + 8);
     return ydb;
 }
 

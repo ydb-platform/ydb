@@ -3,6 +3,10 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/exceptions/exceptions.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/type_switcher.h>
 
+#define INCLUDE_YDB_INTERNAL_H
+#include <ydb/public/sdk/cpp/src/client/impl/internal/grpc_connections/credentials_ready.h>
+#undef INCLUDE_YDB_INTERNAL_H
+
 #include <ydb/public/api/grpc/ydb_discovery_v1.grpc.pb.h>
 #include <ydb/public/api/grpc/ydb_table_v1.grpc.pb.h>
 
@@ -15,6 +19,7 @@
 #include <util/generic/mapfindptr.h>
 
 #include <atomic>
+#include <functional>
 #include <memory>
 
 #include <google/protobuf/text_format.h>
@@ -109,7 +114,51 @@ namespace {
         std::atomic_int& ProviderCount_;
     };
 
+    void AssertCancelled(const NDeferredCredentials::TWaitResult& status) {
+        UNIT_ASSERT(status);
+        UNIT_ASSERT_VALUES_EQUAL(status->Status, EStatus::CLIENT_CANCELLED);
+    }
+
 } // namespace
+
+Y_UNIT_TEST_SUITE(DeferredCredentialsTest) {
+    Y_UNIT_TEST(SchedulerCancellationIsReportedOnce) {
+        using namespace NDeferredCredentials;
+
+        auto credentialsReady = NThreading::NewPromise<void>();
+        std::function<void()> cancel;
+        std::function<void(bool)> scheduled;
+        TWaitResult result;
+        size_t callbackCount = 0;
+
+        UNIT_ASSERT(DeferUntilReady(
+            credentialsReady.GetFuture(),
+            TDeadline::Max(),
+            [&] {
+                return [&](TWaitResult status) {
+                    ++callbackCount;
+                    result = std::move(status);
+                };
+            },
+            [&](auto&& callback, TDeadline) {
+                scheduled = std::forward<decltype(callback)>(callback);
+            },
+            [&](auto&& callback) {
+                cancel = std::forward<decltype(callback)>(callback);
+                return true;
+            },
+            [] { return false; }));
+
+        credentialsReady.SetValue();
+        UNIT_ASSERT(scheduled);
+        UNIT_ASSERT(cancel);
+        cancel();
+        scheduled(false);
+
+        UNIT_ASSERT_VALUES_EQUAL(callbackCount, 1);
+        AssertCancelled(result);
+    }
+}
 
 Y_UNIT_TEST_SUITE(CppGrpcClientSimpleTest) {
     Y_UNIT_TEST(ReusesCredentialsProviderForSameIdentity) {

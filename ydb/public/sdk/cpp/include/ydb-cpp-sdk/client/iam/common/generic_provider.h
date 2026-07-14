@@ -111,20 +111,33 @@ private:
         void StartPeriodicTask() {
             auto facility = ResponseFacility_.lock();
             if (!facility) {
+                FailFirstToken("IAM-token provider response facility is not available");
                 return;
             }
 
             std::weak_ptr<TImpl> weakSelf = TGrpcIamCredentialsProvider<TRequest, TResponse, TService>::TImpl::weak_from_this();
-            facility->AddPeriodicTask(
-                [weakSelf](NYdb::NIssue::TIssues&&, EStatus status) {
-                    auto self = weakSelf.lock();
-                    if (!self || status != EStatus::SUCCESS) {
-                        return false;
-                    }
-                    return self->OnPeriodicTick();
-                },
-                PERIODIC_TICK
-            );
+            try {
+                facility->AddPeriodicTask(
+                    [weakSelf](NYdb::NIssue::TIssues&&, EStatus status) {
+                        auto self = weakSelf.lock();
+                        if (!self) {
+                            return false;
+                        }
+                        if (status != EStatus::SUCCESS) {
+                            self->FailFirstToken(TStringBuilder()
+                                << "IAM-token provider periodic task failed with status "
+                                << static_cast<int>(status));
+                            return false;
+                        }
+                        return self->OnPeriodicTick();
+                    },
+                    PERIODIC_TICK
+                );
+            } catch (...) {
+                FailFirstToken(TStringBuilder()
+                    << "Failed to start IAM-token provider periodic task: "
+                    << CurrentExceptionMessage());
+            }
         }
 
         std::string GetTicket() {
@@ -177,6 +190,21 @@ private:
 
     private:
         using SysDuration = SysClock::duration;
+
+        void FailFirstToken(std::string error) {
+            bool setException = false;
+            {
+                std::lock_guard guard(Lock_);
+                if (!FirstTokenReadySet_) {
+                    FirstTokenReadySet_ = true;
+                    LastRequestError_ = error;
+                    setException = true;
+                }
+            }
+            if (setException) {
+                FirstTokenReady_.SetException(std::make_exception_ptr(yexception() << error));
+            }
+        }
 
         static SysDuration ToBoundedSysDuration(const TDuration& d) {
             return std::chrono::duration_cast<SysDuration>(TDeadline::SafeDurationCast(d));

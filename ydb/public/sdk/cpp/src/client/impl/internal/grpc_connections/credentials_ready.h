@@ -1,11 +1,15 @@
 #pragma once
 
-#include <ydb/public/sdk/cpp/src/client/impl/internal/db_driver_state/state.h>
 #include <ydb/public/sdk/cpp/src/client/impl/internal/plain_status/status.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/library/time/time.h>
+
+#include <library/cpp/threading/future/future.h>
 
 #include <exception>
 #include <memory>
 #include <optional>
+#include <type_traits>
+#include <utility>
 
 #include <util/string/builder.h>
 
@@ -63,8 +67,10 @@ NThreading::TFuture<TWaitResult> WaitUntilReady(
 
     if (deadline != TDeadline::Max()) {
         try {
-            scheduleDelayedTask([result]() mutable {
-                result.TrySetValue(InitDeadlineExceededStatus());
+            scheduleDelayedTask([result](bool ok) mutable {
+                result.TrySetValue(ok
+                    ? InitDeadlineExceededStatus()
+                    : InitCancelledStatus());
             }, deadline);
         } catch (...) {
             result.TrySetValue(InitCancelledStatus());
@@ -74,61 +80,16 @@ NThreading::TFuture<TWaitResult> WaitUntilReady(
     return result.GetFuture();
 }
 
-template <typename TCallback>
-class TCallbackOnce {
-public:
-    explicit TCallbackOnce(TCallback&& callback)
-        : Callback_(std::move(callback))
-    {}
-
-    void Complete(TWaitResult status) {
-        Y_ABORT_UNLESS(Callback_.has_value());
-        auto callback = std::move(*Callback_);
-        Callback_.reset();
-        callback(std::move(status));
-    }
-
-private:
-    std::optional<TCallback> Callback_;
-};
-
-template <typename TCallback, typename TScheduleDelayedTask>
-void ScheduleCompletion(
-    const std::shared_ptr<TCallbackOnce<TCallback>>& callback,
-    TScheduleDelayedTask& scheduleDelayedTask,
-    TWaitResult status)
-{
-    try {
-        scheduleDelayedTask([callback, status = std::move(status)]() mutable {
-            callback->Complete(std::move(status));
-        }, TDeadline::Now());
-    } catch (...) {
-        callback->Complete(InitCancelledStatus());
-    }
-}
-
 template <typename TCallbackFactory, typename TScheduleDelayedTask, typename TSubscribeCancel, typename TIsCancelled>
 bool DeferUntilReady(
-    const TDbDriverStatePtr& dbState,
-    bool useAuth,
+    NThreading::TFuture<void> credentialsReady,
     TDeadline deadline,
     TCallbackFactory&& callbackFactory,
     TScheduleDelayedTask&& scheduleDelayedTask,
     TSubscribeCancel&& subscribeCancel,
     TIsCancelled&& isCancelled)
 {
-    auto schedule = std::forward<TScheduleDelayedTask>(scheduleDelayedTask);
-    auto subscribe = std::forward<TSubscribeCancel>(subscribeCancel);
-    auto cancelled = std::forward<TIsCancelled>(isCancelled);
-
-    if (!useAuth) {
-        return false;
-    }
-
-    auto credentialsReady = dbState->GetCredentialsReady();
-    if (!credentialsReady.Initialized()) {
-        return false;
-    }
+    NThreading::TFuture<TWaitResult> wait;
 
     if (credentialsReady.IsReady()) {
         TWaitResult status;
@@ -139,32 +100,32 @@ bool DeferUntilReady(
         } catch (...) {
             status = InitFailedStatus();
         }
-        if (!status && cancelled()) {
+        if (!status && isCancelled()) {
             status = InitCancelledStatus();
         }
-        if (status) {
-            auto callbackValue = callbackFactory();
-            auto callback = std::make_shared<TCallbackOnce<decltype(callbackValue)>>(std::move(callbackValue));
-            ScheduleCompletion(callback, schedule, std::move(status));
-            return true;
+        if (!status) {
+            return false;
         }
-        return false;
+        wait = NThreading::MakeFuture(std::move(status));
+    } else {
+        wait = WaitUntilReady(
+            std::move(credentialsReady),
+            deadline,
+            scheduleDelayedTask,
+            subscribeCancel);
     }
 
     auto callbackValue = callbackFactory();
-    auto callback = std::make_shared<TCallbackOnce<decltype(callbackValue)>>(std::move(callbackValue));
-    auto wait = WaitUntilReady(
-        std::move(credentialsReady),
-        deadline,
-        schedule,
-        subscribe);
+    auto callback = std::make_shared<std::decay_t<decltype(callbackValue)>>(std::move(callbackValue));
 
-    wait.Subscribe([callback, schedule = std::move(schedule), cancelled = std::move(cancelled)](const NThreading::TFuture<TWaitResult>& future) mutable {
+    wait.Subscribe([callback, schedule = std::forward<TScheduleDelayedTask>(scheduleDelayedTask)](const NThreading::TFuture<TWaitResult>& future) mutable {
         auto status = future.GetValue();
-        if (!status && cancelled()) {
-            status = InitCancelledStatus();
-        }
-        ScheduleCompletion(callback, schedule, std::move(status));
+        schedule([callback, status = std::move(status)](bool ok) mutable {
+            if (!ok) {
+                status = InitCancelledStatus();
+            }
+            (*callback)(std::move(status));
+        }, TDeadline::Now());
     });
 
     return true;

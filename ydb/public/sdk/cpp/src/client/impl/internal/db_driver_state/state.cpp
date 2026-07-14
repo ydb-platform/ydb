@@ -62,10 +62,9 @@ TDbDriverState::TDbDriverState(
 }
 
 void TDbDriverState::SetCredentialsProvider(std::shared_ptr<ICredentialsProvider> credentialsProvider) {
-    auto authenticatorProvider = credentialsProvider;
 #ifndef YDB_GRPC_UNSECURE_AUTH
     auto callCredentials = grpc::MetadataCredentialsFromPlugin(
-        std::unique_ptr<grpc::MetadataCredentialsPlugin>(new TYdbAuthenticator(std::move(authenticatorProvider))));
+        std::unique_ptr<grpc::MetadataCredentialsPlugin>(new TYdbAuthenticator(credentialsProvider)));
 #endif
     std::atomic_store(&CredentialsProvider, std::move(credentialsProvider));
 #ifndef YDB_GRPC_UNSECURE_AUTH
@@ -73,13 +72,13 @@ void TDbDriverState::SetCredentialsProvider(std::shared_ptr<ICredentialsProvider
 #endif
 }
 
-NThreading::TFuture<void> TDbDriverState::InitCredentials(
+void TDbDriverState::InitCredentials(
     std::shared_ptr<ICredentialsProviderFactory> credentialsProviderFactory
 ) {
     std::weak_ptr<TDbDriverState> weakSelf = shared_from_this();
     std::weak_ptr<ICoreFacility> facility = weakSelf;
 
-    return credentialsProviderFactory->CreateProviderAsync(std::move(facility)).Apply(
+    CredentialsReady = credentialsProviderFactory->CreateProviderAsync(std::move(facility)).Apply(
         [weakSelf](const NThreading::TFuture<TCredentialsProviderPtr>& future) {
             auto provider = future.GetValue();
             auto self = weakSelf.lock();
@@ -268,7 +267,7 @@ TDbDriverStatePtr TDbDriverStateTracker::GetDriverState(
                         DiscoveryClient_),
                     deleter);
 
-                strongState->CredentialsReady = strongState->InitCredentials(
+                strongState->InitCredentials(
                     credentialsProviderFactory
                         ? std::move(credentialsProviderFactory)
                         : CreateInsecureCredentialsProviderFactory());

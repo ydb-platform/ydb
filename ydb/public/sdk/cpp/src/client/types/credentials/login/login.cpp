@@ -197,20 +197,18 @@ void TLoginCredentialsProvider::RequestToken() {
 
 void TLoginCredentialsProvider::PrepareToken() {
     std::unique_lock<std::mutex> lock(Mutex_);
-    switch (State_) {
-        case EState::Empty:
-            State_ = EState::Requesting;
-            RequestToken();
-            [[fallthrough]];
-        case EState::Requesting:
-            Notify_.wait(lock, [&]{
-                return State_ == EState::Done;
-            });
-            [[fallthrough]];
-        case EState::Done:
-            ParseToken();
-            break;
+    if (State_ == EState::Empty) {
+        State_ = EState::Requesting;
+        lock.unlock();
+        RequestToken();
+        lock.lock();
     }
+    if (State_ == EState::Requesting) {
+        Notify_.wait(lock, [&] {
+            return State_ == EState::Done;
+        });
+    }
+    ParseToken();
 }
 
 NThreading::TFuture<void> TLoginCredentialsProvider::PrepareTokenAsync() {

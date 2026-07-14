@@ -9,6 +9,7 @@
 
 #include <atomic>
 #include <chrono>
+#include <exception>
 #include <future>
 #include <memory>
 #include <string>
@@ -76,6 +77,29 @@ TIamServiceParams MakeServiceParams(TCredentialsProviderFactoryPtr nestedFactory
     return params;
 }
 
+class TFailingCoreFacility final : public ICoreFacility {
+public:
+    void AddPeriodicTask(TPeriodicCb&& callback, TDeadline::Duration) override {
+        NYdb::NIssue::TIssues issues;
+        callback(std::move(issues), EStatus::CLIENT_CANCELLED);
+    }
+
+    void PostToResponseQueue(TPostTaskCb&& callback) override {
+        callback();
+    }
+};
+
+using TTestOAuthFactory = TIamOAuthCredentialsProviderFactory<
+    CreateIamTokenRequest, CreateIamTokenResponse, IamTokenService>;
+
+TTestOAuthFactory MakeOAuthFactory() {
+    TIamOAuth params;
+    params.Endpoint = "localhost:1";
+    params.EnableSsl = false;
+    params.OAuthToken = "token";
+    return TTestOAuthFactory(params);
+}
+
 } // namespace
 
 TEST(IamCredentialsProviderIdentity, IdentityIsValueBased) {
@@ -140,6 +164,21 @@ TEST(IamServiceCredentialsProvider, NoArgProviderIsCachedAcrossFactoryInstances)
     EXPECT_EQ(stub.GetCreateForServiceRequestCount(), 2);
 
     server.Stop();
+}
+
+TEST(IamCredentialsProvider, AsyncCreationFailsWithExpiredFacility) {
+    auto future = MakeOAuthFactory().CreateProviderAsync(std::weak_ptr<ICoreFacility>{});
+
+    ASSERT_TRUE(future.IsReady());
+    EXPECT_THROW(future.GetValue(), std::exception);
+}
+
+TEST(IamCredentialsProvider, AsyncCreationFailsWhenPeriodicTaskIsRejected) {
+    auto facility = std::make_shared<TFailingCoreFacility>();
+    auto future = MakeOAuthFactory().CreateProviderAsync(std::weak_ptr<ICoreFacility>(facility));
+
+    ASSERT_TRUE(future.IsReady());
+    EXPECT_THROW(future.GetValue(), std::exception);
 }
 
 // Regression test for the deprecated no-arg CreateProvider() on the IAM service-account

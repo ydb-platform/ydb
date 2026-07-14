@@ -147,14 +147,6 @@ public:
 
     static void SetGrpcCompressionAlgorithm(NYdbGrpc::TGRpcClientConfig& config, EGrpcCompressionAlgorithm algorithm);
 
-    bool SubscribeCancel(const IQueueClientContextPtr& context, TSimpleCb&& callback) {
-        if (!context) {
-            return false;
-        }
-        context->SubscribeCancel(std::move(callback));
-        return true;
-    }
-
     template <typename TCallbackFactory>
     bool MaybeDeferUntilCredentialsReady(
         const TDbDriverStatePtr& dbState,
@@ -162,39 +154,44 @@ public:
         IQueueClientContextPtr& context,
         TCallbackFactory&& callbackFactory)
     {
-        IQueueClientContextPtr contextForCancel;
-        IQueueClientContextPtr contextForCheck = context;
-
-        if (requestSettings.UseAuth) {
-            auto credentialsReady = dbState->GetCredentialsReady();
-            if (credentialsReady.Initialized() && !credentialsReady.IsReady()) {
-                if (!context) {
-                    if (!TryCreateContext(context)) {
-                        callbackFactory()(NDeferredCredentials::InitCancelledStatus());
-                        return true;
-                    }
-                }
-                contextForCancel = context;
-                contextForCheck = context;
-            }
+        if (!requestSettings.UseAuth) {
+            return false;
         }
 
+        auto credentialsReady = dbState->GetCredentialsReady();
+        IQueueClientContextPtr waitContext;
+        if (!credentialsReady.IsReady()) {
+            TryCreateContext(context);
+            waitContext = context;
+        }
+        auto scheduleContext = context;
+
         return NDeferredCredentials::DeferUntilReady(
-            dbState,
-            requestSettings.UseAuth,
+            std::move(credentialsReady),
             requestSettings.Deadline,
             std::forward<TCallbackFactory>(callbackFactory),
-            [this](TSimpleCb&& cb, TDeadline deadline) {
-                ScheduleDelayedTask(std::move(cb), deadline);
-            },
-            [this, contextForCancel = std::move(contextForCancel)](TSimpleCb&& cb) {
-                if (!contextForCancel) {
-                    return true;
+            [this, scheduleContext, stopState = StopState_](std::function<void(bool)>&& cb, TDeadline deadline) {
+                TSdkCallbackGuard guard(stopState);
+                if (!guard.IsEntered()) {
+                    cb(false);
+                    return;
                 }
-                return SubscribeCancel(contextForCancel, std::move(cb));
+                const auto now = TDeadline::Clock::now();
+                const auto timeout = deadline.GetTimePoint() <= now
+                    ? TDuration::Zero()
+                    : TDuration::MicroSeconds(std::chrono::duration_cast<std::chrono::microseconds>(
+                        deadline.GetTimePoint() - now).count());
+                ScheduleCallback(timeout, std::move(cb), scheduleContext);
             },
-            [contextForCheck = std::move(contextForCheck)] {
-                return contextForCheck && contextForCheck->IsCancelled();
+            [waitContext = std::move(waitContext)](TSimpleCb&& cb) {
+                if (!waitContext) {
+                    return false;
+                }
+                waitContext->SubscribeCancel(std::move(cb));
+                return true;
+            },
+            [context] {
+                return context && context->IsCancelled();
             });
     }
 

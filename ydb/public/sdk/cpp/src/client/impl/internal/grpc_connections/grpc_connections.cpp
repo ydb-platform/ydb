@@ -377,6 +377,7 @@ TGRpcConnectionsImpl::TGRpcConnectionsImpl(std::shared_ptr<IConnectionsParams> p
 TGRpcConnectionsImpl::~TGRpcConnectionsImpl() {
     Stop(true);
     StopState_->MarkStopped();
+    StopState_->WaitCallbacksDrained();
 }
 
 bool TGRpcConnectionsImpl::IsCurrentThreadInSdkCallback() noexcept {

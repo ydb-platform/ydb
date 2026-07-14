@@ -54,6 +54,10 @@ private:
 
     TPBufferCleanupGather CleanupGather;
 
+    // Result of the last finished cleanup round: the minimum safe barrier
+    // across all DBGs. 0 until the first round finishes.
+    std::atomic<ui64> LastSafeBarrier{0};
+
 public:
     TFastPathService(
         NActors::TActorSystem* actorSystem,

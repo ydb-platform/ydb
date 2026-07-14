@@ -75,6 +75,7 @@ Y_UNIT_TEST_SUITE(TMonRenderTest)
         UNIT_ASSERT_STRING_CONTAINS(html, "DirectBlockGroups");
         UNIT_ASSERT_STRING_CONTAINS(html, "VChunks (total)");
         UNIT_ASSERT_STRING_CONTAINS(html, "LSN counter");
+        UNIT_ASSERT_STRING_CONTAINS(html, "Last safe barrier");
         UNIT_ASSERT_STRING_CONTAINS(html, "vol-1");
     }
 

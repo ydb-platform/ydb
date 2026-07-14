@@ -399,11 +399,11 @@ void TFastPathService::StopTablet(const TString& reason)
 
 TFastPathServiceInfo TFastPathService::GetMonInfo() const
 {
-    const ui64 vchunkSize = StorageConfig->GetVChunkSize();
-    Y_ABORT_UNLESS(vchunkSize != 0);
     return {
         .LsnCounter = SequenceGenerator.load(),
-        .TotalVChunks = Regions.size() * (RegionSize / vchunkSize),
+        .LastSafeBarrier = LastSafeBarrier.load(),
+        .TotalVChunks =
+            Regions.size() * GetVChunksPerRegion(VolumeConfig->VChunkSize),
         .DbgCount = DirectBlockGroups.size(),
     };
 }
@@ -523,6 +523,8 @@ void TFastPathService::FinishPBufferCleanup()
         // dirty map, so its records are not accounted for yet. Skip the tick.
         return;
     }
+
+    LastSafeBarrier.store(*globalMin);
 
     const ui64 cleanupBound = *globalMin - 1;
     for (const auto& dbg: DirectBlockGroups) {

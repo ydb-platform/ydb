@@ -217,6 +217,18 @@ void RenderOverview(IOutputStream& str, const TFastPathServiceInfo& info)
                         str << info.LsnCounter;
                     }
                 }
+                TABLER () {
+                    TABLED () {
+                        str << "Last safe barrier";
+                    }
+                    TABLED () {
+                        if (info.LastSafeBarrier != 0) {
+                            str << info.LastSafeBarrier;
+                        } else {
+                            str << "-";
+                        }
+                    }
+                }
             }
         }
     }

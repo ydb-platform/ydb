@@ -22,6 +22,15 @@
       "release-asan",
       "release-tsan",
       "release-msan"
+    ],
+    "stable-26-3-1": [
+      "relwithdebinfo",
+      "release-asan"
+    ]
+    ,
+    "stable-26-3": [
+      "relwithdebinfo",
+      "release-asan"
     ]
   }
 }

@@ -345,7 +345,6 @@ namespace Tests {
         TServerSettings& operator=(const TServerSettings& settings) = default;
     private:
         YDB_FLAG_ACCESSOR(EnableMetadataProvider, true);
-        YDB_FLAG_ACCESSOR(EnableExternalIndex, false);
     };
 
     class TServer : public TThrRefBase, TMoveOnly {
@@ -700,7 +699,11 @@ namespace Tests {
         void TestAddGroupMembership(const TString& parent, const TString& group, const TString& member);
         NMsgBusProxy::EResponseStatus DeleteGroup(const TString& parent, const TString& group);
         void TestDeleteGroup(const TString& parent, const TString& group);
-        NKikimrScheme::TEvLoginResult Login(TTestActorRuntime& runtime, const TString& user, const TString& password);
+
+        NKikimrScheme::TEvLoginResult Login(TTestActorRuntime& runtime,
+            const TString& user, NLoginProto::ESaslAuthMech::SaslAuthMech authMech,
+            NLoginProto::EHashType::HashType hashType, const TString& hash, const TString& authMessage = "");
+        NKikimrScheme::TEvLoginResult LoginExternal(TTestActorRuntime& runtime, const TString& user);
 
         // ACL operations
         NMsgBusProxy::EResponseStatus ModifyOwner(const TString& parent, const TString& name, const TString& owner, const TString& userToken = "");

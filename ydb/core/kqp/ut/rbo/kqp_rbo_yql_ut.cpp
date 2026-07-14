@@ -220,7 +220,7 @@ const NJson::TJsonValue* FindConnectionNode(const NJson::TJsonValue& node, const
         if (planNodeType != map.end() && nodeType != map.end()
             && planNodeType->second.IsString() && nodeType->second.IsString()
             && planNodeType->second.GetStringSafe() == "Connection"
-            && nodeType->second.GetStringSafe().StartsWith(connectionName))
+            && nodeType->second.GetStringSafe() == connectionName)
         {
             return &node;
         }
@@ -557,6 +557,30 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
     }
 
+    void CreateOriginalRowsHintTables(TKikimrRunner& kikimr) {
+        auto db = kikimr.GetTableClient();
+        auto sessionResult = db.CreateSession().GetValueSync();
+        UNIT_ASSERT_C(sessionResult.IsSuccess(), sessionResult.GetIssues().ToString());
+        auto session = sessionResult.GetSession();
+        auto result = session.ExecuteSchemeQuery(R"(
+            CREATE TABLE `/Root/R` (
+                id Int64 NOT NULL,
+                primary key(id)
+            ) WITH (STORE = column);
+
+            CREATE TABLE `/Root/S` (
+                id Int64 NOT NULL,
+                primary key(id)
+            ) WITH (STORE = column);
+
+            CREATE TABLE `/Root/T` (
+                id Int64 NOT NULL,
+                primary key(id)
+            ) WITH (STORE = column);
+        )").GetValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+    }
+
     NYdb::NQuery::TSession CreateQuerySession(TKikimrRunner& kikimr) {
         auto db = kikimr.GetQueryClient();
         auto res = db.GetSession().GetValueSync();
@@ -611,6 +635,21 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         UNIT_ASSERT_C(!GetStringField(*joinOp, "JoinAlgo").empty(), plan);
         const auto condition = GetStringField(*joinOp, "Condition");
         UNIT_ASSERT_C(condition.Contains("t1.a") && condition.Contains("t2.b") && condition.Contains(" = "), plan);
+
+        const auto* hashShuffle = FindConnectionNode(simplifiedPlan, "HashShuffle");
+        UNIT_ASSERT_C(hashShuffle, plan);
+        UNIT_ASSERT_VALUES_EQUAL_C(GetStringField(*hashShuffle, "Node Type"), "HashShuffle", plan);
+        UNIT_ASSERT_C(!GetStringField(*hashShuffle, "HashFunc").empty(), plan);
+        const auto& hashShuffleMap = hashShuffle->GetMapSafe();
+        UNIT_ASSERT_C(hashShuffleMap.contains("KeyColumns") && hashShuffleMap.at("KeyColumns").IsArray(), plan);
+        UNIT_ASSERT_C(!hashShuffleMap.at("KeyColumns").GetArraySafe().empty(), plan);
+
+        NJson::TJsonValue planJson;
+        UNIT_ASSERT_C(NJson::ReadJsonTree(plan, &planJson, true), plan);
+        const auto* executionHashShuffle = FindConnectionNode(planJson.GetMapSafe().at("Plan"), "HashShuffle");
+        UNIT_ASSERT_C(executionHashShuffle, plan);
+        UNIT_ASSERT_C(executionHashShuffle->GetMapSafe().contains("KeyColumns"), plan);
+        UNIT_ASSERT_C(executionHashShuffle->GetMapSafe().contains("HashFunc"), plan);
     }
 
     Y_UNIT_TEST(ExplainJoin) {
@@ -631,6 +670,76 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         UNIT_ASSERT_C(!GetStringField(*joinOp, "JoinAlgo").empty(), plan);
         const auto condition = GetStringField(*joinOp, "Condition");
         UNIT_ASSERT_C(condition.Contains("t1.a") && condition.Contains("t2.b") && condition.Contains(" = "), plan);
+    }
+
+    Y_UNIT_TEST(ExplainReadRowsHints) {
+        TExplainPlanTestContext testContext;
+        auto& session = testContext.GetSession();
+        auto plan = ExecuteExplain(session, R"(
+            PRAGMA YqlSelect = 'force';
+            PRAGMA ydb.OptimizerHints = '
+                Rows(left_alias # 123)
+                Rows(t2 # 456)
+            ';
+            select left_alias.a, right_alias.b
+            from `/Root/t1` as left_alias
+            inner join `/Root/t2` as right_alias on left_alias.a = right_alias.b;
+        )");
+
+        const auto simplifiedPlan = GetSimplifiedPlan(plan);
+        const auto* leftRead = FindOperatorByStringField(simplifiedPlan, "Table", "t1");
+        const auto* rightRead = FindOperatorByStringField(simplifiedPlan, "Table", "t2");
+
+        UNIT_ASSERT_C(leftRead, plan);
+        UNIT_ASSERT_C(rightRead, plan);
+        UNIT_ASSERT_VALUES_EQUAL_C(GetStringField(*leftRead, "E-Rows"), "123", plan);
+        UNIT_ASSERT_VALUES_EQUAL_C(GetStringField(*rightRead, "E-Rows"), "456", plan);
+    }
+
+    Y_UNIT_TEST(ExplainOriginalRowsHints) {
+        TExplainPlanTestContext testContext;
+        CreateOriginalRowsHintTables(testContext.GetKikimr());
+        auto& session = testContext.GetSession();
+        auto plan = ExecuteExplain(session, R"(
+            PRAGMA YqlSelect = 'force';
+            PRAGMA ydb.OptimizerHints =
+            '
+                Rows(R # 20e8)
+                Rows(T # 777)
+                Rows(S # 30e8)
+                Rows(R T # 1)
+                Rows(R S # 10e8)
+            ';
+            SELECT * FROM
+                `/Root/R` AS R INNER JOIN `/Root/S` AS S on R.id = S.id
+                    INNER JOIN `/Root/T` AS T on R.id = T.id;
+        )");
+
+        const auto simplifiedPlan = GetSimplifiedPlan(plan);
+        const auto* readR = FindOperatorByStringField(simplifiedPlan, "Table", "R");
+        const auto* readS = FindOperatorByStringField(simplifiedPlan, "Table", "S");
+        const auto* readT = FindOperatorByStringField(simplifiedPlan, "Table", "T");
+
+        UNIT_ASSERT_C(readR, plan);
+        UNIT_ASSERT_C(readS, plan);
+        UNIT_ASSERT_C(readT, plan);
+        UNIT_ASSERT_VALUES_EQUAL_C(GetStringField(*readR, "E-Rows"), "2000000000", plan);
+        UNIT_ASSERT_VALUES_EQUAL_C(GetStringField(*readS, "E-Rows"), "3000000000", plan);
+        UNIT_ASSERT_VALUES_EQUAL_C(GetStringField(*readT, "E-Rows"), "777", plan);
+    }
+    
+    Y_UNIT_TEST(PushConstantConditionOnJoinKeyBothSides) {
+        TExplainPlanTestContext testContext;
+        auto& session = testContext.GetSession();
+        auto plan = ExecuteExplain(session, R"(
+            select t1.a, t1.b
+            from `/Root/t1` as t1
+             join `/Root/t2` as t2 on t1.a = t2.a
+             where t1.a == 1;
+        )");
+
+        const auto simplifiedPlan = GetSimplifiedPlan(plan);
+        UNIT_ASSERT_C(!FindOperatorByStringFieldContaining(simplifiedPlan, "Name", "TableFullScan"), plan);
     }
 
     Y_UNIT_TEST(EliminateUnusedLeftJoin) {
@@ -666,10 +775,11 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
 
         const auto* mergeConnection = FindConnectionNode(simplifiedSortPlan, "Merge");
         UNIT_ASSERT_C(mergeConnection, sortPlan);
-        UNIT_ASSERT_C(GetStringField(*mergeConnection, "Node Type").StartsWith("Merge"), sortPlan);
+        UNIT_ASSERT_VALUES_EQUAL_C(GetStringField(*mergeConnection, "Node Type"), "Merge", sortPlan);
         const auto mergeSortBy = GetStringField(*mergeConnection, "SortBy");
         UNIT_ASSERT_C(mergeSortBy.Contains("a desc nulls first"), sortPlan);
         UNIT_ASSERT_C(mergeSortBy.Contains("b asc nulls first"), sortPlan);
+        UNIT_ASSERT_C(mergeConnection->GetMapSafe().contains("SortColumns"), sortPlan);
     }
 
     Y_UNIT_TEST(ExplainReadPushdown) {
@@ -1008,6 +1118,79 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         UNIT_ASSERT_C(filters[0].IsString(), joinJson.GetStringRobust());
         const auto joinFilter = filters[0].GetStringSafe();
         UNIT_ASSERT_C(joinFilter.Contains("t1.b < t2.c"), joinFilter);
+    }
+
+    Y_UNIT_TEST(OperatorIteratorMovePreservesDeepTraversal) {
+        const auto pos = NYql::TPositionHandle();
+        TIntrusivePtr<IOperator> op = MakeIntrusive<TOpEmptySource>(pos);
+        for (size_t i = 0; i < 30; ++i) {
+            op = MakeIntrusive<TOpJoin>(
+                op,
+                MakeIntrusive<TOpEmptySource>(pos),
+                pos,
+                "Cross",
+                TVector<std::pair<TInfoUnit, TInfoUnit>>{});
+        }
+        TOpRoot root(op, pos, TVector<TString>{});
+
+        auto source = root.begin();
+        TOpIterator moved(std::move(source));
+        UNIT_ASSERT(source == TOpEnd{});
+        ++source;
+        UNIT_ASSERT(source == TOpEnd{});
+
+        auto assigned = root.begin();
+        assigned = std::move(moved);
+        UNIT_ASSERT(moved == TOpEnd{});
+        ++moved;
+        UNIT_ASSERT(moved == TOpEnd{});
+
+        size_t count = 0;
+        IOperator* last = nullptr;
+        for (; assigned != TOpEnd{}; ++assigned) {
+            last = assigned->Current.Get();
+            ++count;
+        }
+
+        UNIT_ASSERT_VALUES_EQUAL(count, 61);
+        UNIT_ASSERT_VALUES_EQUAL(last, op.Get());
+    }
+
+    Y_UNIT_TEST(ComputeParentsHandlesSharedDagAndIgnoresInactiveSubplans) {
+        const auto pos = NYql::TPositionHandle();
+        auto shared = MakeIntrusive<TOpEmptySource>(pos);
+        auto join = MakeIntrusive<TOpJoin>(
+            shared,
+            shared,
+            pos,
+            "Cross",
+            TVector<std::pair<TInfoUnit, TInfoUnit>>{});
+        TOpRoot root(join, pos, TVector<TString>{});
+
+        auto inactiveChild = MakeIntrusive<TOpEmptySource>(pos);
+        auto inactiveSubplan = MakeIntrusive<TOpJoin>(
+            inactiveChild,
+            MakeIntrusive<TOpEmptySource>(pos),
+            pos,
+            "Cross",
+            TVector<std::pair<TInfoUnit, TInfoUnit>>{});
+        const TInfoUnit inactiveIU("inactive_subplan", true);
+        root.PlanProps.Subplans.Add(inactiveIU, TSubplanEntry{inactiveSubplan, {}, ESubplanType::EXPR, inactiveIU, {}});
+
+        root.ComputeParents();
+
+        UNIT_ASSERT(join->Parents.empty());
+        UNIT_ASSERT_VALUES_EQUAL(shared->Parents.size(), 2);
+        bool hasLeftEdge = false;
+        bool hasRightEdge = false;
+        for (const auto& [parent, childIndex] : shared->Parents) {
+            UNIT_ASSERT_VALUES_EQUAL(parent, join.Get());
+            hasLeftEdge |= childIndex == 0;
+            hasRightEdge |= childIndex == 1;
+        }
+        UNIT_ASSERT(hasLeftEdge);
+        UNIT_ASSERT(hasRightEdge);
+        UNIT_ASSERT(inactiveChild->Parents.empty());
     }
 
     Y_UNIT_TEST(NameConstraintsPropagateThroughUnary) {
@@ -3897,6 +4080,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         UNIT_ASSERT_VALUES_EQUAL(rewrittenAggregate->KeyColumns.size(), 1);
         UNIT_ASSERT(rewrittenAggregate->KeyColumns.front() == TInfoUnit("key"));
 
+        ComputeRequiredProps(root, ERuleProperties::RequireOutputIUs, testContext.RboCtx, "Focused push rename");
         const auto aggregateOutput = rewrittenAggregate->GetOutputIUs();
         UNIT_ASSERT(std::find(aggregateOutput.begin(), aggregateOutput.end(), TInfoUnit("total")) != aggregateOutput.end());
         UNIT_ASSERT(std::find(aggregateOutput.begin(), aggregateOutput.end(), TInfoUnit("sum_value")) == aggregateOutput.end());
@@ -5935,6 +6119,10 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
                             {}, /*new rbo=*/true, /*printStatus=*/false, /*compareResults=*/true, /*checkNewRBOCbo=*/true);
     }
 
+    Y_UNIT_TEST(TPCH_YQL_Q21_NewRBO) {
+        RunTPCH_YqlSingleQueryTest(21);
+    }
+
     Y_UNIT_TEST(TPCDS_YQL) {
         // RunTPC_YqlBenchmark(EBenchType::TPCDS, /*columnstore*/ true, {}, {}, /*new rbo*/ false);
         RunTPC_YqlBenchmark(EBenchType::TPCDS, /*columnstore=*/true, {1, 2, 3, 4, 5, 6, 7, 8, 10, 11, 13, 15, 16, 18, 19, 21, 22, 24, 25, 26, 28, 29, 30, 31, 32, 33, 34, 35, 37, 38, 40, 42, 43, 45, 46, 48,
@@ -7646,7 +7834,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
 
         const auto& planMap = planNode.GetMapSafe();
         if (auto nodeType = planMap.find("Node Type");
-                nodeType != planMap.end() && nodeType->second.GetStringSafe().StartsWith("HashShuffle")) {
+                nodeType != planMap.end() && nodeType->second.GetStringSafe() == "HashShuffle") {
             hashFuncs.push_back(planMap.at("HashFunc").GetStringSafe());
         }
 
@@ -7673,7 +7861,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
 
         const auto& planMap = planNode.GetMapSafe();
         if (auto nodeType = planMap.find("Node Type");
-                nodeType != planMap.end() && nodeType->second.GetStringSafe().StartsWith("HashShuffle")) {
+                nodeType != planMap.end() && nodeType->second.GetStringSafe() == "HashShuffle") {
             TVector<TString> keyColumns;
             for (const auto& key : planMap.at("KeyColumns").GetArraySafe()) {
                 keyColumns.push_back(key.GetStringSafe());
@@ -7726,7 +7914,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
 
         const auto& planMap = planNode.GetMapSafe();
         if (auto nodeType = planMap.find("Node Type"); nodeType != planMap.end()) {
-            return nodeType->second.GetStringSafe().StartsWith("HashShuffle");
+            return nodeType->second.GetStringSafe() == "HashShuffle";
         }
 
         return false;
@@ -8497,6 +8685,199 @@ PRAGMA ydb.OptimizerHints = '
             SortDescriptions(expectedHashShuffles),
             TStringBuilder() << "Unexpected mixed hash propagation plan: "
                              << JoinSeq(", ", hashShuffles) << "\n" << plan);
+    }
+
+    Y_UNIT_TEST(ShuffleEliminationRightJoinAliasReproducer) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableNewRBO(false);
+        appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
+        appConfig.MutableTableServiceConfig()->SetAllowOlapDataQuery(true);
+        appConfig.MutableTableServiceConfig()->SetDefaultLangVer(NYql::GetMaxLangVersion());
+        appConfig.MutableTableServiceConfig()->SetBackportMode(NKikimrConfig::TTableServiceConfig_EBackportMode_All);
+        appConfig.MutableTableServiceConfig()->SetDefaultCostBasedOptimizationLevel(4);
+
+        NKikimrKqp::TKqpSetting statsSetting;
+        statsSetting.SetName("OptOverrideStatistics");
+        statsSetting.SetValue(R"({
+            "/Root/_temp/_pool_249": {"n_rows": 12, "byte_size": 1024},
+            "/Root/_temp/_pool_252": {"n_rows": 66464, "byte_size": 8517376},
+            "/Root/_temp/_pool_256": {"n_rows": 36, "byte_size": 2048},
+            "/Root/public/_accumrg28120": {"n_rows": 32601254, "byte_size": 4172960512}
+        })");
+
+        auto settings = NKqp::TKikimrSettings(appConfig).SetWithSampleTables(false);
+        settings.SetKqpSettings({statsSetting});
+        TKikimrRunner kikimr(settings);
+
+        auto schemeClient = kikimr.GetSchemeClient();
+        auto mkDir = schemeClient.MakeDirectory("/Root/_temp").GetValueSync();
+        UNIT_ASSERT_C(mkDir.IsSuccess(), mkDir.GetIssues().ToString());
+        mkDir = schemeClient.MakeDirectory("/Root/public").GetValueSync();
+        UNIT_ASSERT_C(mkDir.IsSuccess(), mkDir.GetIssues().ToString());
+
+        auto tableClient = kikimr.GetTableClient();
+        auto tableSession = tableClient.CreateSession().GetValueSync().GetSession();
+        auto schemeResult = tableSession.ExecuteSchemeQuery(R"(
+            CREATE TABLE `/Root/_temp/_pool_252` (
+                `_q_000_f_000` Decimal(10, 0),
+                `_q_000_f_001rref` String,
+                `_q_000_f_002rref` String,
+                `_q_000_f_003rref` String,
+                `_q_000_f_004rref` String,
+                `_q_000_f_005` Decimal(15, 3),
+                `_q_000_f_006` Decimal(31, 18),
+                `_ydb_pk` Int64 NOT NULL,
+                PRIMARY KEY (`_ydb_pk`)
+            );
+
+            CREATE TABLE `/Root/_temp/_pool_256` (
+                `_q_000_f_000rref` String,
+                `_ydb_pk` Int64 NOT NULL,
+                PRIMARY KEY (`_ydb_pk`)
+            );
+
+            CREATE TABLE `/Root/_temp/_pool_249` (
+                `_q_000_f_000_type` String,
+                `_q_000_f_000_rtref` String,
+                `_q_000_f_000_rrref` String,
+                `_ydb_pk` Int64 NOT NULL,
+                PRIMARY KEY (`_ydb_pk`)
+            );
+
+            CREATE TABLE `/Root/public/_accumrg28120` (
+                `_period` Timestamp64 NOT NULL,
+                `_recordertref` String NOT NULL,
+                `_recorderrref` String NOT NULL,
+                `_lineno` Decimal(9, 0) NOT NULL,
+                `_active` Bool NOT NULL,
+                `_recordkind` Decimal(1, 0) NOT NULL,
+                `_fld28121rref` String NOT NULL,
+                `_fld28122rref` String NOT NULL,
+                `_fld28123rref` String NOT NULL,
+                `_fld28124rref` String NOT NULL,
+                `_fld28125` Decimal(15, 3) NOT NULL,
+                `_fld28126` Decimal(15, 2) NOT NULL,
+                `_fld28127_type` String NOT NULL,
+                `_fld28127_rtref` String NOT NULL,
+                `_fld28127_rrref` String NOT NULL,
+                `_fld28128_type` String NOT NULL,
+                `_fld28128_rtref` String NOT NULL,
+                `_fld28128_rrref` String NOT NULL,
+                `_fld28129rref` String NOT NULL,
+                `_fld28130rref` String NOT NULL,
+                `_fld28131rref` String NOT NULL,
+                `_ydb_pk` Int64 NOT NULL,
+                PRIMARY KEY (`_ydb_pk`)
+            );
+        )").GetValueSync();
+        UNIT_ASSERT_C(schemeResult.IsSuccess(), schemeResult.GetIssues().ToString());
+
+        const TString query = R"sql(
+            PRAGMA ydb.CostBasedOptimizationLevel = "4";
+            PRAGMA ydb.OptShuffleElimination = "true";
+
+            DECLARE $const_0 AS String;
+            DECLARE $const_1 AS String;
+            DECLARE $const_2 AS Timestamp64;
+            DECLARE $const_3 AS Timestamp64;
+            DECLARE $const_4 AS Decimal(1, 0);
+
+            SELECT
+                `s2`.`__ydb_1_7`,
+                `s2`.`__ydb_1_8`,
+                `s2`.`__ydb_1_9`,
+                `s2`.`__ydb_1_10`,
+                `s2`.`__ydb_1_13`,
+                `s2`.`__ydb_1_14`,
+                `s2`.`__ydb_1_15`,
+                `t4`.`_q_000_f_000`,
+                `s2`.`__ydb_1_16`,
+                `s2`.`__ydb_1_17`,
+                `s2`.`__ydb_1_18`,
+                `s2`.`__ydb_1_19`,
+                `s2`.`__ydb_1_20`,
+                `s2`.`__ydb_1_21`,
+                `s2`.`__ydb_6_1`,
+                `s2`.`__ydb_1_12`
+            FROM `/Root/_temp/_pool_252` AS `t4`
+            RIGHT JOIN (
+                SELECT
+                    `s1`.`__ydb_1_7` AS `__ydb_1_7`,
+                    `s1`.`__ydb_1_8` AS `__ydb_1_8`,
+                    `s1`.`__ydb_1_9` AS `__ydb_1_9`,
+                    `s1`.`__ydb_1_10` AS `__ydb_1_10`,
+                    `s1`.`__ydb_1_13` AS `__ydb_1_13`,
+                    `s1`.`__ydb_1_14` AS `__ydb_1_14`,
+                    `s1`.`__ydb_1_15` AS `__ydb_1_15`,
+                    `s1`.`__ydb_1_16` AS `__ydb_1_16`,
+                    `s1`.`__ydb_1_17` AS `__ydb_1_17`,
+                    `s1`.`__ydb_1_18` AS `__ydb_1_18`,
+                    `s1`.`__ydb_1_19` AS `__ydb_1_19`,
+                    `s1`.`__ydb_1_20` AS `__ydb_1_20`,
+                    `s1`.`__ydb_1_21` AS `__ydb_1_21`,
+                    `s1`.`__ydb_1_12` AS `__ydb_1_12`,
+                    `s1`.`__ydb_6_1` AS `__ydb_6_1`
+                FROM `/Root/_temp/_pool_256` AS `t2`
+                INNER JOIN (
+                    SELECT
+                        `t1`.`_fld28121rref` AS `__ydb_1_7`,
+                        `t1`.`_fld28122rref` AS `__ydb_1_8`,
+                        `t1`.`_fld28123rref` AS `__ydb_1_9`,
+                        `t1`.`_fld28124rref` AS `__ydb_1_10`,
+                        `t1`.`_fld28127_type` AS `__ydb_1_13`,
+                        `t1`.`_fld28127_rtref` AS `__ydb_1_14`,
+                        `t1`.`_fld28127_rrref` AS `__ydb_1_15`,
+                        `t1`.`_fld28128_type` AS `__ydb_1_16`,
+                        `t1`.`_fld28128_rtref` AS `__ydb_1_17`,
+                        `t1`.`_fld28128_rrref` AS `__ydb_1_18`,
+                        `t1`.`_fld28129rref` AS `__ydb_1_19`,
+                        `t1`.`_fld28130rref` AS `__ydb_1_20`,
+                        `t1`.`_fld28131rref` AS `__ydb_1_21`,
+                        `t1`.`_fld28126` AS `__ydb_1_12`,
+                        `t6`.`__ydb_6_1` AS `__ydb_6_1`
+                    FROM `/Root/public/_accumrg28120` AS `t1`
+                    LEFT JOIN (
+                        SELECT
+                            `t1`.`_ydb_pk` AS `__ydb_pk_0`,
+                            `t6`.`_q_000_f_000` AS `__ydb_6_1`,
+                            `t6`.`_q_000_f_001rref` AS `__ydb_6_2`,
+                            `t6`.`_q_000_f_002rref` AS `__ydb_6_3`,
+                            `t6`.`_q_000_f_003rref` AS `__ydb_6_4`,
+                            `t6`.`_q_000_f_004rref` AS `__ydb_6_5`,
+                            `t6`.`_ydb_pk` AS `_ydb_pk`
+                        FROM `/Root/public/_accumrg28120` AS `t1`
+                        INNER JOIN `/Root/_temp/_pool_252` AS `t6`
+                            ON ((`t6`.`_q_000_f_001rref` = `t1`.`_fld28128_rrref`))
+                            AND ((`t6`.`_q_000_f_002rref` = `t1`.`_fld28129rref`))
+                            AND ((`t6`.`_q_000_f_003rref` = `t1`.`_fld28130rref`))
+                            AND ((`t6`.`_q_000_f_004rref` = `t1`.`_fld28131rref`))
+                        WHERE (($const_0 = `t1`.`_fld28128_type`))
+                            AND (($const_1 = `t1`.`_fld28128_rtref`))
+                    ) AS `t6`
+                        ON (`t1`.`_ydb_pk` = `t6`.`__ydb_pk_0`)
+                    LEFT ONLY JOIN `/Root/_temp/_pool_249` AS `t8`
+                        ON ((`t1`.`_fld28127_type` = `t8`.`_q_000_f_000_type`))
+                        AND ((`t1`.`_fld28127_rtref` = `t8`.`_q_000_f_000_rtref`))
+                        AND ((`t1`.`_fld28127_rrref` = `t8`.`_q_000_f_000_rrref`))
+                    WHERE ((`t1`.`_period` >= $const_2))
+                        AND ((`t1`.`_period` <= $const_3))
+                        AND (`t1`.`_active`)
+                        AND ((`t1`.`_recordkind` = $const_4))
+                ) AS `s1`
+                    ON ((`s1`.`__ydb_1_7` = `t2`.`_q_000_f_000rref`))
+            ) AS `s2`
+                ON ((`t4`.`_q_000_f_001rref` = `s2`.`__ydb_1_7`))
+                AND ((`t4`.`_q_000_f_002rref` = `s2`.`__ydb_1_8`))
+                AND ((`t4`.`_q_000_f_003rref` = `s2`.`__ydb_1_9`))
+                AND ((`t4`.`_q_000_f_004rref` = `s2`.`__ydb_1_10`))
+        )sql";
+
+        auto result = tableSession.ExplainDataQuery(query).GetValueSync();
+
+        result.GetIssues().PrintTo(Cerr);
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+        UNIT_ASSERT_C(!result.GetPlan().empty(), result.GetPlan());
     }
 
     void InsertIntoAliasesRenames(NYdb::NTable::TTableClient &db, std::string tableName, int numRows) {

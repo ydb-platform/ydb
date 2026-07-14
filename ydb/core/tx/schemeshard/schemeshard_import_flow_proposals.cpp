@@ -4,6 +4,7 @@
 #include "schemeshard_path_describer.h"
 #include "schemeshard_xxport__helpers.h"
 
+#include <ydb/core/base/auth.h>
 #include <ydb/core/base/path.h>
 #include <ydb/core/persqueue/public/schema/schema_propose.h>
 #include <ydb/core/protos/s3_settings.pb.h>
@@ -107,6 +108,8 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateTablePropose(
     }
     FillOwner(record, item.Permissions);
 
+    SetSystemOwnerIfNeeded(record, AppData());
+
     if (!FillACL(modifyScheme, item.Permissions, error)) {
         return nullptr;
     }
@@ -185,6 +188,10 @@ static NKikimrSchemeOp::TTableDescription RebuildTableDescription(
 
         Y_ABORT_UNLESS(it->second < src.ColumnsSize());
         tableDesc.MutableColumns()->Add()->CopyFrom(src.GetColumns(it->second));
+    }
+
+    for (const auto& stat : scheme.statistics()) {
+        FillMultiColumnStatistics(*tableDesc.AddMultiColumnStatistics(), stat);
     }
 
     return tableDesc;

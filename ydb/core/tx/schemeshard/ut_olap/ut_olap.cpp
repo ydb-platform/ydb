@@ -117,7 +117,7 @@ NLs::TCheckFunc LsCheckDiskQuotaExceeded(
     };
 }
 
-// A single flag covers both the volume and the count small-blobs quota 
+// A single flag covers both the volume and the count small-blobs quota
 bool GetSmallBlobsQuotaExceeded(const NKikimrScheme::TEvDescribeSchemeResult& record) {
     const auto& state = record.GetPathDescription().GetDomainDescription().GetDomainState();
     return state.GetSmallBlobsQuotaExceeded();
@@ -615,6 +615,140 @@ Y_UNIT_TEST_SUITE(TOlap) {
 
         TestLs(runtime, "/MyRoot/MyDir/MyTable", false, NLs::PathNotExist);
         TestLsPathId(runtime, expectedTablePathId, NLs::PathStringEqual(""));
+    }
+
+    Y_UNIT_TEST(MultiColumnStatistics) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        auto checkMultiColumnStatistics = [&](const TSet<TString>& expectedNames) {
+            auto descr = DescribePrivatePath(runtime, "/MyRoot/ColumnTable");
+            const auto& tableDesc = descr.GetPathDescription().GetColumnTableDescription();
+            TSet<TString> names;
+            for (const auto& stat : tableDesc.GetMultiColumnStatistics()) {
+                names.insert(stat.GetName());
+                // column names must be resolved to ids on persist
+                UNIT_ASSERT_VALUES_EQUAL(stat.ColumnNamesSize(), stat.ColumnIdsSize());
+                UNIT_ASSERT(stat.ColumnNamesSize() > 0);
+                UNIT_ASSERT(stat.TypesSize() > 0);
+                for (const auto type : stat.GetTypes()) {
+                    UNIT_ASSERT_EQUAL(
+                        static_cast<NKikimrSchemeOp::EMultiColumnStatisticsType>(type),
+                        NKikimrSchemeOp::EMultiColumnStatisticsType::COUNT_MIN_SKETCH);
+                }
+            }
+            UNIT_ASSERT_VALUES_EQUAL(names, expectedNames);
+        };
+
+        auto checkStatisticsColumns = [&](const TString& statName, const TVector<TString>& expectedColumns) {
+            auto descr = DescribePrivatePath(runtime, "/MyRoot/ColumnTable");
+            const auto& tableDesc = descr.GetPathDescription().GetColumnTableDescription();
+            for (const auto& stat : tableDesc.GetMultiColumnStatistics()) {
+                if (stat.GetName() != statName) {
+                    continue;
+                }
+                TVector<TString> columns(stat.GetColumnNames().begin(), stat.GetColumnNames().end());
+                UNIT_ASSERT_VALUES_EQUAL(columns, expectedColumns);
+                return;
+            }
+            UNIT_FAIL("MultiColumnStatistics '" << statName << "' not found");
+        };
+
+        TestCreateColumnTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "ColumnTable"
+            ColumnShardCount: 1
+            Schema {
+                Columns { Name: "timestamp" Type: "Timestamp" NotNull: true }
+                Columns { Name: "key1" Type: "Uint32" }
+                Columns { Name: "data" Type: "Utf8" }
+                KeyColumnNames: [ "timestamp" ]
+            }
+            MultiColumnStatistics { Name: "s1" ColumnNames: "key1" ColumnNames: "data" Types: COUNT_MIN_SKETCH }
+        )");
+        env.TestWaitNotification(runtime, txId);
+        checkMultiColumnStatistics({"s1"});
+
+        // MultiColumnStatistics must survive a SchemeShard restart (persist -> load round-trip).
+        GracefulRestartTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+        checkMultiColumnStatistics({"s1"});
+
+        // ADD STATISTICS
+        // A stats-only alter is a SchemeShard-local state change: it completes synchronously
+        // (StatusSuccess), without a shard round-trip (StatusAccepted).
+        TestAlterColumnTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "ColumnTable"
+            UpsertMultiColumnStatistics { Name: "s2" ColumnNames: "data" Types: COUNT_MIN_SKETCH }
+        )", {NKikimrScheme::StatusSuccess});
+        env.TestWaitNotification(runtime, txId);
+        checkMultiColumnStatistics({"s1", "s2"});
+
+        // DROP STATISTICS
+        TestAlterColumnTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "ColumnTable"
+            DropMultiColumnStatistics: "s2"
+        )", {NKikimrScheme::StatusSuccess});
+        env.TestWaitNotification(runtime, txId);
+        checkMultiColumnStatistics({"s1"});
+
+        // Validation: referencing an unknown column must fail.
+        TestAlterColumnTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "ColumnTable"
+            UpsertMultiColumnStatistics { Name: "bad" ColumnNames: "missing" Types: COUNT_MIN_SKETCH }
+        )", {NKikimrScheme::StatusSchemeError, NKikimrScheme::StatusInvalidParameter});
+
+        // True upsert: re-adding an existing name overwrites its definition instead of failing.
+        checkStatisticsColumns("s1", {"key1", "data"});
+        TestAlterColumnTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "ColumnTable"
+            UpsertMultiColumnStatistics { Name: "s1" ColumnNames: "data" Types: COUNT_MIN_SKETCH }
+        )", {NKikimrScheme::StatusSuccess});
+        env.TestWaitNotification(runtime, txId);
+        checkMultiColumnStatistics({"s1"});
+        checkStatisticsColumns("s1", {"data"});
+    }
+
+    Y_UNIT_TEST(MultiColumnStatisticsWithoutTypesMeansAllTypes) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        auto checkMultiColumnStatistics = [&](const TString& expectedName) {
+            auto descr = DescribePrivatePath(runtime, "/MyRoot/ColumnTableNoTypes");
+            const auto& tableDesc = descr.GetPathDescription().GetColumnTableDescription();
+            UNIT_ASSERT_VALUES_EQUAL(tableDesc.MultiColumnStatisticsSize(), 1);
+            const auto& stat = tableDesc.GetMultiColumnStatistics(0);
+            UNIT_ASSERT_VALUES_EQUAL(stat.GetName(), expectedName);
+            UNIT_ASSERT_VALUES_EQUAL(stat.TypesSize(), 0);
+        };
+
+        // CREATE with a MultiColumnStatistics entry that has no Types.
+        TestCreateColumnTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "ColumnTableNoTypes"
+            ColumnShardCount: 1
+            Schema {
+                Columns { Name: "timestamp" Type: "Timestamp" NotNull: true }
+                Columns { Name: "data" Type: "Utf8" }
+                KeyColumnNames: [ "timestamp" ]
+            }
+            MultiColumnStatistics { Name: "s1" ColumnNames: "data" }
+        )");
+        env.TestWaitNotification(runtime, txId);
+        checkMultiColumnStatistics("s1");
+
+        // ALTER ADD STATISTICS: also with no Types.
+        TestAlterColumnTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "ColumnTableNoTypes"
+            DropMultiColumnStatistics: "s1"
+        )", {NKikimrScheme::StatusSuccess});
+        env.TestWaitNotification(runtime, txId);
+
+        TestAlterColumnTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "ColumnTableNoTypes"
+            UpsertMultiColumnStatistics { Name: "s2" ColumnNames: "data" }
+        )", {NKikimrScheme::StatusSuccess});
+        env.TestWaitNotification(runtime, txId);
+        checkMultiColumnStatistics("s2");
     }
 
     Y_UNIT_TEST(CreateTable) {
@@ -1816,6 +1950,25 @@ Y_UNIT_TEST_SUITE(TOlapNaming) {
         )";
     }
 
+    static TString AlterUpsertBloomNGrammFilterIndex(const TString& tableName, const TString& indexName,
+            const TString& columnName, double falsePositiveProbability) {
+        return TStringBuilder() << R"(
+            Name: ")" << tableName << R"("
+            AlterSchema {
+                UpsertIndexes {
+                    Name: ")" << indexName << R"("
+                    ClassName: "BLOOM_NGRAMM_FILTER"
+                    BloomNGrammFilter {
+                        NGrammSize: 3
+                        CaseSensitive: true
+                        ColumnName: ")" << columnName << R"("
+                        FalsePositiveProbability: )" << falsePositiveProbability << R"(
+                    }
+                }
+            }
+        )";
+    }
+
     Y_UNIT_TEST(CreateColumnTableOk) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
@@ -2250,7 +2403,7 @@ Y_UNIT_TEST_SUITE(TOlapNaming) {
 
         {
             auto descr = DescribePath(runtime, "/MyRoot/TestTableCreate");
-            TestDescribeResult(descr, {NLs::PathExist, NLs::ChildrenCount(0)});
+            TestDescribeResult(descr, {NLs::PathExist, NLs::ChildrenCount(0), NLs::ColumnTableIndexesCount(1)});
         }
 
         {
@@ -2280,7 +2433,7 @@ Y_UNIT_TEST_SUITE(TOlapNaming) {
         env.TestWaitNotification(runtime, txId);
 
         TestAlterColumnTable(runtime, ++txId, "/MyRoot",
-            AlterUpsertBloomFilterIndex("TestTableAlter", "bloom_data", "data", 0.05));
+            AlterUpsertBloomNGrammFilterIndex("TestTableAlter", "bloom_data", "data", 0.05));
         env.TestWaitNotification(runtime, txId);
 
         {
@@ -2293,7 +2446,7 @@ Y_UNIT_TEST_SUITE(TOlapNaming) {
             const auto& schema = descr.GetPathDescription().GetColumnTableDescription().GetSchema();
             bool foundBloom = false;
             for (const auto& idx : schema.GetIndexes()) {
-                if (idx.GetName() == "bloom_data" && idx.HasBloomFilter()) {
+                if (idx.GetName() == "bloom_data" && idx.HasBloomNGrammFilter()) {
                     foundBloom = true;
                     break;
                 }
@@ -2302,7 +2455,7 @@ Y_UNIT_TEST_SUITE(TOlapNaming) {
         }
 
         TestAlterColumnTable(runtime, ++txId, "/MyRoot",
-            AlterUpsertBloomFilterIndex("TestTableAlter", "bloom_data_v2", "data", 0.01));
+            AlterUpsertBloomNGrammFilterIndex("TestTableAlter", "bloom_data_v2", "data", 0.01));
         env.TestWaitNotification(runtime, txId);
 
         {
@@ -2481,10 +2634,12 @@ Y_UNIT_TEST_SUITE(TOlapNaming) {
                     Indexes {
                         Id: %d
                         Name: "bloom_%d"
-                        ClassName: "BLOOM_FILTER"
-                        BloomFilter {
-                            ColumnIds: [2]
+                        ClassName: "BLOOM_NGRAMM_FILTER"
+                        BloomNGrammFilter {
+                            ColumnId: 3
                             FalsePositiveProbability: 0.01
+                            NGrammSize: 3
+                            CaseSensitive: false
                         }
                     }
                 )", 4 + i, i);
@@ -2495,10 +2650,10 @@ Y_UNIT_TEST_SUITE(TOlapNaming) {
             TestCreateColumnTable(runtime, ++txId, "/MyRoot", tableSchema);
             env.TestWaitNotification(runtime, txId);
 
-            // Before migration: no scheme object children
+            // Before migration: no scheme object children but still have 30 indexes
             {
                 auto descr = DescribePath(runtime, Sprintf("/MyRoot/%s", tableName.c_str()));
-                TestDescribeResult(descr, {NLs::PathExist, NLs::ChildrenCount(0)});
+                TestDescribeResult(descr, {NLs::PathExist, NLs::ChildrenCount(0), NLs::ColumnTableIndexesCount(30)});
             }
         }
 
@@ -2549,11 +2704,11 @@ Y_UNIT_TEST_SUITE(TOlapNaming) {
 
             // Verify a few sample indexes are ready
             NLocalIndexes::CheckLocalIndexReady(runtime, Sprintf("/MyRoot/%s", tableName.c_str()), "bloom_0",
-                NKikimrSchemeOp::EIndexTypeLocalBloomFilter, {"key"});
+                NKikimrSchemeOp::EIndexTypeLocalBloomNgramFilter, {"data"});
             NLocalIndexes::CheckLocalIndexReady(runtime, Sprintf("/MyRoot/%s", tableName.c_str()), "bloom_15",
-                NKikimrSchemeOp::EIndexTypeLocalBloomFilter, {"key"});
+                NKikimrSchemeOp::EIndexTypeLocalBloomNgramFilter, {"data"});
             NLocalIndexes::CheckLocalIndexReady(runtime, Sprintf("/MyRoot/%s", tableName.c_str()), "bloom_29",
-                NKikimrSchemeOp::EIndexTypeLocalBloomFilter, {"key"});
+                NKikimrSchemeOp::EIndexTypeLocalBloomNgramFilter, {"data"});
         }
 
         // Restart again to verify migration is idempotent (no duplicate scheme objects)

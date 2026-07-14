@@ -204,19 +204,66 @@
     Алгоритм «равномерный случайный выбор» в Java SDK задаётся политикой `USE_ALL_NODES` в `BalancingSettings` (это поведение по умолчанию, если настройки не переопределять).
 
     ```java
+    import tech.ydb.common.transaction.TxMode;
     import tech.ydb.core.grpc.BalancingSettings;
     import tech.ydb.core.grpc.GrpcTransport;
+    import tech.ydb.query.QueryClient;
+    import tech.ydb.query.result.ResultSetReader;
+    import tech.ydb.query.tools.QueryReader;
+    import tech.ydb.query.tools.SessionRetryContext;
+    import tech.ydb.table.query.Params;
 
-    try (GrpcTransport transport = GrpcTransport.forConnectionString("grpc://localhost:2136/local")
-            .withBalancingSettings(BalancingSettings.fromPolicy(BalancingSettings.Policy.USE_ALL_NODES))
-            .build()) {
-        // ...
+    public class RandomChoiceExample {
+        public static void main(String[] args) {
+            String connectionString = System.getenv().getOrDefault(
+                    "YDB_CONNECTION_STRING", "grpc://localhost:2136/local");
+
+            try (GrpcTransport transport = GrpcTransport.forConnectionString(connectionString)
+                    // Явная установка политики random_choice (USE_ALL_NODES)
+                    .withBalancingSettings(BalancingSettings.fromPolicy(BalancingSettings.Policy.USE_ALL_NODES))
+                    .build();
+                 QueryClient queryClient = QueryClient.newClient(transport).build()) {
+
+                SessionRetryContext retryCtx = SessionRetryContext.create(queryClient).build();
+
+                QueryReader reader = retryCtx.supplyResult(session -> QueryReader.readFrom(
+                        session.createQuery("SELECT 1 AS value", TxMode.NONE, Params.empty())
+                )).join().getValue();
+
+                ResultSetReader rs = reader.getResultSet(0);
+                if (rs.next()) {
+                    System.out.println("SELECT 1 = " + rs.getColumn("value").getInt32());
+                }
+            }
+        }
     }
     ```
 
   - JDBC
 
-    Балансировка при выборе новой сессии задаётся на стороне нативного транспорта внутри драйвера; при необходимости используйте те же параметры, что и в нативном SDK, через [настройки подключения JDBC](../../reference/languages-and-apis/jdbc-driver/properties.md).
+    По умолчанию JDBC-драйвер использует политику `USE_ALL_NODES` (равномерный случайный выбор). Дополнительные параметры балансировки можно передать через `Properties` или query-параметры JDBC URL — см. [свойства JDBC-драйвера](../../reference/languages-and-apis/jdbc-driver/properties.md).
+
+    ```java
+    import java.sql.Connection;
+    import java.sql.DriverManager;
+    import java.sql.ResultSet;
+    import java.sql.SQLException;
+    import java.sql.Statement;
+
+    public class JdbcRandomChoiceExample {
+        public static void main(String[] args) throws SQLException {
+            // USE_ALL_NODES — поведение по умолчанию, дополнительные параметры не нужны
+            try (Connection connection = DriverManager.getConnection("jdbc:ydb:grpc://localhost:2136/local");
+                 Statement statement = connection.createStatement();
+                 ResultSet rs = statement.executeQuery("SELECT 1 AS value")) {
+
+                if (rs.next()) {
+                    System.out.println("SELECT 1 = " + rs.getInt("value"));
+                }
+            }
+        }
+    }
+    ```
 
     В Spring Boot, ORM и прочих сторонних фреймворках вокруг JDBC укажите ту же JDBC-строку подключения и параметры балансировки, что и при прямом использовании драйвера (например, `spring.datasource.url` с нужными query-параметрами или свойства `DataSource`).
 

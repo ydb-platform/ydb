@@ -8,6 +8,7 @@
 #include "schemeshard_xxport__helpers.h"
 #include "schemeshard_xxport__tx_base.h"
 
+#include <ydb/core/base/auth.h>
 #include <ydb/core/base/table_index.h>
 #include <ydb/public/api/protos/ydb_import.pb.h>
 #include <ydb/public/api/protos/ydb_issue_message.pb.h>
@@ -23,6 +24,8 @@
 #include <ydb/core/tx/schemeshard/schemeshard_path_describer.h>
 #include <ydb/core/ydb_convert/table_description.h>
 #include <ydb/core/ydb_convert/ydb_convert.h>
+
+#include <ydb/core/backup/common/feature_flags.h>
 
 #include <util/generic/algorithm.h>
 #include <util/generic/maybe.h>
@@ -300,7 +303,7 @@ struct TSchemeShard::TImport::TTxCreate: public TSchemeShard::TXxport::TTxBase {
                     settings.set_scheme(Ydb::Import::ImportFromS3Settings::HTTPS);
                 }
 
-                if (!settings.source_prefix().empty() && AppData()->FeatureFlags.GetEnableEncryptedExport()) {
+                if (!settings.source_prefix().empty() && NBackup::IsExportFilteringEnabled(*AppData())) {
                     initialState = TImportInfo::EState::DownloadExportMetadata;
                 }
 
@@ -327,7 +330,7 @@ struct TSchemeShard::TImport::TTxCreate: public TSchemeShard::TXxport::TTxBase {
                     return Reply(std::move(response), Ydb::StatusIds::UNSUPPORTED, "The feature flag \"EnableFsBackups\" is disabled. The operation cannot be performed.");
                 }
 
-                if (AppData()->FeatureFlags.GetEnableEncryptedExport()) {
+                if (NBackup::IsExportFilteringEnabled(*AppData())) {
                     initialState = TImportInfo::EState::DownloadExportMetadata;
                 }
 
@@ -701,6 +704,10 @@ private:
             return false;
         }
 
+        if (AppData()->AlwaysSetSystemOwner) {
+            op.SetNewOwner(BUILTIN_ACL_METADATA);
+        }
+
         Send(Self->SelfId(), std::move(propose));
         return true;
     }
@@ -752,6 +759,8 @@ private:
             record.SetOwner(*importInfo->UserSID);
         }
         FillOwner(record, item.Permissions);
+
+        SetSystemOwnerIfNeeded(record, AppData());
 
         if (TString error; !FillACL(modifyScheme, item.Permissions, error)) {
             NIceDb::TNiceDb db(txc.DB);

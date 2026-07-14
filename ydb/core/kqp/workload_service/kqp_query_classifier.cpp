@@ -1,5 +1,9 @@
+#include "kqp_has_full_scan_matcher.h"
+#include "kqp_has_path_matcher.h"
 #include "kqp_query_classifier.h"
 #include "kqp_workload_service.h"
+
+#include <ydb/core/kqp/gateway/behaviour/resource_pool_classifier/object.h>
 
 namespace NKikimr::NKqp {
 
@@ -38,14 +42,20 @@ public:
         }
 
         for (const auto& [rank, value] : *ClassifierView) {
-            const NResourcePool::TClassifierSettings& settings = value.GetClassifierSettings();
+            const auto& settings = value.GetClassifierSettings();
 
             if (!MatchesStatic(settings)) {
                 continue;
             }
 
             if (NeedsPreparedQuery(settings)) {
-                return *PreClassifyResult = TPendingCompilation{.ResumeRank = rank};
+                PreClassifyResult = TPendingCompilation{.ResumeRank = rank};
+                return *PreClassifyResult;
+            }
+
+            if (settings.Action == NResourcePool::EClassifierAction::Reject) {
+                PreClassifyResult = MakeRejectFromClassifier(value);
+                return *PreClassifyResult;
             }
 
             if (TryResolve(settings, PreClassifyResult)) {
@@ -77,6 +87,11 @@ public:
                 continue;
             }
 
+            if (settings.Action == NResourcePool::EClassifierAction::Reject) {
+                PostClassifyResult = MakeRejectFromClassifier(it->second);
+                return *PostClassifyResult;
+            }
+
             if (TryResolve(settings, PostClassifyResult)) {
                 return *PostClassifyResult;
             }
@@ -102,13 +117,17 @@ private:
     ///
     /// Check Predicate MemberName
     ///
-    bool MatchesMemberName(const TString& target) const {
-        // Check anonymous user
-        if (!Context.UserToken) {
-            return target == NACLib::TSID();
+    bool MatchesMemberName(const std::optional<TString>& target) const {
+        if (!target) {
+            return true;
         }
 
-        auto [it, inserted] = MemberNameCache.emplace(target, false);
+        // Check anonymous user
+        if (!Context.UserToken) {
+            return *target == NACLib::TSID();
+        }
+
+        auto [it, inserted] = MemberNameCache.emplace(*target, false);
 
         if (!inserted) {
             return it->second;
@@ -118,13 +137,13 @@ private:
 
         // Check UserSID only for non-system users.
         if (!Context.UserToken->IsSystemUser()) {
-            found = target == Context.UserToken->GetUserSID();
+            found = *target == Context.UserToken->GetUserSID();
         }
 
         // Check GroupSID for all users
         if (!found) {
             for (const auto& groupSID : Context.UserToken->GetGroupSIDs()) {
-                if (target == groupSID) {
+                if (*target == groupSID) {
                     found = true;
                     break;
                 }
@@ -135,21 +154,32 @@ private:
     }
 
     ///
+    /// Check Predicate HasAppName
+    ///
+    static bool MatchesAppName(const std::optional<NResourcePool::TRegexPredicate>& predicate, const TString& appName) {
+        return !predicate || predicate->Match(appName);
+    }
+
+    ///
     /// Performs query classification using static query parameters. Static parameters are:
     /// - Known before query compilation/execution.
     /// - Independent of SQL analysis, plan building, or computations.
     /// - Provided as session/connection metadata alongside the query.
     ///
-    bool MatchesStatic(const NResourcePool::TClassifierSettings& s) const {
-        if (s.MemberName && !MatchesMemberName(*s.MemberName)) {
+    bool MatchesStatic(const NResourcePool::TClassifierSettings& settings) const {
+        if (!MatchesAppName(settings.HasAppName, Context.AppName)) {
+            return false;
+        }
+
+        if (!MatchesMemberName(settings.MemberName)) {
             return false;
         }
 
         return true;
     }
 
-    bool NeedsPreparedQuery(const NResourcePool::TClassifierSettings&) const {
-        return false;
+    bool NeedsPreparedQuery(const NResourcePool::TClassifierSettings& settings) const {
+        return settings.HasFullScan.has_value() || settings.HasPath.has_value();
     }
 
     ///
@@ -158,10 +188,9 @@ private:
     /// - Involves SQL analysis, plan building, or computations.
     /// - Depends on actual query structure and execution characteristics.
     ///
-    /// Currently returns true (no dynamic filtering applied).
-    ///
-    bool MatchesDynamic(const NResourcePool::TClassifierSettings&, const TPreparedQueryHolder&) const {
-        return true;
+    bool MatchesDynamic(const NResourcePool::TClassifierSettings& settings, const TPreparedQueryHolder& preparedQuery) const {
+        return MatchesFullScan(settings.HasFullScan, preparedQuery.GetPhysicalQuery())
+            && MatchesPath(settings.HasPath, preparedQuery.GetQueryTables(), preparedQuery.GetPhysicalQuery());
     }
 
     const TResourcePoolEntry* FindPool(const TString& poolId) const {
@@ -188,6 +217,16 @@ private:
     template<typename TStore>
     bool TryResolve(const NResourcePool::TClassifierSettings& classifier, TStore& store) {
         return TryResolve(classifier.ResourcePool, store, TStringBuilder() << "Classifier with rank: " << classifier.Rank);
+    }
+
+    static TReject MakeRejectFromClassifier(const TResourcePoolClassifierConfig& config) {
+        const auto& name = config.GetName();
+        const auto rank = config.GetRank();
+        return TReject{
+            .Code = Ydb::StatusIds::PRECONDITION_FAILED,
+            .Message = TStringBuilder() << "Request is rejected by classifier '" << name << "' (rank=" << rank << ")",
+            .Resolver = TStringBuilder() << "Classifier with rank: " << rank,
+        };
     }
 
     ///

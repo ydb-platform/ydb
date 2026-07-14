@@ -256,7 +256,8 @@ namespace NKikimr {
                             }
                             const auto loc = State.HostRecords->GetLocation(pdiskId.NodeId);
 
-                            pdiskLocations[pdiskId] = NLayoutChecker::TPDiskLayoutPosition(domainMapper, loc, pdiskId, Geometry);
+                            pdiskLocations[pdiskId] = NLayoutChecker::TPDiskLayoutPosition(domainMapper, loc,
+                                vslot->PDisk->DiskScope, pdiskId, Geometry);
                         }
 
                         TString errorReason;
@@ -751,6 +752,7 @@ namespace NKikimr {
                     .Decommitted = info.Decommitted(),
                     .WhyUnusable = std::move(whyUnusable),
                     .BridgePileId = bridgePileId,
+                    .DiskScope = info.DiskScope,
                 });
 
                 bool populateSlotTracker = State.Fit.PreferLessOccupiedRack || State.Fit.WithAttentionToReplication;

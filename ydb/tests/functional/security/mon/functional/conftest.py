@@ -5,6 +5,8 @@ import pytest
 
 from ydb.tests.library.harness.kikimr_runner import KiKiMR
 from ydb.tests.functional.security.lib.cluster_config import create_ydb_configurator, generate_certificates
+from ydb.tests.functional.security.lib.security_test_helpers import mon_base_url as get_mon_base_url
+from ydb.tests.functional.security.lib.security_test_helpers import grant_describe_schema_provided
 
 pytest_plugins = ['ydb.tests.library.fixtures', 'ydb.tests.library.flavours']
 
@@ -74,6 +76,17 @@ def ydb_cluster_with_enforce_user_token_secure_devui_flag_and_graph_shard(certif
     cluster = _start_graph_shard_cluster(configurator)
     yield cluster
     cluster.stop()
+
+
+@pytest.fixture
+def mon_base_url(ydb_cluster_with_external_access_controls):
+    return get_mon_base_url(ydb_cluster_with_external_access_controls)
+
+
+@pytest.fixture
+def describe_schema_grants(mon_base_url):
+    with grant_describe_schema_provided(mon_base_url):
+        yield
 
 
 @pytest.fixture(scope='module')

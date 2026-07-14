@@ -275,7 +275,7 @@ void TMemoryBackend::DownsampleData(TInstant now, const TAggregateSettings& sett
 
                 YDB_LOG_TRACE("Normalizing metric values before downsampling",
                     {"logPrefix", GetLogPrefix()},
-                    {"timestampCount", values.Timestamps.size()},
+                    {"timestampsCount", values.Timestamps.size()},
                     {"firstTimestamp", values.Timestamps.front().Seconds()},
                     {"lastTimestamp", values.Timestamps.back().Seconds()});
                 NormalizeAndDownsample(values, 1);
@@ -489,7 +489,7 @@ bool TLocalBackend::DownsampleData(NTabletFlatExecutor::TTransactionContext& txc
 
                 YDB_LOG_TRACE("Normalizing metric values before downsampling",
                     {"logPrefix", GetLogPrefix()},
-                    {"timestampCount", values.Timestamps.size()},
+                    {"timestampsCount", values.Timestamps.size()},
                     {"firstTimestamp", values.Timestamps.front().Seconds()},
                     {"lastTimestamp", values.Timestamps.back().Seconds()});
                 NormalizeAndDownsample(values, 1);

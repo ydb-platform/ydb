@@ -236,10 +236,10 @@ public:
             {"requestId", id});
         for (auto it = RequestsInFlight.begin(); it != RequestsInFlight.end(); ++it) {
             if (it->Id == id) {
-                YDB_LOG_TRACE("Delivered metrics result to pending request",
+                YDB_LOG_TRACE("Sending metrics result to pending request",
                     {"logPrefix", GetLogPrefix()},
                     {"requestId", id},
-                    {"sender", it->Sender});
+                    {"requestSender", it->Sender});
                 Send(it->Sender, ev->Release().Release(), 0, it->Cookie);
                 RequestsInFlight.erase(it);
                 return;

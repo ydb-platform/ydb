@@ -29,7 +29,7 @@ public:
             {"logPrefix", GetLogPrefix()});
         YDB_LOG_TRACE("Get metrics request completed",
             {"logPrefix", GetLogPrefix()},
-            {"timePointCount", Result.TimeSize()},
+            {"timePointsCount", Result.TimeSize()},
             {"cookie", Event->Cookie});
         ctx.Send(Event->Sender, new TEvGraph::TEvMetricsResult(std::move(Result)), 0, Event->Cookie);
     }
@@ -42,7 +42,7 @@ void TGraphShard::ExecuteTxGetMetrics(TEvGraph::TEvGetMetrics::TPtr ev) {
             MemoryBackend.GetMetrics(ev->Get()->Record, result);
             YDB_LOG_TRACE("Get metrics request completed",
                 {"logPrefix", GetLogPrefix()},
-                {"timePointCount", result.TimeSize()},
+                {"timePointsCount", result.TimeSize()},
                 {"cookie", ev->Cookie});
             Send(ev->Sender, new TEvGraph::TEvMetricsResult(std::move(result)), 0, ev->Cookie);
             break;

@@ -1,6 +1,6 @@
 # Импорт в {{ ydb-short-name }}
 
-Рецепты переноса **данных** из реляционных СУБД в {{ ydb-short-name }}: матрица инструментов и пошаговые инструкции для каждой пары «источник + инструмент».
+Рецепты переноса **данных** из реляционных СУБД и файловых форматов в {{ ydb-short-name }}: матрица инструментов и пошаговые инструкции для каждой пары «источник + инструмент».
 
 {% include notitle [Совместимость инструментов](compat-table.md) %}
 
@@ -12,3 +12,4 @@
 - Обзор способов переноса данных из [Microsoft SQL Server](from/mssql/index.md)
 - Обзор способов переноса данных из [ClickHouse](from/clickhouse/index.md)
 - Обзор способов переноса данных из [Oracle Database](from/oracle/index.md)
+- Импорт из [CSV](../../reference/ydb-cli/export-import/import-file.md) и [Parquet](../../reference/ydb-cli/export-import/import-file.md)

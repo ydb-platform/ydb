@@ -805,6 +805,11 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
             node.stop()
             node.start()
 
+    def restart_slots(self):
+        for slot in self.slots.values():
+            slot.stop()
+            slot.start()
+
     def prepare_node(self, configurator=None, seed_nodes_file=None):
         try:
             new_node_object = self.__register_node(configurator, seed_nodes_file)

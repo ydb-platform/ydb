@@ -3528,9 +3528,9 @@ In {{ ydb-short-name }}, server-side balancing of partitions between clients is 
 
 With a *soft interrupt*, the client receives a notification that the server has finished sending messages from the partition and no more messages will be read. The client can finish processing the messages and send an acknowledgment to the server.
 
-In case of a *hard interruption*, the client receives a notification that it can no longer work with partition messages. The client must stop processing the read messages. Unacknowledged messages will be passed to another reader.
+In case of a *hard interrupt*, the client receives a notification that it can no longer work with partition messages. The client must stop processing the read messages. Unacknowledged messages will be passed to another reader.
 
-#### Soft read abort {#soft-stop}
+#### Soft interrupt {#soft-stop}
 
 {% list tabs group=lang %}
 
@@ -3630,7 +3630,7 @@ In case of a *hard interruption*, the client receives a notification that it can
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 - Rust
 
-  Rust SDK handles stop and close events of partition session internally; there is no public API for configuring soft or hard read interruption yet.
+  Rust SDK handles stop and close events of partition session internally; there is no public API for configuring soft or hard interrupt yet.
 
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
@@ -3641,7 +3641,7 @@ In case of a *hard interruption*, the client receives a notification that it can
 
 {% endlist %}
 
-#### Hard read abort {#hard-stop}
+#### Hard interrupt {#hard-stop}
 
 {% list tabs group=lang %}
 
@@ -3746,7 +3746,7 @@ In case of a *hard interruption*, the client receives a notification that it can
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 - Rust
 
-  Rust SDK handles stop and close events of a partition session internally; there is no public API for configuring soft or hard read interruption yet.
+  Rust SDK handles stop and close events of a partition session internally; there is no public API for configuring soft or hard interrupt yet.
 
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 

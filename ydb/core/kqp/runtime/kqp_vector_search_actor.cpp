@@ -693,6 +693,38 @@ private:
         LaunchRead(src, arena, EReadKind::Posting);
     }
 
+    // Less-than over single-Uint64 keys, matching CompareTypedCells for that type
+    // exactly: NULL orders first, NULLs compare equal. An 8-byte cell is always
+    // stored inline.
+    struct TSingleUint64Less {
+        bool operator()(const TSerializedCellVec& a, const TSerializedCellVec& b) const {
+            const TCell& ca = a.GetCells().front();
+            const TCell& cb = b.GetCells().front();
+            if (Y_UNLIKELY(ca.IsNull() || cb.IsNull())) {
+                return ca.IsNull() && !cb.IsNull();
+            }
+            return ReadUnaligned<ui64>(ca.InlineData()) < ReadUnaligned<ui64>(cb.InlineData());
+        }
+    };
+
+    // Sort candidate PKs ascending by typed key comparison. The generic comparator
+    // re-dispatches on the runtime type id of every cell in every comparison, which
+    // dominates the sort cost. Only the single most common PK shape -- one Uint64
+    // column -- is special-cased with a comparator std::sort can fully inline;
+    // everything else keeps the generic comparison verbatim, so there is no other
+    // ordering semantics duplicated here to drift from CompareTypedCells.
+    void SortMainKeys(TVector<TSerializedCellVec>& keys) const {
+        if (MainKeyTypeInfos.size() == 1 && MainKeyTypeInfos[0].GetTypeId() == NScheme::NTypeIds::Uint64) {
+            std::sort(keys.begin(), keys.end(), TSingleUint64Less());
+            return;
+        }
+        const auto* keyTypes = MainKeyTypeInfos.data();
+        const ui32 keyCount = MainKeyTypeInfos.size();
+        std::sort(keys.begin(), keys.end(), [keyTypes, keyCount](const TSerializedCellVec& a, const TSerializedCellVec& b) {
+            return CompareTypedCellVectors(a.GetCells().data(), b.GetCells().data(), keyTypes, keyCount) < 0;
+        });
+    }
+
     // Launch a main-table read for one batch of candidate PKs. Non-covered searches
     // pipeline posting -> main: instead of waiting for the whole posting scan, the PKs
     // buffered by each posting drain cycle are flushed to their own main read (see
@@ -717,11 +749,7 @@ private:
         // per leaf cluster, so they are not globally ordered yet. The keys arrive
         // with their cells already parsed (built straight from the posting row's
         // cells, see MakePostingPk), so the sort compares without re-parsing.
-        const auto* keyTypes = MainKeyTypeInfos.data();
-        const ui32 keyCount = MainKeyTypeInfos.size();
-        std::sort(keys.begin(), keys.end(), [keyTypes, keyCount](const TSerializedCellVec& a, const TSerializedCellVec& b) {
-            return CompareTypedCellVectors(a.GetCells().data(), b.GetCells().data(), keyTypes, keyCount) < 0;
-        });
+        SortMainKeys(keys);
 
         AddMainKeyColumnTypes(src);
         for (const auto& col : Settings.GetOutputColumns()) {

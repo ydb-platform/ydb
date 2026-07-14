@@ -32,7 +32,7 @@ The main role of database nodes is to run various [tablets](#tablet) and [actors
 
 #### Storage node {#storage-node}
 
-**Storage nodes** or **nodes storage** are stateful nodes responsible for long-term storage of data fragments. The collection of storage nodes in a given [cluster {{ ydb-short-name }}](#cluster) is called [distributed storage](#distributed-storage) and can be viewed as the storage layer of that cluster. Thus, adding more storage nodes and disks is the main way to increase the cluster's storage capacity and I/O throughput.
+**Storage nodes** or **storage nodes** are stateful nodes responsible for long-term storage of data fragments. The collection of storage nodes in a given [cluster {{ ydb-short-name }}](#cluster) is called [distributed storage](#distributed-storage) and can be viewed as the storage layer of that cluster. Thus, adding more storage nodes and disks is the main way to increase the cluster's storage capacity and I/O throughput.
 
 #### Hybrid node {#hybrid-mode}
 
@@ -227,7 +227,7 @@ A local Bloom index is a special case of a [local index](#local-index): a probab
 
 #### Time to live {#ttl}
 
-**Time to live** or **TTL** is a mechanism for automatically deleting old rows from a table asynchronously in the background. It is described in a separate article [{#T}](ttl.md).
+**Time to live**, **time to live**, or **TTL** is a mechanism for automatically deleting old rows from a table asynchronously in the background. It is described in a separate article [{#T}](ttl.md).
 
 ### View {#view}
 
@@ -414,7 +414,7 @@ An access subject can be a [user](#access-user) or a [group](#access-group).
 
 ### Access right {#access-right}
 
-** [Access right](../security/authorization.md#right)** is an entity that reflects permission for an [access subject](#access-subject) to perform a specific set of operations in a cluster or database on a specific [access object](#access-object).
+**[Access right](../security/authorization.md#right)** is an entity that reflects permission for an [access subject](#access-subject) to perform a specific set of operations in a cluster or database on a specific [access object](#access-object).
 
 ### Access right inheritance {#access-right-inheritance}
 
@@ -422,7 +422,7 @@ An access subject can be a [user](#access-user) or a [group](#access-group).
 
 ### Access control list {#access-control-list}
 
-** [Access control list](../security/authorization.md#right)** or **ACL** is a list of all [rights](#access-right) granted to [access subjects](#access-subject) (users and groups) on a specific [access object](#access-object).
+**[Access control list](../security/authorization.md#right)** or **ACL** is a list of all [rights](#access-right) granted to [access subjects](#access-subject) (users and groups) on a specific [access object](#access-object).
 
 ### Access level {#access-level}
 
@@ -653,7 +653,7 @@ Additionally, there is a **root SchemeShard** that stores information about data
 
 #### BSController {#ds-controller}
 
-**BSController**, **blob storage controller**, **blob storage controller**, **BS controller** manages the dynamic configuration of the distributed storage, including information about [PDisk](#pdisk), [VDisk](#vdisk), and [storage groups](#storage-group). It interacts with [node warden](#node-warden) to start various components of the distributed storage. It interacts with [Hive](#hive) to allocate [channels](#channel) to tablets.
+**BSController**, **distributed storage controller**, **blob storage controller**, **BS controller** manages the dynamic configuration of the distributed storage, including information about [PDisk](#pdisk), [VDisk](#vdisk), and [storage groups](#storage-group). It interacts with [node warden](#node-warden) to start various components of the distributed storage. It interacts with [Hive](#hive) to allocate [channels](#channel) to tablets.
 
 #### Console {#console}
 
@@ -718,7 +718,7 @@ Due to its nature, the state storage service operates on a best-effort basis. Fo
 
 #### Compaction {#compaction}
 
-**Compaction**, **compaction**, or **compaction** is an internal background process of rebuilding data in the [LSM tree](#lsm-tree). Data in [VDisk](#vdisk) and [local databases](#local-database) is organized as LSM trees. Therefore, a distinction is made between **VDisk compaction** and **tablet compaction**. The compaction process is usually quite resource-intensive, so measures are taken to minimize the overhead associated with it, for example, by limiting the number of concurrently running compactions.
+**Compaction**, **compactization**, or **compaction** is an internal background process of rebuilding data in the [LSM tree](#lsm-tree). Data in [VDisk](#vdisk) and [local databases](#local-database) is organized as LSM trees. Therefore, a distinction is made between **VDisk compaction** and **tablet compaction**. The compaction process is usually quite resource-intensive, so measures are taken to minimize the overhead associated with it, for example, by limiting the number of concurrently running compactions.
 
 #### gRPC proxy {#grpc-proxy}
 
@@ -768,7 +768,7 @@ PDisk contains a scheduler that ensures shared use of device bandwidth among mul
 
 #### VDisk {#vdisk}
 
-**VDisk**, **virtual disk** — a component that implements data storage of the [distributed storage](#distributed-storage) [LogoBlob](#logoblob) on a [PDisk](#pdisk). VDisk stores all its data on a PDisk. One VDisk corresponds to one PDisk, but typically several VDisks are associated with one PDisk. Unlike PDisk, which hides blocks and logs behind it, VDisk provides an interface at the LogoBlob and [LogoBlobID](#logoblobid) level, e.g., writing a LogoBlob, reading LogoBlobID data, and deleting a set of LogoBlobs using a special command. VDisk is a member of a [storage group](#storage-group). VDisk itself is local, but many VDisks in a given group ensure reliable data storage. VDisks in a group synchronize data with each other and replicate data in case of losses. The set of VDisks in a storage group forms a distributed RAID.
+**VDisk**, **virtual disk**, or **virtual disk** — a component that implements data storage of the [distributed storage](#distributed-storage) [LogoBlob](#logoblob) on a [PDisk](#pdisk). VDisk stores all its data on a PDisk. One VDisk corresponds to one PDisk, but typically several VDisks are associated with one PDisk. Unlike PDisk, which hides blocks and logs behind it, VDisk provides an interface at the LogoBlob and [LogoBlobID](#logoblobid) level, e.g., writing a LogoBlob, reading LogoBlobID data, and deleting a set of LogoBlobs using a special command. VDisk is a member of a [storage group](#storage-group). VDisk itself is local, but many VDisks in a given group ensure reliable data storage. VDisks in a group synchronize data with each other and replicate data in case of losses. The set of VDisks in a storage group forms a distributed RAID.
 
 #### Yard {#yard}
 
@@ -784,7 +784,7 @@ PDisk contains a scheduler that ensures shared use of device bandwidth among mul
 
 #### Proxy {#ds-proxy}
 
-**Distributed storage proxy**, **DS-proxy**, **BS-proxy** acts as a client library for performing operations with the [distributed storage](#distributed-storage). DS-proxy users are [tablets](#tablet) that write to and read from the distributed storage. DS-proxy hides the distributed nature of the distributed storage from the user. The task of DS-proxy is to write to a quorum of [VDisks](#vdisk), retry when necessary, and control the write/read flow to prevent VDisk overload.
+**Proxy distributed storage**, **DS-proxy**, **BS-proxy**, **Distributed storage proxy**, **DS-proxy**, **BS-proxy** acts as a client library for performing operations with the [distributed storage](#distributed-storage). DS-proxy users are [tablets](#tablet) that write to and read from the distributed storage. DS-proxy hides the distributed nature of the distributed storage from the user. The task of DS-proxy is to write to a quorum of [VDisks](#vdisk), retry when necessary, and control the write/read flow to prevent VDisk overload.
 
 Technically, DS-proxy is implemented as an [actor service](#actor-service) launched by [node warden](#node-warden) on each node for each storage group, handling all requests to the group (writing, reading, and deleting [LogoBlob](#logoblob), group locking). When writing data, DS-proxy performs [error-correcting encoding](#erasure-coding) of the data, splitting the LogoBlob into parts that are then sent to the corresponding VDisks. DS-proxy performs the reverse process when reading, receiving parts from VDisks and reconstructing the LogoBlob from them.
 
@@ -808,7 +808,7 @@ Failure domain-level failures are automatically handled by {{ ydb-short-name }} 
 
 #### Distributed storage channel {#channel}
 
-**Distributed storage channel**, **channel**, **distributed storage channel**, **DS channel**, or **channel** is a logical connection between a [tablet](#tablet) and a [distributed storage](#distributed-storage) group. A tablet can write data to different channels, and each channel maps to a specific [storage group](#storage-group). Having multiple channels allows a tablet to:
+**Distributed storage channel**, **channel**, **DS channel**, or **channel** is a logical connection between a [tablet](#tablet) and a [distributed storage](#distributed-storage) group. A tablet can write data to different channels, and each channel maps to a specific [storage group](#storage-group). Having multiple channels allows a tablet to:
 
 * Write more data than a single storage group can contain.
 * Store different [LogoBlob](#logoblob)s in different storage groups, with different properties, such as erasure coding or on different media (HDD, SSD, NVMe).
@@ -841,7 +841,7 @@ In some cases, instead of [preparation](#prepare-stage) and execution, the trans
 
 #### Dirty operations {#dirty-operations}
 
-In the case of read-only transactions, similar to "read uncommitted" in other database management systems, it may be necessary to read data that has not yet been committed to disk. This is called **dirty operations** or **dirty operations**.
+In the case of read-only transactions, similar to "read uncommitted" in other database management systems, it may be necessary to read data that has not yet been committed to disk. This is called **dirty operations**.
 
 #### Read-write set {#rw-set}
 

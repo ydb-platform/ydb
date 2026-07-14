@@ -35,7 +35,7 @@ Y_UNIT_TEST_SUITE(StatisticsSaveLoad) {
         UNIT_ASSERT(saveResponse->Get()->Success);
 
         runtime.RunCall([&] {
-            DispatchLoadStatisticsQuery(sender, 123, "/Root/Database", pathId, statType, 1);
+            DispatchLoadStatisticsQuery(sender, 123, "/Root/Database", pathId, statType, TColumnTags(1u));
             return 0;
         });
         auto loadResponseA = runtime.GrabEdgeEventRethrow<TEvStatistics::TEvLoadStatisticsQueryResponse>(sender);
@@ -44,7 +44,7 @@ Y_UNIT_TEST_SUITE(StatisticsSaveLoad) {
         UNIT_ASSERT_VALUES_EQUAL(*loadResponseA->Get()->Data, "dataA");
 
         runtime.RunCall([&] {
-            DispatchLoadStatisticsQuery(sender, 345, "/Root/Database", pathId, statType, 2);
+            DispatchLoadStatisticsQuery(sender, 345, "/Root/Database", pathId, statType, TColumnTags(2u));
             return 0;
         });
         auto loadResponseB = runtime.GrabEdgeEventRethrow<TEvStatistics::TEvLoadStatisticsQueryResponse>(sender);
@@ -83,7 +83,7 @@ Y_UNIT_TEST_SUITE(StatisticsSaveLoad) {
         UNIT_ASSERT(deleteResponse->Get()->Success);
 
         runtime.RunCall([&] {
-            DispatchLoadStatisticsQuery(sender, 123, "/Root/Database", pathId, statType, 1);
+            DispatchLoadStatisticsQuery(sender, 123, "/Root/Database", pathId, statType, TColumnTags(1u));
             return 0;
         });
         auto loadResponseA = runtime.GrabEdgeEvent<TEvStatistics::TEvLoadStatisticsQueryResponse>(sender);
@@ -115,7 +115,7 @@ Y_UNIT_TEST_SUITE(StatisticsSaveLoad) {
         UNIT_ASSERT(saveResponse->Get()->Success);
 
         runtime.RunCall([&] {
-            DispatchLoadMultiColumnStatisticsQuery(sender, 123, "/Root/Database", pathId, statType, {1, 2});
+            DispatchLoadStatisticsQuery(sender, 123, "/Root/Database", pathId, statType, TColumnTags(std::vector<ui32>{1, 2}));
             return 0;
         });
         auto loadResponseA = runtime.GrabEdgeEventRethrow<TEvStatistics::TEvLoadStatisticsQueryResponse>(sender);
@@ -124,7 +124,7 @@ Y_UNIT_TEST_SUITE(StatisticsSaveLoad) {
         UNIT_ASSERT_VALUES_EQUAL(*loadResponseA->Get()->Data, "dataA");
 
         runtime.RunCall([&] {
-            DispatchLoadMultiColumnStatisticsQuery(sender, 345, "/Root/Database", pathId, statType, {3, 4});
+            DispatchLoadStatisticsQuery(sender, 345, "/Root/Database", pathId, statType, TColumnTags(std::vector<ui32>{3, 4}));
             return 0;
         });
         auto loadResponseB = runtime.GrabEdgeEventRethrow<TEvStatistics::TEvLoadStatisticsQueryResponse>(sender);
@@ -133,7 +133,7 @@ Y_UNIT_TEST_SUITE(StatisticsSaveLoad) {
         UNIT_ASSERT_VALUES_EQUAL(*loadResponseB->Get()->Data, "dataB");
 
         runtime.RunCall([&] {
-            DispatchLoadMultiColumnStatisticsQuery(sender, 567, "/Root/Database", pathId, statType, {2, 1});
+            DispatchLoadStatisticsQuery(sender, 567, "/Root/Database", pathId, statType, TColumnTags(std::vector<ui32>{2, 1}));
             return 0;
         });
         auto loadResponseC = runtime.GrabEdgeEventRethrow<TEvStatistics::TEvLoadStatisticsQueryResponse>(sender);
@@ -170,7 +170,7 @@ Y_UNIT_TEST_SUITE(StatisticsSaveLoad) {
         UNIT_ASSERT(deleteResponse->Get()->Success);
 
         runtime.RunCall([&] {
-            DispatchLoadMultiColumnStatisticsQuery(sender, 123, "/Root/Database", pathId, statType, {1, 2});
+            DispatchLoadStatisticsQuery(sender, 123, "/Root/Database", pathId, statType, TColumnTags(std::vector<ui32>{1, 2}));
             return 0;
         });
         auto loadResponseA = runtime.GrabEdgeEvent<TEvStatistics::TEvLoadStatisticsQueryResponse>(sender);
@@ -195,7 +195,7 @@ Y_UNIT_TEST_SUITE(StatisticsSaveLoad) {
             auto session = db.CreateSession().GetValueSync().GetSession();
 
             auto result = session.ExecuteDataQuery(R"(
-                SELECT * FROM `/Root/Database/.metadata/_statistics`;
+                SELECT * FROM `/Root/Database/.metadata/statistics_v2`;
             )", NYdb::NTable::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
             status = result.GetStatus();
         };

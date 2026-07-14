@@ -884,22 +884,30 @@ void IYdbSetup::WaitFor(TDuration timeout, TString description, std::function<bo
 
 //// Classifier helpers
 
-void WaitForClassifierFail(TIntrusivePtr<IYdbSetup> ydb, const TQueryRunnerSettings& settings, const TString& poolId) {
-    ydb->WaitFor(TDuration::Seconds(10), "Resource pool classifier fail", [ydb, settings, poolId](TString& errorString) {
-        auto result = ydb->ExecuteQuery(TSampleQueries::TSelect42::Query, settings);
+void WaitForClassifierFail(TIntrusivePtr<IYdbSetup> ydb, const TString& query, const TQueryRunnerSettings& settings, const TString& poolId) {
+    ydb->WaitFor(TDuration::Seconds(10), "Resource pool classifier fail", [ydb, query, settings, poolId](TString& errorString) {
+        auto result = ydb->ExecuteQuery(query, settings);
 
         errorString = result.GetIssues().ToOneLineString();
         return result.GetStatus() == NYdb::EStatus::PRECONDITION_FAILED && errorString.Contains(TStringBuilder() << "Resource pool " << poolId << " was disabled due to zero concurrent query limit");
     });
 }
 
-void WaitForClassifierSuccess(TIntrusivePtr<IYdbSetup> ydb, const TQueryRunnerSettings& settings) {
-    ydb->WaitFor(TDuration::Seconds(30), "Resource pool classifier success", [ydb, settings](TString& errorString) {
-        auto result = ydb->ExecuteQuery(TSampleQueries::TSelect42::Query, settings);
+void WaitForClassifierFail(TIntrusivePtr<IYdbSetup> ydb, const TQueryRunnerSettings& settings, const TString& poolId) {
+    WaitForClassifierFail(ydb, TSampleQueries::TSelect42::Query, settings, poolId);
+}
+
+void WaitForClassifierSuccess(TIntrusivePtr<IYdbSetup> ydb, const TString& query, const TQueryRunnerSettings& settings) {
+    ydb->WaitFor(TDuration::Seconds(30), "Resource pool classifier success", [ydb, query, settings](TString& errorString) {
+        auto result = ydb->ExecuteQuery(query, settings);
 
         errorString = result.GetIssues().ToOneLineString();
         return result.GetStatus() == NYdb::EStatus::SUCCESS;
     });
+}
+
+void WaitForClassifierSuccess(TIntrusivePtr<IYdbSetup> ydb, const TQueryRunnerSettings& settings) {
+    WaitForClassifierSuccess(ydb, TSampleQueries::TSelect42::Query, settings);
 }
 
 //// TSampleQueriess

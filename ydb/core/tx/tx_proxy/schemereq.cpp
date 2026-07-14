@@ -125,6 +125,8 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
             request->Record.SetOwner(UserToken->GetUserSID());
         }
 
+        SetSystemOwnerIfNeeded(request->Record, AppData());
+
         request->Record.SetPeerName(GetRequestProto().GetPeerName());
         if (GetRequestEv().HasModifyScheme()) {
             request->Record.AddTransaction()->MergeFrom(GetModifyScheme());

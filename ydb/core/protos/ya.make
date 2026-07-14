@@ -128,6 +128,7 @@ SRCS(
     node_whiteboard.proto
     pdiskfit.proto
     pqconfig.proto
+    pqdata_deferred_publish_destination.proto
     pqdata_mlp.proto
     pqdata_transaction.proto
     pqevents_global.proto

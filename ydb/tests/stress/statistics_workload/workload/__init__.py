@@ -121,12 +121,13 @@ class Workload(object):
     def rows_count(self, table_name):
         return self.driver.table_client.scan_query(f"SELECT count(*) FROM `{table_name}`").next().result_set.rows[0][0]
 
+    # Single-column (and tag-less) stats have no comma in column_tags; multi-column stats do.
     def statistics_count(self, table_statistics, path_id):
-        query = f"SELECT count(*) FROM `{table_statistics}` WHERE local_path_id = {path_id}"
+        query = f"SELECT count(*) FROM `{table_statistics}` WHERE local_path_id = {path_id} AND column_tags NOT LIKE '%,%'"
         return self.driver.table_client.scan_query(query).next().result_set.rows[0][0]
 
-    def statistics_multi_count(self, table_statistics_multi, path_id):
-        query = f"SELECT count(*) FROM `{table_statistics_multi}` WHERE local_path_id = {path_id}"
+    def statistics_multi_count(self, table_statistics, path_id):
+        query = f"SELECT count(*) FROM `{table_statistics}` WHERE local_path_id = {path_id} AND column_tags LIKE '%,%'"
         return self.driver.table_client.scan_query(query).next().result_set.rows[0][0]
 
     def analyze(self, table_path):
@@ -205,8 +206,7 @@ class Workload(object):
     def execute(self):
         table_name = table_name_with_prefix(self.table_prefix)
         table_path = self.database + "/" + table_name
-        table_statistics = ".metadata/_statistics"
-        table_statistics_multi = ".metadata/_statistics_multi"
+        table_statistics = ".metadata/statistics_v2"
         trace_id = random_string(5)
 
         try:
@@ -234,14 +234,14 @@ class Workload(object):
             self.analyze(table_path)
 
             count = self.statistics_count(table_statistics, path_id)
-            logger.info(f"[{trace_id}] number of rows in statistics table '{table_statistics}' {count}")
+            logger.info(f"[{trace_id}] number of single-column (and tag-less) rows in statistics table '{table_statistics}' {count}")
             if count == 0:
-                raise Exception(f"[{trace_id}] statistics table '{table_statistics}' is empty")
+                raise Exception(f"[{trace_id}] statistics table '{table_statistics}' has no single-column (or tag-less) stats")
 
-            multi_count = self.statistics_multi_count(table_statistics_multi, path_id)
-            logger.info(f"[{trace_id}] number of rows in statistics table '{table_statistics_multi}' {multi_count}")
+            multi_count = self.statistics_multi_count(table_statistics, path_id)
+            logger.info(f"[{trace_id}] number of multi-column rows in statistics table '{table_statistics}' {multi_count}")
             if multi_count == 0:
-                raise Exception(f"[{trace_id}] statistics table '{table_statistics_multi}' is empty")
+                raise Exception(f"[{trace_id}] statistics table '{table_statistics}' has no multi-column stats")
 
             expected_count = self.batch_count * self.batch_size
             self.wait_for_planner_row_count_estimate(table_name, expected_count, trace_id)

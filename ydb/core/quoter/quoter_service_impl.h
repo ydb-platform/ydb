@@ -10,6 +10,7 @@
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/wilson/wilson_span.h>
 #include <library/cpp/lwtrace/shuttle.h>
 
 #include <util/generic/set.h>
@@ -61,6 +62,7 @@ struct TResourceLeafId {
 };
 
 struct TResource;
+struct TResourceLeaf;
 
 NMonitoring::IHistogramCollectorPtr GetLatencyHistogramBuckets();
 
@@ -81,6 +83,18 @@ struct TRequest {
 
     // tracing
     mutable NLWTrace::TOrbit Orbit;
+    NWilson::TSpan RequestSpan;
+    NWilson::TSpan WaitSpan; // Resource resolving / quota waiting
+
+    void StartRequestSpan(NWilson::TTraceId traceId, TDuration deadline);
+    void EndRequestSpan(TEvQuota::TEvClearance::EResult resultCode);
+
+    // A request goes through the wait phases sequentially: resolving the quoter,
+    // then creating the resource session, then waiting for quota. Each phase is a
+    // separate span with its own reason and result, reusing the single request.WaitSpan
+    // variable: the previous phase is ended (see EndWaitSpan) before the next is started.
+    void StartWaitSpan(TResourceLeaf& leaf, const char* spanName);
+    void EndWaitSpan(const TString& result, bool success);
 };
 
 class TReqState {
@@ -335,8 +349,8 @@ class TQuoterService : public TActorBootstrapped<TQuoterService> {
     void HandleTick();
 
     void CreateKesusQuoter(NSchemeCache::TSchemeCacheNavigate::TEntry &navigate, decltype(QuotersIndex)::iterator indexIt, decltype(Quoters)::iterator quoterIt);
-    void BreakQuoter(decltype(QuotersIndex)::iterator indexIt, decltype(Quoters)::iterator quoterIt);
-    void BreakQuoter(decltype(Quoters)::iterator quoterIt);
+    void BreakQuoter(decltype(QuotersIndex)::iterator indexIt, decltype(Quoters)::iterator quoterIt, const TString& waitStatus = "QuoterBroken");
+    void BreakQuoter(decltype(Quoters)::iterator quoterIt, const TString& waitStatus = "QuoterBroken");
 
     TString PrintEvent(const TEvQuota::TEvRequest::TPtr& ev);
 public:

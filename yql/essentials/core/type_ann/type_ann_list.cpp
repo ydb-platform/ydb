@@ -9595,12 +9595,13 @@ namespace {
 
     IGraphTransformer::TStatus WatermarkGeneratorWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
         Y_UNUSED(output);
-        if (!EnsureArgsCount(*input, 2, ctx.Expr)) {
+        if (!EnsureArgsCount(*input, 3, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
         }
 
         auto source = input->Child(TCoWatermarkGenerator::idx_Input);
         auto& watermarkExtractor = input->ChildRef(TCoWatermarkGenerator::idx_WatermarkExtractor);
+        auto watermarkSettings = input->Child(TCoWatermarkGenerator::idx_WatermarkSettings);
 
         if (source->GetTypeAnn() && source->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Universal) {
             input->SetTypeAnn(source->GetTypeAnn());
@@ -9628,6 +9629,28 @@ namespace {
             return IGraphTransformer::TStatus::Repeat;
         }
         if (!EnsureSpecificDataType(*watermarkExtractor, EDataSlot::Timestamp, ctx.Expr, /* allowOptional = */ true)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        if (!EnsureValidSettings(
+            *watermarkSettings,
+            {
+                "watermarklatearrivaldelay",
+                "watermarkgranularity",
+                "watermarkidletimeout",
+            },
+            [](TStringBuf name, TExprNode& node, TExprContext& ctx) -> bool {
+                Y_UNUSED(name);
+                if (!EnsureArgsCount(node, 2, ctx)) {
+                    return false;
+                }
+                if (!EnsureAtom(node.Tail(), ctx)) {
+                    return false;
+                }
+                return true;
+            },
+            ctx.Expr
+        )) {
             return IGraphTransformer::TStatus::Error;
         }
 

@@ -59,10 +59,14 @@ TString RenderLwTraceShardLogUrl(const TString& provider, const TString& probe, 
 TString RenderLwTraceShardLinks(
     const TString& vizPage, const TString& provider, const TString& probe, ui64 tabletId, const TString& tabletIdCgi, const TString& title) {
     const TString traceUrl = RenderLwTraceShardLogUrl(provider, probe, tabletId);
+    const TString safeTitle = TEscapeHtml(title);
+    const TString safeVizPage = TEscapeHtml(vizPage);
+    const TString safeTabletId = TEscapeHtml(tabletIdCgi);
+    const TString safeTraceUrl = TEscapeHtml(traceUrl);
     TStringStream html;
-    html << "<a href=\"app?page=" << vizPage << "&TabletID=" << tabletIdCgi << "\">" << title << "</a>";
+    html << "<a href=\"app?page=" << safeVizPage << "&amp;TabletID=" << safeTabletId << "\">" << safeTitle << "</a>";
     html << " | ";
-    html << "<a href=\"" << traceUrl << "\">" << title << " (text)</a>";
+    html << "<a href=\"" << safeTraceUrl << "\">" << safeTitle << " (text)</a>";
     return html.Str();
 }
 

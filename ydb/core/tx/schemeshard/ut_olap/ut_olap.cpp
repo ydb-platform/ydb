@@ -1947,8 +1947,6 @@ Y_UNIT_TEST_SUITE(TOlap) {
         CheckQuotaExceedance(runtime, TTestTxConfig::SchemeShard, "/MyRoot/SomeDatabase", false, DEBUG_HINT);
     }
 
-    // Reproduces export race: while ColumnShard copy plan step is blocked, SS must not
-    // complete read-only copy. If it does, scan metadata is not ready on ColumnShard.
     Y_UNIT_TEST(ColumnTableCopyCompletesOnSSBeforeColumnShardProgressScanFails) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);

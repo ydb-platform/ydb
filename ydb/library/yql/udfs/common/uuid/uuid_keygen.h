@@ -23,8 +23,6 @@
 
 namespace NYql::NUuidKeyGen {
 
-static constexpr ui8 UuidVersionByte = 0x80;
-
 // Number of high bits in the MSB used as a partition-spread prefix (default 10 → ~1024 buckets).
 static constexpr ui32 PrefixBits = 10;
 static constexpr ui32 ShardedTimestampBits = 30;
@@ -32,6 +30,9 @@ static constexpr ui64 PrefixMsbMask = ((1ULL << PrefixBits) - 1) << (64 - Prefix
 static constexpr ui64 PrefixParamMask = (1ULL << PrefixBits) - 1;
 static constexpr ui32 ShardedTimestampShift = 64 - PrefixBits - ShardedTimestampBits;
 static constexpr ui64 ShardedTimestampMask = ((1ULL << ShardedTimestampBits) - 1) << ShardedTimestampShift;
+
+static constexpr ui8 UuidVersionByte = 0x80;
+static constexpr ui8 RfcV7VersionByte = 0x70;
 
 inline ui64 ReadBe64(const ui8* data) {
     ui64 value = 0;
@@ -150,11 +151,7 @@ inline std::array<ui8, NKikimr::NUuid::UUID_LEN> MakeShardedUuidBytes(ui64 prefi
     return result;
 }
 
-static constexpr ui8 RfcV7VersionByte = 0x70;
-
 // Reorder RFC MSB (big-endian) into YDB GUID (Microsoft mixed-endian) storage.
-// Port of BaseKeyGen.reorder():
-// https://github.com/zinal/ydb-key-prefix-test/blob/bc876201/src/main/java/tech/ydb/samples/keyprefix/BaseKeyGen.java#L122
 inline ui64 ReorderRfcMsbToYdb(ui64 msb) {
     const ui64 b0 = (msb >> 56) & 0xff;
     const ui64 b1 = (msb >> 48) & 0xff;

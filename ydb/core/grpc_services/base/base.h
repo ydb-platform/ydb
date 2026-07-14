@@ -1313,7 +1313,7 @@ public:
     }
 
     void ReplyUnauthenticated(const TString& in) override {
-        FinishSpan();
+        FinishSpan(Ydb::StatusIds::UNAUTHORIZED);
         Ctx_->ReplyUnauthenticated(MakeAuthError(in, IssueManager));
     }
 
@@ -1436,7 +1436,7 @@ public:
             AuditLogRequestEnd(status);
         }
         if (flag == IRequestCtx::EStreamCtrl::FINISH || !Ctx_->IsStreamCall()) {
-            FinishSpan();
+            FinishSpan(status);
         }
         Ctx_->Reply(&data, status, flag);
     }

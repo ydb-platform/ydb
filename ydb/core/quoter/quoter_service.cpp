@@ -412,7 +412,9 @@ void TQuoterService::ForgetRequest(TRequest &request, TRequestId reqIdx) {
     // cleanup from resource wait queue
     // (no-op when reached via ReplyRequest, which already ended these spans)
     request.EndWaitSpan("Cancelled", false);
-    request.RequestSpan.EndError("Cancelled");
+    if (request.RequestSpan) {
+        request.RequestSpan.EndError("Cancelled");
+    }
 
     for (TResourceLeafId leafIdx = request.ResourceLeaf; leafIdx != TResourceLeafId{}; ) {
         TResourceLeaf &leaf = ResState.Get(leafIdx);
@@ -1664,7 +1666,7 @@ void TRequest::StartWaitSpan(TResourceLeaf& leaf, const char* spanName) {
     if (WaitSpan = RequestSpan.CreateChild(TWilsonQuoter::QuoterService, spanName)) {
         WaitSpan.Attribute("quoter", leaf.QuoterName);
         WaitSpan.Attribute("resource", leaf.ResourceName);
-        WaitSpan.Attribute("amount", static_cast<int>(leaf.Amount));
+        WaitSpan.Attribute("amount", static_cast<i64>(leaf.Amount));
         WaitSpan.Attribute("is_used_amount", leaf.IsUsedAmount);
     }
 }

@@ -433,11 +433,11 @@ private:
     }
 
     void ProcessSubscribeResourceError(Ydb::StatusIds::StatusCode code, TResourceState* resState) {
+        const TEvQuota::TEvProxySession::EResult sessionCode = code == Ydb::StatusIds::NOT_FOUND ? TEvQuota::TEvProxySession::UnknownResource : TEvQuota::TEvProxySession::GenericError;
+        EndProxyRequestSpan(*resState, sessionCode);
         if (!resState->ProxySessionWasSent) {
             resState->ProxySessionWasSent = true;
-            const TEvQuota::TEvProxySession::EResult sessionCode = code == Ydb::StatusIds::NOT_FOUND ? TEvQuota::TEvProxySession::UnknownResource : TEvQuota::TEvProxySession::GenericError;
             SendProxySessionError(sessionCode, resState->Resource);
-            EndProxyRequestSpan(*resState, sessionCode);
             DeleteResourceInfo(resState->Resource, resState->ResId);
         } else {
             BreakResource(*resState, GetProxyUpdateEv());

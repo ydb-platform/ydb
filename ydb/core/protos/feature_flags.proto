@@ -343,6 +343,9 @@ message TFeatureFlags {
     optional bool EnableColumnshardInterval = 296 [default = false];
     optional bool EnableColumnshardUuid = 297 [default = false];
     optional bool EnableColumnshardDyNumber = 298 [default = false];
-    optional bool EnableSharedReadingStructuredJsonParsing = 299 [default = false];
+    optional bool EnableDataShardDirectPartImport = 299 [default = false];
+    // For test purposes only, may cause persistent system failure if enabled
+    optional bool BsControllerRestartBeforeCompatibilityInfoUpdate = 300 [default = false];
+    optional bool EnableSharedReadingStructuredJsonParsing = 301 [default = false];
 
 }

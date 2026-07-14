@@ -4080,7 +4080,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         UNIT_ASSERT_VALUES_EQUAL(rewrittenAggregate->KeyColumns.size(), 1);
         UNIT_ASSERT(rewrittenAggregate->KeyColumns.front() == TInfoUnit("key"));
 
-        ComputeRequiredProps(root, /*props=*/0, testContext.RboCtx, "Focused push rename");
+        ComputeRequiredProps(root, ERuleProperties::RequireOutputIUs, testContext.RboCtx, "Focused push rename");
         const auto aggregateOutput = rewrittenAggregate->GetOutputIUs();
         UNIT_ASSERT(std::find(aggregateOutput.begin(), aggregateOutput.end(), TInfoUnit("total")) != aggregateOutput.end());
         UNIT_ASSERT(std::find(aggregateOutput.begin(), aggregateOutput.end(), TInfoUnit("sum_value")) == aggregateOutput.end());
@@ -6117,6 +6117,10 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         // Q11 is intentionally omitted: it is not accepted by the current New RBO benchmark path.
         RunTPC_YqlBenchmark(EBenchType::TPCH, /*columnstore=*/true, {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22},
                             {}, /*new rbo=*/true, /*printStatus=*/false, /*compareResults=*/true, /*checkNewRBOCbo=*/true);
+    }
+
+    Y_UNIT_TEST(TPCH_YQL_Q21_NewRBO) {
+        RunTPCH_YqlSingleQueryTest(21);
     }
 
     Y_UNIT_TEST(TPCDS_YQL) {

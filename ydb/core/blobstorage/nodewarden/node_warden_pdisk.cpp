@@ -44,9 +44,8 @@ namespace NKikimr::NStorage {
         const ui64 inMemoryForTestsBufferBytes = pdisk.GetInMemoryForTestsBufferBytes();
         Y_VERIFY_S(!inMemoryForTestsBufferBytes, "InMemory PDisk is deprecated, use SectorMap instead");
 
-        TIntrusivePtr<TPDiskConfig> pdiskConfig = new TPDiskConfig(path, pdiskGuid, pdiskID, pdiskCategory);
+        TIntrusivePtr<TPDiskConfig> pdiskConfig = new TPDiskConfig(path, pdiskGuid, pdiskID, pdiskCategory, &Cfg->FeatureFlags);
         pdiskConfig->StartOwnerRound = NextLocalPDiskInitOwnerRound();
-        pdiskConfig->FeatureFlags = Cfg->FeatureFlags;
         if (pdisk.HasManagementStage()) {
             pdiskConfig->SerialManagementStage = pdisk.GetManagementStage();
         }

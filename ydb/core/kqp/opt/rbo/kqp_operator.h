@@ -200,8 +200,7 @@ public:
 
     /**
      * Get the information units that are in the output of this operator
-     * Currently recursively computes the correct values
-     * TODO: Add caching with the ability to invalidate
+     * Computes and caches missing output IUs for this operator subtree.
      */
     virtual const TVector<TInfoUnit>& GetOutputIUs();
 
@@ -1032,6 +1031,7 @@ public:
 
     void ComputePlanMetadata(TRBOContext& ctx);
     void ComputePlanStatistics(TRBOContext& ctx);
+    void RecomputeOutputIUsSubtree();
 
     // Lazy traversal of the whole plan, following subplan references
     TOpRange Iterate(ETraversalOrder order) {

@@ -2,6 +2,7 @@
 
 #include <yql/essentials/types/uuid/uuid.h>
 
+#include <util/generic/yexception.h>
 #include <util/random/random.h>
 
 #include <algorithm>
@@ -148,6 +149,73 @@ inline std::array<ui8, NKikimr::NUuid::UUID_LEN> MakeShardedUuidBytes(ui64 prefi
     WriteBe64(msb, result.data());
 
     return result;
+}
+
+static constexpr ui8 RfcV7VersionByte = 0x70;
+
+inline TString RfcUuidBytesToCanonicalString(const ui8* uuid) {
+    static const char hexDigits[] = "0123456789abcdef";
+    TString result;
+    result.reserve(36);
+    auto appendByte = [&](ui8 byte) {
+        result.append(hexDigits[byte >> 4]);
+        result.append(hexDigits[byte & 0x0f]);
+    };
+    for (ui32 i = 0; i < 4; ++i) {
+        appendByte(uuid[i]);
+    }
+    result.append('-');
+    for (ui32 i = 4; i < 6; ++i) {
+        appendByte(uuid[i]);
+    }
+    result.append('-');
+    for (ui32 i = 6; i < 8; ++i) {
+        appendByte(uuid[i]);
+    }
+    result.append('-');
+    for (ui32 i = 8; i < 10; ++i) {
+        appendByte(uuid[i]);
+    }
+    result.append('-');
+    for (ui32 i = 10; i < 16; ++i) {
+        appendByte(uuid[i]);
+    }
+    return result;
+}
+
+// RFC 9562 (network byte order) → YDB internal storage via canonical text parsing.
+inline std::array<ui8, NKikimr::NUuid::UUID_LEN> RfcUuidBytesToYdbInternal(const ui8* rfc) {
+    const TString canonical = RfcUuidBytesToCanonicalString(rfc);
+    std::array<ui16, 8> dw{};
+    Y_ENSURE(NKikimr::NUuid::ParseUuidToArray(canonical, dw.data(), false),
+        "Failed to parse RFC UUID bytes");
+    std::array<ui8, NKikimr::NUuid::UUID_LEN> ydb{};
+    std::memcpy(ydb.data(), dw.data(), ydb.size());
+    return ydb;
+}
+
+// Build an RFC 9562 UUID v7 in network byte order.
+inline std::array<ui8, NKikimr::NUuid::UUID_LEN> MakeRfcV7Bytes(ui64 timestampMs) {
+    std::array<ui8, NKikimr::NUuid::UUID_LEN> uuid{};
+    FillRandomBytes(uuid.data(), uuid.size());
+
+    uuid[0] = static_cast<ui8>((timestampMs >> 40) & 0xff);
+    uuid[1] = static_cast<ui8>((timestampMs >> 32) & 0xff);
+    uuid[2] = static_cast<ui8>((timestampMs >> 24) & 0xff);
+    uuid[3] = static_cast<ui8>((timestampMs >> 16) & 0xff);
+    uuid[4] = static_cast<ui8>((timestampMs >> 8) & 0xff);
+    uuid[5] = static_cast<ui8>(timestampMs & 0xff);
+    uuid[6] = static_cast<ui8>((uuid[6] & 0x0f) | RfcV7VersionByte);
+    uuid[8] = static_cast<ui8>((uuid[8] & 0x3f) | 0x80);
+
+    return uuid;
+}
+
+// Build an RFC 9562 UUID v7 and convert it to YDB internal storage layout.
+// Sort order in YDB keys will not follow creation time; use for external interoperability.
+inline std::array<ui8, NKikimr::NUuid::UUID_LEN> MakeRfcV7YdbBytes(ui64 timestampMs) {
+    const auto rfc = MakeRfcV7Bytes(timestampMs);
+    return RfcUuidBytesToYdbInternal(rfc.data());
 }
 
 } // namespace NYql::NUuidKeyGen

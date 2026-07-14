@@ -53,4 +53,23 @@ SELECT
     AND Substring(CAST(Uuid::newShardedPrefix($p) AS String), 14, 1) = '8'
     AS sharded_prefix_string_format;
 
+SELECT Uuid::newV7() != Uuid::newV7() AS v7_unique;
+SELECT Uuid::newV7(1) != Uuid::newV7(2) AS v7_dep_unique;
+SELECT
+    Substring(CAST(Uuid::newV7() AS String), 8, 1) = '-'
+    AND Substring(CAST(Uuid::newV7() AS String), 13, 1) = '-'
+    AND Substring(CAST(Uuid::newV7() AS String), 18, 1) = '-'
+    AND Substring(CAST(Uuid::newV7() AS String), 23, 1) = '-'
+    AND Substring(CAST(Uuid::newV7() AS String), 14, 1) = '7'
+    AS v7_string_format;
+
+$ts = CurrentUtcTimestamp();
+$ts64 = CAST($ts AS Timestamp64);
+SELECT Uuid::newV7At($ts) != Uuid::newV7At($ts) AS v7_at_unique;
+SELECT Uuid::newV7At($ts64) != Uuid::newV7At($ts64) AS v7_at_ts64_unique;
+SELECT Uuid::newV7At($ts, 1) != Uuid::newV7At($ts, 2) AS v7_at_dep_unique;
+SELECT
+    Substring(CAST(Uuid::newV7At($ts) AS String), 14, 1) = '7'
+    AS v7_at_string_format;
+
 SELECT $p != 0ul OR $p == 0ul AS prefix_is_uint64;

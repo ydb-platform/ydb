@@ -16,8 +16,8 @@ namespace {
 
 using TUuidBytes = std::array<ui8, NKikimr::NUuid::UUID_LEN>;
 
-constexpr ui64 kTestV7Prefix = 0x00000A9400000000ULL;
-constexpr ui64 kTestV8Prefix = 0x00000A9400000000ULL;
+constexpr ui64 kTestV7Prefix = 0x294ULL;
+constexpr ui64 kTestV8Prefix = 0x294ULL;
 constexpr ui64 kSmallPrefix = 3ULL;
 
 int CompareUuidBytes(const TUuidBytes& lhs, const TUuidBytes& rhs) {
@@ -95,32 +95,33 @@ TUuidBytes GenerateV8WithFixedRandom(ui64 prefix, ui64 epochSeconds) {
 } // namespace
 
 Y_UNIT_TEST_SUITE(TUuidSortOrder) {
-    Y_UNIT_TEST(V7UsesTop10PrefixBits) {
+    Y_UNIT_TEST(V7UsesBottom10PrefixBits) {
         const ui64 rawPrefix = 0xAABBCCDDEEFF0011ULL;
+        const ui64 expectedParam = rawPrefix & PrefixParamMask;  // 0x11
         const ui64 timestampMs = 1'700'000'000'000ULL;
-
         SetRandomSeed(77);
         const auto v7FromRaw = MakeV7Bytes(rawPrefix, timestampMs, true);
         SetRandomSeed(77);
-        const auto v7FromTopBits = MakeV7Bytes(rawPrefix & PrefixMask64, timestampMs, true);
-        UNIT_ASSERT_VALUES_EQUAL(v7FromRaw, v7FromTopBits);
+        const auto v7FromBottomBits = MakeV7Bytes(expectedParam, timestampMs, true);
+        UNIT_ASSERT_VALUES_EQUAL(v7FromRaw, v7FromBottomBits);
     }
 
-    Y_UNIT_TEST(V8UsesTop10PrefixBits) {
+    Y_UNIT_TEST(V8UsesBottom10PrefixBits) {
         const ui64 rawPrefix = 0xAABBCCDDEEFF0011ULL;
+        const ui64 expectedParam = rawPrefix & PrefixParamMask;  // 0x11
         const ui64 epochSeconds = 1'700'000'000ULL;
-
         SetRandomSeed(77);
         const auto v8FromRaw = MakeV8Bytes(rawPrefix, epochSeconds, true);
         SetRandomSeed(77);
-        const auto v8FromTopBits = MakeV8Bytes(rawPrefix & PrefixMask64, epochSeconds, true);
-        UNIT_ASSERT_VALUES_EQUAL(v8FromRaw, v8FromTopBits);
-
+        const auto v8FromBottomBits = MakeV8Bytes(expectedParam, epochSeconds, true);
+        UNIT_ASSERT_VALUES_EQUAL(v8FromRaw, v8FromBottomBits);
+        // Было: small prefix 3 игнорировался (верхние 10 бит = 0).
+        // Стало: prefix=3 реально кодируется.
         SetRandomSeed(88);
         const auto v8WithSmallPrefix = MakeV8Bytes(kSmallPrefix, epochSeconds, true);
         SetRandomSeed(88);
-        const auto v8WithoutPrefix = MakeV8Bytes(0, epochSeconds, true);
-        UNIT_ASSERT_VALUES_EQUAL(v8WithSmallPrefix, v8WithoutPrefix);
+        const auto v8WithZeroPrefix = MakeV8Bytes(0, epochSeconds, true);
+        UNIT_ASSERT_VALUES_UNEQUAL(v8WithSmallPrefix, v8WithZeroPrefix);
     }
 
     Y_UNIT_TEST(V7SortOrderAtTimestampBoundary) {
@@ -214,7 +215,7 @@ Y_UNIT_TEST_SUITE(TUuidSortOrder) {
 
     Y_UNIT_TEST(V7DistinctRandomSuffixAtSameTimestampWithPrefix) {
         SetRandomSeed(13579);
-        const ui64 prefix = 0x1FFULL << 54;
+        const ui64 prefix = 0x1FFULL;
         const ui64 timestampMs = MilliSeconds();
         TVector<TUuidBytes> generated;
         generated.reserve(32);

@@ -18,6 +18,8 @@
 
 #include <util/random/random.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::NODE_BROKER
+
 namespace NKikimr {
 namespace NNodeBroker {
 
@@ -186,9 +188,14 @@ private:
         // Node is either already expired or its ID is banned.
         Y_ABORT_UNLESS(rec.GetNodeId() == ctx.SelfID.NodeId());
         if (rec.GetStatus().GetCode() != NKikimrNodeBroker::TStatus::OK) {
+<<<<<<< HEAD
             LOG_ERROR(ctx, NKikimrServices::NODE_BROKER, "Cannot extend lease: %s",
                       rec.GetStatus().GetReason().data());
             PingErrorsCounter->Inc();
+=======
+            YDB_LOG_ERROR_CTX(ctx, "TLeaseHolder::Handle TEvNodeBroker::TEvExtendLeaseResponse: cannot extend lease",
+                {"reason", rec.GetStatus().GetReason().data()});
+>>>>>>> 284010bf225 ([YDB_LOG] Migrate ydb/core/mind (without hive) (#43615))
             return;
         }
 
@@ -196,8 +203,8 @@ private:
         ExpireV2 = TInstant::MicroSeconds(rec.HasExpireV2() ? rec.GetExpireV2() : rec.GetExpire());
 
         LastResponse = ctx.Now();
-        LOG_DEBUG_S(ctx, NKikimrServices::NODE_BROKER,
-                    "Node has now extended lease expiring " << ToString(EffectiveExpire()));
+        YDB_LOG_DEBUG_CTX(ctx, "TLeaseHolder::Handle TEvNodeBroker::TEvExtendLeaseResponse: lease extended",
+            {"expireTime", ToString(EffectiveExpire())});
 
         Y_ABORT_UNLESS(rec.HasEpoch());
         LastPingEpoch = rec.GetEpoch().GetId();
@@ -264,7 +271,7 @@ private:
 
     void StopNode(const TActorContext &ctx)
     {
-        LOG_ERROR_S(ctx, NKikimrServices::NODE_BROKER, "Stop node upon lease expiration (exit code 2)");
+        YDB_LOG_ERROR_CTX(ctx, "TLeaseHolder::StopNode: stopping node upon lease expiration (exit code 2)");
         AppData(ctx)->KikimrShouldContinue->ShouldStop(2);
     }
 

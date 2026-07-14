@@ -1409,11 +1409,14 @@ const NHPTimer::STime TReader::MaxCyclesPerIteration =
     ((NHPTimer::GetCyclesPerSecond() * MaxTimePerIteration.MicroSeconds()) + TDuration::Seconds(1).MicroSeconds() - 1)
     / TDuration::Seconds(1).MicroSeconds();
 
+} // namespace
+
 // Emits a retro-span covering the intended throttle wait [now, now + delay] as a
 // child of the read's span. It is constructed already terminated, so there is no
 // span lifecycle to manage across the async reschedule (no member storage, no
 // teardown obligations). Note: the duration is the *scheduled* delay decided by
 // the quota, not the measured wait - hence the "predicted" attribute.
+// Lives in NDataShard (not the anonymous namespace) so unit tests can drive it directly.
 void EmitReadThrottleSpan(const NWilson::TSpan& readSpan, TInstant now, TDuration delay, TStringBuf path) {
     if (!readSpan) {
         return;
@@ -1440,8 +1443,6 @@ void EmitReadThrottleSpan(const NWilson::TSpan& readSpan, TInstant now, TDuratio
         .Attribute("predicted", true)
         .End();
 }
-
-} // namespace
 
 void TReadIteratorState::ForwardScanEvent(std::unique_ptr<IEventHandle>&& ev, ui64 tabletId) {
     Y_ENSURE(State == EState::Scan);

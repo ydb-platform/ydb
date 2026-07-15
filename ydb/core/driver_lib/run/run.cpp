@@ -2267,6 +2267,10 @@ TIntrusivePtr<TServiceInitializersList> TKikimrRunner::CreateServiceInitializers
         sil->AddServiceInitializer(new TOverloadManagerInitializer(runConfig));
     }
 
+    if (serviceMask.EnableCsFlowControlManager) {
+        sil->AddServiceInitializer(new TFlowControlManagerInitializer(runConfig));
+    }
+
 #if defined(YDB_EMBEDDED_NBS_ENABLED)
     if (serviceMask.EnableNBSService) {
         sil->AddServiceInitializer(new TNbsServiceInitializer(runConfig));

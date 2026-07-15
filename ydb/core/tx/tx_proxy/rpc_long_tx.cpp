@@ -1,12 +1,11 @@
-#include "global.h"
-
 #include <ydb/core/formats/arrow/size_calcer.h>
 #include <ydb/core/kqp/query_data/kqp_predictor.h>
+#include <ydb/core/protos/config.pb.h>
 #include <ydb/core/tx/columnshard/columnshard.h>
+#include <ydb/core/tx/columnshard/flow_control_manager/flow_control_manager_service.h>
 #include <ydb/core/tx/data_events/shard_writer.h>
 #include <ydb/core/tx/long_tx_service/public/events.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
-#include <ydb/core/protos/config.pb.h>
 
 #include <ydb/library/aclib/user_context.h>
 #include <ydb/library/actors/prof/tag.h>
@@ -20,7 +19,7 @@ namespace NKikimr {
 namespace {
 
 ui64 GetMemoryInFlightLimit() {
-    static std::atomic_uint64_t DEFAULT_MEMORY_IN_FLIGHT_LIMIT{0};
+    static std::atomic_uint64_t DEFAULT_MEMORY_IN_FLIGHT_LIMIT{ 0 };
 
     if (HasAppData() && AppDataVerified().ColumnShardConfig.GetProxyMemoryInFlightLimit()) {
         return AppDataVerified().ColumnShardConfig.GetProxyMemoryInFlightLimit();
@@ -34,7 +33,7 @@ ui64 GetMemoryInFlightLimit() {
     return DEFAULT_MEMORY_IN_FLIGHT_LIMIT.load();
 }
 
-}
+}   // namespace
 
 namespace NTxProxy {
 using namespace NActors;
@@ -52,12 +51,7 @@ protected:
     using TThis = typename TBase::TThis;
 
 public:
-    TLongTxWriteBase(
-        const TString& databaseName,
-        const TString& path,
-        const TString& token,
-        const TLongTxId& longTxId,
-        const TString& dedupId,
+    TLongTxWriteBase(const TString& databaseName, const TString& path, const TString& token, const TLongTxId& longTxId, const TString& dedupId,
         TIntrusivePtr<NACLib::TUserContext> userCtx)
         : DatabaseName(databaseName)
         , Path(path)
@@ -65,7 +59,7 @@ public:
         , LongTxId(longTxId)
         , ActorSpan(0, NWilson::TTraceId::NewTraceId(0, Max<ui32>()), "TLongTxWriteBase")
         , UserCtx(userCtx)
-        , Counters(std::make_shared<NEvWrite::TCSUploadCounters>())  {
+        , Counters(std::make_shared<NEvWrite::TCSUploadCounters>()) {
         if (token) {
             UserToken.emplace(token);
         }
@@ -276,15 +270,19 @@ private:
     std::shared_ptr<NYql::TIssues> Issues;
 };
 
-TActorId DoLongTxWriteSameMailbox(const TActorContext& ctx, const TActorId& replyTo, const NLongTxService::TLongTxId& longTxId,
+void DoLongTxWriteSameMailbox(const TActorContext& ctx, const TActorId& replyTo, const NLongTxService::TLongTxId& longTxId,
     const TString& dedupId, const TString& databaseName, const TString& path,
     std::shared_ptr<const NSchemeCache::TSchemeCacheNavigate> navigateResult, std::shared_ptr<arrow::RecordBatch> batch,
-    std::shared_ptr<NYql::TIssues> issues,
-    TIntrusivePtr<NACLib::TUserContext> userCtx) {
-    return ctx.RegisterWithSameMailbox(new TLongTxWriteInternal(replyTo, longTxId, dedupId, databaseName, path, navigateResult, batch, issues, userCtx));
-}
+    std::shared_ptr<NYql::TIssues> issues, TIntrusivePtr<NACLib::TUserContext> userCtx, bool forceNoFlowControl) {
 
-//
+    if (!forceNoFlowControl && HasAppData() && AppData()->FeatureFlags.GetEnableCsFlowControl()) {
+        NColumnShard::NFlowControl::TFlowControlManagerServiceOperator::StartLongTxWrite(ctx,
+            NColumnShard::NFlowControl::TLongTxWrite(replyTo, longTxId, dedupId, databaseName, path, std::move(navigateResult), std::move(batch), std::move(issues), std::move(userCtx)));
+    } else {
+        ctx.RegisterWithSameMailbox(new TLongTxWriteInternal(
+            replyTo, longTxId, dedupId, databaseName, path, std::move(navigateResult), std::move(batch), std::move(issues), std::move(userCtx)));
+    }
+}
 
 }   // namespace NTxProxy
 }   // namespace NKikimr

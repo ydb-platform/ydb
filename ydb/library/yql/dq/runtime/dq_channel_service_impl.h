@@ -658,6 +658,10 @@ public:
     std::atomic<bool> ResendAsked = false;
     std::deque<char> ReconciliationLog;
     TChannelInfo LastLostInfo = TChannelInfo(0,  NActors::TActorId{}, NActors::TActorId{});
+    std::atomic<ui64> SendCount = 0;
+    std::atomic<ui64> ResendCount = 0;
+    std::atomic<ui64> ReconCount = 0;
+    std::atomic<TInstant> ReconSent;
 };
 
 class TDebugNodeState : public TNodeState {

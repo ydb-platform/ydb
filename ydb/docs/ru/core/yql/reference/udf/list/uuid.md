@@ -101,7 +101,7 @@ FROM AS_TABLE($rows);
 Многострочная транзакция с общим префиксом (строки обычно попадают в одну партицию):
 
 ```yql
-$prefix = Uuid::newShardedPrefix(RandomNumber(1));
+$prefix = RandomNumber(1);
 
 INSERT INTO events (id, payload)
 SELECT

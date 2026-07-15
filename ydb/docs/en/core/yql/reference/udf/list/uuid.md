@@ -101,7 +101,7 @@ FROM AS_TABLE($rows);
 Multi-row transaction with a shared prefix (rows typically land in one partition):
 
 ```yql
-$prefix = Uuid::newShardedPrefix(RandomNumber(1));
+$prefix = RandomNumber(1);
 
 INSERT INTO events (id, payload)
 SELECT

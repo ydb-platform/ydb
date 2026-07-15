@@ -38,4 +38,5 @@ ALTER TABLE table_name ALTER COLUMN column_name DROP NOT NULL;
 
 ## См. также
 
-* {% include [Описание всех опций колонки](../_includes/column_option_list_alter.md) %}
+* [Описание всех опций колонки](columns.md)
+

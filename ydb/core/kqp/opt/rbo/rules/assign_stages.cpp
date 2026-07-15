@@ -1,4 +1,5 @@
 #include <ydb/core/kqp/opt/rbo/kqp_rbo_rules.h>
+#include <ydb/core/kqp/opt/rbo/kqp_rbo_utils.h>
 #include <ydb/core/kqp/provider/yql_kikimr_settings.h>
 
 namespace NKikimr::NKqp {
@@ -8,24 +9,27 @@ namespace {
 using namespace NKikimr;
 using namespace NKikimr::NKqp;
 
-void MaybeSetJoinAlgo(TPhysicalOpProps& props, const TRBOContext& rboCtx) {
-    if (props.JoinAlgo.has_value()) {
-        return;
+void FinalizeJoinPhysicalProps(TOpJoin& join, const TRBOContext& rboCtx) {
+    auto& props = join.Props;
+    if (!props.JoinAlgo.has_value()) {
+        const auto joinMode = rboCtx.KqpCtx.Config->GetHashJoinMode();
+        switch (joinMode) {
+            case NYql::NDq::EHashJoinMode::Map: {
+                props.JoinAlgo = EJoinAlgoType::MapJoin;
+                break;
+            }
+            default: {
+                props.JoinAlgo = EJoinAlgoType::GraceJoin;
+                break;
+            }
+        }
     }
 
-    auto joinMode = rboCtx.KqpCtx.Config->GetHashJoinMode();
-    NKikimr::NKqp::EJoinAlgoType joinAlgo;
-    switch (joinMode) {
-        case NYql::NDq::EHashJoinMode::Map: {
-            joinAlgo = NKikimr::NKqp::EJoinAlgoType::MapJoin;
-            break;
-        }
-        default: {
-            joinAlgo = NKikimr::NKqp::EJoinAlgoType::GraceJoin;
-            break;
-        }
-    }
-    props.JoinAlgo = joinAlgo;
+    const auto joinKind = GetValidJoinKind(join.JoinKind);
+    const auto joinAlgo = *props.JoinAlgo;
+    props.UseBlockHashJoin = rboCtx.KqpCtx.Config->GetUseBlockHashJoin()
+        && (joinAlgo == EJoinAlgoType::GraceJoin || joinAlgo == EJoinAlgoType::ReverseBlockJoin)
+        && (joinKind == "Inner" || joinKind == "Left" || joinKind == "LeftSemi" || joinKind == "LeftOnly");
 }
 
 // For row storage read we create a separate stage.
@@ -85,7 +89,7 @@ bool TAssignStagesRule::MatchAndApply(TIntrusivePtr<IOperator>& input, TRBOConte
         const auto newStageId = props.StageGraph.AddStage();
         join->Props.StageId = newStageId;
 
-        MaybeSetJoinAlgo(join->Props, ctx);
+        FinalizeJoinPhysicalProps(*join, ctx);
 
         // For cross-join or map join we build a stage with map and broadcast connections
         // FIXME: We assume that right side is small one, map join also can work with hash shuffle connections.

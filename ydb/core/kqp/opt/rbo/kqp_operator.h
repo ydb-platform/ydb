@@ -125,6 +125,9 @@ struct TPhysicalOpProps {
     std::optional<TRBOMetadata> Metadata;
     std::optional<TRBOStatistics> Statistics;
     std::optional<NKikimr::NKqp::EJoinAlgoType> JoinAlgo;
+    // Resolved physical implementation for a join. std::nullopt means that
+    // physical join selection has not run yet.
+    std::optional<bool> UseBlockHashJoin;
     std::optional<double> Cost;
 
     // CBO decision for this join's input edges.
@@ -148,6 +151,7 @@ private:
         Metadata = other.Metadata;
         Statistics = other.Statistics;
         JoinAlgo = other.JoinAlgo;
+        UseBlockHashJoin = other.UseBlockHashJoin;
         Cost = other.Cost;
         LeftShuffleBy = other.LeftShuffleBy;
         RightShuffleBy = other.RightShuffleBy;

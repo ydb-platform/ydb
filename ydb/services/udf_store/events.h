@@ -1,7 +1,13 @@
 #pragma once
 
+#include "events.h"
+
 #include <ydb/library/actors/core/event_local.h>
 #include <ydb/library/actors/core/events.h>
+#include <ydb/services/udf_store/wasm/registry.h>
+#include <ydb/services/udf_store/wasm/registry_helpers.h>
+
+#include <memory>
 
 namespace NKikimr::NUdfStore {
 

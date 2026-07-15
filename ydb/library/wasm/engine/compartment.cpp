@@ -420,10 +420,11 @@ public:
         InstantiateModule(wavmModule, linkResult, name);
     }
 
-    void AddSdk(const TModuleBytecode& bytecode) override
+    void AddPrecompiledModule(const TModuleBytecode& bytecode, TStringBuf name = "") override
     {
-        YT_ASSERT(!RuntimeLibraryInstance_);
-        YT_ASSERT(Compartment_->instances.size() == 1);
+        if (!bytecode.ObjectCode) {
+            THROW_ERROR_EXCEPTION("Precompiled module object code is required");
+        }
 
         if (bytecode.ObjectCode) {
             AddPrecompiledModule(bytecode, "env");
@@ -453,7 +454,7 @@ public:
                     &loadError);
 
                 if (!succeeded) {
-                    THROW_ERROR_EXCEPTION("Could not load WebAssembly runtime library: %v", loadError.message);
+                    THROW_ERROR_EXCEPTION("Could not load WebAssembly module: %v", loadError.message);
                 }
 
                 CoerceImportIndexTypesToLayout(irModule, MemoryLayoutData_);

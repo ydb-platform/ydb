@@ -2099,16 +2099,19 @@ private:
 
         TypesCtx->IgnoreExpandPg = SessionCtx->ConfigPtr()->GetEnableNewRBO();
 
-        bool addExternalDataSources = (queryType == EKikimrQueryType::Script || queryType == EKikimrQueryType::Query
-            || queryType == EKikimrQueryType::YqlScript || queryType == EKikimrQueryType::YqlScriptStreaming) && AppData()->FeatureFlags.GetEnableExternalDataSources();
-        if (addExternalDataSources && FederatedQuerySetup) {
-            InitS3Provider(queryType);
-            InitGenericProvider();
-            InitSolomonProvider();
-
+        bool isSupportedQueryType = queryType == EKikimrQueryType::Script || queryType == EKikimrQueryType::Query
+            || queryType == EKikimrQueryType::YqlScript || queryType == EKikimrQueryType::YqlScriptStreaming;
+        if (isSupportedQueryType && FederatedQuerySetup) {
             TVector<std::function<TFuture<void>()>> finalizers;
-            if (FederatedQuerySetup->YtGateway) {
-                InitYtProvider(finalizers);
+            if (AppData()->FeatureFlags.GetEnableExternalDataSources()) {
+                InitS3Provider(queryType);
+                InitGenericProvider();
+                InitSolomonProvider();
+
+                if (FederatedQuerySetup->YtGateway) {
+                    InitYtProvider(finalizers);
+                }
+                TypesCtx->StreamLookupJoin = Config->GetEnableDqSourceStreamLookupJoin();
             }
             if (FederatedQuerySetup->PqGatewayFactory) {
                 InitPqProvider(finalizers);
@@ -2123,7 +2126,6 @@ private:
                     return WaitAll(futures);
                 };
             }
-            TypesCtx->StreamLookupJoin = Config->GetEnableDqSourceStreamLookupJoin();
         }
 
         InitPgProvider();

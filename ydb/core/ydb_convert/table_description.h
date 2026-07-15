@@ -108,6 +108,16 @@ bool FillIndexDescription(NKikimrSchemeOp::TIndexedTableCreationConfig& out,
     const Ydb::Table::CreateTableRequest& in, Ydb::StatusIds::StatusCode& status, TString& error);
 
 // out
+void FillMultiColumnStatisticsDescription(Ydb::Table::DescribeTableResult& out,
+    const NKikimrSchemeOp::TTableDescription& in);
+void FillMultiColumnStatisticsDescription(Ydb::Table::CreateTableRequest& out,
+    const NKikimrSchemeOp::TTableDescription& in);
+
+// in
+void FillMultiColumnStatistics(NKikimrSchemeOp::TMultiColumnStatisticsDescription& out,
+    const Ydb::Table::TableMultiColumnStatistics& in);
+
+// out
 void FillChangefeedDescription(Ydb::Table::ChangefeedDescription& out,
     const NKikimrSchemeOp::TCdcStreamDescription& in);
 void FillChangefeedDescription(Ydb::Table::DescribeTableResult& out,

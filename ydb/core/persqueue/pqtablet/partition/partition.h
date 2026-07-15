@@ -61,6 +61,7 @@ struct TTransaction {
         : Tx(tx)
         , Predicate(predicate)
         , SupportivePartitionActor(tx->SupportivePartitionActor)
+        , DeferredFinalizeOp(tx->DeferredFinalizeOp)
         , CalcPredicateSpan(std::move(tx->Span))
         , CalcPredicateTimestamp(calcPredicateTimestamp)
     {
@@ -113,6 +114,8 @@ struct TTransaction {
     TSimpleSharedPtr<TEvPQ::TEvTxCalcPredicate> Tx;
     TMaybe<bool> Predicate;
     TActorId SupportivePartitionActor;
+    NKikimrPQ::TPartitionOperation::TWriteOp::TDeferredPublicationApi::EOp DeferredFinalizeOp =
+        NKikimrPQ::TPartitionOperation::TWriteOp::TDeferredPublicationApi::Unspecified;
 
 
     TSimpleSharedPtr<TEvPQ::TEvChangePartitionConfig> ChangeConfig;

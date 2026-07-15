@@ -5,21 +5,20 @@
 
 namespace NActors {
 
-    TInterconnectSessionTCPv2::TInterconnectSessionTCPv2(TInterconnectProxyTCP* const proxy, TSessionParams params)
+    TInterconnectSessionTCPv2::TInterconnectSessionTCPv2(TInterconnectProxyTCP* const proxy)
         : TActor(&TInterconnectSessionTCPv2::StateFunc)
         , Proxy(proxy)
-        , Params(std::move(params))
-    {
+    { }
+
+    void TInterconnectSessionTCPv2::Init(const TSessionParams& params) {
+        Params = params;
         // v2 does not support encryption
         Y_ABORT_UNLESS(!Params.Encryption);
         Proxy->Metrics->SetPeerScopeId(Params.PeerScopeId);
         Proxy->Metrics->SetConnected(0);
-    }
-
-    void TInterconnectSessionTCPv2::Init() {
         SetPrefix(Sprintf("SessionV2 %s [node %" PRIu32 "]", SelfId().ToString().data(), Proxy->PeerNodeId));
         LOG_INFO_IC_SESSION("ICS90", "v2 session created");
-        DirectSession = std::make_shared<TDirectSession>();
+        DirectSession = std::make_shared<TDirectSessionV2>();
     }
 
     void TInterconnectSessionTCPv2::SetNewConnection(TEvHandshakeDone::TPtr& ev) {

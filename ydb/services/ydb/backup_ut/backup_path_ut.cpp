@@ -6,6 +6,11 @@
 #include <util/folder/tempdir.h>
 
 #include <ydb/library/testlib/helpers.h>
+#include <ydb/library/testlib/parquet_helpers/parquet_helpers.h>
+
+#include <arrow/api.h>
+
+#include <fmt/format.h>
 
 using namespace NYdb;
 
@@ -13,6 +18,8 @@ using TBackupPathTestFixture = TS3BackupTestFixture;
 using TBackupPathTestFixtureFs = TFsBackupTestFixture;
 
 namespace {
+
+using namespace fmt::literals;
 
 template <typename TExportSettings>
 struct TBackupTraits;
@@ -25,6 +32,12 @@ struct TBackupTraits<NExport::TExportToS3Settings> {
 
     TExportSettings MakeExportSettings(TS3BackupTestFixture& f, const TString& sourcePath) {
         return f.MakeExportSettings(sourcePath, "Prefix");
+    }
+
+    TExportSettings MakeExportParquetSettings(TS3BackupTestFixture& f, const TString& sourcePath) {
+        auto settings = f.MakeExportSettings(sourcePath, "Prefix");
+        settings.Format(NYdb::NExport::TParquetFormat());
+        return settings;
     }
 
     TImportSettings MakeImportSettings(TS3BackupTestFixture& f, const TString& dstPath) {
@@ -49,6 +62,10 @@ struct TBackupTraits<NExport::TExportToS3Settings> {
 
     TString FilePrefixRaw() {
         return "/test_bucket/";
+    }
+
+    TString GetBucketLocation(const TStringBuf bucket) {
+        return TStringBuilder() << GetEnv("S3_ENDPOINT") << '/' << bucket << '/';
     }
 
     static TImportSettings::TItem MakeImportItem(const TString& dst, const TString& srcPath) {
@@ -489,6 +506,169 @@ void ExportWholeDatabaseByExplicitRootItemImpl(TBackupTestFixture& f, bool isOla
 }
 
 template <typename TExportSettings, typename TBackupTestFixture>
+void ExportParquetWholeDatabaseImpl(TBackupTestFixture &f, bool isOlap) {
+    f.Server().GetRuntime()->GetAppData().FeatureFlags.SetEnableExportInParquet(true);
+    {
+        auto res = f.YdbQueryClient()
+                    .ExecuteQuery(R"sql(
+                INSERT INTO `/Root/RecursiveFolderProcessing/Table0` (key, value) VALUES
+                    (1, "rhl8q6u2"),
+                    (2, "yah6v01e"),
+                    (3, "3i91khlz");
+            )sql",
+                                    NQuery::TTxControl::NoTx())
+                    .GetValueSync();
+        UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
+    }
+
+    TBackupTraits<TExportSettings> traits;
+    const TString prefix = traits.FilePrefix();
+    auto exportSettings = traits.MakeExportParquetSettings(f, "");
+
+    {
+        auto res = traits.Export(f, exportSettings);
+        f.WaitOpSuccess(res);
+
+        traits.ValidateFileList(f, {
+            prefix + "metadata.json",
+            prefix + "SchemaMapping/metadata.json",
+            prefix + "SchemaMapping/mapping.json",
+            prefix + "RecursiveFolderProcessing/Table0/metadata.json",
+            prefix + "RecursiveFolderProcessing/Table0/scheme.pb",
+            prefix + "RecursiveFolderProcessing/Table0/permissions.pb",
+            prefix + "RecursiveFolderProcessing/Table0/data_00.parquet",
+            prefix + "RecursiveFolderProcessing/dir1/Table1/metadata.json",
+            prefix + "RecursiveFolderProcessing/dir1/Table1/scheme.pb",
+            prefix + "RecursiveFolderProcessing/dir1/Table1/permissions.pb",
+            prefix + "RecursiveFolderProcessing/dir1/Table1/data_00.parquet",
+            prefix + "RecursiveFolderProcessing/dir1/dir2/Table2/metadata.json",
+            prefix + "RecursiveFolderProcessing/dir1/dir2/Table2/scheme.pb",
+            prefix + "RecursiveFolderProcessing/dir1/dir2/Table2/permissions.pb",
+            prefix + "RecursiveFolderProcessing/dir1/dir2/Table2/data_00.parquet",
+
+            prefix + "metadata.json.sha256",
+            prefix + "SchemaMapping/metadata.json.sha256",
+            prefix + "SchemaMapping/mapping.json.sha256",
+            prefix + "RecursiveFolderProcessing/Table0/metadata.json.sha256",
+            prefix + "RecursiveFolderProcessing/Table0/scheme.pb.sha256",
+            prefix + "RecursiveFolderProcessing/Table0/permissions.pb.sha256",
+            prefix + "RecursiveFolderProcessing/Table0/data_00.parquet.sha256",
+            prefix + "RecursiveFolderProcessing/dir1/Table1/metadata.json.sha256",
+            prefix + "RecursiveFolderProcessing/dir1/Table1/scheme.pb.sha256",
+            prefix + "RecursiveFolderProcessing/dir1/Table1/permissions.pb.sha256",
+            prefix + "RecursiveFolderProcessing/dir1/Table1/data_00.parquet.sha256",
+            prefix + "RecursiveFolderProcessing/dir1/dir2/Table2/metadata.json.sha256",
+            prefix + "RecursiveFolderProcessing/dir1/dir2/Table2/scheme.pb.sha256",
+            prefix + "RecursiveFolderProcessing/dir1/dir2/Table2/permissions.pb.sha256",
+            prefix + "RecursiveFolderProcessing/dir1/dir2/Table2/data_00.parquet.sha256",
+        });
+    }
+
+    {
+        auto path = prefix + "RecursiveFolderProcessing/Table0/data_00.parquet";
+        auto s3Data = f.GetS3Data();
+        auto dataIt = s3Data.find(path);
+        UNIT_ASSERT_C(dataIt != s3Data.end(), "data_00.parquet not found");
+
+        auto value = dataIt->second;
+        const auto table = NTestUtils::ReadParquet(value);
+        UNIT_ASSERT_EQUAL(3, table->num_rows());
+
+        auto schema = arrow::schema({
+            // TODO(#41099): "nullable" should not depend on "isOlap", it should be `false` here.
+            arrow::field("key", arrow::int64(), isOlap),
+            arrow::field("value", arrow::binary()),
+        });
+
+        auto kBuilder = arrow::Int64Builder();
+        arrow::Status status = kBuilder.AppendValues({1, 2, 3});
+        UNIT_ASSERT_C(status.ok(), status.message());
+
+        std::vector<std::string> values = {"rhl8q6u2", "yah6v01e", "3i91khlz"};
+        auto vBuilder = arrow::BinaryBuilder();
+        for (const auto& v : values) {
+            status = vBuilder.Append(v.data(), v.size());
+            UNIT_ASSERT_C(status.ok(), status.message());
+        }
+
+        auto expectedTable =
+            arrow::Table::Make(schema, {kBuilder.Finish().ValueOrDie(),
+                                        vBuilder.Finish().ValueOrDie()});
+
+        UNIT_ASSERT(expectedTable->Equals(*table));
+    }
+}
+
+template <typename TExportSettings, typename TBackupTestFixture>
+void ExportParquetTableWithCompressionImpl(TBackupTestFixture &f, bool isOlap) {
+    Y_UNUSED(isOlap);
+
+    f.Server().GetRuntime()->GetAppData().FeatureFlags.SetEnableExportInParquet(true);
+
+    const int64_t numRows = 10000;
+    TString data = TString("Data") * 256;
+    auto expectedMaxDataSize = numRows * (4+data.size()) / 10;
+    {
+        for (ui32 i = 0; i < numRows;) {
+            TStringBuilder query;
+            query << "INSERT INTO `/Root/RecursiveFolderProcessing/Table0` (key, value) VALUES ";
+            for (ui32 j = 0; j < 1000 && i < numRows; ++j, ++i) {
+                query << ( j ? "," : "") << "(" << (i+1) << ",\"" << data << "\")";
+            }
+            query << ";";
+
+            auto res = f.YdbQueryClient()
+                        .ExecuteQuery(query, NQuery::TTxControl::NoTx())
+                        .GetValueSync();
+            UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
+        }
+    }
+
+    TBackupTraits<TExportSettings> traits;
+    const TString prefix = traits.FilePrefix();
+    auto exportSettings = traits.MakeExportParquetSettings(f, "");
+    exportSettings
+            .AppendItem(typename TExportSettings::TItem{.Src = "/Root/RecursiveFolderProcessing/Table0", .Dst = "Table0"});
+
+    traits.SetCompression(exportSettings, "zstd");
+
+    {
+        auto res = traits.Export(f, exportSettings);
+        f.WaitOpSuccess(res);
+
+        traits.ValidateFileList(f, {
+            prefix + "metadata.json",
+            prefix + "SchemaMapping/metadata.json",
+            prefix + "SchemaMapping/mapping.json",
+            prefix + "Table0/metadata.json",
+            prefix + "Table0/scheme.pb",
+            prefix + "Table0/permissions.pb",
+            prefix + "Table0/data_00.parquet",
+
+            prefix + "metadata.json.sha256",
+            prefix + "SchemaMapping/metadata.json.sha256",
+            prefix + "SchemaMapping/mapping.json.sha256",
+            prefix + "Table0/metadata.json.sha256",
+            prefix + "Table0/scheme.pb.sha256",
+            prefix + "Table0/permissions.pb.sha256",
+            prefix + "Table0/data_00.parquet.sha256",
+        });
+    }
+
+    {
+        auto path = prefix + "Table0/data_00.parquet";
+        auto s3Data = f.GetS3Data();
+        auto dataIt = s3Data.find(path);
+        UNIT_ASSERT_C(dataIt != s3Data.end(), "data_00.parquet not found");
+        UNIT_ASSERT_LE_C(dataIt->second.size(), expectedMaxDataSize, fmt::format("data_00.parquet is too big: {}, max {}", dataIt->second.size(), expectedMaxDataSize));
+
+        auto value = dataIt->second;
+        const auto table = NTestUtils::ReadParquet(value);
+        UNIT_ASSERT_EQUAL(numRows, table->num_rows());
+    }
+}
+
+template <typename TExportSettings, typename TBackupTestFixture>
 void ExportWithCommonSourcePathImpl(TBackupTestFixture& f, bool isOlap) {
     TBackupTraits<TExportSettings> traits;
     const TString prefix = traits.FilePrefix();
@@ -592,6 +772,69 @@ void ExportWithExcludeRegexpsImpl(TBackupTestFixture& f, bool isOlap) {
             prefix + "dir1/dir2/Table2/permissions.pb.sha256",
             prefix + "dir1/dir2/Table2/data_00.csv.sha256",
         });
+    }
+
+    {
+        auto importSettings = traits.MakeImportSettings(f, "/Root/RestorePrefix");
+        auto res = traits.Import(f, importSettings);
+        f.WaitOpSuccess(res);
+
+        f.ValidateHasYdbPaths({
+            TBackupTestFixture::TEntryPath::TablePath("/Root/RestorePrefix/Table0", isOlap),
+            TBackupTestFixture::TEntryPath::TablePath("/Root/RestorePrefix/dir1/dir2/Table2", isOlap),
+        });
+    }
+}
+
+template <typename TExportSettings, typename TBackupTestFixture>
+void ExportFilteringWithoutEncryptionImpl(TBackupTestFixture& f, bool isOlap) {
+    TBackupTraits<TExportSettings> traits;
+    const TString prefix = traits.FilePrefix();
+    f.Server().GetRuntime()->GetAppData().FeatureFlags.SetEnableFsBackups(true);
+    f.Server().GetRuntime()->GetAppData().FeatureFlags.SetEnableExportFiltering(true);
+    f.Server().GetRuntime()->GetAppData().FeatureFlags.SetEnableEncryptedExport(false);
+
+    {
+        auto exportSettings = traits.MakeExportSettings(f, "/Root/RecursiveFolderProcessing");
+        exportSettings
+            .AppendExcludeRegexp("^Table$")
+            .AppendExcludeRegexp("^dir1$")
+            .AppendExcludeRegexp("^dir1/Table");
+        auto res = traits.Export(f, exportSettings);
+        f.WaitOpSuccess(res);
+
+        traits.ValidateFileList(f, {
+            prefix + "metadata.json",
+            prefix + "SchemaMapping/metadata.json",
+            prefix + "SchemaMapping/mapping.json",
+            prefix + "Table0/metadata.json",
+            prefix + "Table0/scheme.pb",
+            prefix + "Table0/permissions.pb",
+            prefix + "Table0/data_00.csv",
+            prefix + "dir1/dir2/Table2/metadata.json",
+            prefix + "dir1/dir2/Table2/scheme.pb",
+            prefix + "dir1/dir2/Table2/permissions.pb",
+            prefix + "dir1/dir2/Table2/data_00.csv",
+
+            prefix + "metadata.json.sha256",
+            prefix + "SchemaMapping/metadata.json.sha256",
+            prefix + "SchemaMapping/mapping.json.sha256",
+            prefix + "Table0/metadata.json.sha256",
+            prefix + "Table0/scheme.pb.sha256",
+            prefix + "Table0/permissions.pb.sha256",
+            prefix + "Table0/data_00.csv.sha256",
+            prefix + "dir1/dir2/Table2/metadata.json.sha256",
+            prefix + "dir1/dir2/Table2/scheme.pb.sha256",
+            prefix + "dir1/dir2/Table2/permissions.pb.sha256",
+            prefix + "dir1/dir2/Table2/data_00.csv.sha256",
+        });
+    }
+
+    {
+        auto exportSettings = traits.MakeExportSettings(f, "/Root/RecursiveFolderProcessing");
+        traits.SetEncryption(exportSettings, NExport::TEncryptionAlgorithm::AES_128_GCM, "Cool random key!");
+        auto res = traits.Export(f, exportSettings);
+        f.WaitOpStatus(res, EStatus::BAD_REQUEST);
     }
 
     {
@@ -920,6 +1163,7 @@ void FilterByPathFailsWhenNoSchemaMappingImpl(TBackupTestFixture& f, bool /*isOl
     const TString prefixRaw = traits.FilePrefixRaw();
     f.Server().GetRuntime()->GetAppData().FeatureFlags.SetEnableFsBackups(true);
     if constexpr (std::is_same_v<TExportSettings, NExport::TExportToFsSettings>) {
+        f.Server().GetRuntime()->GetAppData().FeatureFlags.SetEnableExportFiltering(false);
         f.Server().GetRuntime()->GetAppData().FeatureFlags.SetEnableEncryptedExport(false);
     }
     {
@@ -1096,6 +1340,7 @@ void ExportRecursiveWithoutDestinationPrefixImpl(TBackupTestFixture& f, bool isO
     const TString importPrefix = traits.ImportSrcPrefix();
     f.Server().GetRuntime()->GetAppData().FeatureFlags.SetEnableFsBackups(true);
     if constexpr (std::is_same_v<TExportSettings, NExport::TExportToFsSettings>) {
+        f.Server().GetRuntime()->GetAppData().FeatureFlags.SetEnableExportFiltering(false);
         f.Server().GetRuntime()->GetAppData().FeatureFlags.SetEnableEncryptedExport(false);
     }
 
@@ -1761,6 +2006,9 @@ Y_UNIT_TEST_SUITE_F(BackupPathTestFs, TBackupPathTestFixtureFs) {
     Y_UNIT_TEST(ExportWithExcludeRegexps) {
         ExportWithExcludeRegexpsImpl<NExport::TExportToFsSettings, TFsBackupTestFixture>(*this, false);
     }
+    Y_UNIT_TEST(ExportFilteringWithoutEncryption) {
+        ExportFilteringWithoutEncryptionImpl<NExport::TExportToFsSettings, TFsBackupTestFixture>(*this, false);
+    }
     Y_UNIT_TEST(ExportWithCommonSourcePathAndExplicitTableInside) {
         ExportWithCommonSourcePathAndExplicitTableInsideImpl<NExport::TExportToFsSettings, TFsBackupTestFixture>(*this, false);
     }
@@ -1810,6 +2058,14 @@ Y_UNIT_TEST_SUITE_F(BackupPathTest, TBackupPathTestFixture) {
         ExportWholeDatabaseImpl<NExport::TExportToS3Settings, TS3BackupTestFixture>(*this, IsOlap);
     }
 
+    Y_UNIT_TEST_TWIN(ExportParquetWholeDatabase, IsOlap) {
+        ExportParquetWholeDatabaseImpl<NExport::TExportToS3Settings, TS3BackupTestFixture>(*this, IsOlap);
+    }
+
+    Y_UNIT_TEST_TWIN(ExportParquetTableWithCompression, IsOlap) {
+        ExportParquetTableWithCompressionImpl<NExport::TExportToS3Settings, TS3BackupTestFixture>(*this, IsOlap);
+    }
+
     Y_UNIT_TEST_TWIN(ExportWholeDatabaseByExplicitRootItem, IsOlap) {
         ExportWholeDatabaseByExplicitRootItemImpl<NExport::TExportToS3Settings, TS3BackupTestFixture>(*this, IsOlap);
     }
@@ -1824,6 +2080,10 @@ Y_UNIT_TEST_SUITE_F(BackupPathTest, TBackupPathTestFixture) {
 
     Y_UNIT_TEST_TWIN(ExportWithExcludeRegexps, IsOlap) {
         ExportWithExcludeRegexpsImpl<NExport::TExportToS3Settings, TS3BackupTestFixture>(*this, IsOlap);
+    }
+
+    Y_UNIT_TEST_TWIN(ExportFilteringWithoutEncryption, IsOlap) {
+        ExportFilteringWithoutEncryptionImpl<NExport::TExportToS3Settings, TS3BackupTestFixture>(*this, IsOlap);
     }
 
     Y_UNIT_TEST_TWIN(ImportWithExcludeRegexps, IsOlap) {

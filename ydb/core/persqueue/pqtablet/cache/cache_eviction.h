@@ -346,9 +346,9 @@ namespace NKikimr::NPQ {
                         {"partition", oldBlob.Partition},
                         {"offset", oldBlob.Offset},
                         {"count", oldBlob.Count},
-                        {"partition", newBlob.Partition},
-                        {"offset", newBlob.Offset},
-                        {"count", newBlob.Count},
+                        {"newPartition", newBlob.Partition},
+                        {"newOffset", newBlob.Offset},
+                        {"newCount", newBlob.Count},
                         {"selfId", ctx.SelfID});
                 }
             }

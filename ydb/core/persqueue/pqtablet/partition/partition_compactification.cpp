@@ -392,7 +392,7 @@ TPartitionCompaction::TCompactState::TCompactState(
             YDB_LOG_CRIT("Partition compaction state - got less then uncompacted",
                 {"logPrefix", LogPrefix()},
                 {"offset", offset},
-                {"offset", firstUncompactedOffset},
+                {"firstUncompactedOffset", firstUncompactedOffset},
                 {"topic", PartitionActor->TopicName()},
                 {"partitionActorPartitionOriginalPartitionId", PartitionActor->Partition.OriginalPartitionId});
             Failure = true;

@@ -48,14 +48,14 @@ class TExpression {
     // Check if the expression is a cast
     bool IsCast() const;
 
-    // Check is the expression can be folded
-    bool IsConstantExpr() const;
-
     // Check if this is a potential equi-join condition
     bool MaybeEquiJoinCondition() const;
 
     // Check if this is a potential equi-join condition over simple expressions
     bool MaybeExprEquiJoinCondition() const;
+
+    // Check if this is a potential comparison of a column with a constant
+    bool MaybeConstantCondition() const;
 
     // Return the full lambda ExprNode of this expression
     TExprNode::TPtr GetLambda() const;

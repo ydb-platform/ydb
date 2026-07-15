@@ -325,7 +325,7 @@ bool TPartition::CompactRequestedBlob(const TRequestedBlob& requestedBlob,
     AFL_ENSURE(batches != nullptr);
     for (const auto& batch : *batches) {
         for (const auto& blob : batch.Blobs) {
-            YDB_LOG_DEBUG_COMP(Service, "Try append part /",
+            YDB_LOG_DEBUG_COMP(Service, "Try append part ",
                 {"logPrefix", NPQ_LOG_PREFIX},
                 {"offset", offset},
                 {"partNo", blob.GetPartNo()},
@@ -533,7 +533,7 @@ void TPartition::BlobsForCompactionWereRead(const TVector<NPQ::TRequestedBlob>& 
         auto& [k, pos] = KeysForCompaction[i];
         bool needToCompactHead = (parameters.CurOffset < k.Key.GetOffset());
 
-        YDB_LOG_DEBUG_COMP(Service, "Key[ /",
+        YDB_LOG_DEBUG_COMP(Service, "Key[ ",
             {"logPrefix", NPQ_LOG_PREFIX},
             {"i", i},
             {"keysForCompactionSize", KeysForCompaction.size()},

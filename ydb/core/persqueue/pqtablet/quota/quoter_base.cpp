@@ -158,7 +158,7 @@ void TPartitionQuoterBase::HandleConsumed(TEvPQ::TEvConsumed::TPtr& ev, const TA
             {"logPrefix", NPQ_LOG_PREFIX},
             {"clientSideName", TopicConverter->GetClientsideName()},
             {"partition", Partition},
-            {"RequestCookie", ev->Get()->RequestCookie});
+            {"requestCookie", ev->Get()->RequestCookie});
     }
 
     if (!RequestsInflight && (ExclusiveLockState == EExclusiveLockState::EAcquiring)) {

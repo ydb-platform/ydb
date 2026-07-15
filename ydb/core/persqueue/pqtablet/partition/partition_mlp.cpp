@@ -44,16 +44,16 @@ void TPartition::HandleOnInit(TEvPQ::TEvMLPPurgeRequest::TPtr& ev) {
 void TPartition::HandleOnInit(TEvPQ::TEvGetMLPConsumerStateRequest::TPtr& ev) {
     YDB_LOG_DEBUG("HandleOnInit TEvPQ::TEvGetMLPConsumerStateRequest",
         {"logPrefix", NPQ_LOG_PREFIX},
-        {"Consumer", ev->Get()->Consumer},
-        {"PartitionId", ev->Get()->PartitionId});
+        {"consumer", ev->Get()->Consumer},
+        {"partitionId", ev->Get()->PartitionId});
     MLPPendingEvents.emplace_back(ev);
 }
 
 void TPartition::HandleOnInit(TEvPQ::TEvMLPUpdateExternalLockedMessageGroupsId::TPtr& ev)  {
     YDB_LOG_DEBUG("HandleOnInit TEvPQ::TEvMLPUpdateExternalLockedMessageGroupsId",
         {"logPrefix", NPQ_LOG_PREFIX},
-        {"Record.GetConsumer", ev->Get()->Record.GetConsumer()},
-        {"GetPartitionId", ev->Get()->GetPartitionId()});
+        {"consumer", ev->Get()->Record.GetConsumer()},
+        {"getPartitionId", ev->Get()->GetPartitionId()});
     MLPPendingEvents.emplace_back(ev);
 }
 
@@ -108,16 +108,16 @@ void TPartition::Handle(TEvPQ::TEvMLPPurgeRequest::TPtr& ev) {
 void TPartition::Handle(TEvPQ::TEvGetMLPConsumerStateRequest::TPtr& ev) {
     YDB_LOG_DEBUG("Handle TEvPQ::TEvGetMLPConsumerStateRequest",
         {"logPrefix", NPQ_LOG_PREFIX},
-        {"Consumer", ev->Get()->Consumer},
-        {"PartitionId", ev->Get()->PartitionId});
+        {"consumer", ev->Get()->Consumer},
+        {"partitionId", ev->Get()->PartitionId});
     ForwardToMLPConsumer(ev->Get()->Consumer, ev);
 }
 
 void TPartition::Handle(TEvPQ::TEvMLPUpdateExternalLockedMessageGroupsId::TPtr& ev)  {
     YDB_LOG_DEBUG("Handle TEvPQ::TEvMLPUpdateExternalLockedMessageGroupsId",
         {"logPrefix", NPQ_LOG_PREFIX},
-        {"Record.GetConsumer", ev->Get()->Record.GetConsumer()},
-        {"GetPartitionId", ev->Get()->GetPartitionId()});
+        {"consumer", ev->Get()->Record.GetConsumer()},
+        {"getPartitionId", ev->Get()->GetPartitionId()});
     ForwardToMLPConsumer(ev->Get()->GetConsumer(), ev);
 }
 

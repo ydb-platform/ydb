@@ -58,6 +58,12 @@ struct TRunConfig {
     EFormat Format = EFormat::Pretty;
     NQuery::TTxSettings TxMode = NQuery::TTxSettings::SerializableRW();
 
+    // mixed tx mode weights (used when MixedTxMode is true)
+    bool MixedTxMode = false;
+    double TxModeWeightSerializable = 0.0;
+    double TxModeWeightSnapshot = 0.0;
+    double TxModeWeightReadCommitted = 0.0;
+
     TString JsonResultPath;
 
     // advanced settings (normally, used by developer only)

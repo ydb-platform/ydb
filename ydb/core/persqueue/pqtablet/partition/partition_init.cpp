@@ -1066,7 +1066,7 @@ void TInitDataStep::Handle(TEvKeyValue::TEvResponse::TPtr &ev, const TActorConte
                     {"logPrefix", LogPrefix()},
                     {"offset", offset},
                     {"partitionBlobEncoderEndOffset", Partition()->BlobEncoder.EndOffset},
-                    {"offset", key.GetOffset()},
+                    {"keyOffset", key.GetOffset()},
                     {"count", key.GetCount()},
                     {"valueSize", read.GetValue().size()},
                     {"size", size});

@@ -175,9 +175,10 @@ TVector<IDirectBlockGroupPtr> TPartitionActor::CreateDirectBlockGroups(
     auto executors =
         nbsService->ExecutorPool.GetExecutors(DirectBlockGroupsCount);
 
-    for (size_t i = 0; i < DirectBlockGroupsCount; i++) {
+    for (ui32 dbgIndex = 0; dbgIndex < DirectBlockGroupsCount; dbgIndex++) {
         const auto& conn =
-            directBlockGroupsConnections.GetDirectBlockGroupConnections(i);
+            directBlockGroupsConnections.GetDirectBlockGroupConnections(
+                dbgIndex);
         TVector<NBsController::TDDiskId> ddiskIds;
         for (const auto& connection: conn.GetConnections()) {
             ddiskIds.push_back(
@@ -192,16 +193,18 @@ TVector<IDirectBlockGroupPtr> TPartitionActor::CreateDirectBlockGroups(
         auto directBlockGroup = std::make_shared<TDirectBlockGroup>(
             TActivationContext::ActorSystem(),
             nbsService->StorageConfig,
-            executors[i],
+            executors[dbgIndex],
             VolumeConfig.GetDiskId(),
             TabletID(),
             Executor()->Generation(),   // generation
-            i,                          // direct block group index
+            dbgIndex,
             std::move(ddiskIds),
             std::move(persistentBufferDDiskIds),
             std::make_unique<NTransport::TICStorageTransport>(
                 TActivationContext::ActorSystem(),
-                NTransport::CreateTransportActor()));
+                NTransport::CreateTransportActor(
+                    VolumeConfig.GetDiskId(),
+                    dbgIndex)));
 
         directBlockGroups.emplace_back(std::move(directBlockGroup));
     }
@@ -505,8 +508,9 @@ void TPartitionActor::HandleAddHostToDBG(
         LogTitle.GetWithTime().c_str(),
         dbgId);
 
-    // TEvAddHostToDBG is only sent by a running FastPathService, so it (and the
-    // allocated DBGs) is alive by the time we handle the request.
+    // TEvAddHostToDBG is only sent via a running FastPathService (by a DBG or
+    // by the mon page button), so it (and the allocated DBGs) is alive by the
+    // time we handle the request.
     Y_ABORT_UNLESS(FastPathService);
 
     if (!ValidateAddHostToDBGRequest(ctx, dbgId)) {
@@ -641,12 +645,12 @@ void TPartitionActor::HandleUpdateVChunkConfig(
 {
     auto& cfg = ev->Get()->VChunkConfig;
 
-    LOG_DEBUG_S(
+    LOG_INFO(
         ctx,
         NKikimrServices::NBS_PARTITION,
-        LogTitle.GetWithTime().c_str()
-            << " Handle UpdateVChunkConfig, vChunkIndex: "
-            << cfg.GetVChunkIndex());
+        "%s Handle UpdateVChunkConfig %s",
+        LogTitle.GetWithTime().c_str(),
+        cfg.DebugPrint().c_str());
 
     ExecuteTx(ctx, CreateTx<TUpdateVChunkConfig>(std::move(cfg)));
 }

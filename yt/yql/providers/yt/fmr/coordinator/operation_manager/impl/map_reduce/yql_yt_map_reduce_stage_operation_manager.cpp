@@ -63,6 +63,11 @@ public:
     std::vector<TString> GetExpectedOutputTableIds(const TOperationParams& params) const override {
         const auto& mapReduceParams = std::get<TMapReduceOperationParams>(params);
         std::vector<TString> ids;
+        // Direct (map-bypass) outputs come first, matching the execCtx->OutTables_ convention
+        // ([0..K) direct outputs, [K..N) reduce outputs) the gateway uses to split them.
+        for (const auto& directOutput : mapReduceParams.DirectMapOutput) {
+            ids.emplace_back(directOutput.FmrTableId.Id);
+        }
         for (const auto& output : mapReduceParams.Output) {
             ids.emplace_back(output.FmrTableId.Id);
         }
@@ -75,6 +80,12 @@ public:
             TString tableId = mapTaskParams->Output.TableId;
             if (!mapTaskParams->Output.PartId.empty() && context.PartIdStats.contains(mapTaskParams->Output.PartId)) {
                 groupsToClear.emplace_back(tableId, mapTaskParams->Output.PartId);
+            }
+            for (auto& directOutputRef : mapTaskParams->DirectOutputs) {
+                TString directTableId = directOutputRef.TableId;
+                if (!directOutputRef.PartId.empty() && context.PartIdStats.contains(directOutputRef.PartId)) {
+                    groupsToClear.emplace_back(directTableId, directOutputRef.PartId);
+                }
             }
         } else if (auto* reduceTaskParams = std::get_if<TReduceTaskParams>(&context.Task->TaskParams)) {
             for (auto& fmrTableOutputRef : reduceTaskParams->Output) {
@@ -97,11 +108,20 @@ private:
         );
         TString path = prefix + "map_reduce_stage/" + GenerateId();
 
-        // Always sort the intermediate table by [_yql_key_hash, ...reduceBy].
-        // For identity mapper (empty state) the worker injects the hash; for real mappers it is
-        // the user lambda's responsibility.
-        const auto intermediateSortColumns =
-            MakeMapReduceIntermediateSortColumns(params.ReduceOperationSpec.ReduceBy);
+        // Always sort the intermediate table by [_yql_key_hash, ...sortBy]. sortBy (not reduceBy)
+        // is required here: for joins it carries an extra tiebreaker column (e.g. "_yql_sort")
+        // after the reduce-by columns that the reducer's compiled lambda relies on to order rows
+        // correctly within a group (e.g. CommonJoinCore's build-then-probe side ordering) - using
+        // reduceBy alone would sort rows into the right groups but leave their relative order
+        // within a group unspecified. The gateway (yql_yt_fmr.cpp) already builds
+        // ReduceOperationSpec.SortBy as MakeMapReduceIntermediateSortColumns(sortBy), i.e. with the
+        // _yql_key_hash prefix already applied, so it's used as-is here rather than re-derived.
+        // An empty SortBy means the caller didn't request extra tiebreaker columns beyond reduceBy
+        // (mirrors the gateway's own "sortBy.empty() -> sortBy = reduceBy" fallback), so fall back
+        // to the reduceBy-derived columns in that case.
+        const auto intermediateSortColumns = params.ReduceOperationSpec.SortBy.Columns.empty()
+            ? MakeMapReduceIntermediateSortColumns(params.ReduceOperationSpec.ReduceBy)
+            : params.ReduceOperationSpec.SortBy;
 
         TFmrTableRef res;
         res.FmrTableId.Id = path;
@@ -191,6 +211,25 @@ private:
             mapTaskParams.Output.PartId = newPartId;
             result.PartIdsToUpdate[mapTaskParams.Output.TableId].emplace_back(newPartId);
 
+            // Direct (map-bypass) outputs are written by the same job run as the intermediate
+            // table, but each output is still a DISTINCT physical table and must get its own
+            // PartId: the coordinator's PartIdStats_ is keyed by bare PartId (not (TableId,
+            // PartId)), so reusing the intermediate table's PartId here would let a direct
+            // output's (unsorted) chunk stats silently clobber the intermediate table's (sorted)
+            // ones whenever they're reported in the same worker heartbeat.
+            std::vector<TFmrTableOutputRef> directOutputRefs;
+            std::transform(
+                operationParams.DirectMapOutput.begin(), operationParams.DirectMapOutput.end(),
+                std::back_inserter(directOutputRefs),
+                [](const TFmrTableRef& ref) { return TFmrTableOutputRef(ref); }
+            );
+            for (auto& directOutputRef : directOutputRefs) {
+                TString directPartId = GenerateId();
+                directOutputRef.PartId = directPartId;
+                result.PartIdsToUpdate[directOutputRef.TableId].emplace_back(directPartId);
+            }
+            mapTaskParams.DirectOutputs = std::move(directOutputRefs);
+
             YQL_CLOG(INFO, FastMapReduce) << "MapReduce.Map task: intermediate table="
                 << mapTaskParams.Output.TableId << " partId=" << newPartId;
 
@@ -216,6 +255,9 @@ private:
             reduceTaskParams.Input = taskInput;
             reduceTaskParams.SerializedReduceJobState = operationParams.SerializedReduceJobState;
             reduceTaskParams.ReduceOperationSpec = operationParams.ReduceOperationSpec;
+            // The map stage above always shuffles via a synthetic _yql_key_hash prefix (see
+            // GenerateIntermediateTable), unlike a plain Reduce operation's real YT-sorted input.
+            reduceTaskParams.SortByHasKeyHashPrefix = true;
 
             std::vector<TFmrTableOutputRef> outputRefs;
             std::transform(
@@ -244,46 +286,62 @@ private:
         return result;
     }
 
-    TGetNewPartIdsForTaskResult GetNewPartIdsForMapReduceMap(const TGetNewPartIdsForTaskContext& context) {
-        TGetNewPartIdsForTaskResult result;
-        TMapReduceMapTaskParams& mapTaskParams = std::get<TMapReduceMapTaskParams>(context.Task->TaskParams);
-
-        if (mapTaskParams.Output.PartId.empty()) {
-            return {.Error = TFmrError{
+    TMaybe<TFmrError> ValidateMapReduceMapOutputRef(
+        const TFmrTableOutputRef& outputRef,
+        const TGetNewPartIdsForTaskContext& context
+    ) {
+        if (outputRef.PartId.empty()) {
+            return TFmrError{
                 .Component = EFmrComponent::Coordinator,
                 .Reason = EFmrErrorReason::RestartQuery,
                 .ErrorMessage = "MapReduceMap task has empty output PartId",
                 .TaskId = context.TaskId,
                 .OperationId = context.OperationId
-            }};
+            };
         }
 
-        TString tableId = mapTaskParams.Output.TableId;
-        TString partId = mapTaskParams.Output.PartId;
+        TString tableId = outputRef.TableId;
+        TString partId = outputRef.PartId;
 
         const auto partIdsIter = context.PartIdsForTables.find(tableId);
         if (partIdsIter == context.PartIdsForTables.end()) {
-            return {.Error = TFmrError{
+            return TFmrError{
                 .Component = EFmrComponent::Coordinator,
                 .Reason = EFmrErrorReason::RestartQuery,
                 .ErrorMessage = "MapReduceMap task output PartId is missing in coordinator part list",
                 .TaskId = context.TaskId,
                 .OperationId = context.OperationId
-            }};
+            };
         }
 
         const auto& partIds = partIdsIter->second;
         if (std::find(partIds.begin(), partIds.end(), partId) == partIds.end()) {
-            return {.Error = TFmrError{
+            return TFmrError{
                 .Component = EFmrComponent::Coordinator,
                 .Reason = EFmrErrorReason::RestartQuery,
                 .ErrorMessage = "MapReduceMap task output PartId is missing in coordinator part list",
                 .TaskId = context.TaskId,
                 .OperationId = context.OperationId
-            }};
+            };
         }
 
-        return result;
+        return Nothing();
+    }
+
+    TGetNewPartIdsForTaskResult GetNewPartIdsForMapReduceMap(const TGetNewPartIdsForTaskContext& context) {
+        TMapReduceMapTaskParams& mapTaskParams = std::get<TMapReduceMapTaskParams>(context.Task->TaskParams);
+
+        if (auto error = ValidateMapReduceMapOutputRef(mapTaskParams.Output, context)) {
+            return {.Error = error};
+        }
+
+        for (auto& directOutputRef : mapTaskParams.DirectOutputs) {
+            if (auto error = ValidateMapReduceMapOutputRef(directOutputRef, context)) {
+                return {.Error = error};
+            }
+        }
+
+        return TGetNewPartIdsForTaskResult{};
     }
 
     TGetNewPartIdsForTaskResult GetNewPartIdsForReduce(const TGetNewPartIdsForTaskContext& context) {

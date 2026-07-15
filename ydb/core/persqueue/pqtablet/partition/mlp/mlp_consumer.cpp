@@ -1109,7 +1109,7 @@ void TConsumerActor::Handle(TEvPQ::TEvError::TPtr& ev) {
 void TConsumerActor::HandleOnWork(TEvents::TEvWakeup::TPtr& ev) {
     YDB_LOG_DEBUG("HandleOnWork TEvents::TEvWakeup",
         {"logPrefix", NPQ_LOG_PREFIX},
-        {"Tag", ev->Get()->Tag});
+        {"tag", ev->Get()->Tag});
     switch (ev->Get()->Tag) {
         case EWakeUpTag::Regular: {
             FetchMessagesIfNeeded();
@@ -1199,7 +1199,7 @@ void TConsumerActor::Handle(TEvPQ::TEvMLPDLQMoverResponse::TPtr& ev) {
 void TConsumerActor::Handle(TEvents::TEvWakeup::TPtr& ev) {
     YDB_LOG_DEBUG("Handle TEvents::TEvWakeup",
         {"logPrefix", NPQ_LOG_PREFIX},
-        {"Tag", ev->Get()->Tag});
+        {"tag", ev->Get()->Tag});
     if (ev->Get()->Tag == EWakeUpTag::UpdateChildPartitions) {
         UpdateLockedGroupsIdInChildPartitions(false);
         return;

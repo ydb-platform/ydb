@@ -11,6 +11,7 @@
 #include <ydb/core/base/counters.h>
 #include <ydb/core/base/path.h>
 #include <ydb/core/persqueue/pqtablet/common/event_helpers.h>
+#include <ydb/core/persqueue/public/pqdata_transaction_compat.h>
 #include <ydb/core/persqueue/pqtablet/common/logging.h>
 #include <ydb/core/persqueue/pqtablet/common/tracing_support.h>
 #include <ydb/core/persqueue/pqtablet/partition/autopartitioning_manager.h>
@@ -28,6 +29,8 @@
 #include <util/string/escape.h>
 #include <util/system/byteorder.h>
 #include <util/generic/overloaded.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::PQ_TX
 
 namespace NKafka {
 
@@ -945,6 +948,10 @@ void TPartition::DestroyActor(const TActorContext& ctx)
         UsersInfoStorage->Clear(ctx);
     }
 
+    for (auto& [_, mlpConsumerInfo] : MLPConsumers) {
+        Send(mlpConsumerInfo.ActorId, new TEvents::TEvPoisonPill());
+    }
+
     if (ReadQuotaTrackerActor) {
         Send(ReadQuotaTrackerActor, new TEvents::TEvPoisonPill());
     }
@@ -1553,9 +1560,10 @@ void TPartition::Handle(TEvPQ::TEvUpdateWriteTimestamp::TPtr& ev, const TActorCo
 
 void TPartition::Handle(TEvPersQueue::TEvProposeTransaction::TPtr& ev, const TActorContext& ctx)
 {
-    const NKikimrPQ::TEvProposeTransaction& event = ev->Get()->GetRecord();
+    NKikimrPQ::TEvProposeTransaction& event = *ev->Get()->MutableRecord();
     PQ_ENSURE(event.GetTxBodyCase() == NKikimrPQ::TEvProposeTransaction::kData);
     PQ_ENSURE(event.HasData());
+    EnsureCanonical(*event.MutableData());
     const NKikimrPQ::TDataTransaction& txBody = event.GetData();
 
     if (!txBody.GetImmediate()) {
@@ -1604,8 +1612,8 @@ void TPartition::Handle(TEvPQ::TEvProposePartitionConfig::TPtr& ev, const TActor
 {
     YDB_LOG_DEBUG_COMP(Service, "Handle TEvPQ::TEvProposePartitionConfig Step TxId",
         {"logPrefix", NPQ_LOG_PREFIX},
-        {"Step", ev->Get()->Step},
-        {"TxId", ev->Get()->TxId});
+        {"step", ev->Get()->Step},
+        {"txId", ev->Get()->TxId});
 
     ProcessPendingEvent(ev, ctx);
 }
@@ -1704,8 +1712,8 @@ void TPartition::Handle(TEvPQ::TEvTxCalcPredicate::TPtr& ev, const TActorContext
 {
     YDB_LOG_DEBUG_COMP(Service, "Handle TEvPQ::TEvTxCalcPredicate Step TxId",
         {"logPrefix", NPQ_LOG_PREFIX},
-        {"Step", ev->Get()->Step},
-        {"TxId", ev->Get()->TxId});
+        {"step", ev->Get()->Step},
+        {"txId", ev->Get()->TxId});
 
     ev->Get()->Span = NWilson::TSpan(TWilsonTopic::TopicTopLevel,
                                      std::move(ev->TraceId),
@@ -1758,8 +1766,8 @@ void TPartition::Handle(TEvPQ::TEvTxCommit::TPtr& ev, const TActorContext& ctx)
 {
     YDB_LOG_DEBUG_COMP(Service, "Handle TEvPQ::TEvTxCommit Step TxId",
         {"logPrefix", NPQ_LOG_PREFIX},
-        {"Step", ev->Get()->Step},
-        {"TxId", ev->Get()->TxId});
+        {"step", ev->Get()->Step},
+        {"txId", ev->Get()->TxId});
 
     ev->Get()->Span = NWilson::TSpan(TWilsonTopic::TopicTopLevel,
                                      std::move(ev->TraceId),
@@ -1812,8 +1820,8 @@ void TPartition::Handle(TEvPQ::TEvTxRollback::TPtr& ev, const TActorContext& ctx
 {
     YDB_LOG_DEBUG_COMP(Service, "Handle TEvPQ::TEvTxRollback Step TxId",
         {"logPrefix", NPQ_LOG_PREFIX},
-        {"Step", ev->Get()->Step},
-        {"TxId", ev->Get()->TxId});
+        {"step", ev->Get()->Step},
+        {"txId", ev->Get()->TxId});
 
     ProcessPendingEvent(ev, ctx);
 }
@@ -1906,16 +1914,27 @@ void TPartition::WriteInfoResponseHandler(
 
     tx.WriteInfoResponseTimestamp = Now();
 
-    std::visit(TOverloaded{
-        [&tx](TAutoPtr<TEvPQ::TEvGetWriteInfoResponse>& msg) {
-            tx.WriteInfo.Reset(msg.Release());
-        },
-        [&tx](TAutoPtr<TEvPQ::TEvGetWriteInfoError>& err) {
-            tx.Predicate = false;
-            tx.WriteInfoApplied = true;
-            tx.Message = err->Message;
+    if (auto* msg = std::get_if<TAutoPtr<TEvPQ::TEvGetWriteInfoResponse>>(&ev)) {
+        tx.WriteInfo.Reset(msg->Release());
+        using TDeferredPublicationApi = NKikimrPQ::TPartitionOperation::TWriteOp::TDeferredPublicationApi;
+        if (tx.DeferredFinalizeOp == TDeferredPublicationApi::Cancel) {
+            tx.WriteInfo->Discard = true;
         }
-    }, ev);
+    } else if (auto* err = std::get_if<TAutoPtr<TEvPQ::TEvGetWriteInfoError>>(&ev)) {
+        using TDeferredPublicationApi = NKikimrPQ::TPartitionOperation::TWriteOp::TDeferredPublicationApi;
+        if (tx.DeferredFinalizeOp == TDeferredPublicationApi::Publish
+            || tx.DeferredFinalizeOp == TDeferredPublicationApi::Cancel) {
+            YDB_LOG_WARN("Deferred publication finalize failed while getting write info for TxId",
+                {"logPrefix", LogPrefix()},
+                {"txId", tx.GetTxId()},
+                {"errorMessage", (*err)->Message});
+        }
+        tx.Predicate = false;
+        tx.WriteInfoApplied = true;
+        tx.Message = (*err)->Message;
+    } else {
+        PQ_ENSURE(false);
+    }
 
     WriteInfosToTx.erase(txIter);
     ProcessTxsAndUserActs(ctx);
@@ -2008,6 +2027,17 @@ TPartition::EProcessResult TPartition::ApplyWriteInfoResponse(TTransaction& tx,
     }
 
     if (ret == EProcessResult::Continue && tx.Predicate.GetOrElse(true)) {
+        using TDeferredPublicationApi = NKikimrPQ::TPartitionOperation::TWriteOp::TDeferredPublicationApi;
+        if (tx.DeferredFinalizeOp == TDeferredPublicationApi::Publish && tx.WriteInfo->BodyKeys.empty()) {
+            YDB_LOG_WARN("Deferred publication publish failed: staging is empty for TxId",
+                {"logPrefix", LogPrefix()},
+                {"txId", tx.GetTxId()});
+            tx.Predicate = false;
+            tx.Message = "deferred publication staging is empty";
+            tx.WriteInfoApplied = true;
+            return EProcessResult::Continue;
+        }
+
         auto& sourceIds =
             (isImmediate ? affectedSourceIdsAndConsumers.WriteSourcesIds : affectedSourceIdsAndConsumers.TxWriteSourcesIds);
         sourceIds = std::move(txSourceIds);
@@ -2047,8 +2077,8 @@ void TPartition::ProcessPendingEvent(std::unique_ptr<TEvPQ::TEvGetWriteInfoError
 void TPartition::Handle(TEvPQ::TEvGetWriteInfoError::TPtr& ev, const TActorContext& ctx) {
     YDB_LOG_DEBUG_COMP(Service, "Handle TEvPQ::TEvGetWriteInfoError Cookie Message",
         {"logPrefix", NPQ_LOG_PREFIX},
-        {"Cookie", ev->Get()->Cookie},
-        {"Message", ev->Get()->Message});
+        {"cookie", ev->Get()->Cookie},
+        {"message", ev->Get()->Message});
 
     ev->Get()->SupportivePartition = ev->Sender;
 
@@ -2224,7 +2254,7 @@ void TPartition::Handle(TEvPQ::TEvConsumerBatchProcessorMetrics::TPtr& ev, const
         return;
     }
 
-    userInfo->ConsumerBatchProcessorCPUUsage += event->CPUUsage;
+    userInfo->ConsumerBatchRecompressionCpuElapsedMicrosec += event->CPUUsage;
 }
 
 void TPartition::Handle(NBatching::TEvProcessBatchKeysResult::TPtr& ev, const TActorContext& ctx) {
@@ -2318,10 +2348,10 @@ bool TPartition::UpdateCounters(const TActorContext& ctx, bool force) {
         }
         bool haveChanges = false;
 
-        if (userInfo.ConsumerBatchProcessorCPUUsage) {
+        if (userInfo.ConsumerBatchRecompressionCpuElapsedMicrosec) {
             auto& counter = userInfo.LabeledCounters->GetCounters()[METRIC_CONSUMER_BATCH_PROCESSOR_CPU_USAGE];
-            counter.Set(counter.Get() + userInfo.ConsumerBatchProcessorCPUUsage);
-            userInfo.ConsumerBatchProcessorCPUUsage = 0;
+            counter.Set(counter.Get() + userInfo.ConsumerBatchRecompressionCpuElapsedMicrosec);
+            userInfo.ConsumerBatchRecompressionCpuElapsedMicrosec = 0;
             haveChanges = true;
         }
 
@@ -2617,7 +2647,7 @@ void TPartition::Handle(TEvKeyValue::TEvResponse::TPtr& ev, const TActorContext&
 
     //check correctness of response
     if (response.GetStatus() != NMsgBusProxy::MSTATUS_OK) {
-        YDB_LOG_ERROR_COMP(Service, "OnWrite topic partition commands are not processed at all,",
+        YDB_LOG_ERROR_COMP(Service, "OnWrite topic partition commands are not processed at all",
             {"logPrefix", NPQ_LOG_PREFIX},
             {"topicName", TopicName()},
             {"partition", Partition},
@@ -2703,7 +2733,12 @@ void TPartition::RequestWriteInfoIfRequired(bool skipSrcIdInfo)
         YDB_LOG_DEBUG_COMP(NKikimrServices::PQ_TX, "Send TEvGetWriteInfoRequest for TxId",
             {"logPrefix", LogPrefix()},
             {"txTxId", tx->GetTxId()});
-        Send(supportId, new TEvPQ::TEvGetWriteInfoRequest(skipSrcIdInfo),
+        auto* request = new TEvPQ::TEvGetWriteInfoRequest(skipSrcIdInfo);
+        using TDeferredPublicationApi = NKikimrPQ::TPartitionOperation::TWriteOp::TDeferredPublicationApi;
+        if (tx->DeferredFinalizeOp == TDeferredPublicationApi::Cancel) {
+            request->SetDiscard(true);
+        }
+        Send(supportId, request,
              0, 0,
              tx->CalcPredicateSpan.GetTraceId());
         WriteInfosToTx.insert(std::make_pair(supportId, tx));
@@ -3108,6 +3143,16 @@ void TPartition::RunPersist() {
 
         // Apply counters
         for (const auto& writeInfo : WriteInfosApplied) {
+            if (writeInfo->Discard) {
+                if (writeInfo->MessagesWrittenTotal > 0) {
+                    MsgsDiscarded.Inc(writeInfo->MessagesWrittenTotal);
+                }
+                if (writeInfo->BytesWrittenTotal > 0) {
+                    BytesDiscarded.Inc(writeInfo->BytesWrittenTotal);
+                }
+                continue;
+            }
+
             // writeTimeLag
             if (InputTimeLag && writeInfo->InputLags) {
                 writeInfo->InputLags->UpdateTimestamp(ctx.Now().MilliSeconds());
@@ -3685,91 +3730,98 @@ void TPartition::CommitWriteOperations(TTransaction& t)
     if (!t.WriteInfo) {
         return;
     }
-    for (const auto& s : t.WriteInfo->SrcIdInfo) {
-        auto pair = TSeqNoProducerEpoch{s.second.SeqNo, s.second.ProducerEpoch};
-        auto [iter, ins] = TxInflightMaxSeqNoPerSourceId.emplace(s.first, pair);
-        if (!ins) {
-            bool ok = !SeqnoViolation(iter->second.KafkaProducerEpoch, iter->second.SeqNo, s.second.ProducerEpoch, s.second.SeqNo);
-            PQ_ENSURE(ok);
-            iter->second = pair;
+
+    using TDeferredPublicationApi = NKikimrPQ::TPartitionOperation::TWriteOp::TDeferredPublicationApi;
+    const bool discardStaging = t.WriteInfo->Discard
+        || t.DeferredFinalizeOp == TDeferredPublicationApi::Cancel;
+
+    if (!discardStaging) {
+        for (const auto& s : t.WriteInfo->SrcIdInfo) {
+            auto pair = TSeqNoProducerEpoch{s.second.SeqNo, s.second.ProducerEpoch};
+            auto [iter, ins] = TxInflightMaxSeqNoPerSourceId.emplace(s.first, pair);
+            if (!ins) {
+                bool ok = !SeqnoViolation(iter->second.KafkaProducerEpoch, iter->second.SeqNo, s.second.ProducerEpoch, s.second.SeqNo);
+                PQ_ENSURE(ok);
+                iter->second = pair;
+            }
         }
     }
     const auto& ctx = ActorContext();
 
-    if (!HaveWriteMsg) {
-        BeginHandleRequests(PersistRequest.Get(), ctx);
-        if (!DiskIsFull) {
-            BeginProcessWrites(ctx);
-            BeginAppendHeadWithNewWrites(ctx);
-        }
-        HaveWriteMsg = true;
-    }
-
-    YDB_LOG_DEBUG_COMP(Service, "Dump NPQLOGPREFIX, head, newHead",
-        {"logPrefix", NPQ_LOG_PREFIX},
-        {"head", BlobEncoder.Head},
-        {"newHead", BlobEncoder.NewHead});
-
-    auto oldHeadOffset = BlobEncoder.NewHead.Offset;
-
-    if (!t.WriteInfo->BodyKeys.empty()) {
-        bool needCompactHead =
-            (Parameters->FirstCommitWriteOperations ? BlobEncoder.Head : BlobEncoder.NewHead).PackedSize != 0;
-
-        BlobEncoder.NewPartitionedBlob(Partition,
-                                       BlobEncoder.NewHead.Offset,
-                                       "", // SourceId
-                                       0,  // SeqNo
-                                       0,  // TotalParts
-                                       0,  // TotalSize
-                                       Parameters->HeadCleared,  // headCleared
-                                       needCompactHead,          // needCompactHead
-                                       MaxBlobSize);
-
-        for (auto& k : t.WriteInfo->BodyKeys) {
-            YDB_LOG_DEBUG_COMP(Service, "Add key",
-                {"logPrefix", NPQ_LOG_PREFIX},
-                {"key", k.Key});
-            auto write = BlobEncoder.PartitionedBlob.Add(k.Key, k.Size, ctx.Now(), true);
-            if (write && !write->Value.empty()) {
-                AddCmdWriteWithDeferredTimestamp(write, PersistRequest.Get(), ctx);
-                BlobEncoder.CompactedKeys.emplace_back(write->Key, write->Value.size());
+    if (!discardStaging) {
+        if (!HaveWriteMsg) {
+            BeginHandleRequests(PersistRequest.Get(), ctx);
+            if (!DiskIsFull) {
+                BeginProcessWrites(ctx);
+                BeginAppendHeadWithNewWrites(ctx);
             }
-            Parameters->CurOffset += k.Key.GetCount();
-            // The key does not need to be deleted, as it will be renamed
-            k.BlobKeyToken->NeedDelete = false;
+            HaveWriteMsg = true;
         }
 
-        YDB_LOG_DEBUG_COMP(Service, "Dump NPQLOGPREFIX, #_PartitionedBlob.GetFormedBlobs().size",
+        YDB_LOG_DEBUG_COMP(Service, "Dump Head, NewHead",
             {"logPrefix", NPQ_LOG_PREFIX},
-            {"partitionedBlobFormedBlobsSize", BlobEncoder.PartitionedBlob.GetFormedBlobs().size()});
-        if (const auto& formedBlobs = BlobEncoder.PartitionedBlob.GetFormedBlobs(); !formedBlobs.empty()) {
-            ui32 curWrites = RenameTmpCmdWrites(PersistRequest.Get());
-            RenameFormedBlobs(formedBlobs,
-                              *Parameters,
-                              curWrites,
-                              PersistRequest.Get(),
-                              BlobEncoder,
-                              ctx);
+            {"head", BlobEncoder.Head},
+            {"newHead", BlobEncoder.NewHead});
+
+        auto oldHeadOffset = BlobEncoder.NewHead.Offset;
+
+        if (!t.WriteInfo->BodyKeys.empty()) {
+            bool needCompactHead =
+                (Parameters->FirstCommitWriteOperations ? BlobEncoder.Head : BlobEncoder.NewHead).PackedSize != 0;
+
+            BlobEncoder.NewPartitionedBlob(Partition,
+                                           BlobEncoder.NewHead.Offset,
+                                           "", // SourceId
+                                           0,  // SeqNo
+                                           0,  // TotalParts
+                                           0,  // TotalSize
+                                           Parameters->HeadCleared,  // headCleared
+                                           needCompactHead,          // needCompactHead
+                                           MaxBlobSize);
+
+            for (auto& k : t.WriteInfo->BodyKeys) {
+                LOG_D("add key " << k.Key.ToString());
+                auto write = BlobEncoder.PartitionedBlob.Add(k.Key, k.Size, ctx.Now(), true);
+                if (write && !write->Value.empty()) {
+                    AddCmdWriteWithDeferredTimestamp(write, PersistRequest.Get(), ctx);
+                    BlobEncoder.CompactedKeys.emplace_back(write->Key, write->Value.size());
+                }
+                Parameters->CurOffset += k.Key.GetCount();
+                // The key does not need to be deleted, as it will be renamed
+                k.BlobKeyToken->NeedDelete = false;
+            }
+
+            LOG_D("PartitionedBlob.GetFormedBlobs().size=" << BlobEncoder.PartitionedBlob.GetFormedBlobs().size());
+            if (const auto& formedBlobs = BlobEncoder.PartitionedBlob.GetFormedBlobs(); !formedBlobs.empty()) {
+                ui32 curWrites = RenameTmpCmdWrites(PersistRequest.Get());
+                RenameFormedBlobs(formedBlobs,
+                                  *Parameters,
+                                  curWrites,
+                                  PersistRequest.Get(),
+                                  BlobEncoder,
+                                  ctx);
+            }
+
+            BlobEncoder.ClearPartitionedBlob(Partition, MaxBlobSize);
+
+            BlobEncoder.NewHead.Clear();
+            BlobEncoder.NewHead.Offset = Parameters->CurOffset;
         }
 
-        BlobEncoder.ClearPartitionedBlob(Partition, MaxBlobSize);
+        for (const auto& [srcId, info] : t.WriteInfo->SrcIdInfo) {
+            auto& sourceIdBatch = Parameters->SourceIdBatch;
+            auto sourceId = sourceIdBatch.GetSource(srcId);
+            sourceId.Update(info.SeqNo, info.Offset + oldHeadOffset, CurrentTimestamp, info.ProducerEpoch);
+            auto& persistInfo = TxSourceIdForPostPersist[srcId];
+            persistInfo.SeqNo = info.SeqNo;
+            persistInfo.Offset = info.Offset + oldHeadOffset;
+            persistInfo.KafkaProducerEpoch = info.ProducerEpoch;
+        }
 
-        BlobEncoder.NewHead.Clear();
-        BlobEncoder.NewHead.Offset = Parameters->CurOffset;
+        Parameters->FirstCommitWriteOperations = false;
+    } else if (t.WriteInfo->BytesWrittenTotal > 0 || t.WriteInfo->MessagesWrittenTotal > 0) {
+        t.WriteInfo->Discard = true;
     }
-
-    for (const auto& [srcId, info] : t.WriteInfo->SrcIdInfo) {
-        auto& sourceIdBatch = Parameters->SourceIdBatch;
-        auto sourceId = sourceIdBatch.GetSource(srcId);
-        sourceId.Update(info.SeqNo, info.Offset + oldHeadOffset, CurrentTimestamp, info.ProducerEpoch);
-        auto& persistInfo = TxSourceIdForPostPersist[srcId];
-        persistInfo.SeqNo = info.SeqNo;
-        persistInfo.Offset = info.Offset + oldHeadOffset;
-        persistInfo.KafkaProducerEpoch = info.ProducerEpoch;
-    }
-
-    Parameters->FirstCommitWriteOperations = false;
 
     WriteInfosApplied.emplace_back(std::move(t.WriteInfo));
 }
@@ -4105,14 +4157,14 @@ TPartition::EProcessResult TPartition::PreProcessImmediateTx(TTransaction& t,
     PQ_ENSURE(tx.HasData());
     TVector<TString> consumers;
     for (const auto& operation : tx.GetData().GetOperations()) {
-        if (!operation.HasCommitOffsetsBegin() || !operation.HasCommitOffsetsEnd() || !operation.HasConsumer()) {
+        if (!HasTopicReadCommit(operation) || GetReadConsumer(operation).empty()) {
             continue; //Write operation - handled separately via WriteInfo
         }
 
-        PQ_ENSURE(operation.GetCommitOffsetsBegin() <= (ui64)Max<i64>())("Unexpected begin offset", operation.GetCommitOffsetsBegin());
-        PQ_ENSURE(operation.GetCommitOffsetsEnd() <= (ui64)Max<i64>())("Unexpected end offset", operation.GetCommitOffsetsEnd());
+        PQ_ENSURE(GetReadCommitOffsetsBegin(operation) <= (ui64)Max<i64>())("Unexpected begin offset", GetReadCommitOffsetsBegin(operation));
+        PQ_ENSURE(GetReadCommitOffsetsEnd(operation) <= (ui64)Max<i64>())("Unexpected end offset", GetReadCommitOffsetsEnd(operation));
 
-        const TString& user = operation.GetConsumer();
+        const TString& user = GetReadConsumer(operation);
         if (TxAffectedConsumers.contains(user)) {
             return EProcessResult::Blocked;
         }
@@ -4123,7 +4175,7 @@ TPartition::EProcessResult TPartition::PreProcessImmediateTx(TTransaction& t,
                                  "the consumer has been deleted");
             return EProcessResult::ContinueDrop;
         }
-        if (operation.GetCommitOffsetsBegin() > operation.GetCommitOffsetsEnd()) {
+        if (GetReadCommitOffsetsBegin(operation) > GetReadCommitOffsetsEnd(operation)) {
             ScheduleReplyPropose(tx,
                                  NKikimrPQ::TEvProposeTransactionResult::BAD_REQUEST,
                                  NKikimrPQ::TError::BAD_REQUEST,
@@ -4162,18 +4214,18 @@ void TPartition::ExecImmediateTx(TTransaction& t)
         return;
     }
     for (const auto& operation : record.GetData().GetOperations()) {
-        if (operation.GetOnlyCheckCommitedToFinish()) {
+        if (GetReadOnlyCheckCommitedToFinish(operation)) {
             continue;
         }
 
-        if (!operation.HasCommitOffsetsBegin() || !operation.HasCommitOffsetsEnd() || !operation.HasConsumer()) {
+        if (!HasTopicReadCommit(operation) || GetReadConsumer(operation).empty()) {
             continue; //Write operation - handled separately via WriteInfo
         }
 
-        PQ_ENSURE(operation.GetCommitOffsetsBegin() <= (ui64)Max<i64>())("Unexpected begin offset", operation.GetCommitOffsetsBegin());
-        PQ_ENSURE(operation.GetCommitOffsetsEnd() <= (ui64)Max<i64>())("Unexpected end offset", operation.GetCommitOffsetsEnd());
+        PQ_ENSURE(GetReadCommitOffsetsBegin(operation) <= (ui64)Max<i64>())("Unexpected begin offset", GetReadCommitOffsetsBegin(operation));
+        PQ_ENSURE(GetReadCommitOffsetsEnd(operation) <= (ui64)Max<i64>())("Unexpected end offset", GetReadCommitOffsetsEnd(operation));
 
-        const TString& user = operation.GetConsumer();
+        const TString& user = GetReadConsumer(operation);
         if (!PendingUsersInfo.contains(user) && AffectedUsers.contains(user)) {
             ScheduleReplyPropose(record,
                                  NKikimrPQ::TEvProposeTransactionResult::ABORTED,
@@ -4183,7 +4235,7 @@ void TPartition::ExecImmediateTx(TTransaction& t)
         }
         TUserInfoBase& pendingUserInfo = GetOrCreatePendingUser(user);
 
-        if (!operation.GetForceCommit() && operation.GetCommitOffsetsBegin() > operation.GetCommitOffsetsEnd()) {
+        if (!GetReadForceCommit(operation) && GetReadCommitOffsetsBegin(operation) > GetReadCommitOffsetsEnd(operation)) {
             ScheduleReplyPropose(record,
                                  NKikimrPQ::TEvProposeTransactionResult::BAD_REQUEST,
                                  NKikimrPQ::TError::BAD_REQUEST,
@@ -4191,7 +4243,7 @@ void TPartition::ExecImmediateTx(TTransaction& t)
             return;
         }
 
-        if (!operation.GetForceCommit() && pendingUserInfo.Offset != (i64)operation.GetCommitOffsetsBegin()) {
+        if (!GetReadForceCommit(operation) && pendingUserInfo.Offset != (i64)GetReadCommitOffsetsBegin(operation)) {
             ScheduleReplyPropose(record,
                                  NKikimrPQ::TEvProposeTransactionResult::ABORTED,
                                  NKikimrPQ::TError::BAD_REQUEST,
@@ -4199,7 +4251,7 @@ void TPartition::ExecImmediateTx(TTransaction& t)
             return;
         }
 
-        if (!operation.GetForceCommit() && operation.GetCommitOffsetsEnd() > GetEndOffset()) {
+        if (!GetReadForceCommit(operation) && GetReadCommitOffsetsEnd(operation) > GetEndOffset()) {
             ScheduleReplyPropose(record,
                                  NKikimrPQ::TEvProposeTransactionResult::BAD_REQUEST,
                                  NKikimrPQ::TError::BAD_REQUEST,
@@ -4207,8 +4259,8 @@ void TPartition::ExecImmediateTx(TTransaction& t)
             return;
         }
 
-        if (!operation.GetReadSessionId().empty() && operation.GetReadSessionId() != pendingUserInfo.Session) {
-            if (IsActive() || operation.GetCommitOffsetsEnd() < GetEndOffset() || pendingUserInfo.Offset != i64(GetEndOffset())) {
+        if (!GetReadSessionId(operation).empty() && GetReadSessionId(operation) != pendingUserInfo.Session) {
+            if (IsActive() || GetReadCommitOffsetsEnd(operation) < GetEndOffset() || pendingUserInfo.Offset != i64(GetEndOffset())) {
                 ScheduleReplyPropose(record,
                             NKikimrPQ::TEvProposeTransactionResult::BAD_REQUEST,
                             NKikimrPQ::TError::BAD_REQUEST,
@@ -4217,11 +4269,11 @@ void TPartition::ExecImmediateTx(TTransaction& t)
             }
         }
 
-        if ((i64)operation.GetCommitOffsetsEnd() < pendingUserInfo.Offset && !operation.GetReadSessionId().empty()) {
+        if ((i64)GetReadCommitOffsetsEnd(operation) < pendingUserInfo.Offset && !GetReadSessionId(operation).empty()) {
             continue; // this is stale request, answer ok for it
         }
 
-        pendingUserInfo.Offset = operation.GetCommitOffsetsEnd();
+        pendingUserInfo.Offset = GetReadCommitOffsetsEnd(operation);
     }
     CommitWriteOperations(t);
 
@@ -5029,7 +5081,7 @@ void TPartition::Handle(TEvPQ::TEvCheckPartitionStatusRequest::TPtr& ev, const T
             {"logPrefix", NPQ_LOG_PREFIX},
             {"partition", record.GetPartition()},
             {"topicName", TopicName()},
-            {"partition", Partition});
+            {"internalPartition", Partition});
         return;
     }
 

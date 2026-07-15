@@ -742,7 +742,7 @@ void TPartition::Handle(TEvPQ::TEvReadTimeout::TPtr& ev, const TActorContext& ct
     ctx.Send(ReplyTo(res->Destination, answer.ReplyTo), answer.Event.Release());
     YDB_LOG_DEBUG_COMP(Service, "Waiting read cookie partition read timeout for offset",
         {"logPrefix", NPQ_LOG_PREFIX},
-        {"Cookie", ev->Get()->Cookie},
+        {"cookie", ev->Get()->Cookie},
         {"partition", Partition},
         {"user", res->User},
         {"offset", res->Offset});
@@ -929,7 +929,7 @@ void TPartition::DoRead(TEvPQ::TEvRead::TPtr&& readEvent, TDuration waitQuotaTim
         {"size", read->Size},
         {"endOffset", GetEndOffset()},
         {"maxTimeLagMs", read->MaxTimeLagMs},
-        {"offset", offset});
+        {"effectiveOffset", offset});
 
     if (offset == GetEndOffset() && !(read->Timeout == 0 && read->IsInternal())) { // Why? If read timeout = 0 we wait?
         const ui32 maxTimeout = IsActive() ? 30000 : 1000;
@@ -945,7 +945,7 @@ void TPartition::DoRead(TEvPQ::TEvRead::TPtr&& readEvent, TDuration waitQuotaTim
                     {"size", read->Size},
                     {"endOffset", GetEndOffset()},
                     {"maxTimeLagMs", read->MaxTimeLagMs},
-                    {"offset", offset});
+                    {"effectiveOffset", offset});
             }
             read->Timeout = maxTimeout;
         }
@@ -1091,7 +1091,7 @@ void TPartition::Handle(TEvPQ::TEvProxyResponse::TPtr& ev, const TActorContext& 
         YDB_LOG_INFO_CTX_COMP(ctx, NKikimrServices::PERSQUEUE, "Reading Timestamp failed for offset",
             {"readingForOffset", ReadingForOffset},
             {"userInfoOffset", userInfo->Offset},
-            {"Response->DebugString", ev->Get()->Response->DebugString()});
+            {"responseDebugString", ev->Get()->Response->DebugString()});
         if (ev->Get()->Response->GetStatus() == NMsgBusProxy::MSTATUS_OK &&
             ev->Get()->Response->GetErrorCode() == NPersQueue::NErrorCode::OK &&
             ev->Get()->Response->GetPartitionResponse().HasCmdReadResult() &&

@@ -115,6 +115,10 @@ public:
     // Read-only info for the monitoring UI.
     [[nodiscard]] TFastPathServiceInfo GetMonInfo() const;
 
+    // Gathers per-DBG monitoring snapshots: one if dbgIndex is set, else all.
+    [[nodiscard]] NThreading::TFuture<TVector<TDbgSnapshot>> GatherMonSnapshots(
+        std::optional<size_t> dbgIndex) const;
+
 private:
     void ScheduleDirtyMapDebugPrint();
     void QueryDirtyMapDebugDump();

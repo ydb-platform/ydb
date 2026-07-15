@@ -108,7 +108,6 @@ PEERDIR(
     ydb/services/cms
     ydb/services/datastreams
     ydb/services/discovery
-    ydb/services/ext_index/service
     ydb/services/ymq
     ydb/core/tx/conveyor/service
     ydb/core/tx/priorities/service

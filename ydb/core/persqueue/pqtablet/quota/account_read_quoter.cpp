@@ -93,9 +93,9 @@ void TBasicAccountQuoter::HandleQuotaRequest(NAccountQuoterEvents::TEvRequest::T
 
 void TBasicAccountQuoter::HandleQuotaConsumed(NAccountQuoterEvents::TEvConsumed::TPtr& ev, const TActorContext& ctx) {
     ConsumedBytesInCredit += ev->Get()->BytesConsumed;
-    YDB_LOG_DEBUG_COMP(Service, "Consumed quota bytes by consumed in credit /",
+    YDB_LOG_DEBUG_COMP(Service, "Consumed quota bytes by consumed in credit ",
         {"logPrefix", NPQ_LOG_PREFIX},
-        {"BytesConsumed", ev->Get()->BytesConsumed},
+        {"bytesConsumed", ev->Get()->BytesConsumed},
         {"cookie", ev->Get()->RequestCookie},
         {"consumedBytesInCredit", ConsumedBytesInCredit},
         {"creditBytes", CreditBytes});

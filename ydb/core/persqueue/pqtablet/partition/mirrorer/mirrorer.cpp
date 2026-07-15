@@ -347,7 +347,7 @@ void TMirrorer::Handle(TEvPQ::TEvUpdateCounters::TPtr& /*ev*/, const TActorConte
         if (!ReadFeatures.empty()) {
             const auto& oldest = *ReadFeatures.begin();
             const auto& info = oldest.second;
-            YDB_LOG_NOTICE("[STATE] The oldest read future future / /",
+            YDB_LOG_NOTICE("[STATE] The oldest read future future / ",
                 {"logPrefix", NPQ_LOG_PREFIX},
                 {"id", oldest.first},
                 {"ts", info.first},

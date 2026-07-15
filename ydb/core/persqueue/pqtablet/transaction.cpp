@@ -4,6 +4,7 @@
 #include <ydb/core/persqueue/pqtablet/common/event_helpers.h>
 
 #include <ydb/library/wilson_ids/wilson.h>
+#include <ydb/library/yverify_stream/yverify_stream.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::PQ_TX
 
@@ -106,12 +107,15 @@ void TDistributedTransaction::InitPartitions(const google::protobuf::RepeatedPtr
     Partitions.clear();
 
     for (auto& o : operations) {
-        if (!o.HasCommitOffsetsBegin()) {
+        NKikimrPQ::TPartitionOperation operation = o;
+        EnsureCanonical(operation);
+
+        if (IsWriteTxOperation(operation)) {
             HasWriteOperations = true;
         }
 
-        Operations.push_back(o);
-        Partitions.insert(o.GetPartitionId());
+        Operations.push_back(std::move(operation));
+        Partitions.insert(Operations.back().GetPartitionId());
     }
 }
 
@@ -187,6 +191,9 @@ void TDistributedTransaction::OnProposeTransaction(const NKikimrPQ::TDataTransac
     }
 
     InitPartitions(txBody.GetOperations());
+
+    Y_VALIDATE(!(txBody.HasWriteId() && !HasWriteOperations),
+        "TDataTransaction has WriteId but no write operation");
 
     if (txBody.HasWriteId() && HasWriteOperations) {
         WriteId = GetWriteId(txBody);
@@ -303,7 +310,7 @@ void TDistributedTransaction::OnPartitionResult(const E& event, TMaybe<EDecision
 
     ++PartitionRepliesCount;
 
-    YDB_LOG_DEBUG("Partition responses /",
+    YDB_LOG_DEBUG("Partition responses ",
         {"logPrefix", LogPrefix()},
         {"partitionRepliesCount", PartitionRepliesCount},
         {"partitionRepliesExpected", PartitionRepliesExpected});
@@ -332,7 +339,7 @@ void TDistributedTransaction::OnReadSet(const NKikimrTx::TEvReadSet& event,
             p.SetPredicate(data.GetDecision() == NKikimrTx::TReadSetData::DECISION_COMMIT);
             ++ReadSetCount;
 
-            YDB_LOG_DEBUG("Predicates /",
+            YDB_LOG_DEBUG("Predicates ",
                 {"logPrefix", LogPrefix()},
                 {"readSetCount", ReadSetCount},
                 {"predicatesReceivedSize", PredicatesReceived.size()});
@@ -370,7 +377,7 @@ void TDistributedTransaction::OnReadSetAck(ui64 tabletId)
         PredicateRecipients[tabletId] = true;
         ++PredicateAcksCount;
 
-        YDB_LOG_DEBUG("Predicate acks /",
+        YDB_LOG_DEBUG("Predicate acks ",
             {"logPrefix", LogPrefix()},
             {"predicateAcksCount", PredicateAcksCount},
             {"predicateRecipientsSize", PredicateRecipients.size()});
@@ -421,7 +428,7 @@ bool TDistributedTransaction::HaveParticipantsDecision() const
 
 bool TDistributedTransaction::HaveAllRecipientsReceive() const
 {
-    YDB_LOG_DEBUG("/",
+    YDB_LOG_DEBUG("",
         {"logPrefix", LogPrefix()},
         {"predicateAcks", PredicateAcksCount},
         {"predicateRecipientsSize", PredicateRecipients.size()});
@@ -472,7 +479,12 @@ NKikimrPQ::TTransaction TDistributedTransaction::Serialize(EState state) {
         TX_ENSURE(false);
     }
 
-    tx.MutableOperations()->Add(Operations.begin(), Operations.end());
+    tx.MutableOperations()->Reserve(Operations.size());
+    for (const auto& operation : Operations) {
+        NKikimrPQ::TPartitionOperation persisted = operation;
+        DowngradeToLegacy(persisted);
+        *tx.MutableOperations()->Add() = std::move(persisted);
+    }
     if (SelfDecision != NKikimrTx::TReadSetData::DECISION_UNKNOWN) {
         tx.SetPredicate(SelfDecision == NKikimrTx::TReadSetData::DECISION_COMMIT);
     }

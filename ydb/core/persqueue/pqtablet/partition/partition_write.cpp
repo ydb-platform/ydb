@@ -1347,8 +1347,8 @@ bool TPartition::ExecRequest(TWriteMsg& p, ProcessParameters& parameters, TEvKey
                 {"sourceId", EscapeC(p.Msg.SourceId)},
                 {"seqNo", p.Msg.SeqNo},
                 {"initialSeqNo", p.InitialSeqNo},
-                {"seqNo", sourceId.CommittedSeqNo()},
-                {"seqNo", sourceId.UpdatedSeqNo()},
+                {"committedSeqNo", sourceId.CommittedSeqNo()},
+                {"updatedSeqNo", sourceId.UpdatedSeqNo()},
                 {"endOffset", BlobEncoder.EndOffset},
                 {"curOffset", curOffset},
                 {"offset", poffset});

@@ -259,7 +259,7 @@ private:
                             {"seqNoPartNo", back.GetSeqNo()},
                             {"partNo", back.GetPartNo()},
                             {"seqNo", currentReadResult.GetSeqNo()},
-                            {"partNo", currentReadResult.GetPartNo()},
+                            {"currentPartNo", currentReadResult.GetPartNo()},
                             {"requestNow", Request});
                         break;
                     }
@@ -289,7 +289,7 @@ private:
                         {"seqNoPartNo", rr->GetSeqNo()},
                         {"partNo", rr->GetPartNo()},
                         {"seqNo", currentReadResult.GetSeqNo()},
-                        {"partNo", currentReadResult.GetPartNo()},
+                        {"currentPartNo", currentReadResult.GetPartNo()},
                         {"requestNow", Request});
                     makeErrorResponse("Internal error - got message with wrong SeqNo/PartNo when expecting");
                     break;

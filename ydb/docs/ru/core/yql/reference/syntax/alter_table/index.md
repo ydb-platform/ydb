@@ -18,4 +18,4 @@ ALTER TABLE table_name action1, action2, ..., actionN;
 * Изменение [дополнительных параметров таблиц](set.md).
 {% endif %}
 * [Запуск принудительного компакшена](compact.md).
-* [Работа с колоночными ограничениями](not_null.md).
+* [Выставление и сброс ограничения NOT NULL](not_null.md).

@@ -105,7 +105,7 @@ A `Uuid` primary key is a common alternative to monotonically increasing numeric
 
 [`RandomUuid()`](../../yql/reference/builtins/basic.md#random) (UUID version 4) gives uniformly random keys. That avoids hot spots on the last partition, but each new key is scattered across the full key space. Related rows and index entries rarely sit in adjacent ranges, which increases cross-partition work for time-bounded scans and secondary index maintenance.
 
-The experimental [`Uuid` module](../../yql/reference/udf/list/uuid.md) provides generators tuned for {{ ydb-short-name }}'s byte-level key order:
+The [`Uuid` module](../../yql/reference/udf/list/uuid.md) provides generators tuned for {{ ydb-short-name }}'s byte-level key order:
 
 * **`Uuid::newSharded`** — default choice for insert-heavy tables. Each key draws a random 10-bit prefix (about 1024 partition buckets) and embeds the current time at second granularity. Writes spread across partitions; rows created at similar times stay relatively close in key space.
 * **`Uuid::newChrono`** — stronger chronological ordering in the stored bytes. Prefer when queries often scan a time range by primary key or when index keys should follow creation time closely.

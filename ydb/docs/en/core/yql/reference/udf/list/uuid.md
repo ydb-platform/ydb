@@ -1,11 +1,5 @@
 # Uuid
 
-{% note warning "Experimental feature" %}
-
-The `Uuid` module is an experimental feature. Its API and behavior may change in future releases.
-
-{% endnote %}
-
 The `Uuid` module provides generators for primary keys in row-oriented tables. Unlike [`RandomUuid()`](../../builtins/basic.md#random), which returns a uniformly random [UUID version 4](https://datatracker.ietf.org/doc/html/rfc4122#section-4.4), these functions assemble 128-bit values with a deliberate bit layout so that key order and partition spread suit {{ ydb-short-name }}'s range partitioning.
 
 All functions return a value of type `Uuid` in {{ ydb-short-name }}'s internal 16-byte representation (Microsoft GUID / mixed-endian layout). This is the same byte order used when comparing primary keys. Generators that target key-friendly layout write bytes directly in this order; they do not round-trip through RFC network-byte-order representation.

@@ -340,6 +340,12 @@ private:
         Ydb::Query::SchemaInclusionMode schemaInclusionMode = req->schema_inclusion_mode();
         Ydb::ResultSet::Format resultSetFormat = req->result_set_format();
 
+        if (req->has_rows_limit() && resultSetFormat == Ydb::ResultSet::FORMAT_ARROW) {
+            issues.AddIssue(MakeIssue(NKikimrIssues::TIssuesIds::DEFAULT_ERROR,
+                "rows_limit is not supported with FORMAT_ARROW result set format"));
+            return ReplyFinishStream(Ydb::StatusIds::BAD_REQUEST, std::move(issues));
+        }
+
         std::optional<NKqp::NFormats::TArrowFormatSettings> arrowFormatSettings;
         if (req->has_arrow_format_settings()) {
             arrowFormatSettings = NKqp::NFormats::TArrowFormatSettings::ImportFromProto(req->arrow_format_settings());

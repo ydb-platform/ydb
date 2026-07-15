@@ -127,7 +127,13 @@ public:
         // This is either the default setting or the explicit exclusion of a new RBO when compilation fails and recompilation is attempted.
         config->SetEnableNewRBO(EnableNewRBO);
 
-        if (QueryId.Settings.QueryType == NKikimrKqp::QUERY_TYPE_SQL_GENERIC_SCRIPT || QueryId.Settings.QueryType == NKikimrKqp::QUERY_TYPE_SQL_GENERIC_QUERY) {
+        if (QueryId.Settings.RowsLimit.Defined()) {
+            config->_ResultRowsLimit = QueryId.Settings.RowsLimit.GetRef();
+        } else if (IsIn({
+                NKikimrKqp::QUERY_TYPE_SQL_GENERIC_SCRIPT,
+                NKikimrKqp::QUERY_TYPE_SQL_GENERIC_QUERY,
+                NKikimrKqp::QUERY_TYPE_SQL_GENERIC_CONCURRENT_QUERY},
+            QueryId.Settings.QueryType)) {
             ui32 scriptResultRowsLimit = QueryServiceConfig.GetScriptResultRowsLimit();
             if (scriptResultRowsLimit > 0) {
                 config->_ResultRowsLimit = scriptResultRowsLimit;

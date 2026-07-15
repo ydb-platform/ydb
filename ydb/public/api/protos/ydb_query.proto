@@ -233,6 +233,11 @@ message ExecuteQueryRequest {
 
     // Format settings, only used for Ydb.ResultSet.Format.FORMAT_ARROW
     Ydb.Formats.ArrowFormatSettings arrow_format_settings = 14;
+
+    // Optional maximum number of rows in each result set.
+    // When not set, there is no row limit (unlimited results).
+    // Value 0 returns result set metadata without data rows.
+    optional int64 rows_limit = 15 [(Ydb.value) = ">= 0"];
 }
 
 message ResultSetMeta {

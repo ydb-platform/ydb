@@ -346,6 +346,10 @@ public:
             }
         }
 
+        if (settings.RowsLimit_) {
+            request.set_rows_limit(*settings.RowsLimit_);
+        }
+
         if (txControl.HasTx()) {
             auto requestTxControl = request.mutable_tx_control();
             requestTxControl->set_commit_tx(txControl.CommitTx_);

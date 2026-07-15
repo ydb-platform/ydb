@@ -1407,6 +1407,35 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
         UNIT_ASSERT_VALUES_EQUAL(result.GetResultSet(0).RowsCount(), 8);
     }
 
+    Y_UNIT_TEST(GenericQueryWithRowsLimit) {
+        TKikimrRunner kikimr;
+        auto db = kikimr.GetQueryClient();
+
+        auto result = db.ExecuteQuery(Q_(R"(
+            SELECT * FROM `/Root/EightShard` WHERE Text = "Value2";
+        )"), NYdb::NQuery::TTxControl::BeginTx().CommitTx(),
+            NYdb::NQuery::TExecuteQuerySettings().RowsLimit(5)).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        UNIT_ASSERT(result.GetResultSet(0).Truncated());
+        UNIT_ASSERT_VALUES_EQUAL(result.GetResultSet(0).RowsCount(), 5);
+    }
+
+    Y_UNIT_TEST(GenericQueryRowsLimitZero) {
+        TKikimrRunner kikimr;
+        auto db = kikimr.GetQueryClient();
+
+        auto result = db.ExecuteQuery(Q_(R"(
+            SELECT * FROM `/Root/EightShard` WHERE Text = "Value2";
+        )"), NYdb::NQuery::TTxControl::BeginTx().CommitTx(),
+            NYdb::NQuery::TExecuteQuerySettings().RowsLimit(0)).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        UNIT_ASSERT(result.GetResultSet(0).Truncated());
+        UNIT_ASSERT_VALUES_EQUAL(result.GetResultSet(0).RowsCount(), 0);
+        UNIT_ASSERT(result.GetResultSet(0).ColumnsCount() > 0);
+    }
+
     Y_UNIT_TEST(GenericQueryNoRowsLimitLotsOfRows) {
         TKikimrRunner kikimr;
         auto db = kikimr.GetQueryClient();

@@ -336,6 +336,9 @@ public:
         QueryState = std::make_shared<TKqpQueryState>(
             ev, QueryId, Settings.Database, Settings.ApplicationName, Settings.Cluster, Settings.DbCounters, Settings.LongSession,
             Settings.TableService, Settings.QueryService, SessionId, AppData()->MonotonicTimeProvider->Now(), Settings.MutableExecuterConfig->RuntimeParameterSizeLimit.load());
+        if (auto rowsLimit = QueryState->GetRowsLimit()) {
+            FillSettings.RowsLimitPerWrite = *rowsLimit;
+        }
         if (QueryState->UserRequestContext->TraceId.empty()) {
             QueryState->UserRequestContext->TraceId = UlidGen.Next().ToString();
         }
@@ -3103,9 +3106,16 @@ public:
             for (size_t i = 0; i < phyQuery.ResultBindingsSize(); ++i) {
                 if (QueryState->IsStreamResult()) {
                     if (QueryState->QueryData->HasTrailingTxResult(phyQuery.GetResultBindings(i))) {
+                        TMaybe<ui64> effectiveRowsLimit = FillSettings.RowsLimitPerWrite;
+                        if (QueryState->PreparedQuery->GetResults(i).GetRowsLimit()) {
+                            effectiveRowsLimit = QueryState->PreparedQuery->GetResults(i).GetRowsLimit();
+                        } else if (auto requestRowsLimit = QueryState->GetRowsLimit()) {
+                            effectiveRowsLimit = *requestRowsLimit;
+                        }
+
                         auto ydbResult = QueryState->QueryData->GetYdbTxResult(
                             phyQuery.GetResultBindings(i), response->GetArena(),
-                            QueryState->GetFormatsSettings(), {});
+                            QueryState->GetFormatsSettings(), effectiveRowsLimit);
 
                         YQL_ENSURE(ydbResult);
                         ++trailingResultsCount;
@@ -3119,6 +3129,8 @@ public:
                 TMaybe<ui64> effectiveRowsLimit = FillSettings.RowsLimitPerWrite;
                 if (QueryState->PreparedQuery->GetResults(i).GetRowsLimit()) {
                     effectiveRowsLimit = QueryState->PreparedQuery->GetResults(i).GetRowsLimit();
+                } else if (auto requestRowsLimit = QueryState->GetRowsLimit()) {
+                    effectiveRowsLimit = *requestRowsLimit;
                 }
 
                 auto* ydbResult = QueryState->QueryData->GetYdbTxResult(

@@ -198,6 +198,7 @@ message TQueryRequest {
     optional Ydb.ResultSet.Format ResultSetFormat = 39;
     optional Ydb.Formats.ArrowFormatSettings ArrowFormatSettings = 40;
     optional bool IsWarmupCompilation = 41;
+    optional uint64 RowsLimit = 43;
 }
 
 message TVectorIndexKmeansTreeDescription {

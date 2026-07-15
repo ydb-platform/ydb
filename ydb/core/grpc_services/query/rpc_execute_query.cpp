@@ -31,9 +31,10 @@ struct TProducerState {
     TActorId ActorId;
     ui64 ChannelId = 0;
 
-    void SendAck(const NActors::TActorIdentity& actor) const {
+    void SendAck(const NActors::TActorIdentity& actor, bool enough = false) const {
         auto resp = MakeHolder<NKqp::TEvKqpExecuter::TEvStreamDataAck>(*LastSeqNo, ChannelId);
         resp->Record.SetFreeSpace(AckedFreeSpaceBytes);
+        resp->Record.SetEnough(enough);
 
         actor.Send(ActorId, resp.Release());
     }
@@ -46,6 +47,66 @@ struct TProducerState {
         }
         return false;
     }
+};
+
+class TStreamRowsLimitState {
+public:
+    bool ApplyLimit(TMaybe<ui64> rowsLimit, i64 resultSetIndex, Ydb::ResultSet& resultSet) {
+        if (!rowsLimit) {
+            return false;
+        }
+
+        if (Truncated_.contains(resultSetIndex)) {
+            resultSet.clear_rows();
+            resultSet.set_truncated(true);
+            return true;
+        }
+
+        auto& rowCount = RowCount_[resultSetIndex];
+        if (*rowsLimit == 0) {
+            const bool hadRows = resultSet.rows_size() > 0;
+            resultSet.clear_rows();
+            if (hadRows) {
+                resultSet.set_truncated(true);
+                Truncated_.insert(resultSetIndex);
+            }
+            return hadRows;
+        }
+
+        Ydb::ResultSet limitedResultSet;
+        limitedResultSet.mutable_columns()->Swap(resultSet.mutable_columns());
+        limitedResultSet.set_format(resultSet.format());
+        if (resultSet.has_arrow_format_meta()) {
+            limitedResultSet.mutable_arrow_format_meta()->Swap(resultSet.mutable_arrow_format_meta());
+        }
+        if (resultSet.has_data()) {
+            limitedResultSet.set_data(resultSet.data());
+        }
+
+        bool truncated = false;
+        for (auto& row : *resultSet.mutable_rows()) {
+            if (rowCount + 1 > *rowsLimit) {
+                truncated = true;
+                break;
+            }
+            ++rowCount;
+            limitedResultSet.add_rows()->Swap(&row);
+        }
+
+        if (truncated) {
+            limitedResultSet.set_truncated(true);
+            Truncated_.insert(resultSetIndex);
+        } else if (resultSet.truncated()) {
+            limitedResultSet.set_truncated(true);
+        }
+
+        resultSet.Swap(&limitedResultSet);
+        return truncated;
+    }
+
+private:
+    THashMap<i64, ui64> RowCount_;
+    THashSet<i64> Truncated_;
 };
 
 bool FillTxSettings(const Ydb::Query::TransactionSettings& from, Ydb::Table::TransactionSettings& to,
@@ -305,6 +366,10 @@ private:
             .SetOutputChunkMaxSize(req->response_part_limit_bytes())
             .SetSchemaInclusionMode(schemaInclusionMode)
             .SetResultSetFormat(resultSetFormat);
+        if (req->has_rows_limit()) {
+            settings.SetRowsLimit(req->rows_limit());
+        }
+        RowsLimit_ = req->has_rows_limit() ? TMaybe<ui64>(req->rows_limit()) : Nothing();
 
         auto ev = MakeHolder<NKqp::TEvKqp::TEvQueryRequest>(
             QueryAction,
@@ -375,6 +440,9 @@ private:
         response->set_result_set_index(ev->Get()->Record.GetQueryResultIndex());
         response->mutable_result_set()->Swap(ev->Get()->Record.MutableResultSet());
 
+        const bool truncated = StreamRowsLimitState_.ApplyLimit(
+            RowsLimit_, response->result_set_index(), *response->mutable_result_set());
+
         if (ev->Get()->Record.HasVirtualTimestamp()) {
             auto snap = response->mutable_snapshot_timestamp();
             auto& ts = ev->Get()->Record.GetVirtualTimestamp();
@@ -402,7 +470,13 @@ private:
             << ", to: " << ev->Sender
             << ", queue: " << FlowControl_.QueueSize());
 
-        channel.SendAck(SelfId());
+        channel.SendAck(SelfId(), truncated);
+
+        if (truncated) {
+            LOG_DEBUG_S(ctx, NKikimrServices::RPC_REQUEST, this->SelfId() << "Stop stream by rows limit"
+                << ", resultSetIndex: " << response->result_set_index()
+                << ", rowsLimit: " << (RowsLimit_ ? ToString(*RowsLimit_) : "none"));
+        }
     }
 
     void Handle(NKqp::TEvKqpExecuter::TEvExecuterProgress::TPtr& ev) {
@@ -464,6 +538,7 @@ private:
                     hasTrailingMessage = true;
                     response.set_result_set_index(i);
                     response.mutable_result_set()->Swap(record.MutableResponse()->MutableYdbResults(i));
+                    StreamRowsLimitState_.ApplyLimit(RowsLimit_, i, *response.mutable_result_set());
                 }
             }
 
@@ -569,6 +644,8 @@ private:
     NKikimrKqp::EQueryAction QueryAction;
     TRpcFlowControlState FlowControl_;
     TMap<ui64, TProducerState> StreamChannels_;
+    TMaybe<ui64> RowsLimit_;
+    TStreamRowsLimitState StreamRowsLimitState_;
 
     NWilson::TSpan Span_;
 };

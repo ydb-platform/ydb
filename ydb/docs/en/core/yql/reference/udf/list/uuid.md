@@ -1,12 +1,12 @@
 # Uuid
 
-The `Uuid` module provides generators for primary keys in {{ ydb-short-name }} tables. Unlike [`RandomUuid()`](../../builtins/basic.md#random), which returns a uniformly random [UUID version 4](https://datatracker.ietf.org/doc/html/rfc4122#section-4.4), these functions assemble 128-bit values with a deliberate bit layout so that key order and partition spread suit {{ ydb-short-name }}'s partitioning.
+The `Uuid` module provides primary key generators for {{ ydb-short-name }} tables. Unlike [`RandomUuid()`](../../builtins/basic.md#random), which returns a uniformly random [UUID version 4](https://datatracker.ietf.org/doc/html/rfc4122#section-4.4), these functions assemble 128-bit values with a deliberate bit layout so that key order and partition spread suit {{ ydb-short-name }}'s partitioning.
 
-All functions return a value of type `Uuid` in {{ ydb-short-name }}'s internal 16-byte representation (Microsoft GUID / mixed-endian layout). This is the same byte order used when comparing primary key values. Generators that target key-friendly layout write bytes directly in this order instead of using the RFC network-byte-order representation.
+All functions return a value of type `Uuid` in {{ ydb-short-name }}'s internal 16-byte representation (Microsoft GUID / mixed-endian layout). This is the same byte order used when comparing primary keys. Generators that target key-friendly layout write bytes directly in this format instead of using the RFC network-byte-order representation.
 
-When you cast a generated `Uuid` to `Text`, you get a canonical GUID text representation. For key-friendly generators (`newChrono`, `newSharded`, and their `Prefix` variants), the visible string layout does not reflect how the timestamp and prefix are embedded in the stored bytes.
+When you cast a generated `Uuid` to `Text`, you get a canonical GUID text representation. For key-friendly generators (`newChrono`, `newSharded`, and their `Prefix` variants), the string produced by this conversion does not reflect how the timestamp and prefix are embedded in the stored bytes.
 
-For general recommendations on using `Uuid` for primary key, see [UUID as a primary key](../../../dev/primary-key/row-oriented.md#uuid-primary-key).
+For general recommendations on using `Uuid` as a primary key, see [UUID as a primary key](../../../dev/primary-key/row-oriented.md#uuid-primary-key).
 
 ## Key-friendly generators {#key-friendly}
 
@@ -22,11 +22,11 @@ Optional dependency arguments work like [`RandomUuid()`](../../builtins/basic.md
 
 ### `Uuid::newChronoPrefix` {#newchronoprefix}
 
-Same chronological layout as `newChrono`, but the high bits of the key (10-bit prefix) are taken from the first argument instead of being random. Use this to pin a shared prefix for several rows in one transaction or batch so they map to a single partition.
+Same chronological layout as `newChrono`, but the high bits of the key (default prefix size is 10 bits) are taken from the first argument instead of being random. Use this to pin a shared prefix for several rows in one transaction or batch so they map to a single partition.
 
 The first argument is either:
 
-* `Uint64` — the low 10 bits are used as the prefox;
+* `Uint64` — the low 10 bits are used as the prefix;
 * `Uuid` — the high 10 bits of the source value's MSB are used as the prefix.
 
 Optional dependency arguments may follow.
@@ -36,7 +36,7 @@ Optional dependency arguments may follow.
 
 ### `Uuid::newSharded` {#newsharded}
 
-Generates a key that balances partition spread and time locality. Each call leaves the high prefix bits random (by default, about 2<sup>10</sup> ≈ 1024 partition buckets), embeds the current Unix time at second granularity in the following bit field, and fills the remaining bits with randomness. This spreads write load across partitions while keeping rows created at similar times relatively close in key space.
+Generates a key that balances partition spread and time locality. Each call leaves the high bits (prefix) random (by default, 2<sup>10</sup> ≈ 1024 value buckets), embeds the current Unix time at second granularity in the following bit field, and fills the remaining bits with randomness. This spreads write load across partitions while keeping rows created at similar times relatively close in key space.
 
 Optional dependency arguments work like [`RandomUuid()`](../../builtins/basic.md#random).
 
@@ -44,27 +44,27 @@ Optional dependency arguments work like [`RandomUuid()`](../../builtins/basic.md
 
 ### `Uuid::newShardedPrefix` {#newshardedprefix}
 
-Same sharded layout as `newSharded`, but the prefix is fixed from the first argument. Rows that share a prefix usually belong to one partition, which simplifies multi-row transactions, while the embedded timestamp still groups nearby writes inside the prefix bucket.
+Same sharded layout as `newSharded`, but the prefix is fixed from the first argument. Rows that share a prefix usually belong to one partition, which simplifies multi-row transactions; the embedded timestamp still groups nearby writes inside the prefix bucket.
 
 The first argument is either `Uint64` or `Uuid` (same rules as `newChronoPrefix`). Optional dependency arguments may follow.
 
 * `Uuid::newShardedPrefix(Uint64{Flags:AutoMap}[, T1[, T2, ...]]) -> Uuid`
 * `Uuid::newShardedPrefix(Uuid{Flags:AutoMap}[, T1[, T2, ...]]) -> Uuid`
 
-### Choosing between `newChrono` and `newSharded` {#key-friendly-choice}
+### Choosing between `Uuid::newChrono` and `Uuid::newSharded` {#key-friendly-choice}
 
 | Goal | Function |
 | --- | --- |
-| Maximum time ordering in the primary key; time-range scans by key | `newChrono` |
-| Even partition spread for single-row inserts with some time locality | `newSharded` |
-| Several rows in one transaction should share a partition | `newChronoPrefix` or `newShardedPrefix` with the same prefix |
+| Maximum chronological order in the primary key; time-range scans by key | `Uuid::newChrono` |
+| Even partition spread for single-row inserts with some time locality; efficient data caching | `Uuid::newSharded` |
+| Reduce the number of partitions affected when writing many rows in one transaction | `Uuid::newChronoPrefix` or `Uuid::newShardedPrefix` with the same prefix |
 | Unstructured random IDs without sort semantics | [`RandomUuid()`](../../builtins/basic.md#random) |
 
 ## RFC UUID version 7 {#rfc-v7}
 
-These functions generate standard [RFC 9562 UUID version 7](https://datatracker.ietf.org/doc/html/rfc9562) values: a 48-bit Unix timestamp in milliseconds in the leading bits, then random bits. The result is stored in {{ ydb-short-name }} internal `Uuid` layout. Use these when you need interoperability with RFC v7 tools or when extracting the embedded timestamp.
+`Uuid::newV7` and `Uuid::newV7At` generate standard [RFC 9562 UUID version 7](https://datatracker.ietf.org/doc/html/rfc9562) values: a 48-bit Unix timestamp in milliseconds in the leading bits, then a random suffix. The result is stored in {{ ydb-short-name }}'s internal `Uuid` representation. Use these when you need interoperability with RFC v7 tools or to extract the embedded timestamp.
 
-Because v7 follows the RFC field layout, its sort order in {{ ydb-short-name }} keys does not match chronological order as closely as `newChrono`. Prefer `newChrono` or `newSharded` when the primary goal is row-table performance in {{ ydb-short-name }}.
+Because UUIDv7 follows the RFC byte layout, its sort order in {{ ydb-short-name }} does not match chronological order. For table performance in {{ ydb-short-name }}, prefer `Uuid::newChrono` or `Uuid::newSharded` in primary keys.
 
 ### `Uuid::newV7` {#newv7}
 
@@ -81,7 +81,7 @@ Generates a v7 UUID from an explicit timestamp. Accepts `Timestamp` or `Timestam
 
 ### `Uuid::extractTs` and `Uuid::extractTs64` {#extract-ts}
 
-Extract the timestamp embedded in a v7 UUID. Returns `NULL` if the argument is not a v7 value (for example, a key from `newChrono` or `newSharded`).
+Extract the timestamp embedded in a v7 UUID. Returns `NULL` if the argument is not UUIDv7 (for example, a key from `newChrono` or `newSharded`).
 
 * `Uuid::extractTs(Uuid{Flags:AutoMap}) -> Timestamp?`
 * `Uuid::extractTs64(Uuid{Flags:AutoMap}) -> Timestamp64?`

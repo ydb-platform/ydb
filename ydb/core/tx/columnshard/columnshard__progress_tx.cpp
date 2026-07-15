@@ -32,15 +32,10 @@ public:
     }
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
-<<<<<<< HEAD
         YDB_LOG_CREATE_CONTEXT_COMP(NKikimrServices::TX_COLUMNSHARD_TX,
             {"tabletId", Self->TabletID()},
             {"txState", "TTxProgressTx::Execute"},
             {"txCurrent", Self->InProgressTxId});
-=======
-        NActors::TLogContextGuard logGuard = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD_TX)(
-            "tablet_id", Self->TabletID())("tx_state", "TTxProgressTx::Execute")("tx_current", Self->InProgressTxId);
->>>>>>> 5427ca9d9ef (fix TxProgress enqueue (#43594))
         AFL_VERIFY(Self->ProgressTxScheduled);
         Self->Counters.GetTabletCounters()->SetCounter(COUNTER_TX_COMPLETE_LAG, Self->GetTxCompleteLag().MilliSeconds());
 
@@ -59,18 +54,12 @@ public:
             PlannedQueueItem.emplace(plannedItem->PlanStep, plannedItem->TxId);
             const ui64 step = plannedItem->PlanStep;
             const ui64 txId = plannedItem->TxId;
-<<<<<<< HEAD
             YDB_LOG_CREATE_CONTEXT_COMP(NKikimrServices::TX_COLUMNSHARD_TX,
                 {"txId", txId});
             TxOperator = Self->ProgressTxController->GetTxOperator(txId, ETxOperatorStatus::InProgress);
             YDB_LOG_DEBUG("",
                 {"event", "PlannedItemStart"},
                 {"opType", TxOperator->GetOpType()});
-=======
-            NActors::TLogContextGuard logGuardTx = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD_TX)("tx_id", txId);
-            TxOperator = Self->ProgressTxController->GetTxOperator(txId, ETxOperatorStatus::InProgress);
-            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_TX)("event", "PlannedItemStart")("op_type", TxOperator->GetOpType());
->>>>>>> 5427ca9d9ef (fix TxProgress enqueue (#43594))
             if (auto txPrepare = TxOperator->BuildTxPrepareForProgress(Self)) {
                 YDB_LOG_DEBUG("",
                     {"event", "PlannedItemStart"},
@@ -82,13 +71,9 @@ public:
                 return true;
             } else if (TxOperator->IsInProgress()) {
                 AbortedThroughRemoveExpired = true;
-<<<<<<< HEAD
                 YDB_LOG_DEBUG("",
                     {"event", "PlannedItemContinue"},
                     {"opType", TxOperator->GetOpType()});
-=======
-                AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_TX)("event", "PlannedItemContinue")("op_type", TxOperator->GetOpType());
->>>>>>> 5427ca9d9ef (fix TxProgress enqueue (#43594))
                 AFL_VERIFY(Self->InProgressTxId == txId);
                 return true;
             } else {
@@ -146,30 +131,21 @@ public:
 };
 
 void TColumnShard::EnqueueProgressTx(const TActorContext& ctx, const ui64 continueTxId) {
-<<<<<<< HEAD
     YDB_LOG_DEBUG("",
         {"event", "EnqueueProgressTx"},
         {"tabletId", TabletID()},
         {"txId", continueTxId});
-=======
-    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_TX)("event", "EnqueueProgressTx")("tablet_id", TabletID())("tx_id", continueTxId);
->>>>>>> 5427ca9d9ef (fix TxProgress enqueue (#43594))
     // While a particular tx is in the distributed commit process, only its own nudge can advance it.
     // So, skip everything else.
     if (InProgressTxId != 0 && continueTxId != InProgressTxId) {
         return;
     }
     if (!ProgressTxScheduled) {
-<<<<<<< HEAD
         YDB_LOG_DEBUG("",
             {"event", "EnqueueProgressTxStart"},
             {"tabletId", TabletID()},
             {"txId", continueTxId},
             {"txCurrent", InProgressTxId});
-=======
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_TX)("event", "EnqueueProgressTxStart")("tablet_id", TabletID())("tx_id", continueTxId)(
-            "tx_current", InProgressTxId);
->>>>>>> 5427ca9d9ef (fix TxProgress enqueue (#43594))
         ProgressTxScheduled = true;
         Execute(new TTxProgressTx(this), ctx);
     }

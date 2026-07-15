@@ -1269,7 +1269,6 @@ void TColumnShard::Handle(TEvTxProcessing::TEvReadSet::TPtr& ev, const TActorCon
     auto& txController = GetProgressTxController();
     const ui64 txId = ev->Get()->Record.GetTxId();
     const ui64 tabletDest = ev->Get()->Record.GetTabletProducer();
-<<<<<<< HEAD
 
     auto op = txController.GetTxOperatorAs<TEvWriteCommitSyncTransactionOperator>(txId, ETxOperatorStatus::Any, /*optional*/ true);
     if (!op) {
@@ -1284,15 +1283,6 @@ void TColumnShard::Handle(TEvTxProcessing::TEvReadSet::TPtr& ev, const TActorCon
         {"proto", ev->Get()->Record.DebugString()},
         {"lockId", op->GetLockId()});
 
-=======
-    auto op = txController.GetTxOperatorAs<TEvWriteCommitSyncTransactionOperator>(txId, ETxOperatorStatus::Any, /*optional*/ true);
-    if (!op) {
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "read_set_ignored")("proto", ev->Get()->Record.DebugString());
-        TEvWriteCommitSyncTransactionOperator::SendBrokenFlagAck(*this, ev->Get()->Record.GetStep(), txId, tabletDest);
-        return;
-    }
-    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "read_set")("proto", ev->Get()->Record.DebugString())("lock_id", op->GetLockId());
->>>>>>> 5427ca9d9ef (fix TxProgress enqueue (#43594))
     NKikimrTx::TReadSetData data;
     AFL_VERIFY(data.ParseFromArray(ev->Get()->Record.GetReadSet().data(), ev->Get()->Record.GetReadSet().size()));
     auto tx = op->CreateReceiveBrokenFlagTx(*this, tabletDest, data.GetDecision() != NKikimrTx::TReadSetData::DECISION_COMMIT);
@@ -1304,7 +1294,6 @@ void TColumnShard::Handle(TEvTxProcessing::TEvReadSetAck::TPtr& ev, const TActor
     const ui64 txId = ev->Get()->Record.GetTxId();
     auto op = txController.GetTxOperatorAs<TEvWriteCommitSyncTransactionOperator>(txId, ETxOperatorStatus::Any, /*optional*/ true);
     if (!op) {
-<<<<<<< HEAD
         YDB_LOG_DEBUG("",
             {"event", "missed_read_set_ack"},
             {"proto", ev->Get()->Record.DebugString()},
@@ -1316,13 +1305,6 @@ void TColumnShard::Handle(TEvTxProcessing::TEvReadSetAck::TPtr& ev, const TActor
         {"proto", ev->Get()->Record.DebugString()},
         {"lockId", op->GetLockId()});
 
-=======
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "missed_read_set_ack")("proto", ev->Get()->Record.DebugString())(
-            "tx_id", ev->Get()->Record.GetTxId());
-        return;
-    }
-    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "read_set_ack")("proto", ev->Get()->Record.DebugString())("lock_id", op->GetLockId());
->>>>>>> 5427ca9d9ef (fix TxProgress enqueue (#43594))
     auto tx = op->CreateReceiveResultAckTx(*this, ev->Get()->Record.GetTabletConsumer());
     Execute(tx.release(), ctx);
 }

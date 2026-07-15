@@ -8,7 +8,7 @@ This is an experimental module. Its API and behavior may change in future versio
 
 {% endnote %}
 
-{{ ydb-short-name }}is a distributed database, so some errors are transient: for example, a session may expire, a short-term overload may occur, a node may become temporarily unavailable, or a transaction may be aborted due to concurrent data changes. Correct handling of such errors requires retrying the entire transaction, not a single query. The `spring-ydb-retry` module handles this logic: it intercepts transactional methods, classifies errors by [{{ ydb-short-name }} status codes](../../reference/ydb-sdk/error_handling.md), and, if necessary, retries the transaction with [exponential backoff](../../concepts/glossary.md#exponential-backoff) and [jitter](../../concepts/glossary.md#jitter).
+{{ ydb-short-name }} is a distributed database, so some errors are transient: for example, a session may expire, a short-term overload may occur, a node may become temporarily unavailable, or a transaction may be aborted due to concurrent data changes. Correct handling of such errors requires retrying the entire transaction, not a single query. The `spring-ydb-retry` module handles this logic: it intercepts transactional methods, classifies errors by [{{ ydb-short-name }} status codes](../../reference/ydb-sdk/error_handling.md), and, if necessary, retries the transaction with [exponential backoff](../../concepts/glossary.md#exponential-backoff) and [jitter](../../concepts/glossary.md#jitter).
 
 ## Features {#features}
 
@@ -144,10 +144,10 @@ The module extracts the status code {{ ydb-short-name }} from the exception chai
 | `CLIENT_RESOURCE_EXHAUSTED` | always | slow |
 | `BAD_SESSION` | always | zero |
 | `SESSION_BUSY` | always | zero |
-| `UNDETERMINED` | only on `idempotent = true` | fast |
-| `TRANSPORT_UNAVAILABLE` (transport error) | only on `idempotent = true` | fast |
-| `CLIENT_GRPC_ERROR` | only on `idempotent = true` | fast |
-| `SESSION_EXPIRED` | only on `idempotent = true` | zero |
+| `UNDETERMINED` | only when `idempotent = true` | fast |
+| `TRANSPORT_UNAVAILABLE` (transport error) | only when `idempotent = true` | fast |
+| `CLIENT_GRPC_ERROR` | only when `idempotent = true` | fast |
+| `SESSION_EXPIRED` | only when `idempotent = true` | zero |
 
 Backoff levels:
 

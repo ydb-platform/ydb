@@ -6,7 +6,7 @@ Consider a scenario where you need to ensure that only one instance of a client 
 
 Unlike local multithreaded programming, clients in distributed systems do not acquire locks or semaphores directly. Instead, they lease them for a certain period of time, which can be periodically renewed. Since physical time may differ on different machines, clients and the server may end up in a situation where multiple clients believe their sessions have acquired the same semaphore simultaneously, even if from the server's perspective this is not the case. To reduce the likelihood of such situations, it is important to pre-configure automatic time synchronization both on the servers with client applications and on the {{ ydb-short-name }} side, preferably using a single time source.
 
-Thus, implementing a distributed lock through such mechanisms cannot guarantee the absence of concurrent access to a resource, but it can significantly reduce the probability of such an event. This can be used as an optimization so that clients do not compete for a shared resource when it is not meaningful. Guarantees of no concurrent requests to a resource can be implemented on the resource side itself.
+Thus, implementing a distributed lock through such mechanisms cannot guarantee the absence of concurrent access to a resource, but it can significantly reduce the probability of such an event. This can be used as an optimization so that clients do not compete for a shared resource when it is not meaningful. Guarantees of no concurrent queries to a resource can be implemented on the resource side itself.
 
 ## Code example
 

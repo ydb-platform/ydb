@@ -730,7 +730,7 @@ The [ImplicitTx](../../concepts/transactions#implicit) mode allows you to execut
 
 {% endlist %}
 
-## Online read-only {#online-read-only}
+## Online Read-Only {#online-read-only}
 
 {% list tabs group=lang %}
 
@@ -1085,7 +1085,7 @@ The [ImplicitTx](../../concepts/transactions#implicit) mode allows you to execut
 
 {% endlist %}
 
-## Stale read-only {#stale-read-only}
+## Stale Read-Only {#stale-read-only}
 
 {% list tabs group=lang %}
 
@@ -1423,7 +1423,7 @@ The [ImplicitTx](../../concepts/transactions#implicit) mode allows you to execut
 
 {% endlist %}
 
-## Snapshot read-only {#snapshot-read-only}
+## Snapshot Read-Only {#snapshot-read-only}
 
 {% list tabs group=lang %}
 
@@ -1695,12 +1695,12 @@ The [ImplicitTx](../../concepts/transactions#implicit) mode allows you to execut
 
   - Entity Framework
 
-    Entity Framework does not support the Snapshot read-only mode directly.
+    Entity Framework does not support the Snapshot Read-Only mode directly.
     Use ydb-dotnet-sdk or ADO.NET for this isolation level.
 
   - linq2db
 
-    linq2db does not support the Snapshot read-only mode directly.
+    linq2db does not support the Snapshot Read-Only mode directly.
     Use ydb-dotnet-sdk or ADO.NET for this isolation level.
 
   {% endlist %}
@@ -1762,7 +1762,7 @@ The [ImplicitTx](../../concepts/transactions#implicit) mode allows you to execut
 
 {% endlist %}
 
-## Snapshot read-write {#snapshot-read-write}
+## Snapshot Read-Write {#snapshot-read-write}
 
 {% list tabs group=lang %}
 
@@ -2132,6 +2132,6 @@ The [ImplicitTx](../../concepts/transactions#implicit) mode allows you to execut
 
 - PHP
 
-  The Snapshot read-write mode is not supported in the PHP SDK.
+  The Snapshot Read-Write mode is not supported in the PHP SDK.
 
 {% endlist %}

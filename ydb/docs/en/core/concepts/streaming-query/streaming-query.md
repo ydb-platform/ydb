@@ -62,7 +62,7 @@ We continuously work on improving streaming processing mechanisms. In future rel
 
 The following are also not supported in the current version:
 
-- The [important reader](../datamodel/topic.md#important-consumer) flag for consumers used by streaming queries.
+- The [important consumer](../datamodel/topic.md#important-consumer) flag for consumers used by streaming queries.
 - [Auto-partitioning](../datamodel/topic.md#autopartitioning) (split/merge of partitions) of topics used by streaming queries. When the number of partitions in a topic from which a running streaming query reads increases, new partitions will not be processed.
 - Changing the text of a running query. To modify the query, you must recreate it — drop it using [DROP STREAMING QUERY](../../yql/reference/syntax/drop-streaming-query.md) and create it again using [CREATE STREAMING QUERY](../../yql/reference/syntax/create-streaming-query.md).
 

@@ -10777,6 +10777,44 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         UpdateChannelsBindingSolomon(true);
     }
 
+    Y_UNIT_TEST(UpdateChannelsBindingSolomonRetriesLostCreateReply) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().AllowUpdateChannelsBindingOfSolomonPartitions(true));
+        ui64 txId = 100;
+
+        TestCreateSolomon(runtime, ++txId, "/MyRoot", R"(
+            Name: "Solomon"
+            PartitionCount: 1
+            ChannelProfileId: 2
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        ui32 createRequests = 0;
+        bool dropCreateReply = true;
+        auto prevObserver = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvHive::TEvCreateTablet::EventType) {
+                ++createRequests;
+            } else if (ev->GetTypeRewrite() == TEvHive::TEvCreateTabletReply::EventType && dropCreateReply) {
+                dropCreateReply = false;
+                return TTestActorRuntime::EEventAction::DROP;
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+
+        TestAlterSolomon(runtime, ++txId, "/MyRoot", R"(
+            Name: "Solomon"
+            ChannelProfileId: 3
+            UpdateChannelsBinding: true
+        )");
+
+        env.SimulateSleep(runtime, TDuration::Seconds(61));
+        env.TestWaitNotification(runtime, txId);
+        runtime.SetObserverFunc(prevObserver);
+
+        UNIT_ASSERT(!dropCreateReply);
+        UNIT_ASSERT_VALUES_EQUAL(createRequests, 2);
+    }
+
     void UpdateChannelsBindingSolomonStorageConfig() {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime, TTestEnvOptions().AllowUpdateChannelsBindingOfSolomonPartitions(true));

@@ -11,6 +11,11 @@
 
 namespace NYdb::inline Dev::NObservability {
 
+// SDK build-info chain versions. Bump these when the corresponding
+// observability integration changes incompatibly.
+inline constexpr std::string_view kTracingChainVersion = "0.1.0";
+inline constexpr std::string_view kMetricsChainVersion = "0.1.0";
+
 // ---------------------------------------------------------------------------
 // OTel Semconv attribute keys shared between span attributes and metric labels.
 // ---------------------------------------------------------------------------

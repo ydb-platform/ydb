@@ -10,6 +10,7 @@ ENDIF()
 FORK_SUBTESTS()
 
 SRCS(
+    build_info_ut.cpp
     metric_buffer_ut.cpp
     metrics_ut.cpp
     spans_ut.cpp
@@ -17,11 +18,15 @@ SRCS(
 
 PEERDIR(
     library/cpp/logger
+    library/cpp/testing/common
     library/cpp/testing/gtest
+    ydb/public/api/grpc
+    ydb/public/sdk/cpp/src/client/driver
     ydb/public/sdk/cpp/src/client/impl/observability
     ydb/public/sdk/cpp/src/client/impl/stats
     ydb/public/sdk/cpp/src/client/metrics
     ydb/public/sdk/cpp/src/client/query/impl
+    ydb/public/sdk/cpp/src/client/table
     ydb/public/sdk/cpp/src/client/table/impl
 )
 

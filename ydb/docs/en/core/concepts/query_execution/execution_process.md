@@ -10,7 +10,7 @@ A distributed engine designed for scalability and efficiency in large distribute
 
 The following describes the step-by-step process of processing SQL queries in {{ ydb-short-name }}. Understanding this process helps to better comprehend the architecture and internal structure of {{ ydb-short-name }}.
 
-! [Query execution process](%E2%9F%A6S1%E2%9F%A7 "Query execution process")
+![Query execution process](_assets/query_workflow.png "Query execution process")
 
 1. **Connecting to the database**
    The application uses one of the [official {{ ydb-short-name }} SDKs](../../reference/ydb-sdk/index.md) to connect to the database. The SDK automatically manages a pool of sessions — logical connections required for query execution. Each session is physically associated with one of the cluster nodes. When a query needs to be executed, the SDK provides a ready session from the pool, freeing the developer from the need to manually manage connections.
@@ -62,7 +62,7 @@ Most data operations in {{ ydb-short-name }} are performed via YQL — it is the
 YQL supports all basic SQL constructs, including:
 
 - [Data Manipulation Language (DML)](https://en.wikipedia.org/wiki/Data_manipulation_language): `SELECT`, `INSERT`, `REPLACE`, `UPDATE`, `DELETE`, `UPSERT`.
-- [Data Definition Language (DDL)](https://ru.wikipedia.org/wiki/%D0%AF%D0%B7%D1%8B%D0%BA_%D0%BE%D0%BF%D1%80%D0%B5%D0%B4%D0%B5%D0%BB%D0%B5%D0%BD%D0%B8%D1%8F_%D0%B4%D0%B0%D0%BD%D0%BD%D1%8B%D1%85): `CREATE`, `ALTER`, `DROP` for tables, indexes, and other schema objects.
+- [Data Definition Language (DDL)](https://en.wikipedia.org/wiki/Data_definition_language): `CREATE`, `ALTER`, `DROP` for tables, indexes, and other schema objects.
 - Joins — all standard types of joins, as well as special types of joins (for example, `LEFT SEMI`, `RIGHT SEMI`, `ANY`).
 - Aggregations — grouping (`GROUP BY`) and window functions.
 - [Named expressions](../../yql/reference/syntax/expressions.md#named-nodes) for structuring the query text.

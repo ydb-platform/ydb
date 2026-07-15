@@ -2279,6 +2279,7 @@ void TNbsDbgLikeActor::HandleNbsWrite(TEvLoad::TEvNbsWrite::TPtr& ev, const TAct
         TabletConfig.GetPBufferReplyTimeoutMicroseconds());
 
     wireEv->AddPayload(std::move(ev->Get()->Payload));
+    wireEv->ChecksumPayload();
 
     Send(dbg.PBActor[coord], wireEv.release(), 0, lsn, it->second.Span.GetTraceId().Clone());
 

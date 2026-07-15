@@ -9,10 +9,25 @@
 
 #include <ydb/core/blobstorage/vdisk/common/vdisk_config.h>
 
+#include <ydb/library/actors/util/rope.h>
+
+#include <vector>
+
 namespace NKikimr::NDDisk {
 
     constexpr size_t MinSectorSize = 4096;
     constexpr size_t DataAlignment = MinSectorSize;
+
+    // Computes an XXH3-64 checksum over exactly numBytes bytes starting at it. The iterator is passed by
+    // value, so the caller's own iterator is not advanced. This is a raw data checksum with no identity
+    // or salt mixed in (unlike TDDiskActor::CalculateChecksum, which additionally mixes in
+    // PersistentBufferUniqueId for on-disk PB sector integrity - a value senders cannot know, so it
+    // cannot be used for a sender-computed, wire-level checksum like this one).
+    ui64 CalculateBlockChecksum(TRope::TConstIterator it, size_t numBytes);
+
+    // Splits payload into MinSectorSize (4 KiB) blocks and computes a checksum for each block, in order.
+    // payload.size() must be a non-zero multiple of MinSectorSize.
+    std::vector<ui64> CalculatePayloadChecksums(const TRope& payload);
 
     struct TEv {
         enum {
@@ -189,6 +204,51 @@ namespace NKikimr::NDDisk {
         }
     };
 
+    struct TChecksumValidationResult {
+        NKikimrBlobStorage::NDDisk::TReplyStatus::E Status;
+        TString ErrorReason;
+        ui32 ChecksumCount = 0;
+        std::optional<ui32> MismatchedBlockIdx; // set only when Status == CORRUPTED
+    };
+
+    // Validates a sender-supplied per-block payload checksum list against the payload actually received.
+    // For now, checksum validation is opt-in: returns std::nullopt when the sender attached no checksums at all
+    // or when every checksum matches. Otherwise returns the status/reason to send back to the sender:
+    // * INCORRECT_REQUEST if the checksum count does not match the payload size
+    // * CORRUPTED at the first mismatching MinSectorSize block.
+    template<typename TRecord>
+    [[nodiscard]]
+    std::optional<TChecksumValidationResult> ValidatePayloadChecksums(const TRecord& record, const TRope& payload) {
+        const ui32 checksumCount = static_cast<ui32>(record.ChecksumsSize());
+        if (checksumCount == 0) {
+            return std::nullopt;
+        }
+
+        if (static_cast<ui64>(checksumCount) * MinSectorSize != payload.size()) {
+            return TChecksumValidationResult{
+                NKikimrBlobStorage::NDDisk::TReplyStatus::INCORRECT_REQUEST,
+                TStringBuilder() << "checksum count " << checksumCount << " does not match payload size "
+                    << payload.size() << " (block size " << MinSectorSize << ")",
+                checksumCount,
+                std::nullopt,
+            };
+        }
+
+        auto it = payload.Begin();
+        for (ui32 i = 0; i < checksumCount; ++i) {
+            if (record.GetChecksums(i) != CalculateBlockChecksum(it, MinSectorSize)) {
+                return TChecksumValidationResult{
+                    NKikimrBlobStorage::NDDisk::TReplyStatus::CORRUPTED,
+                    TStringBuilder() << "checksum mismatch at block " << i << " of " << checksumCount,
+                    checksumCount,
+                    i,
+                };
+            }
+            it += MinSectorSize;
+        }
+        return std::nullopt;
+    }
+
     struct TWriteInstruction {
         std::optional<ui32> PayloadId;
 
@@ -363,6 +423,19 @@ struct TPersistentBufferFormat {
         static constexpr size_t GetPayloadAlignment() {
             return DataAlignment;
         }
+
+        void AddChecksum(ui64 checksum) {
+            Record.AddChecksums(checksum);
+        }
+
+        void AddChecksum(const std::vector<ui64>& checksums) {
+            for (ui64 checksum : checksums) {
+                Record.AddChecksums(checksum);
+            }
+        }
+
+        // Computes and attaches a checksum for each MinSectorSize block of the already-attached payload 0.
+        void ChecksumPayload();
     };
 
     DECLARE_DDISK_EVENT(WriteResult) {
@@ -425,6 +498,19 @@ struct TPersistentBufferFormat {
         static constexpr size_t GetPayloadHeaderSize() {
             return MinSectorSize;
         }
+
+        void AddChecksum(ui64 checksum) {
+            Record.AddChecksums(checksum);
+        }
+
+        void AddChecksum(const std::vector<ui64>& checksums) {
+            for (ui64 checksum : checksums) {
+                Record.AddChecksums(checksum);
+            }
+        }
+
+        // Computes and attaches a checksum for each MinSectorSize block of the already-attached payload 0.
+        void ChecksumPayload();
     };
 
     DECLARE_DDISK_EVENT(WritePersistentBufferResult) {
@@ -505,6 +591,19 @@ struct TPersistentBufferFormat {
         static constexpr size_t GetPayloadAlignment() {
             return DataAlignment;
         }
+
+        void AddChecksum(ui64 checksum) {
+            Record.AddChecksums(checksum);
+        }
+
+        void AddChecksum(const std::vector<ui64>& checksums) {
+            for (ui64 checksum : checksums) {
+                Record.AddChecksums(checksum);
+            }
+        }
+
+        // Computes and attaches a checksum for each MinSectorSize block of the already-attached payload 0.
+        void ChecksumPayload();
     };
 
     DECLARE_DDISK_EVENT(ReadPersistentBuffer) {

@@ -614,6 +614,7 @@ public:
                 auto ev = std::make_unique<NDDisk::TEvWrite>(Credentials,
                     NDDisk::TBlockSelector(vChunkIndex, offsetInChunk, size), NDDisk::TWriteInstruction(0));
                 ev->AddPayload(TRope(RandomData));
+                ev->ChecksumPayload();
                 SendRequest(ctx, std::move(ev), requestIdx);
             }
             ++RequestsSent;
@@ -660,6 +661,7 @@ public:
                 auto ev = std::make_unique<NDDisk::TEvWrite>(Credentials,
                     NDDisk::TBlockSelector(vChunkIndex, offsetInChunk, size), NDDisk::TWriteInstruction(0));
                 ev->AddPayload(TRope(ZeroData));
+                ev->ChecksumPayload();
                 SendRequest(ctx, std::move(ev), requestIdx);
                 ++InFlight;
 

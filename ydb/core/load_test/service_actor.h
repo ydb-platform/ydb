@@ -70,14 +70,6 @@ namespace NKikimr {
     NActors::IActor *CreateInterconnectLoadTest(const NKikimr::TEvLoadTestRequest::TInterconnectLoad& cmd,
             const NActors::TActorId& parent, const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters, ui64 tag);
 
-    // Wraps a log backend so that NInterconnect::TLoadActor's periodic
-    // INTERCONNECT_SPEED_TEST summary lines (see interconnect_load.cpp) are
-    // intercepted and parsed into TInterconnectLoadFinishStats, made
-    // available via TEvLoad::TEvLoadTestFinished::WorkerStats through
-    // GetInterconnectLoadFinishStats(). All other log lines are passed
-    // through to the underlying backend unchanged.
-    TAutoPtr<TLogBackend> WrapWithInterconnectStatsCapture(TAutoPtr<TLogBackend> underlying);
-
 #ifdef __linux__
     NActors::IActor *CreateNBS2LoadActor(const NKikimr::TEvLoadTestRequest::TNBS2Load& cmd,
             const NActors::TActorId& parent, const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters,

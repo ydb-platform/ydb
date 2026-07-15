@@ -83,11 +83,10 @@ protected:
         const auto& cmd = record.GetInterconnectLoad();
 
         Printer->SetTestType("InterconnectLoad");
-        Printer->AddResult("Name", cmd.HasName() ? cmd.GetName() : TString("Interconnect load #") + ToString(CurrentTest));
         Printer->AddResult("Duration, sec", cmd.GetDurationSeconds());
         Printer->AddResult("InFlyMax", cmd.GetInFlyMax());
-        Printer->AddResult("SizeMin", cmd.GetSizeMin());
-        Printer->AddResult("SizeMax", cmd.GetSizeMax());
+        auto size = cmd.GetSizeMin() == cmd.GetSizeMax() ? std::to_string(cmd.GetSizeMin()) : (std::to_string(cmd.GetSizeMin()) + "-" + std::to_string(cmd.GetSizeMax()));
+        Printer->AddResult("Size", size);
 
         const TInterconnectLoadFinishStats* stats = GetInterconnectLoadFinishStats(*ev->Get());
         if (stats && stats->Valid) {
@@ -100,14 +99,10 @@ protected:
                 TString percName = Sprintf("p%.2f", q * 100);
                 Printer->AddResult(percName, Sprintf("%zu us", static_cast<size_t>(valueUs)));
             }
-            Printer->AddResult("Dropped", stats->NumDropped);
         } else {
             Printer->AddResult("Speed", TString("N/A"));
             Printer->AddResult("IOPS", TString("N/A"));
         }
-
-        const TString status = ev->Get()->ErrorReason ? ev->Get()->ErrorReason : TString("OK");
-        Printer->AddResult("Status", status);
 
         InterconnectDoneEvent.Signal();
         InterconnectResultsPrintedEvent.Wait();
@@ -216,15 +211,10 @@ struct TInterconnectTest : public TPerfTest {
 
         TString explanation;
         LogSettings->SetLevel(Cfg.LogLevel, NKikimrServices::BS_LOAD_TEST, explanation);
-        // Periodic throughput/RTT statistics from the load actor are logged at NOTICE
-        // level under INTERCONNECT_SPEED_TEST; make sure they are visible by default.
-        LogSettings->SetLevel(NActors::NLog::PRI_NOTICE, NActorsServices::INTERCONNECT_SPEED_TEST, explanation);
+        // LogSettings->SetLevel(NActors::NLog::PRI_NOTICE, NActorsServices::INTERCONNECT_SPEED_TEST, explanation);
 
-        // Wrap the stderr backend so that the interconnect load actor's periodic
-        // INTERCONNECT_SPEED_TEST summary lines are captured and turned into a
-        // proper Speed/IOPS/latency-percentiles table (see Handle() below).
         NActors::TLoggerActor *loggerActor = new NActors::TLoggerActor(LogSettings,
-            WrapWithInterconnectStatsCapture(NActors::CreateStderrBackend()),
+            NActors::CreateStderrBackend(),
             GetServiceCounters(Counters, "utils"));
         NActors::TActorSetupCmd loggerActorCmd(loggerActor, NActors::TMailboxType::Simple, 3);
         Setup->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(NActors::TActorId(SelfNodeId, "logger"),

@@ -330,6 +330,13 @@ namespace NInterconnect {
 
         const TDuration ResultPublishPeriod = TDuration::Seconds(15);
 
+        // Full-run accumulators (independent of the rolling ThroughputBytes/Samples
+        // window that gets reset on every PublishResults() call), used to compute the
+        // average throughput reported to the finish callback.
+        ui64 TotalThroughputBytes = 0;
+        ui64 TotalThroughputSamples = 0;
+        TMonotonic RunFirstSample = TMonotonic::Zero();
+
         void SchedulePublishResults(const TActorContext& ctx) {
             ctx.Schedule(ResultPublishPeriod, new TEvPublishResults);
         }
@@ -350,6 +357,13 @@ namespace NInterconnect {
                 << " b/s# " << ui64(ThroughputBytes * 1000000 / duration.MicroSeconds())
                 << " common# " << ui64((traffic - TrafficAtBegin) * 1000000 / duration.MicroSeconds())
                 << "}";
+
+            if (RunFirstSample == TMonotonic::Zero()) {
+                RunFirstSample = ThroughputFirstSample;
+            }
+            TotalThroughputBytes += ThroughputBytes;
+            TotalThroughputSamples += ThroughputSamples;
+
             ResetThroughput(now, traffic);
 
             msg << " RTT# ";
@@ -384,6 +398,44 @@ namespace NInterconnect {
             }
         }
 
+        // Computes the aggregated run statistics directly from the actor's internal
+        // counters (no log parsing). Called once, right before the finish callback,
+        // after the final PublishResults(ctx, /* schedule */ false) has folded the
+        // last window into the full-run accumulators.
+        TLoadActorStats ComputeStats(const TActorContext& ctx) const {
+            TLoadActorStats stats;
+
+            const TMonotonic now = ctx.Monotonic();
+            const TMonotonic firstSample = RunFirstSample != TMonotonic::Zero() ? RunFirstSample : ThroughputFirstSample;
+            stats.ThroughputWindow = now - firstSample;
+            stats.ThroughputBytes = TotalThroughputBytes;
+            stats.ThroughputSamples = TotalThroughputSamples;
+            if (stats.ThroughputWindow != TDuration::Zero()) {
+                stats.BytesPerSecond = stats.ThroughputBytes * 1000000 / stats.ThroughputWindow.MicroSeconds();
+            }
+
+            if (Histogram) {
+                stats.RttWindow = Histogram.back().first - Histogram.front().first;
+                stats.RttSamples = Histogram.size();
+
+                TVector<TDuration> v;
+                v.reserve(Histogram.size());
+                for (const auto& item : Histogram) {
+                    v.push_back(item.second);
+                }
+                std::sort(v.begin(), v.end());
+                stats.LatencyPercentilesUs.reserve(6);
+                for (double q : {0.5, 0.9, 0.99, 0.999, 0.9999, 1.0}) {
+                    const size_t pos = q * (v.size() - 1);
+                    stats.LatencyPercentilesUs.emplace_back(q, v[pos].MicroSeconds());
+                }
+            }
+
+            stats.NumDropped = NumDropped;
+
+            return stats;
+        }
+
         STRICT_STFUNC(QueryTrafficCounter,
             HFunc(TEvTrafficCounter, Handle);
         )
@@ -403,8 +455,10 @@ namespace NInterconnect {
 
         void Die(const TActorContext& ctx) override {
             PublishResults(ctx, false);
-            if (FinishCallback)
-                FinishCallback(ctx, RenderHTML(true, ctx));
+            if (FinishCallback) {
+                const TLoadActorStats stats = ComputeStats(ctx);
+                FinishCallback(ctx, RenderHTML(true, ctx), stats);
+            }
             TActorBootstrapped::Die(ctx);
         }
 

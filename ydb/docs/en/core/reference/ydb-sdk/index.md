@@ -28,8 +28,10 @@ The SDK documentation contains the following sections:
 - [{#T}](error_handling.md)
 - [SDK feature comparison](feature-parity.md)
 - [Parameterized queries](parameterized_queries.md)
+- [Data formats](data-formats/index.md)
 - [Working with topics](topic.md)
 - [Working with coordination nodes](coordination.md)
+- [{#T}](observability/index.md)
 
 See also:
 

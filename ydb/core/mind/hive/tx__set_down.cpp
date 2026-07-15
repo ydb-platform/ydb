@@ -56,11 +56,18 @@ bool TTxSetDown::Execute(TTransactionContext& txc, const TActorContext&) {
 }
 
 void TTxSetDown::Complete(const TActorContext& ctx) {
+<<<<<<< HEAD
     YDB_LOG_DEBUG("THive::TTxSetDown::Complete setting node down state",
         {"logPrefix", GetLogPrefix()},
         {"nodeId", NodeId},
         {"down", Down},
         {"sideEffects", SideEffects});
+=======
+        YDB_LOG_DEBUG("THive::TTxSetDown::Complete setting node down state",
+            {"logPrefix", GetLogPrefix()},
+            {"nodeId", NodeId},
+            {"down", Down});
+>>>>>>> b02c94bde0d ([YDB_LOG] Migrate ydb/core/mind/hive (#43618))
     SideEffects.Complete(ctx);
 }
 

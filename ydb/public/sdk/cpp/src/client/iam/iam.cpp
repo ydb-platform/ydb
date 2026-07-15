@@ -136,7 +136,11 @@ public:
     TIamCredentialsProviderFactory(const TIamHost& params): Params_(params) {}
 
     TCredentialsProviderPtr CreateProvider() const final {
-        return std::make_shared<TIAMCredentialsProvider>(Params_);
+        return NCredentials::NDetail::GetOrCreateCachedProvider(
+            GetClientIdentity(),
+            [this] {
+                return std::make_shared<TIAMCredentialsProvider>(Params_);
+            });
     }
 
     std::string GetClientIdentity() const final {

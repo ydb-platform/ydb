@@ -10853,6 +10853,84 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         UNIT_ASSERT_VALUES_EQUAL(createRequests, 12);
     }
 
+    Y_UNIT_TEST(UpdateChannelsBindingSolomonBlockedOwnerDoesNotRetry) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().AllowUpdateChannelsBindingOfSolomonPartitions(true));
+        ui64 txId = 100;
+
+        TestCreateExtSubDomain(runtime, ++txId, "/MyRoot", R"(
+            Name: "Tenant"
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestAlterExtSubDomain(runtime, ++txId, "/MyRoot", R"(
+            Name: "Tenant"
+            ExternalSchemeShard: true
+            ExternalHive: false
+            PlanResolution: 50
+            Coordinators: 1
+            Mediators: 1
+            TimeCastBucketsPerMediator: 2
+            StoragePools {
+                Name: "pool-1"
+                Kind: "pool-kind-1"
+            }
+            StoragePools {
+                Name: "pool-2"
+                Kind: "pool-kind-2"
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        ui64 tenantSchemeShard = 0;
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Tenant"), {
+            NLs::ExtractTenantSchemeshard(&tenantSchemeShard)
+        });
+        UNIT_ASSERT(tenantSchemeShard != 0 && tenantSchemeShard != TTestTxConfig::SchemeShard);
+
+        TestCreateSolomon(runtime, tenantSchemeShard, ++txId, "/MyRoot/Tenant", R"(
+            Name: "Solomon"
+            PartitionCount: 1
+            ChannelProfileId: 2
+        )");
+        env.TestWaitNotification(runtime, txId, tenantSchemeShard);
+
+        ui32 createRequests = 0;
+        ui32 blockedReplies = 0;
+        auto prevObserver = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvHive::TEvCreateTablet::EventType) {
+                const auto& record = ev->Get<TEvHive::TEvCreateTablet>()->Record;
+                if (record.GetOwner() == tenantSchemeShard) {
+                    ++createRequests;
+                }
+            } else if (ev->GetTypeRewrite() == TEvHive::TEvCreateTabletReply::EventType) {
+                auto& record = ev->Get<TEvHive::TEvCreateTabletReply>()->Record;
+                if (record.GetOwner() == tenantSchemeShard) {
+                    record.SetStatus(NKikimrProto::BLOCKED);
+                    ++blockedReplies;
+                }
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+
+        TestAlterSolomon(runtime, tenantSchemeShard, ++txId, "/MyRoot/Tenant", R"(
+            Name: "Solomon"
+            ChannelProfileId: 3
+            UpdateChannelsBinding: true
+        )");
+
+        TDispatchOptions opts;
+        opts.CustomFinalCondition = [&] {
+            return blockedReplies == 1;
+        };
+        runtime.DispatchEvents(opts);
+        env.SimulateSleep(runtime, TDuration::Minutes(11));
+        runtime.SetObserverFunc(prevObserver);
+
+        UNIT_ASSERT_VALUES_EQUAL(blockedReplies, 1);
+        UNIT_ASSERT_VALUES_EQUAL(createRequests, 1);
+    }
+
     void UpdateChannelsBindingSolomonStorageConfig() {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime, TTestEnvOptions().AllowUpdateChannelsBindingOfSolomonPartitions(true));

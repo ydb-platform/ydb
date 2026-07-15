@@ -79,9 +79,7 @@ public:
         if (resultSet.has_arrow_format_meta()) {
             limitedResultSet.mutable_arrow_format_meta()->Swap(resultSet.mutable_arrow_format_meta());
         }
-        if (resultSet.has_data()) {
-            limitedResultSet.set_data(resultSet.data());
-        }
+        limitedResultSet.mutable_data()->swap(*resultSet.mutable_data());
 
         bool truncated = false;
         for (auto& row : *resultSet.mutable_rows()) {

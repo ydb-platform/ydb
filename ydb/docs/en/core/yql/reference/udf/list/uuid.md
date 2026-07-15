@@ -6,7 +6,7 @@ All functions return a value of type `Uuid` in {{ ydb-short-name }}'s internal 1
 
 When you cast a generated `Uuid` to `Text`, you get a canonical GUID text representation. For key-friendly generators (`newChrono`, `newSharded`, and their `Prefix` variants), the string produced by this conversion does not reflect how the timestamp and prefix are embedded in the stored bytes.
 
-For general recommendations on using `Uuid` as a primary key, see [UUID as a primary key](../../../dev/primary-key/row-oriented.md#uuid-primary-key).
+For general recommendations on using `Uuid` as a primary key, see [UUID as a primary key](../../../../dev/primary-key/row-oriented.md#uuid-primary-key).
 
 ## Key-friendly generators {#key-friendly}
 

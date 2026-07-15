@@ -471,7 +471,7 @@ struct TCommonAppOptions {
         opts.AddLongOption("grpc-public-port", "set public gRPC port for discovery").RequiredArgument("PORT").StoreResult(&GRpcPublicPort);
         opts.AddLongOption("grpcs-public-port", "set public gRPC SSL port for discovery").RequiredArgument("PORT").StoreResult(&GRpcsPublicPort);
         opts.AddLongOption("kafka-port", "enable kafka proxy to listen on port").OptionalArgument("PORT").StoreResult(&KafkaPort);
-        opts.AddLongOption("kafka-listen-address", "set kafka proxy listen address").RequiredArgument("ADDR").StoreResult(&KafkaListenAddress);
+        opts.AddLongOption("kafka-address", "set kafka proxy listen address").RequiredArgument("ADDR").StoreResult(&KafkaListenAddress);
         // Should be provided in yaml config: TGRpcConfig.PublicAddressesV4
         opts.AddLongOption("grpc-public-address-v4", "set public ipv4 address for discovery").RequiredArgument("ADDR").Hidden().EmplaceTo(&GRpcPublicAddressesV4);
         // Should be provided in yaml config: TGRpcConfig.PublicAddressesV6

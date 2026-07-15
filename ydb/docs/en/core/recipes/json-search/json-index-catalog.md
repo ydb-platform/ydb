@@ -126,7 +126,7 @@ sku_id
 ```
 
 
-## See also
+## More details
 
 * [Supported JSON index predicates](../../dev/json-indexes.md#predicates) — full rules for which expressions are indexed.
 * [AND and OR handling](../../dev/json-indexes.md#predicates) — nuances of combining conditions, including with non-indexable predicates.

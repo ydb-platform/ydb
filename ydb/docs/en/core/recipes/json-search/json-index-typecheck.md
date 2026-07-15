@@ -87,7 +87,7 @@ The conditions above select documents where the specified attribute is explicitl
 
 {% endnote %}
 
-## See also
+## More details
 
 * [JSON_EXISTS](../../dev/json-indexes.md#json-exists) — what is allowed in JsonPath expressions.
 * [JSON_VALUE](../../dev/json-indexes.md#json-value) — what is allowed when extracting values.

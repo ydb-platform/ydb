@@ -448,7 +448,7 @@ public:
             SendCreateTabletEvent(txState->TargetPathId, shard.Idx, context);
 
         } else {
-            YDB_LOG_INFO_CTX(context.Ctx, "ProgressState, ExtSubDomain hive already exist",
+            YDB_LOG_INFO_CTX(context.Ctx, "ProgressState ExtSubDomain hive already exists",
                 {"tabletId", context.SS->TabletID()},
                 {"debugHint", DebugHint()},
                 {"tabletId", subdomainHiveTabletId});
@@ -526,7 +526,7 @@ public:
         context.OnComplete.UnbindMsgFromPipe(OperationId, rootHiveId, shardIdx);
         context.OnComplete.ActivateShardCreated(shardIdx, OperationId.GetTxId());
 
-        YDB_LOG_INFO_CTX(context.Ctx, "ExtSubDomain hive created, tabletId",
+        YDB_LOG_INFO_CTX(context.Ctx, "ExtSubDomain hive created",
             {"tabletId", context.SS->TabletID()},
             {"debugHint", DebugHint()},
             {"createdTabletId", createdTabletId});
@@ -569,7 +569,7 @@ public:
     }
 
     bool HandleReply(TEvPrivate::TEvCompleteBarrier::TPtr& ev, TOperationContext& context) override {
-        YDB_LOG_INFO_CTX(context.Ctx, "HandleReply TEvPrivate:TEvCompleteBarrier",
+        YDB_LOG_INFO_CTX(context.Ctx, "HandleReply TEvCompleteBarrier",
             {"tabletId", context.SS->TabletID()},
             {"debugHint", DebugHint()},
             {"msg", ev->Get()->ToString()});
@@ -664,11 +664,11 @@ public:
         // Create subdomain alter
         TSubDomainInfo::TPtr alter = new TSubDomainInfo(*subdomainInfo, 0, 0, delta.StoragePoolsAdded);
 
-        YDB_LOG_DEBUG_CTX(context.Ctx, "TAlterExtSubDomainCreateHive Propose subdomain ver alter ver",
+        YDB_LOG_DEBUG_CTX(context.Ctx, "TAlterExtSubDomainCreateHive Propose subdomain and alter versions",
             {"tabletId", context.SS->TabletID()},
             {"opId", OperationId},
-            {"#_subdomainInfo->GetVersion", subdomainInfo->GetVersion()},
-            {"#_alter->GetVersion", alter->GetVersion()});
+            {"subdomainVersion", subdomainInfo->GetVersion()},
+            {"alterVersion", alter->GetVersion()});
 
         auto guard = context.DbGuard();
 
@@ -703,7 +703,7 @@ public:
     }
 
     void AbortPropose(TOperationContext& context) override {
-        YDB_LOG_NOTICE_CTX(context.Ctx, "TAlterExtSubDomainCreateHive AbortPropose opId",
+        YDB_LOG_NOTICE_CTX(context.Ctx, "TAlterExtSubDomainCreateHive AbortPropose",
             {"tabletId", context.SS->TabletID()},
             {"operationId", OperationId});
     }
@@ -739,10 +739,10 @@ public:
         TTxState* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
 
-        YDB_LOG_INFO_CTX(context.Ctx, "ProgressState, operation type",
+        YDB_LOG_INFO_CTX(context.Ctx, "ProgressState operation type",
             {"tabletId", context.SS->TabletID()},
             {"debugHint", DebugHint()},
-            {"#_TTxState::TypeName(txState->TxType)", TTxState::TypeName(txState->TxType)});
+            {"txType", TTxState::TypeName(txState->TxType)});
 
         // Register barrier which this suboperation will wait on.
         // This is a sync point with TAlterExtSubDomainCreateHive suboperation.
@@ -752,7 +752,7 @@ public:
     }
 
     bool HandleReply(TEvPrivate::TEvCompleteBarrier::TPtr& ev, TOperationContext& context) override {
-        YDB_LOG_INFO_CTX(context.Ctx, "HandleReply TEvPrivate:TEvCompleteBarrier",
+        YDB_LOG_INFO_CTX(context.Ctx, "HandleReply TEvCompleteBarrier",
             {"tabletId", context.SS->TabletID()},
             {"debugHint", DebugHint()},
             {"msg", ev->Get()->ToString()});
@@ -816,7 +816,7 @@ public:
                 {"tabletId", context.SS->TabletID()},
                 {"debugHint", DebugHint()},
                 {"hive", hiveToSync},
-                {"#_event->Record", event->Record.ShortDebugString()});
+                {"eventRecord", event->Record.ShortDebugString()});
 
             context.OnComplete.BindMsgToPipe(OperationId, hiveToSync, pathId, event.Release());
             return false;
@@ -993,11 +993,11 @@ public:
             alter->SetServerlessComputeResourcesMode(inputSettings.GetServerlessComputeResourcesMode());
         }
 
-        YDB_LOG_DEBUG_CTX(context.Ctx, "TAlterExtSubDomain Propose subdomain ver alter ver",
+        YDB_LOG_DEBUG_CTX(context.Ctx, "TAlterExtSubDomain Propose subdomain and alter versions",
             {"tabletId", context.SS->TabletID()},
             {"opId", OperationId},
-            {"#_subdomainInfo->GetVersion", subdomainInfo->GetVersion()},
-            {"#_alter->GetVersion", alter->GetVersion()});
+            {"subdomainVersion", subdomainInfo->GetVersion()},
+            {"alterVersion", alter->GetVersion()});
 
         auto guard = context.DbGuard();
 
@@ -1113,17 +1113,17 @@ TVector<ISubOperation::TPtr> CreateCompatibleAlterExtSubDomain(TOperationId id, 
     // This compatibility case should be upholded until Console records would be updated.
     Y_ABORT_UNLESS(tx.GetOperationType() == NKikimrSchemeOp::ESchemeOpAlterExtSubDomain || tx.GetOperationType() == NKikimrSchemeOp::ESchemeOpAlterSubDomain);
 
-    YDB_LOG_INFO_CTX(context.Ctx, "CreateCompatibleAlterExtSubDomain, opId feature flag EnableAlterDatabaseCreateHiveFirst tx",
+    YDB_LOG_INFO_CTX(context.Ctx, "CreateCompatibleAlterExtSubDomain feature flag and transaction",
         {"tabletId", context.SS->TabletID()},
         {"id", id},
-        {"#_context.SS->EnableAlterDatabaseCreateHiveFirst", context.SS->EnableAlterDatabaseCreateHiveFirst},
-        {"#_tx", tx.ShortDebugString()});
+        {"enableAlterDatabaseCreateHiveFirst", context.SS->EnableAlterDatabaseCreateHiveFirst},
+        {"transaction", tx.ShortDebugString()});
 
     const TString& parentPathStr = tx.GetWorkingDir();
     const auto& inputSettings = tx.GetSubDomain();
     const TString& name = inputSettings.GetName();
 
-    YDB_LOG_INFO_CTX(context.Ctx, "CreateCompatibleAlterExtSubDomain, opId path",
+    YDB_LOG_INFO_CTX(context.Ctx, "CreateCompatibleAlterExtSubDomain path",
         {"tabletId", context.SS->TabletID()},
         {"id", id},
         {"parentPathStr", parentPathStr},

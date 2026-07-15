@@ -251,9 +251,9 @@ public:
         TTxState* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
 
-        YDB_LOG_INFO_CTX(context.Ctx, "ProgressState, operation type",
+        YDB_LOG_INFO_CTX(context.Ctx, "ProgressState operation type",
             {"debugHint", DebugHint()},
-            {"#_TTxState::TypeName(txState->TxType)", TTxState::TypeName(txState->TxType)});
+            {"txType", TTxState::TypeName(txState->TxType)});
 
         context.OnComplete.Barrier(OperationId, "CopyTableBarrier");
         return false;

@@ -221,8 +221,8 @@ void AuditLogModifySchemeTransactionDeprecated(const NKikimrScheme::TEvModifySch
             entry << ", remove access: " << i;
         }
 
-        YDB_LOG_NOTICE("",
-            {"AUDIT", entry});
+        YDB_LOG_NOTICE("Audit log entry",
+            {"entry", entry});
     }
 }
 

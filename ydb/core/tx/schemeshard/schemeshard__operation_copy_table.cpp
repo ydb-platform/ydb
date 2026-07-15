@@ -99,7 +99,7 @@ public:
                 {"dstDatashard", dstDatashardId},
                 {"idx", dstShardIdx},
                 {"srcDatashard", srcDatashardId},
-                {"#_dup_idx", srcShardIdx},
+                {"srcShardIdx", srcShardIdx},
                 {"operationId", OperationId},
                 {"seqNo", seqNo},
                 {"tablet", ssId});
@@ -712,8 +712,8 @@ public:
                 if (oldStreamPath.Base()->LastTxId != InvalidTxId && oldStreamPath.Base()->LastTxId != OperationId.GetTxId()) {
                     YDB_LOG_NOTICE_CTX(context.Ctx, "TCopyTable Propose: Stream was busy by txId overriding with current opId because CopyTable owns the parent table",
                         {"streamName", streamName},
-                        {"#_oldStreamPath.Base()->LastTxId", oldStreamPath.Base()->LastTxId},
-                        {"#_OperationId.GetTxId", OperationId.GetTxId()});
+                        {"lastTxId", oldStreamPath.Base()->LastTxId},
+                        {"txId", OperationId.GetTxId()});
                 }
 
                 context.MemChanges.GrabPath(context.SS, oldStreamPath.Base()->PathId);

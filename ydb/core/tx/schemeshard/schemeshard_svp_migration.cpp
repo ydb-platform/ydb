@@ -35,14 +35,14 @@ public:
             cFunc(TEvents::TEvPoison::EventType, PassAway);
             default:
                 YDB_LOG_CRIT_CTX(*TlsActivationContext, "TTabletMigrator StateWork unexpected event 0x%08x",
-                    {"#_ev->GetTypeRewrite", ev->GetTypeRewrite()});
+                    {"eventType", ev->GetTypeRewrite()});
         }
     }
 
 private:
     void RequestTxId() {
         YDB_LOG_DEBUG("TabletMigrator - send TEvAllocateTxId working dir db",
-            {"#_Current.WorkingDir", Current.WorkingDir},
+            {"workingDir", Current.WorkingDir},
             {"name", Current.DbName},
             {"schemeshard", SSTabletId});
 
@@ -73,7 +73,7 @@ private:
         }
 
         YDB_LOG_DEBUG("TabletMigrator - send TEvModifySchemeTransaction working dir db",
-            {"#_Current.WorkingDir", Current.WorkingDir},
+            {"workingDir", Current.WorkingDir},
             {"name", Current.DbName},
             {"schemeshard", SSTabletId});
 

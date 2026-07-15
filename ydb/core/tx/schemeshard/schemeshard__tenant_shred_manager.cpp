@@ -30,7 +30,7 @@ NOperationQueue::EStartStatus TTenantShredManager::StartShredOperation(const TSh
         {"pathId", pathId},
         {"tabletId", tabletId},
         {"generation", Generation},
-        {"#_SchemeShard->TabletID", SchemeShard->TabletID()});
+        {"tabletId", SchemeShard->TabletID()});
 
     std::unique_ptr<IEventBase> request = nullptr;
     switch (it->second.TabletType) {
@@ -121,7 +121,7 @@ void TTenantShredManager::Start() {
             }
         }
         YDB_LOG_TRACE_CTX(ctx, "[TenantShredManager] Continue",
-            {"#_WaitingShredShards.size", WaitingShredShards.size()},
+            {"waitingShredShardsCount", WaitingShredShards.size()},
             {"status", Status});
     }
 }
@@ -157,11 +157,11 @@ void TTenantShredManager::StartShred(NIceDb::TNiceDb& db, ui64 newGen) {
                 db.Table<Schema::WaitingShredShards>().Key(shardIdx.GetOwnerId(), shardIdx.GetLocalId()).Update<Schema::WaitingShredShards::Status>(WaitingShredShards[shardIdx]);
                 YDB_LOG_TRACE_CTX(ctx, "[TenantShredManager] [Enqueue] Enqueued at schemeshard",
                     {"shard", shardIdx},
-                    {"#_SchemeShard->TabletID", SchemeShard->TabletID()});
+                    {"tabletId", SchemeShard->TabletID()});
             } else {
                 YDB_LOG_TRACE_CTX(ctx, "[TenantShredManager] [Enqueue] Skipped or already exists at schemeshard",
                     {"shard", shardIdx},
-                    {"#_SchemeShard->TabletID", SchemeShard->TabletID()});
+                    {"tabletId", SchemeShard->TabletID()});
             }
             break;
         }
@@ -177,7 +177,7 @@ void TTenantShredManager::StartShred(NIceDb::TNiceDb& db, ui64 newGen) {
 
     YDB_LOG_NOTICE_CTX(ctx, "[TenantShredManager] StartShred",
         {"generation", Generation},
-        {"#_WaitingShredShards.size", WaitingShredShards.size()},
+        {"waitingShredShardsCount", WaitingShredShards.size()},
         {"status", Status});
 }
 
@@ -190,11 +190,11 @@ void TTenantShredManager::StartShredForNewShards(NIceDb::TNiceDb& db, const std:
             db.Table<Schema::WaitingShredShards>().Key(shardIdx.GetOwnerId(), shardIdx.GetLocalId()).Update<Schema::WaitingShredShards::Status>(WaitingShredShards[shardIdx]);
             YDB_LOG_TRACE_CTX(ctx, "[TenantShredManager] [Enqueue] Enqueued at schemeshard",
                 {"shard", shardIdx},
-                {"#_SchemeShard->TabletID", SchemeShard->TabletID()});
+                {"tabletId", SchemeShard->TabletID()});
         } else {
             YDB_LOG_TRACE_CTX(ctx, "[TenantShredManager] [Enqueue] Skipped or already exists at schemeshard",
                 {"shard", shardIdx},
-                {"#_SchemeShard->TabletID", SchemeShard->TabletID()});
+                {"tabletId", SchemeShard->TabletID()});
         }
     }
     if (WaitingShredShards.empty()) {
@@ -205,7 +205,7 @@ void TTenantShredManager::StartShredForNewShards(NIceDb::TNiceDb& db, const std:
 
     YDB_LOG_TRACE_CTX(ctx, "[TenantShredManager] StartShredForNewShards",
         {"generation", Generation},
-        {"#_WaitingShredShards.size", WaitingShredShards.size()},
+        {"waitingShredShardsCount", WaitingShredShards.size()},
         {"status", Status});
 }
 
@@ -217,13 +217,13 @@ void TTenantShredManager::FinishShred(NIceDb::TNiceDb& db, const TTabletId& tabl
         YDB_LOG_WARN_CTX(ctx, "[TenantShredManager] [Finished] Failed to resolve shard info for ms at schemeshard",
             {"tabletId", tabletId},
             {"in", duration.MilliSeconds()},
-            {"#_SchemeShard->TabletID", SchemeShard->TabletID()});
+            {"tabletId", SchemeShard->TabletID()});
     } else {
         YDB_LOG_INFO_CTX(ctx, "[TenantShredManager] [Finished] Shred is completed for ms at schemeshard",
             {"tabletId", tabletId},
             {"shardIdx", shardIdx},
             {"in", duration.MilliSeconds()},
-            {"#_SchemeShard->TabletID", SchemeShard->TabletID()});
+            {"tabletId", SchemeShard->TabletID()});
     }
 
     bool wasRunning = ActivePipes.erase(shardIdx) > 0;

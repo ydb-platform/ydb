@@ -402,7 +402,7 @@ public:
     bool ProgressState(TOperationContext& context) override {
         TTabletId ssId = context.SS->SelfTabletId();
 
-        YDB_LOG_INFO_CTX(context.Ctx, "HandleReply ProgressState",
+        YDB_LOG_INFO_CTX(context.Ctx, "ProgressState",
             {"debugHint", DebugHint()},
             {"tablet", ssId});
 

@@ -18,7 +18,7 @@ private:
     NActors::TActorId TxAllocatorClient;
 
     void SendCurrentTxToSS() {
-        YDB_LOG_NOTICE_COMP(NKikimrServices::TX_COLUMNSHARD, "",
+        YDB_LOG_NOTICE_COMP(NKikimrServices::TX_COLUMNSHARD, "SendCurrentTxToSS",
             {"chainTx", SessionLogic->GetTxData().GetTransactions()[SessionLogic->GetStepForExecute()].DebugString()});
         auto evModification = std::make_unique<TEvSchemeShard::TEvModifySchemeTransaction>(SessionLogic->GetCurrentTxIdVerified(), (ui64)TabletId);
         *evModification->Record.AddTransaction() = SessionLogic->GetTxData().GetTransactions()[SessionLogic->GetStepForExecute()];

@@ -39,16 +39,16 @@ struct TSchemeShard::TTxDescribeScheme : public TSchemeShard::TRwTxBase {
 
         if (params.HasPathId()) {
             YDB_LOG_INFO_CTX(ctx, "Tablet describe pathId took result status",
-                {"#_Self->TabletID", Self->TabletID()},
-                {"#_params.GetPathId", params.GetPathId()},
-                {"#_HumanReadable(ExecuteDuration)", HumanReadable(ExecuteDuration)},
-                {"#_NKikimrScheme::EStatus_Name(Result->Record.GetStatus())", NKikimrScheme::EStatus_Name(Result->Record.GetStatus())});
+                {"tabletId", Self->TabletID()},
+                {"pathId", params.GetPathId()},
+                {"executeDuration", HumanReadable(ExecuteDuration)},
+                {"status", NKikimrScheme::EStatus_Name(Result->Record.GetStatus())});
         } else {
             YDB_LOG_INFO_CTX(ctx, "Tablet describe path took result status",
-                {"#_Self->TabletID", Self->TabletID()},
-                {"#_params.GetPath", params.GetPath()},
-                {"#_HumanReadable(ExecuteDuration)", HumanReadable(ExecuteDuration)},
-                {"#_NKikimrScheme::EStatus_Name(Result->Record.GetStatus())", NKikimrScheme::EStatus_Name(Result->Record.GetStatus())});
+                {"tabletId", Self->TabletID()},
+                {"path", params.GetPath()},
+                {"executeDuration", HumanReadable(ExecuteDuration)},
+                {"status", NKikimrScheme::EStatus_Name(Result->Record.GetStatus())});
         }
 
         YDB_LOG_DEBUG_CTX(ctx, "TTxDescribeScheme DoComplete",

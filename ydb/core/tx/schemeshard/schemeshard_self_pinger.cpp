@@ -15,9 +15,9 @@ void TSelfPinger::Handle(TEvSchemeShard::TEvMeasureSelfResponseTime::TPtr &ev, c
     LastResponseTime = responseTime;
     TabletCounters->Simple()[COUNTER_RESPONSE_TIME_USEC].Set(LastResponseTime.MicroSeconds());
     if (responseTime.MilliSeconds() > 1000) {
-        YDB_LOG_WARN_CTX(ctx, "Schemeshard response time is msec",
+        YDB_LOG_WARN_CTX(ctx, "Schemeshard response time is too high",
             {"tabletId", TabletId},
-            {"#_responseTime.MilliSeconds", responseTime.MilliSeconds()});
+            {"responseTimeMs", responseTime.MilliSeconds()});
     }
     SelfPingInFlight = false;
     if (responseTime > SELF_PING_INTERVAL) {

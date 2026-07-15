@@ -18,7 +18,7 @@ struct TSchemeShard::TForcedCompaction::TTxProgress: public TRwTxBase {
 
     void DoExecute(TTransactionContext &txc, const TActorContext &ctx) override {
         YDB_LOG_DEBUG_CTX(ctx, "][ForcedCompaction] TForcedCompaction::TTxProgress DoExecute",
-            {"#_Self->SelfTabletId", Self->SelfTabletId()},
+            {"tabletId", Self->SelfTabletId()},
             {"forcedCompactionsDoneShardsToPersistSize", Self->ForcedCompactionsDoneShardsToPersist.size()},
             {"cancellingForcedCompactionsSize", Self->CancellingForcedCompactions.size()});
         THashSet<TForcedCompactionInfo::TPtr> compactionsToPersist;
@@ -69,7 +69,7 @@ struct TSchemeShard::TForcedCompaction::TTxProgress: public TRwTxBase {
 
     void DoComplete(const TActorContext &ctx) override {
         YDB_LOG_DEBUG_CTX(ctx, "][ForcedCompaction] TForcedCompaction::TTxProgress DoComplete",
-            {"#_Self->SelfTabletId", Self->SelfTabletId()},
+            {"tabletId", Self->SelfTabletId()},
             {"forcedCompactionsDoneShardsToPersistSize", Self->ForcedCompactionsDoneShardsToPersist.size()},
             {"cancellingForcedCompactionsSize", Self->CancellingForcedCompactions.size()});
         SideEffects.ApplyOnComplete(Self, ctx);
@@ -82,7 +82,7 @@ private:
         }
 
         YDB_LOG_TRACE_CTX(ctx, "][ForcedCompaction] TForcedCompaction::TTxProgress SendNotifications: subscribers",
-            {"#_Self->SelfTabletId", Self->SelfTabletId()},
+            {"tabletId", Self->SelfTabletId()},
             {"id", info.Id},
             {"count", info.Subscribers.size()});
 

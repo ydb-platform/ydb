@@ -254,13 +254,13 @@ void TSideEffects::DoActivateOps(TSchemeShard* ss, const TActorContext& ctx) {
         if (operation->WaitOperations.size()) {
             YDB_LOG_INFO_CTX(ctx, "Delay activating there is await operations num",
                 {"operation", txId},
-                {"#_operation->WaitOperations.size", operation->WaitOperations.size()});
+                {"waitOperationsCount", operation->WaitOperations.size()});
             continue;
         }
 
         for (ui32 partIdx = 0; partIdx < operation->Parts.size(); ++partIdx) {
             YDB_LOG_TRACE_CTX(ctx, "Activate send",
-                {"#_TOperationId(txId, partIdx)", TOperationId(txId, partIdx)});
+                {"waitOperationId", TOperationId(txId, partIdx)});
             ctx.Send(ctx.SelfID, new TEvPrivate::TEvProgressOperation(ui64(txId), partIdx));
         }
     }
@@ -277,7 +277,7 @@ void TSideEffects::DoActivateOps(TSchemeShard* ss, const TActorContext& ctx) {
         if (operation->WaitOperations.size()) {
             YDB_LOG_INFO_CTX(ctx, "Delay activating operation there is await operations num",
                 {"part", opPart},
-                {"#_operation->WaitOperations.size", operation->WaitOperations.size()});
+                {"waitOperationsCount", operation->WaitOperations.size()});
             continue;
         }
 
@@ -579,7 +579,7 @@ void TSideEffects::DoUpdateTenant(TSchemeShard* ss, NTabletFlatExecutor::TTransa
             YDB_LOG_DEBUG_CTX(ctx, "DoUpdateTenant no hasChanges",
                 {"pathId", pathId},
                 {"tenantLink", tenantLink},
-                {"#_subDomain->GetVersion", subDomain->GetVersion()},
+                {"subdomainVersion", subDomain->GetVersion()},
                 {"actualEffectiveACLVersion", actualEffectiveACLVersion},
                 {"actualUserAttrsVersion", actualUserAttrsVersion},
                 {"tenantHive", subDomain->GetTenantHiveID()},
@@ -946,8 +946,8 @@ void TSideEffects::DoDoneParts(TSchemeShard *ss, const TActorContext &ctx) {
 
         YDB_LOG_INFO_CTX(ctx, "Part operation is done progress is",
             {"id", opId},
-            {"#_operation->DoneParts.size", operation->DoneParts.size()},
-            {"#_operation->Parts.size", operation->Parts.size()});
+            {"donePartsCount", operation->DoneParts.size()},
+            {"partsCount", operation->Parts.size()});
 
         if (!operation->IsReadyToDone(ctx)) {
             continue;
@@ -1043,8 +1043,8 @@ void TSideEffects::DoDoneTransactions(TSchemeShard *ss, NTabletFlatExecutor::TTr
             for (const auto& pub : operation->Publications) {
                 YDB_LOG_DEBUG_CTX(ctx, "Publication details",
                     {"tx", txId},
-                    {"#_pub.first", pub.first},
-                    {"#_pub.second", pub.second});
+                    {"publishPathId", pub.first},
+                    {"publishStepId", pub.second});
             }
 
             ss->Publications[txId] = {

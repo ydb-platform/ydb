@@ -39,9 +39,9 @@ struct TSchemeShard::TTxCleanTables : public TTransactionBase<TSchemeShard> {
 
     void Complete(const TActorContext &ctx) override {
         if (RemovedCount) {
-            YDB_LOG_WARN_CTX(ctx, "TTxCleanTables Complete done PersistRemoveTable for tables left",
+            YDB_LOG_WARN_CTX(ctx, "TTxCleanTables complete: PersistRemoveTable for remaining tables",
                 {"removedCount", RemovedCount},
-                {"#_TablesToClean.size", TablesToClean.size()},
+                {"tablesToCleanCount", TablesToClean.size()},
                 {"schemeshard", Self->TabletID()});
         }
 
@@ -86,9 +86,9 @@ struct TSchemeShard::TTxCleanBlockStoreVolumes : public TTransactionBase<TScheme
 
     void Complete(const TActorContext& ctx) override {
         if (RemovedCount) {
-            YDB_LOG_WARN_CTX(ctx, "TTxCleanBlockStoreVolumes Complete done PersistRemoveBlockStoreVolume for volumes left",
+            YDB_LOG_WARN_CTX(ctx, "TTxCleanBlockStoreVolumes complete: PersistRemoveBlockStoreVolume for remaining volumes",
                 {"removedCount", RemovedCount},
-                {"#_BlockStoreVolumesToClean.size", BlockStoreVolumesToClean.size()},
+                {"blockStoreVolumesToCleanCount", BlockStoreVolumesToClean.size()},
                 {"schemeshard", Self->TabletID()});
         }
 
@@ -117,7 +117,7 @@ struct TSchemeShard::TTxCleanDroppedPaths : public TTransactionBase<TSchemeShard
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
         YDB_LOG_DEBUG_CTX(ctx, "TTxCleanDroppedPaths Execute paths in candidate queue",
-            {"#_Self->CleanDroppedPathsCandidates.size", Self->CleanDroppedPathsCandidates.size()},
+            {"cleanDroppedPathsCandidatesCount", Self->CleanDroppedPathsCandidates.size()},
             {"schemeshard", Self->TabletID()});
 
         Y_ABORT_UNLESS(Self->CleanDroppedPathsInFly);
@@ -163,10 +163,10 @@ struct TSchemeShard::TTxCleanDroppedPaths : public TTransactionBase<TSchemeShard
         Y_ABORT_UNLESS(Self->CleanDroppedPathsInFly);
 
         if (RemovedCount || SkippedCount) {
-            YDB_LOG_NOTICE_CTX(ctx, "TTxCleanDroppedPaths Complete done PersistRemovePath for paths skipped left candidates",
+            YDB_LOG_NOTICE_CTX(ctx, "TTxCleanDroppedPaths complete: PersistRemovePath for remaining candidates",
                 {"removedCount", RemovedCount},
                 {"skippedCount", SkippedCount},
-                {"#_Self->CleanDroppedPathsCandidates.size", Self->CleanDroppedPathsCandidates.size()},
+                {"cleanDroppedPathsCandidatesCount", Self->CleanDroppedPathsCandidates.size()},
                 {"schemeshard", Self->TabletID()});
         }
 
@@ -209,7 +209,7 @@ struct TSchemeShard::TTxCleanDroppedSubDomains : public TTransactionBase<TScheme
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
         YDB_LOG_DEBUG_CTX(ctx, "TTxCleanDroppedSubDomains Execute paths in candidate queue",
-            {"#_Self->CleanDroppedSubDomainsCandidates.size", Self->CleanDroppedSubDomainsCandidates.size()},
+            {"cleanDroppedSubDomainsCandidatesCount", Self->CleanDroppedSubDomainsCandidates.size()},
             {"schemeshard", Self->TabletID()});
 
         Y_ABORT_UNLESS(Self->CleanDroppedSubDomainsInFly);
@@ -252,10 +252,10 @@ struct TSchemeShard::TTxCleanDroppedSubDomains : public TTransactionBase<TScheme
         Y_ABORT_UNLESS(Self->CleanDroppedSubDomainsInFly);
 
         if (RemovedCount || SkippedCount) {
-            YDB_LOG_NOTICE_CTX(ctx, "TTxCleanDroppedSubDomains Complete done PersistRemoveSubDomain for subdomains skipped left candidates",
+            YDB_LOG_NOTICE_CTX(ctx, "TTxCleanDroppedSubDomains complete: PersistRemoveSubDomain for remaining candidates",
                 {"removedCount", RemovedCount},
                 {"skippedCount", SkippedCount},
-                {"#_Self->CleanDroppedSubDomainsCandidates.size", Self->CleanDroppedSubDomainsCandidates.size()},
+                {"cleanDroppedSubDomainsCandidatesCount", Self->CleanDroppedSubDomainsCandidates.size()},
                 {"schemeshard", Self->TabletID()});
 
         }

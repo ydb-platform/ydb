@@ -25,9 +25,9 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> LockPropose(
     modifyScheme.MutableLockConfig()->SetLockTxId(ui64(buildInfo.LockTxId));
 
     YDB_LOG_NOTICE("LockPropose",
-        {"#_buildInfo.Id", buildInfo.Id},
-        {"#_buildInfo.State", buildInfo.State},
-        {"#_propose->Record", propose->Record.ShortDebugString()});
+        {"buildId", buildInfo.Id},
+        {"buildState", buildInfo.State},
+        {"proposeRecord", propose->Record.ShortDebugString()});
 
     return propose;
 }
@@ -63,9 +63,9 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> UnlockPropose(
     }
 
     YDB_LOG_NOTICE("UnlockPropose",
-        {"#_buildInfo.Id", buildInfo.Id},
-        {"#_buildInfo.State", buildInfo.State},
-        {"#_propose->Record", propose->Record.ShortDebugString()});
+        {"buildId", buildInfo.Id},
+        {"buildState", buildInfo.State},
+        {"proposeRecord", propose->Record.ShortDebugString()});
 
     return propose;
 }

@@ -219,11 +219,11 @@ public:
 
         YDB_LOG_INFO_CTX(context.Ctx, "HandleReply",
             {"debugHint", DebugHint()},
-            {"#_TEvSchemaChangedTraits<TEvent>::GetName", TEvSchemaChangedTraits<TEvent>::GetName()},
+            {"eventName", TEvSchemaChangedTraits<TEvent>::GetName()},
             {"tablet", ssId});
         YDB_LOG_DEBUG_CTX(context.Ctx, "HandleReply triggered early",
             {"debugHint", DebugHint()},
-            {"#_TEvSchemaChangedTraits<TEvent>::GetName", TEvSchemaChangedTraits<TEvent>::GetName()},
+            {"eventName", TEvSchemaChangedTraits<TEvent>::GetName()},
             {"message", evRecord.ShortDebugString()});
 
         NTableState::CollectSchemaChanged(OperationId, ev, context);
@@ -380,7 +380,7 @@ public:
 
         YDB_LOG_INFO_CTX(context.Ctx, "HandleReply save it",
             {"debugHint", DebugHint()},
-            {"#_TEvSchemaChangedTraits<TEvent>::GetName", TEvSchemaChangedTraits<TEvent>::GetName()},
+            {"eventName", TEvSchemaChangedTraits<TEvent>::GetName()},
             {"schemeshard", ssId});
 
         NTableState::CollectSchemaChanged(OperationId, ev, context);
@@ -416,7 +416,7 @@ public:
         TTxState* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
 
-        YDB_LOG_INFO_CTX(context.Ctx, "ProgressState operation",
+        YDB_LOG_INFO_CTX(context.Ctx, "ProgressState",
             {"debugHint", DebugHint()},
             {"type", TTxState::TypeName(txState->TxType)},
             {"tablet", ssId});
@@ -473,7 +473,7 @@ public:
 
         YDB_LOG_INFO_CTX(context.Ctx, "HandleReply save it",
             {"debugHint", DebugHint()},
-            {"#_TEvSchemaChangedTraits<TEvent>::GetName", TEvSchemaChangedTraits<TEvent>::GetName()},
+            {"eventName", TEvSchemaChangedTraits<TEvent>::GetName()},
             {"schemeshard", ssId});
 
         NTableState::CollectSchemaChanged(OperationId, ev, context);
@@ -491,7 +491,7 @@ public:
     bool HandleReply(TEvPrivate::TEvCompleteBarrier::TPtr& ev, TOperationContext& context) override {
         TTabletId ssId = context.SS->SelfTabletId();
 
-        YDB_LOG_INFO_CTX(context.Ctx, "HandleReply TEvPrivate:TEvCompleteBarrier",
+        YDB_LOG_INFO_CTX(context.Ctx, "HandleReply TEvCompleteBarrier",
             {"debugHint", DebugHint()},
             {"msg", ev->Get()->ToString()},
             {"tablet", ssId});
@@ -542,7 +542,7 @@ public:
         TTxState* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
 
-        YDB_LOG_INFO_CTX(context.Ctx, "ProgressState operation",
+        YDB_LOG_INFO_CTX(context.Ctx, "ProgressState",
             {"debugHint", DebugHint()},
             {"type", TTxState::TypeName(txState->TxType)},
             {"tablet", ssId});
@@ -570,18 +570,18 @@ private:
 
         YDB_LOG_INFO_CTX(context.Ctx, "HandleReply",
             {"debugHint", DebugHint()},
-            {"#_TEvSchemaChangedTraits<TEvent>::GetName", TEvSchemaChangedTraits<TEvent>::GetName()},
+            {"eventName", TEvSchemaChangedTraits<TEvent>::GetName()},
             {"tablet", ssId});
         YDB_LOG_DEBUG_CTX(context.Ctx, "HandleReply",
             {"debugHint", DebugHint()},
-            {"#_TEvSchemaChangedTraits<TEvent>::GetName", TEvSchemaChangedTraits<TEvent>::GetName()},
+            {"eventName", TEvSchemaChangedTraits<TEvent>::GetName()},
             {"tablet", ssId},
             {"message", evRecord.ShortDebugString()});
 
         if (!NTableState::CollectSchemaChanged(OperationId, ev, context)) {
             YDB_LOG_DEBUG_CTX(context.Ctx, "HandleReply CollectSchemaChanged: false",
                 {"debugHint", DebugHint()},
-                {"#_TEvSchemaChangedTraits<TEvent>::GetName", TEvSchemaChangedTraits<TEvent>::GetName()});
+                {"eventName", TEvSchemaChangedTraits<TEvent>::GetName()});
             return false;
         }
 
@@ -591,7 +591,7 @@ private:
         if (!txState.ReadyForNotifications) {
             YDB_LOG_DEBUG_CTX(context.Ctx, "HandleReply ReadyForNotifications: false",
                 {"debugHint", DebugHint()},
-                {"#_TEvSchemaChangedTraits<TEvent>::GetName", TEvSchemaChangedTraits<TEvent>::GetName()});
+                {"eventName", TEvSchemaChangedTraits<TEvent>::GetName()});
             return false;
         }
 
@@ -690,7 +690,7 @@ public:
 
         YDB_LOG_INFO_CTX(context.Ctx, "HandleReply repeated message, ack it anyway",
             {"debugHint", DebugHint()},
-            {"#_TEvSchemaChangedTraits<TEvent>::GetName", TEvSchemaChangedTraits<TEvent>::GetName()},
+            {"eventName", TEvSchemaChangedTraits<TEvent>::GetName()},
             {"tablet", ssId});
 
         THolder<TEvDataShard::TEvSchemaChangedResult> event = MakeHolder<TEvDataShard::TEvSchemaChangedResult>();

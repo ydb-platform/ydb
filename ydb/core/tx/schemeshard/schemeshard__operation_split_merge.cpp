@@ -51,7 +51,7 @@ public:
         if (!idx) {
             YDB_LOG_ERROR_CTX(context.Ctx, "Tablet is not known in TxId",
                 {"tabletId", tabletId},
-                {"#_OperationId.GetTxId", OperationId.GetTxId()});
+                {"txId", OperationId.GetTxId()});
             return false;
         }
 
@@ -219,7 +219,7 @@ public:
         if (!srcShardIdx) {
             YDB_LOG_ERROR_CTX(context.Ctx, "Tablet is not known in TxId",
                 {"tabletId", tabletId},
-                {"#_OperationId.GetTxId", OperationId.GetTxId()});
+                {"txId", OperationId.GetTxId()});
             return false;
         }
 
@@ -438,7 +438,7 @@ public:
             // TODO: verify that this is a repeated event from known Src shard, not a random one
             YDB_LOG_INFO_CTX(context.Ctx, "Got SplitPartitioningChangedAck from shard that is not a part ot Tx",
                 {"tabletId", tabletId},
-                {"#_OperationId.GetTxId", OperationId.GetTxId()});
+                {"txId", OperationId.GetTxId()});
             return false;
         }
 
@@ -484,7 +484,7 @@ public:
 
             if (!context.SS->ShardInfos.contains(shard.Idx) || context.SS->ShardDeleter.Has(shard.Idx)) {
                 YDB_LOG_DEBUG_CTX(context.Ctx, "Src datashard idx for is already deleted or is intended to at tablet",
-                    {"#_shard.Idx", shard.Idx},
+                    {"shardIdx", shard.Idx},
                     {"splitOp", OperationId.GetTxId()},
                     {"tabletId", context.SS->TabletID()});
                 continue;
@@ -993,8 +993,8 @@ public:
                              Sprintf("Split/Merge operation involves too many parts: %" PRIu64, totalSrcPartCount));
 
             YDB_LOG_CRIT_CTX(context.Ctx, "Cannot start split/merge operation for table (id at tablet because the operation involves too many",
-                {"#_info.GetTablePath", info.GetTablePath()},
-                {"#_path.Base()->PathId", path.Base()->PathId},
+                {"tablePath", info.GetTablePath()},
+                {"pathId", path.Base()->PathId},
                 {"tabletId", context.SS->TabletID()},
                 {"parts", totalSrcPartCount});
             return result;

@@ -50,7 +50,7 @@ struct TSchemeShard::TTxUnmarkRestoreTables : public TTransactionBase<TSchemeSha
         if (UnmarkedCount) {
             YDB_LOG_NOTICE_CTX(ctx, "TTxUnmarkRestoreTables Complete done for tables left",
                 {"unmarkedCount", UnmarkedCount},
-                {"#_RestoreTablesToUnmark.size", RestoreTablesToUnmark.size()},
+                {"restoreTablesToUnmarkCount", RestoreTablesToUnmark.size()},
                 {"schemeshard", Self->TabletID()});
         }
 

@@ -31,7 +31,7 @@ inline bool ConvertOlapIndexToCreationConfig(
             if (it == columnIdToName.end()) {
                 YDB_LOG_ERROR_COMP(NKikimrServices::FLAT_TX_SCHEMESHARD, "ConvertOlapIndexToCreationConfig: BloomFilter column ID not found in columnIdToName map for index",
                     {"colId", colId},
-                    {"#_indexProto.GetName", indexProto.GetName()});
+                    {"indexName", indexProto.GetName()});
                 return false;
             }
             config.AddKeyColumnNames(it->second);
@@ -43,8 +43,8 @@ inline bool ConvertOlapIndexToCreationConfig(
         auto it = columnIdToName.find(indexProto.GetBloomNGrammFilter().GetColumnId());
         if (it == columnIdToName.end()) {
             YDB_LOG_ERROR_COMP(NKikimrServices::FLAT_TX_SCHEMESHARD, "ConvertOlapIndexToCreationConfig: BloomNGrammFilter column ID not found in columnIdToName map for index",
-                {"#_indexProto.GetBloomNGrammFilter().GetColumnId", indexProto.GetBloomNGrammFilter().GetColumnId()},
-                {"#_indexProto.GetName", indexProto.GetName()});
+                {"columnId", indexProto.GetBloomNGrammFilter().GetColumnId()},
+                {"indexName", indexProto.GetName()});
             return false;
         }
         config.AddKeyColumnNames(it->second);
@@ -56,8 +56,8 @@ inline bool ConvertOlapIndexToCreationConfig(
 
         if (it == columnIdToName.end()) {
             YDB_LOG_ERROR_COMP(NKikimrServices::FLAT_TX_SCHEMESHARD, "ConvertOlapIndexToCreationConfig: MinMaxIndex column ID not found in columnIdToName map for index",
-                {"#_indexProto.GetMinMaxIndex().GetColumnId", indexProto.GetMinMaxIndex().GetColumnId()},
-                {"#_indexProto.GetName", indexProto.GetName()});
+                {"columnId", indexProto.GetMinMaxIndex().GetColumnId()},
+                {"indexName", indexProto.GetName()});
             return false;
         }
         config.AddKeyColumnNames(it->second);
@@ -77,7 +77,7 @@ inline bool ConvertOlapIndexToCreationConfig(
         return true;
     }
     YDB_LOG_ERROR_COMP(NKikimrServices::FLAT_TX_SCHEMESHARD, "ConvertOlapIndexToCreationConfig: Unrecognized index type for index",
-        {"#_indexProto.GetName", indexProto.GetName()});
+        {"indexName", indexProto.GetName()});
     return false;
 }
 
@@ -102,7 +102,7 @@ inline bool ConvertOlapIndexToRequested(
                 if (it == columnIdToName.end()) {
                     YDB_LOG_ERROR_COMP(NKikimrServices::FLAT_TX_SCHEMESHARD, "ConvertOlapIndexToRequested: BloomFilter column ID not found in columnIdToName map for index",
                         {"colId", colId},
-                        {"#_src.GetName", src.GetName()});
+                        {"indexName", src.GetName()});
                     return false;
                 }
                 bf->AddColumnNames(it->second);
@@ -121,8 +121,8 @@ inline bool ConvertOlapIndexToRequested(
                 auto it = columnIdToName.find(src.GetBloomNGrammFilter().GetColumnId());
                 if (it == columnIdToName.end()) {
                     YDB_LOG_ERROR_COMP(NKikimrServices::FLAT_TX_SCHEMESHARD, "ConvertOlapIndexToRequested: BloomNGrammFilter column ID not found in columnIdToName map for index",
-                        {"#_src.GetBloomNGrammFilter().GetColumnId", src.GetBloomNGrammFilter().GetColumnId()},
-                        {"#_src.GetName", src.GetName()});
+                        {"columnId", src.GetBloomNGrammFilter().GetColumnId()},
+                        {"indexName", src.GetName()});
                     return false;
                 }
                 nf->SetColumnName(it->second);
@@ -156,8 +156,8 @@ inline bool ConvertOlapIndexToRequested(
                 auto it = columnIdToName.find(src.GetMinMaxIndex().GetColumnId());
                 if (it == columnIdToName.end()) {
                     YDB_LOG_ERROR_COMP(NKikimrServices::FLAT_TX_SCHEMESHARD, "ConvertOlapIndexToRequested: MinMaxIndex column ID not found in columnIdToName map for index",
-                        {"#_src.GetMinMaxIndex().GetColumnId", src.GetMinMaxIndex().GetColumnId()},
-                        {"#_src.GetName", src.GetName()});
+                        {"columnId", src.GetMinMaxIndex().GetColumnId()},
+                        {"indexName", src.GetName()});
                     return false;
                 }
                 min_max->SetColumnName(it->second);
@@ -180,8 +180,8 @@ inline bool ConvertOlapIndexToRequested(
         }
         case NKikimrSchemeOp::TOlapIndexDescription::kMaxIndex:
         case NKikimrSchemeOp::TOlapIndexDescription::IMPLEMENTATION_NOT_SET:
-            YDB_LOG_ERROR_COMP(NKikimrServices::FLAT_TX_SCHEMESHARD, "",
-                {"#_num_0", Sprintf("ConvertOlapIndexToRequested: unimplemented olap index type '%s'", src.GetClassName().c_str())});
+            YDB_LOG_ERROR_COMP(NKikimrServices::FLAT_TX_SCHEMESHARD,
+                Sprintf("ConvertOlapIndexToRequested: unimplemented olap index type '%s'", src.GetClassName().c_str()));
             return false;
     }
 
@@ -253,8 +253,8 @@ inline bool ConvertRequestedIndexToCreationConfig(
         }
         case NKikimrSchemeOp::TOlapIndexRequested::IMPLEMENTATION_NOT_SET:
         case NKikimrSchemeOp::TOlapIndexRequested::kMaxIndex:
-            YDB_LOG_ERROR_COMP(NKikimrServices::FLAT_TX_SCHEMESHARD, "",
-                {"#_num_0", Sprintf("ConvertRequestedIndexToCreationConfig: unimplemented olap index type '%s'", indexProto.GetClassName().c_str())});
+            YDB_LOG_ERROR_COMP(NKikimrServices::FLAT_TX_SCHEMESHARD,
+                Sprintf("ConvertRequestedIndexToCreationConfig: unimplemented olap index type '%s'", indexProto.GetClassName().c_str()));
             return false;
     }
 
@@ -329,8 +329,8 @@ inline bool ConvertRequestedIndexToAlteringConfig(
         }
 
         default: {
-            YDB_LOG_ERROR_COMP(NKikimrServices::FLAT_TX_SCHEMESHARD, "",
-                {"#_num_0", Sprintf("ConvertRequestedIndexToAlteringConfig: unimplemented olap index type '%s'", indexProto.GetClassName().c_str())});
+            YDB_LOG_ERROR_COMP(NKikimrServices::FLAT_TX_SCHEMESHARD,
+                Sprintf("ConvertRequestedIndexToAlteringConfig: unimplemented olap index type '%s'", indexProto.GetClassName().c_str()));
             return false;
         }
     }
@@ -443,8 +443,8 @@ inline bool ConvertCreationConfigToRequested(
             return true;
         }
         default:
-            YDB_LOG_ERROR_COMP(NKikimrServices::FLAT_TX_SCHEMESHARD, "",
-                {"#_num_0", Sprintf("ConvertCreationConfigToRequested: unimplemented index type '%s'", EIndexType_Name(config.GetType()).c_str())});
+            YDB_LOG_ERROR_COMP(NKikimrServices::FLAT_TX_SCHEMESHARD,
+                Sprintf("ConvertCreationConfigToRequested: unimplemented index type '%s'", EIndexType_Name(config.GetType()).c_str()));
             return false;
     }
 

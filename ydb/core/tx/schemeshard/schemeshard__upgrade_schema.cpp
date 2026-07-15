@@ -116,7 +116,7 @@ struct TSchemeShard::TTxUpgradeSchema : public TTransactionBase<TSchemeShard> {
     void Complete(const TActorContext &ctx) override {
         if (!IsOk) {
             YDB_LOG_CRIT_CTX(ctx, "Send TEvPoisonPill to self",
-                {"#_Self->TabletID", Self->TabletID()});
+                {"tabletId", Self->TabletID()});
             ctx.Send(Self->SelfId(), new TEvents::TEvPoisonPill());
             return;
         }

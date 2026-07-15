@@ -117,7 +117,7 @@ public:
                    << " Unexpected answer status from hive "
                    << ", msg: " << record.ShortDebugString()
                    << ", at schemeshard: " << ssId;
-            YDB_LOG_ERROR_CTX(context.Ctx, "",
+            YDB_LOG_ERROR_CTX(context.Ctx, "Drop ext subdomain error",
                 {"errMsg", errMsg});
             Y_VERIFY_DEBUG_S(false, errMsg);
             return false;

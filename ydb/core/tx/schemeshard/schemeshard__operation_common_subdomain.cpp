@@ -178,7 +178,7 @@ bool TConfigureParts::ProgressState(TOperationContext& context) {
         case ETabletType::Coordinator:
         case ETabletType::Mediator: {
             YDB_LOG_DEBUG_CTX(context.Ctx, "Send configure request",
-                {"#_coordinator/mediator", tabletID},
+                {"coordinatorTabletId", tabletID},
                 {"opId", OperationId},
                 {"schemeshard", ssId});
             shard.Operation = TTxState::ConfigureParts;

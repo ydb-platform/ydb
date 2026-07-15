@@ -76,7 +76,7 @@ public:
 
             context.SS->FillSeqNo(tx, seqNo);
 
-            YDB_LOG_DEBUG_CTX(context.Ctx, "ProgressState SEND TFlatSchemeTransaction to with publish shadow data request",
+            YDB_LOG_DEBUG_CTX(context.Ctx, "ProgressState send TFlatSchemeTransaction with prepare index validation request",
                 {"debugHint", DebugHint()},
                 {"datashard", datashardId},
                 {"operationId", OperationId},
@@ -165,7 +165,7 @@ public:
     bool ProgressState(TOperationContext& context) override {
         TTabletId ssId = context.SS->SelfTabletId();
 
-        YDB_LOG_INFO_CTX(context.Ctx, "HandleReply ProgressState",
+        YDB_LOG_INFO_CTX(context.Ctx, "ProgressState",
             {"debugHint", DebugHint()},
             {"tablet", ssId});
 
@@ -208,13 +208,13 @@ public:
         TTxState* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
 
-        YDB_LOG_INFO_CTX(context.Ctx, "ProgressState operation",
+        YDB_LOG_INFO_CTX(context.Ctx, "ProgressState",
             {"debugHint", DebugHint()},
             {"type", TTxState::TypeName(txState->TxType)},
             {"tablet", ssId});
 
         if (NTableState::CheckPartitioningChangedForTableModification(*txState, context)) {
-            YDB_LOG_INFO_CTX(context.Ctx, "ProgressState SourceTablePartitioningChangedForModification tx",
+            YDB_LOG_INFO_CTX(context.Ctx, "ProgressState source table partitioning changed for modification",
                 {"debugHint", DebugHint()},
                 {"type", TTxState::TypeName(txState->TxType)});
             NTableState::UpdatePartitioningForTableModification(OperationId, *txState, context);

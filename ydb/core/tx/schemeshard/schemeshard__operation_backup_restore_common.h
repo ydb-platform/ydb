@@ -64,7 +64,7 @@ public:
         auto ssId = context.SS->SelfTabletId();
 
         YDB_LOG_DEBUG_CTX_COMP(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "TConfigurePart ProgressState",
-            {"#_TKind::Name", TKind::Name()},
+            {"kindName", TKind::Name()},
             {"opId", OperationId},
             {"schemeshard", ssId});
 
@@ -434,7 +434,7 @@ public:
             auto datashardId = context.SS->ShardInfos[idx].TabletID;
 
             YDB_LOG_DEBUG_CTX_COMP(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "Abort",
-                {"#_TKind::Name", TKind::Name()},
+                {"kindName", TKind::Name()},
                 {"datashard", datashardId},
                 {"opId", OperationId},
                 {"schemeshard", context.SS->TabletID()});
@@ -717,7 +717,7 @@ public:
         const bool internal = Transaction.HasInternal() && Transaction.GetInternal();
 
         YDB_LOG_NOTICE_CTX_COMP(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "Propose",
-            {"#_TKind::Name", TKind::Name()},
+            {"kindName", TKind::Name()},
             {"path", parentPath},
             {"name", name},
             {"opId", OperationId},
@@ -793,7 +793,7 @@ public:
 
     void AbortUnsafe(TTxId forceDropTxId, TOperationContext& context) override {
         YDB_LOG_NOTICE_CTX_COMP(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "AbortUnsafe",
-            {"#_TKind::Name", TKind::Name()},
+            {"kindName", TKind::Name()},
             {"opId", OperationId},
             {"forceDropId", forceDropTxId},
             {"schemeshard", context.SS->TabletID()});

@@ -40,7 +40,7 @@ public:
 
     void Bootstrap() {
         YDB_LOG_NOTICE("LocalIndexMigrator: Bootstrap with pending items",
-            {"#_PendingItems.size", PendingItems.size()});
+            {"pendingItemsCount", PendingItems.size()});
         // Process items immediately
         ProcessItems(TlsActivationContext->AsActorContext());
         Become(&TLocalIndexMigrator::StateWork);
@@ -56,7 +56,7 @@ public:
             cFunc(TEvents::TEvPoison::EventType, PassAway);
             default:
                 YDB_LOG_CRIT_CTX(*TlsActivationContext, "LocalIndexMigrator unexpected event 0x%08x",
-                    {"#_ev->GetTypeRewrite", ev->GetTypeRewrite()});
+                    {"eventType", ev->GetTypeRewrite()});
         }
     }
 
@@ -82,7 +82,7 @@ private:
         if (!AwaitingRequests.empty()) {
             // Wait for current operation to complete before processing next item
             YDB_LOG_NOTICE_CTX(ctx, "LocalIndexMigrator: Waiting for request(s) to complete",
-                {"#_AwaitingRequests.size", AwaitingRequests.size()});
+                {"awaitingRequestsCount", AwaitingRequests.size()});
             return;
         }
 
@@ -90,7 +90,7 @@ private:
         if (txId == InvalidTxId) {
             // No more TxIds available, wait and retry
             YDB_LOG_INFO_CTX(ctx, "LocalIndexMigrator: TxId cache exhausted, waiting for remaining item(s)",
-                {"#_PendingItems.size", PendingItems.size()});
+                {"pendingItemsCount", PendingItems.size()});
             ctx.Schedule(RetryDelay, new TEvents::TEvWakeup());
             return;
         }
@@ -99,7 +99,7 @@ private:
         auto& item = PendingItems.back();
 
         YDB_LOG_NOTICE_CTX(ctx, "LocalIndexMigrator: Processing index with",
-            {"#_JoinPath({item.WorkingDir, item.IndexConfig.GetName()})", JoinPath({item.WorkingDir, item.IndexConfig.GetName()})},
+            {"indexPath", JoinPath({item.WorkingDir, item.IndexConfig.GetName()})},
             {"txId", txId},
             {"remaining", (PendingItems.size() - 1)});
 
@@ -116,13 +116,13 @@ private:
                 auto delay = item.Backoff.Next();
                 YDB_LOG_ERROR_CTX(ctx, "LocalIndexMigrator at failed to split path will retry after delay",
                     {"schemeshard", SelfTabletId},
-                    {"#_item.WorkingDir", item.WorkingDir},
+                    {"workingDir", item.WorkingDir},
                     {"delay", delay});
                 ctx.Schedule(delay, new TEvents::TEvWakeup());
             } else {
                 YDB_LOG_CRIT_CTX(ctx, "LocalIndexMigrator at failed to split path after max retries, dying",
                     {"schemeshard", SelfTabletId},
-                    {"#_item.WorkingDir", item.WorkingDir});
+                    {"workingDir", item.WorkingDir});
                 PassAway();
             }
             return;
@@ -153,13 +153,13 @@ private:
                     auto delay = item.Backoff.Next();
                     YDB_LOG_ERROR_CTX(ctx, "LocalIndexMigrator at failed to convert index config for will retry after delay",
                         {"schemeshard", SelfTabletId},
-                        {"#_item.WorkingDir", item.WorkingDir},
+                        {"workingDir", item.WorkingDir},
                         {"delay", delay});
                     ctx.Schedule(delay, new TEvents::TEvWakeup());
                 } else {
                     YDB_LOG_CRIT_CTX(ctx, "LocalIndexMigrator at failed to convert index config for after max retries, dying",
                         {"schemeshard", SelfTabletId},
-                        {"#_item.WorkingDir", item.WorkingDir});
+                        {"workingDir", item.WorkingDir});
                     PassAway();
                 }
                 return;
@@ -220,7 +220,7 @@ private:
                 auto delay = AwaitingRequests.at(txId).Backoff.Next();
                 YDB_LOG_ERROR_CTX(ctx, "LocalIndexMigrator at failed to will retry after delay",
                     {"schemeshard", SelfTabletId},
-                    {"#_AwaitingRequests.at(txId).DebugString", AwaitingRequests.at(txId).DebugString()},
+                    {"awaitingRequest", AwaitingRequests.at(txId).DebugString()},
                     {"reason", record.GetReason()},
                     {"delay", delay});
                 PendingItems.push_back(std::move(AwaitingRequests.at(txId)));
@@ -229,7 +229,7 @@ private:
             } else {
                 YDB_LOG_CRIT_CTX(ctx, "LocalIndexMigrator at failed to after max retries, dying",
                     {"schemeshard", SelfTabletId},
-                    {"#_AwaitingRequests.at(txId).DebugString", AwaitingRequests.at(txId).DebugString()},
+                    {"awaitingRequest", AwaitingRequests.at(txId).DebugString()},
                     {"reason", record.GetReason()});
                 PassAway();
             }
@@ -246,7 +246,7 @@ private:
             SchemeShard->ReturnTxIdToCache(TTxId(txId));
         }
         YDB_LOG_NOTICE_CTX(ctx, "LocalIndexMigrator: replenished TxId cache with TxId(s)",
-            {"#_ev->Get()->TxIds.size", ev->Get()->TxIds.size()},
+            {"txIdsCount", ev->Get()->TxIds.size()},
             {"pendingItems", PendingItems.size()});
         ProcessItems(ctx);
     }

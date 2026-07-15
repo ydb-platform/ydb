@@ -106,7 +106,7 @@ public:
             {"tabletId", context.SS->TabletID()},
             {"opId", OperationId},
             {"path", workingDir},
-            {"#_op.GetName", op.GetName()});
+            {"operationName", op.GetName()});
 
         auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), context.SS->TabletID());
 

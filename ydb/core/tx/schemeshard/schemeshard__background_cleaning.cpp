@@ -105,7 +105,7 @@ NOperationQueue::EStartStatus TSchemeShard::StartBackgroundCleaning(const TPathI
         if (txId == InvalidTxId) {
             YDB_LOG_WARN_CTX(ctx, "Only objects will be removed during current iteration. Background cleaning will be finished later",
                 {"dir", JoinPath({info->WorkingDir, info->Name})},
-                {"#_state.ObjectsToDrop", state.ObjectsToDrop});
+                {"objectsToDrop", state.ObjectsToDrop});
             state.NeedToRetryLater = true;
             break;
         }
@@ -151,8 +151,8 @@ NOperationQueue::EStartStatus TSchemeShard::StartBackgroundCleaning(const TPathI
             default:
                 YDB_LOG_ERROR_CTX(ctx, "Is not expected here ` `",
                     {"dir", JoinPath({info->WorkingDir, info->Name})},
-                    {"#_ToString(objectPath.Base()->PathType)", ToString(objectPath.Base()->PathType)},
-                    {"#_objectPath.PathString", objectPath.PathString()});
+                    {"pathType", ToString(objectPath.Base()->PathType)},
+                    {"objectPath", objectPath.PathString()});
                 break;
         }
         if (!modifyScheme.HasOperationType()) {

@@ -312,7 +312,7 @@ bool CreateConsistentCopyTables(
             if (indexInfo->State != NKikimrSchemeOp::EIndexState::EIndexStateReady) {
                 YDB_LOG_TRACE_CTX(context.Ctx, "CreateConsistentCopyTables: Skipping a non-ready index in state",
                     {"name", name},
-                    {"#_indexInfo->State", indexInfo->State});
+                    {"indexState", indexInfo->State});
                 continue;
             }
 

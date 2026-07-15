@@ -25,7 +25,7 @@ void TSchemeShard::TIndexBuilder::TTxBase::ApplyState(NTabletFlatExecutor::TTran
         auto& buildInfo = *buildInfoPtr->get();
         YDB_LOG_INFO("Change state",
             {"logPrefix", LogPrefix},
-            {"#_buildInfo.State", buildInfo.State},
+            {"buildState", buildInfo.State},
             {"state", state});
         if (state == TIndexBuildInfo::EState::Rejected ||
             state == TIndexBuildInfo::EState::Cancelled ||
@@ -48,8 +48,8 @@ void TSchemeShard::TIndexBuilder::TTxBase::ApplyState(NTabletFlatExecutor::TTran
         auto& operationInfo = *operationInfoPtr->get();
         YDB_LOG_INFO("Change SetColumnConstraint state",
             {"logPrefix", LogPrefix},
-            {"#_ToString(operationInfo.OperationState)", ToString(operationInfo.OperationState)},
-            {"#_ToString(state)", ToString(state)});
+            {"operationState", ToString(operationInfo.OperationState)},
+            {"state", ToString(state)});
         if (state == TSetColumnConstraintOperationInfo::EOperationState::Done) {
             operationInfo.EndTime = TAppData::TimeProvider->Now();
         }
@@ -551,9 +551,9 @@ bool TSchemeShard::TIndexBuilder::TTxBase::OnUnhandledExceptionSafe(TTransaction
         YDB_LOG_ERROR("Unhandled exception",
             {"logPrefix", LogPrefix},
             {"buildId", buildIdStr},
-            {"#_TypeName(originalExc)", TypeName(originalExc)},
-            {"#_originalExc.what", originalExc.what()},
-            {"#_TBackTrace::FromCurrentException().PrintToString", TBackTrace::FromCurrentException().PrintToString()},
+            {"exceptionType", TypeName(originalExc)},
+            {"exceptionMessage", originalExc.what()},
+            {"backtrace", TBackTrace::FromCurrentException().PrintToString()},
             {"buildInfo", buildInfoStr});
 
         OnUnhandledException(txc, ctx, buildInfo, originalExc);
@@ -562,9 +562,9 @@ bool TSchemeShard::TIndexBuilder::TTxBase::OnUnhandledExceptionSafe(TTransaction
     } catch (const std::exception& handleExc) {
         YDB_LOG_ERROR("OnUnhandledException throws unhandled exception",
             {"logPrefix", LogPrefix},
-            {"#_TypeName(handleExc)", TypeName(handleExc)},
-            {"#_handleExc.what", handleExc.what()},
-            {"#_TBackTrace::FromCurrentException().PrintToString", TBackTrace::FromCurrentException().PrintToString()});
+            {"exceptionType", TypeName(handleExc)},
+            {"exceptionMessage", handleExc.what()},
+            {"backtrace", TBackTrace::FromCurrentException().PrintToString()});
         return false;
     }
 }

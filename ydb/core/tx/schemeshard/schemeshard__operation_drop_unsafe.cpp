@@ -152,7 +152,7 @@ public:
             {"schemeshard", ssId});
 
         if (ExpectedType == TPathElement::EPathType::EPathTypeInvalid) {
-            YDB_LOG_WARN_CTX(context.Ctx, "",
+            YDB_LOG_WARN_CTX(context.Ctx, "UNSAFE DELETION IS CALLED",
                 {"path", parentPathStr},
                 {"name", name},
                 {"pathId", drop.GetId()},

@@ -496,15 +496,15 @@ public:
         TShardInfo defaultShardInfo = TShardInfo::PersQShardInfo(txId, pathId);
         defaultShardInfo.BindedChannels = pqBindedChannels;
 
-        YDB_LOG_DEBUG_CTX(context.Ctx, "AlterPQGroup Parts -> Groups -> -> adding deleting",
+        YDB_LOG_DEBUG_CTX(context.Ctx, "AlterPQGroup partition changes",
             {"txid", txId},
             {"alterVersion", pqGroup->AlterData->AlterVersion},
             {"partsCount", pqGroup->TotalPartitionCount},
-            {"#_pqGroup->AlterData->TotalPartitionCount", pqGroup->AlterData->TotalPartitionCount},
+            {"totalPartitionCount", pqGroup->AlterData->TotalPartitionCount},
             {"groupsCount", pqGroup->TotalGroupCount},
-            {"#_pqGroup->AlterData->TotalGroupCount", pqGroup->AlterData->TotalGroupCount},
+            {"totalGroupCount", pqGroup->AlterData->TotalGroupCount},
             {"maxPerPQ", pqGroup->MaxPartsPerTablet},
-            {"#_pqGroup->AlterData->MaxPartsPerTablet", pqGroup->AlterData->MaxPartsPerTablet},
+            {"maxPartsPerTablet", pqGroup->AlterData->MaxPartsPerTablet},
             {"addingPartitions", pqGroup->AlterData->PartitionsToAdd.size()},
             {"deletingPartitions", pqGroup->AlterData->PartitionsToDelete.size()});
 
@@ -562,7 +562,7 @@ public:
             txState.Shards.emplace_back(shardIdx, ETabletType::PersQueueReadBalancer, TTxState::ConfigureParts);
         }
 
-        YDB_LOG_DEBUG_CTX(context.Ctx, "AlterPQGroup Shard count -> first new shardIdx hasBalancer",
+        YDB_LOG_DEBUG_CTX(context.Ctx, "AlterPQGroup shard count change",
             {"txid", txId},
             {"shardsCurrent", shardsCurrent},
             {"shardsNeeded", shardsNeeded},
@@ -882,12 +882,14 @@ public:
                     }
                     if (prescribedChildPartitionId && ShouldCreateSiblingAtRootLevel(split, topic)) [[unlikely]] {
                         if (topic->Partitions.contains(*prescribedChildPartitionId)) {
-                            YDB_LOG_TRACE_CTX(context.Ctx, "",
-                                {"#_num_0", std::format("Skipping split partition {} because child partition {} exists",                                                     splittedPartitionId, *prescribedChildPartitionId)});
+                            YDB_LOG_TRACE_CTX(context.Ctx, "Skipping split partition because child partition already exists",
+                                {"splittedPartitionId", splittedPartitionId},
+                                {"childPartitionId", *prescribedChildPartitionId});
                             alterData->TotalGroupCount -= 1;
                         } else {
-                            YDB_LOG_TRACE_CTX(context.Ctx, "",
-                                {"#_num_0", std::format("Skipping split partition {}. Create new partition {}",                                                     splittedPartitionId, *prescribedChildPartitionId)});
+                            YDB_LOG_TRACE_CTX(context.Ctx, "Skipping split partition and creating new partition",
+                                {"splittedPartitionId", splittedPartitionId},
+                                {"childPartitionId", *prescribedChildPartitionId});
                             alterData->PartitionsToAdd.emplace_back(childPartitionId.value(), childPartitionId.value() + 1);
                         }
                     } else {

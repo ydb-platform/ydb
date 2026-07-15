@@ -238,7 +238,7 @@ public:
                 {"logPrefix", GetLogPrefix()},
                 {"pathId", itemPathId},
                 {"id", id},
-                {"#_item.State", item.State});
+                {"itemState", item.State});
             return;
         }
 

@@ -41,7 +41,7 @@ void PrepareChanges(TOperationId operationId,
 
     YDB_LOG_DEBUG_CTX(context.Ctx, "AlterKesus AlterVersion",
         {"txid", operationId.GetTxId()},
-        {"#_kesus->AlterVersion", kesus->AlterVersion});
+        {"alterVersion", kesus->AlterVersion});
 
     context.SS->PersistAddKesusAlter(db, item->PathId, kesus);
 

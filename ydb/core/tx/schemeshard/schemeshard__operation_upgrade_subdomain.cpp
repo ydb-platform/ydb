@@ -37,7 +37,7 @@ public:
         TTxState* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
 
-        YDB_LOG_INFO_CTX(context.Ctx, "ProgressState operation",
+        YDB_LOG_INFO_CTX(context.Ctx, "ProgressState",
             {"debugHint", DebugHint()},
             {"type", TTxState::TypeName(txState->TxType)},
             {"tablet", ssId});
@@ -57,7 +57,7 @@ public:
                    << ", parent transaction: " << otherTxId
                    << ", at schemeshard: " << ssId;
 
-            YDB_LOG_ERROR_CTX(context.Ctx, "",
+            YDB_LOG_ERROR_CTX(context.Ctx, "Upgrade subdomain error",
                 {"errMsg", errMsg});
             Y_FAIL_S(errMsg);
 
@@ -1462,7 +1462,7 @@ public:
                << ", parent transaction: " << txId
                << ", at schemeshard: " << ssId;
 
-        YDB_LOG_ERROR_CTX(context.Ctx, "",
+        YDB_LOG_ERROR_CTX(context.Ctx, "Upgrade subdomain error",
             {"errMsg", errMsg});
 
         context.OnComplete.Dependence(txId, OperationId.GetTxId());

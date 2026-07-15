@@ -105,7 +105,7 @@ bool TConfigurePartsAtTable::ProgressState(TOperationContext& context) {
 bool TConfigurePartsAtTable::HandleReply(TEvDataShard::TEvProposeTransactionResult::TPtr& ev, TOperationContext& context) {
     YDB_LOG_INFO_CTX(context.Ctx, "HandleReply",
         {"debugHint", DebugHint()},
-        {"#_ev->Get()->ToString", ev->Get()->ToString()},
+        {"message", ev->Get()->ToString()},
         {"schemeshard", context.SS->SelfTabletId()});
 
     if (!NTableState::CollectProposeTransactionResults(OperationId, ev, context)) {

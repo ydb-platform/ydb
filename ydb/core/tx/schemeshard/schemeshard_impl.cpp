@@ -214,7 +214,7 @@ void TSchemeShard::CollectLocalIndexMigrations(const TActorContext& ctx) {
 
         YDB_LOG_INFO_CTX_COMP(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "LocalIndexMigrator: processing table with index(es)",
             {"workingDir", workingDir},
-            {"#_schema.IndexesSize", schema.IndexesSize()});
+            {"indexesCount", schema.IndexesSize()});
 
         for (const auto& indexProto : schema.GetIndexes()) {
             const TString& indexName = indexProto.GetName();
@@ -350,7 +350,7 @@ void TSchemeShard::CollectLocalIndexMigrations(const TActorContext& ctx) {
     }
 
     YDB_LOG_NOTICE_CTX_COMP(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "LocalIndexMigrator: starting migrator for index(es)",
-        {"#_items.size", items.size()});
+        {"itemsCount", items.size()});
 
     LocalIndexMigratorId = ctx.RegisterWithSameMailbox(CreateLocalIndexMigrator(static_cast<TTabletId>(TabletID()), SelfId(), this, std::move(items)).Release());
 }
@@ -656,7 +656,7 @@ EAttachChildResult TSchemeShard::AttachChild(TPathElement::TPtr child) {
         {"parentName", parent->Name},
         {"childName", child->Name},
         {"childId", prevChild->PathId},
-        {"#_dup_child_id", child->PathId},
+        {"childPathId", child->PathId},
         {"prevOrder", prevChildOrder},
         {"childOrder", childOrder},
         {"schemeshard", TabletID()});
@@ -797,7 +797,7 @@ void TSchemeShard::IncrementPathDbRefCount(const TPathId& pathId, const TStringB
         YDB_LOG_DEBUG_COMP(NKikimrServices::FLAT_TX_SCHEMESHARD, "IncrementPathDbRefCount reason for pathId was",
             {"debug", debug},
             {"pathId", pathId},
-            {"#_it->second->DbRefCount", it->second->DbRefCount});
+            {"dbRefCount", it->second->DbRefCount});
         size_t newRefCount = ++it->second->DbRefCount;
         Y_DEBUG_ABORT_UNLESS(newRefCount > 0);
     }
@@ -811,7 +811,7 @@ void TSchemeShard::DecrementPathDbRefCount(const TPathId& pathId, const TStringB
         YDB_LOG_DEBUG_COMP(NKikimrServices::FLAT_TX_SCHEMESHARD, "DecrementPathDbRefCount reason for pathId was",
             {"debug", debug},
             {"pathId", pathId},
-            {"#_it->second->DbRefCount", it->second->DbRefCount});
+            {"dbRefCount", it->second->DbRefCount});
         Y_DEBUG_ABORT_UNLESS(it->second->DbRefCount > 0);
         if (it->second->DbRefCount > 0) {
             size_t newRefCount = --it->second->DbRefCount;
@@ -2934,8 +2934,8 @@ void TSchemeShard::ChangeTxState(NIceDb::TNiceDb& db, const TOperationId opId, T
 
     YDB_LOG_INFO_CTX_COMP(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "Change state for txid ->",
         {"opId", opId},
-        {"#_NKikimr::NSchemeShard::TxStateName(TxInFlight[opId].State)", NKikimr::NSchemeShard::TxStateName(TxInFlight[opId].State)},
-        {"#_NKikimr::NSchemeShard::TxStateName(newState)", NKikimr::NSchemeShard::TxStateName(newState)});
+        {"currentState", NKikimr::NSchemeShard::TxStateName(TxInFlight[opId].State)},
+        {"newState", NKikimr::NSchemeShard::TxStateName(newState)});
 
     FindTx(opId)->State = newState;
     db.Table<Schema::TxInFlightV2>().Key(opId.GetTxId(), opId.GetSubTxId()).Update(
@@ -6460,7 +6460,7 @@ void TSchemeShard::UncountNode(TPathElement::TPtr node) {
 
 void TSchemeShard::MarkAsMigrated(TPathElement::TPtr node, const TActorContext &ctx) {
     YDB_LOG_WARN_CTX_COMP(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "Mark as Migrated path id",
-        {"#_node->PathId", node->PathId});
+        {"pathId", node->PathId});
 
     Y_ABORT_UNLESS(!node->Dropped());
     Y_VERIFY_S(PathsById.contains(ResolvePathIdForDomain(node)),
@@ -6480,7 +6480,7 @@ void TSchemeShard::MarkAsMigrated(TPathElement::TPtr node, const TActorContext &
 
 void TSchemeShard::MarkAsDropping(TPathElement::TPtr node, TTxId txId, const TActorContext &ctx) {
     YDB_LOG_WARN_CTX_COMP(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "Mark as Dropping path id by",
-        {"#_node->PathId", node->PathId},
+        {"pathId", node->PathId},
         {"tx", txId});
     if (!node->Dropped()) {
         node->PathState = TPathElement::EPathState::EPathStateDrop;
@@ -7003,7 +7003,7 @@ void TSchemeShard::Handle(TEvHive::TEvCreateTabletReply::TPtr &ev, const TActorC
     if (!ShardInfos.contains(shardIdx)) {
         YDB_LOG_WARN_CTX_COMP(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "Got TEvCreateTabletReply for unknown shard idx tabletId",
             {"shardIdx", shardIdx},
-            {"#_ev->Get()->Record.GetTabletID", ev->Get()->Record.GetTabletID()});
+            {"tabletId", ev->Get()->Record.GetTabletID()});
         return;
     }
 
@@ -7038,7 +7038,7 @@ void TSchemeShard::Handle(TEvHive::TEvAdoptTabletReply::TPtr &ev, const TActorCo
     if (!ShardInfos.contains(shardIdx)) {
         YDB_LOG_WARN_CTX_COMP(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "Got TEvAdoptTabletReply for unknown shard idx tabletId",
             {"shardIdx", shardIdx},
-            {"#_ev->Get()->Record.GetTabletID", ev->Get()->Record.GetTabletID()});
+            {"tabletId", ev->Get()->Record.GetTabletID()});
         return;
     }
 
@@ -7049,7 +7049,7 @@ void TSchemeShard::Handle(TEvHive::TEvAdoptTabletReply::TPtr &ev, const TActorCo
         YDB_LOG_WARN_CTX_COMP(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "Got TEvAdoptTabletReply for unknown txId shardIdx tabletId",
             {"txId", txId},
             {"shardIdx", shardIdx},
-            {"#_ev->Get()->Record.GetTabletID", ev->Get()->Record.GetTabletID()});
+            {"tabletId", ev->Get()->Record.GetTabletID()});
 
         return;
     }
@@ -7077,8 +7077,8 @@ void TSchemeShard::Handle(TEvHive::TEvDeleteOwnerTabletsReply::TPtr &ev, const T
     if (!Operations.contains(txId)) {
         YDB_LOG_WARN_CTX_COMP(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "Got TEvDeleteOwnerTabletsReply for unknown txId ownerID form hive at schemeshard",
             {"txId", txId},
-            {"#_record.GetOwner", record.GetOwner()},
-            {"#_record.GetOrigin", record.GetOrigin()},
+            {"owner", record.GetOwner()},
+            {"origin", record.GetOrigin()},
             {"tabletID", TabletID()});
         return;
     }
@@ -7163,7 +7163,7 @@ void TSchemeShard::Handle(TEvPersQueue::TEvUpdateConfigResponse::TPtr& ev, const
     if (!Operations.contains(txId)) {
         YDB_LOG_WARN_CTX_COMP(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "Got TEvPersQueue::TEvUpdateConfigResponse for unknown txId message",
             {"txId", txId},
-            {"#_ev->Get()->Record", ev->Get()->Record.ShortDebugString()});
+            {"record", ev->Get()->Record.ShortDebugString()});
         return;
     }
 
@@ -7186,7 +7186,7 @@ void TSchemeShard::Handle(TEvPersQueue::TEvProposeTransactionResult::TPtr& ev, c
     if (!Operations.contains(txId)) {
         YDB_LOG_WARN_CTX_COMP(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "Got TEvPersQueue::TEvProposeTransactionResult for unknown txId message",
             {"txId", txId},
-            {"#_ev->Get()->Record", ev->Get()->Record.ShortDebugString()});
+            {"record", ev->Get()->Record.ShortDebugString()});
         return;
     }
 
@@ -7209,7 +7209,7 @@ void TSchemeShard::Handle(TEvBlobDepot::TEvApplyConfigResult::TPtr& ev, const TA
     if (const auto it = Operations.find(txId); it == Operations.end()) {
         YDB_LOG_WARN_CTX_COMP(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "Got TEvBlobDepot::TEvApplyConfigResult for unknown txId message",
             {"txId", txId},
-            {"#_ev->Get()->Record", ev->Get()->Record.ShortDebugString()});
+            {"record", ev->Get()->Record.ShortDebugString()});
     } else if (const TSubTxId partId = it->second->FindRelatedPartByTabletId(tabletId, ctx); partId == InvalidSubTxId) {
         YDB_LOG_WARN_CTX_COMP(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "Got TEvBlobDepot::TEvApplyConfigResult but partId is unknown",
             {"txId", txId},
@@ -7406,7 +7406,7 @@ void TSchemeShard::Handle(TEvSubDomain::TEvConfigureStatus::TPtr &ev, const TAct
     if (!opId) {
         YDB_LOG_WARN_CTX_COMP(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "Got TEvSubDomain::TEvConfigureStatus, no route has found by tabletId message",
             {"tabletId", tabletId},
-            {"#_ev->Get()->Record", ev->Get()->Record.ShortDebugString()});
+            {"record", ev->Get()->Record.ShortDebugString()});
         return;
     }
     Y_ABORT_UNLESS(opId.GetTxId());
@@ -7427,7 +7427,7 @@ void TSchemeShard::Handle(TEvBlockStore::TEvUpdateVolumeConfigResponse::TPtr& ev
     if (!Operations.contains(txId)) {
         YDB_LOG_WARN_CTX_COMP(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "Got TEvBlockStore::TEvUpdateVolumeConfigResponse for unknown txId tabletId",
             {"txId", txId},
-            {"#_ev->Get()->Record.GetOrigin", ev->Get()->Record.GetOrigin()});
+            {"origin", ev->Get()->Record.GetOrigin()});
         return;
     }
 
@@ -7449,7 +7449,7 @@ void TSchemeShard::Handle(TEvFileStore::TEvUpdateConfigResponse::TPtr& ev, const
     if (!Operations.contains(txId)) {
         YDB_LOG_WARN_CTX_COMP(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "Got TEvFileStore::TEvUpdateConfigResponse for unknown txId tabletId",
             {"txId", txId},
-            {"#_ev->Get()->Record.GetOrigin", ev->Get()->Record.GetOrigin()});
+            {"origin", ev->Get()->Record.GetOrigin()});
         return;
     }
 
@@ -7474,7 +7474,7 @@ void TSchemeShard::Handle(TEvSchemeShard::TEvInitTenantSchemeShardResult::TPtr& 
     if (!opId) {
         YDB_LOG_WARN_CTX_COMP(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "Got TEvSchemeShard::TEvInitTenantSchemeShardResult no route has found by tabletId message",
             {"tabletId", tabletId},
-            {"#_ev->Get()->Record", ev->Get()->Record.ShortDebugString()});
+            {"record", ev->Get()->Record.ShortDebugString()});
         return;
     }
     Y_ABORT_UNLESS(opId.GetTxId());
@@ -7498,7 +7498,7 @@ void TSchemeShard::Handle(TEvSchemeShard::TEvPublishTenantAsReadOnlyResult::TPtr
     if (!opId) {
         YDB_LOG_WARN_CTX_COMP(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "Got TEvSchemeShard::TEvPublishTenantAsReadOnlyResult no route has found by tabletId message",
             {"tabletId", tabletId},
-            {"#_ev->Get()->Record", ev->Get()->Record.ShortDebugString()});
+            {"record", ev->Get()->Record.ShortDebugString()});
         return;
     }
     Y_ABORT_UNLESS(opId.GetTxId());
@@ -7522,7 +7522,7 @@ void TSchemeShard::Handle(TEvSchemeShard::TEvPublishTenantResult::TPtr& ev, cons
     if (!opId) {
         YDB_LOG_WARN_CTX_COMP(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "Got TEvSchemeShard::TEvPublishTenantResult no route has found by tabletId message",
             {"tabletId", tabletId},
-            {"#_ev->Get()->Record", ev->Get()->Record.ShortDebugString()});
+            {"record", ev->Get()->Record.ShortDebugString()});
         return;
     }
     Y_ABORT_UNLESS(opId.GetTxId());
@@ -7548,7 +7548,7 @@ void TSchemeShard::Handle(NKesus::TEvKesus::TEvSetConfigResult::TPtr& ev, const 
     if (!opId) {
         YDB_LOG_WARN_CTX_COMP(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "Got NKesus::TEvKesus::TEvSetConfigResult no route has found by tabletId message",
             {"tabletId", tabletId},
-            {"#_ev->Get()->Record", ev->Get()->Record.ShortDebugString()});
+            {"record", ev->Get()->Record.ShortDebugString()});
         return;
     }
     Y_ABORT_UNLESS(opId.GetTxId());
@@ -7651,7 +7651,7 @@ void TSchemeShard::Handle(TEvSchemeShard::TEvPublishTenant::TPtr &ev, const TAct
 void TSchemeShard::Handle(TEvSchemeShard::TEvMigrateSchemeShard::TPtr &ev, const TActorContext &ctx) {
     if (InitState != TTenantInitState::Inprogress) {
         YDB_LOG_ERROR_CTX_COMP(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "Ignoring message TEvSchemeShard::TEvMigrateSchemeShard: not in TTenantInitState::Inprogress state state is",
-            {"#_(ui64) InitState", (ui64) InitState},
+            {"initState", (ui64) InitState},
             {"schemeshard", TabletID()},
             {"reason", "schemeshard"});
         return;
@@ -7711,8 +7711,8 @@ bool TSchemeShard::ProcessPendingConditionalEraseResponseBatch(const TInstant& n
 
     if (PendingCondEraseResponses.size() > 0 && (completeBySize || completeByTime)) {
         YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "Conditional erase flush pending response batch (by batch size / batch age",
-            {"#_num_0", (completeBySize ? "size" : "time")},
-            {"#_PendingCondEraseResponses.size", PendingCondEraseResponses.size()},
+            {"detail", (completeBySize ? "size" : "time")},
+            {"pendingCondEraseResponsesCount", PendingCondEraseResponses.size()},
             {"condEraseResponseBatchSize", CondEraseResponseBatchSize},
             {"batchAge", batchAge},
             {"condEraseResponseBatchMaxTime", CondEraseResponseBatchMaxTime},
@@ -7785,9 +7785,9 @@ void TSchemeShard::Handle(TEvDataShard::TEvConditionalEraseRowsResponse::TPtr& e
             YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "Conditional erase finished batch size / batch age / enqueued",
                 {"tabletId", tabletId},
                 {"status", record.GetStatus()},
-                {"#_PendingCondEraseResponses.size", PendingCondEraseResponses.size()},
+                {"pendingCondEraseResponsesCount", PendingCondEraseResponses.size()},
                 {"condEraseResponseBatchSize", CondEraseResponseBatchSize},
-                {"#_(now - PendingCondEraseResponsesStartTime)", (now - PendingCondEraseResponsesStartTime)},
+                {"pendingCondEraseDuration", (now - PendingCondEraseResponsesStartTime)},
                 {"condEraseResponseBatchMaxTime", CondEraseResponseBatchMaxTime},
                 {"schemeshard", TabletID()});
 
@@ -7855,7 +7855,7 @@ void TSchemeShard::Handle(TEvSchemeShard::TEvModifySchemeTransactionResult::TPtr
         {"txId", ev->Get()->Record.GetTxId()},
         {"status", ev->Get()->Record.GetStatus()});
     YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "Message:\n",
-        {"#_ev->Get()->Record", ev->Get()->Record.ShortDebugString()});
+        {"record", ev->Get()->Record.ShortDebugString()});
 
     const auto txId = TTxId(ev->Get()->Record.GetTxId());
 
@@ -7883,7 +7883,7 @@ void TSchemeShard::Handle(TEvIndexBuilder::TEvCreateResponse::TPtr& ev, const TA
         {"txId", ev->Get()->Record.GetTxId()},
         {"status", ev->Get()->Record.GetStatus()});
     YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "Message:\n",
-        {"#_ev->Get()->Record", ev->Get()->Record.ShortDebugString()});
+        {"record", ev->Get()->Record.ShortDebugString()});
 
     const auto txId = TTxId(ev->Get()->Record.GetTxId());
 
@@ -7904,7 +7904,7 @@ void TSchemeShard::Handle(TEvSchemeShard::TEvNotifyTxCompletionResult::TPtr& ev,
     YDB_LOG_INFO_CTX_COMP(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "Handle: TEvNotifyTxCompletionResult",
         {"txId", ev->Get()->Record.GetTxId()});
     YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "Message:\n",
-        {"#_ev->Get()->Record", ev->Get()->Record.ShortDebugString()});
+        {"record", ev->Get()->Record.ShortDebugString()});
 
     const auto txId = TTxId(ev->Get()->Record.GetTxId());
     bool executed = false;
@@ -7952,7 +7952,7 @@ void TSchemeShard::Handle(TEvSchemeShard::TEvCancelTxResult::TPtr& ev, const TAc
         {"cookie", ev->Cookie},
         {"schemeshard", TabletID()});
     YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "Message:\n",
-        {"#_ev->Get()->Record", ev->Get()->Record.ShortDebugString()});
+        {"record", ev->Get()->Record.ShortDebugString()});
 
     const ui64 id = ev->Cookie;
     if (Exports.contains(id)) {
@@ -7971,7 +7971,7 @@ void TSchemeShard::Handle(TEvIndexBuilder::TEvCancelResponse::TPtr& ev, const TA
         {"cookie", ev->Cookie},
         {"schemeshard", TabletID()});
     YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "Message:\n",
-        {"#_ev->Get()->Record", ev->Get()->Record.ShortDebugString()});
+        {"record", ev->Get()->Record.ShortDebugString()});
 
     const ui64 id = ev->Cookie;
     if (Imports.contains(id)) {
@@ -8657,8 +8657,8 @@ void TSchemeShard::ConfigureStatsOperations(const NKikimrConfig::TSchemeShardCon
 
     for (auto it = InFlightLimits.begin(); it != InFlightLimits.end(); ++it) {
         YDB_LOG_NOTICE_CTX_COMP(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "OperationsProcessing config: type limit",
-            {"#_TTxState::TypeName(it->first)", TTxState::TypeName(it->first)},
-            {"#_it->second", it->second});
+            {"txType", TTxState::TypeName(it->first)},
+            {"txCount", it->second});
     }
 }
 
@@ -9289,7 +9289,7 @@ void TSchemeShard::ConnectToSA() {
         {"id", SAPipeClientId},
         {"atSchemeshard", TabletID()},
         {"statisticsAggregatorId", StatisticsAggregatorId},
-        {"#_dup_at_schemeshard", TabletID()});
+        {"schemeshardTabletId", TabletID()});
 }
 
 TDuration TSchemeShard::SendBaseStatsToSA() {

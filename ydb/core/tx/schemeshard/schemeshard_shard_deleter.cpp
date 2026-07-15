@@ -19,8 +19,8 @@ void TShardDeleter::SendDeleteRequests(TTabletId hiveTabletId,
         NKikimr::NSchemeShard::TShardInfo>& shardsInfos,
         const NActors::TActorContext &ctx
     ) {
-    YDB_LOG_DEBUG_CTX(ctx, "SendDeleteRequests, shardsToDelete to hive at schemeshard",
-        {"#_shardsToDelete.size", shardsToDelete.size()},
+    YDB_LOG_DEBUG_CTX(ctx, "SendDeleteRequests to hive",
+        {"shardsToDeleteCount", shardsToDelete.size()},
         {"hiveTabletId", hiveTabletId},
         {"myTabletID", MyTabletID});
 
@@ -48,7 +48,7 @@ void TShardDeleter::SendDeleteRequests(TTabletId hiveTabletId,
 
         Y_ABORT_UNLESS(shardIdx);
 
-        YDB_LOG_DEBUG_CTX(ctx, "Free shard hive at ss",
+        YDB_LOG_DEBUG_CTX(ctx, "Free shard at hive",
             {"shardIdx", shardIdx},
             {"hiveTabletId", hiveTabletId},
             {"myTabletID", MyTabletID});

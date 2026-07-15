@@ -534,7 +534,7 @@ public:
             {"tableName", tableName},
             {"oldStreamName", oldStreamName},
             {"newStream", workingDir},
-            {"#_dup_tableName", tableName},
+            {"tableName", tableName},
             {"newStreamName", newStreamName});
 
         auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), context.SS->TabletID());

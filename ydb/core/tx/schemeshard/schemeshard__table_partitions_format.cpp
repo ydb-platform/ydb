@@ -47,7 +47,7 @@ struct TSchemeShard::TTxTablePartitionsFormatSwitch : public TTransactionBase<TS
         YDB_LOG_NOTICE_CTX(ctx, "TTxTablePartitionsFormatSwitch: path switch to format result",
             {"pathStr", PathStr},
             {"pathId", PathId},
-            {"#_num_0", (ShardIdxFormat ? "shardidx" : "position")},
+            {"detail", (ShardIdxFormat ? "shardidx" : "position")},
             {"status", Status},
             {"schemeshardId", Self->TabletID()});
 
@@ -129,9 +129,9 @@ struct TSchemeShard::TTxTablePartitionsFormatSweepStep : public TTransactionBase
 
         if (sweep.Queue.empty()) {
             Self->ClearTablePartitionsFormatSweep(db);
-            YDB_LOG_NOTICE_CTX(ctx, "TablePartitionsFormatSweep complete: done skipped",
-                {"#_sweep.Done", sweep.Done},
-                {"#_sweep.Skipped", sweep.Skipped},
+            YDB_LOG_NOTICE_CTX(ctx, "TablePartitionsFormatSweep complete",
+                {"sweepDone", sweep.Done},
+                {"sweepSkipped", sweep.Skipped},
                 {"schemeshardId", Self->TabletID()});
             return true;
         }
@@ -163,15 +163,15 @@ struct TSchemeShard::TTxTablePartitionsFormatSweepStep : public TTransactionBase
         YDB_LOG_NOTICE_CTX(ctx, "TablePartitionsFormatSweep step: path switch to format result",
             {"pathStr", pathStr},
             {"pathId", pathId},
-            {"#_num_0", (sweep.TargetIsShardIdx ? "shardidx" : "position")},
+            {"detail", (sweep.TargetIsShardIdx ? "shardidx" : "position")},
             {"status", status},
             {"schemeshardId", Self->TabletID()});
 
         if (sweep.Queue.empty()) {
             Self->ClearTablePartitionsFormatSweep(db);
-            YDB_LOG_NOTICE_CTX(ctx, "TablePartitionsFormatSweep complete: done skipped",
-                {"#_sweep.Done", sweep.Done},
-                {"#_sweep.Skipped", sweep.Skipped},
+            YDB_LOG_NOTICE_CTX(ctx, "TablePartitionsFormatSweep complete",
+                {"sweepDone", sweep.Done},
+                {"sweepSkipped", sweep.Skipped},
                 {"schemeshardId", Self->TabletID()});
         }
 
@@ -228,9 +228,9 @@ void TSchemeShard::StartTablePartitionsFormatSweep(NIceDb::TNiceDb& db, bool tar
     }
 
     YDB_LOG_NOTICE("TablePartitionsFormatSweep start: tables to process tables total switch",
-        {"#_sweep.Queue.size", sweep.Queue.size()},
-        {"#_Tables.size", Tables.size()},
-        {"#_num_0", (sweep.TargetIsShardIdx ? "shardidx" : "position")},
+        {"sweepQueueSize", sweep.Queue.size()},
+        {"tablesCount", Tables.size()},
+        {"detail", (sweep.TargetIsShardIdx ? "shardidx" : "position")},
         {"schemeshardId", TabletID()});
 
     db.Table<Schema::SysParams>().Key(Schema::SysParam_TablePartitionsFormatSweepStatus)
@@ -247,9 +247,9 @@ void TSchemeShard::PauseTablePartitionsFormatSweep(NIceDb::TNiceDb& db) {
     auto& sweep = TablePartitionsFormatSweep;
 
     YDB_LOG_NOTICE("TablePartitionsFormatSweep pause: tables to process tables total switch",
-        {"#_sweep.Queue.size", sweep.Queue.size()},
-        {"#_Tables.size", Tables.size()},
-        {"#_num_0", (sweep.TargetIsShardIdx ? "shardidx" : "position")},
+        {"sweepQueueSize", sweep.Queue.size()},
+        {"tablesCount", Tables.size()},
+        {"detail", (sweep.TargetIsShardIdx ? "shardidx" : "position")},
         {"schemeshardId", TabletID()});
 
     sweep.Status = TTablePartitionsFormatSweepState::EStatus::Paused;
@@ -263,9 +263,9 @@ void TSchemeShard::ResumeTablePartitionsFormatSweep(NIceDb::TNiceDb& db) {
     auto& sweep = TablePartitionsFormatSweep;
 
     YDB_LOG_NOTICE("TablePartitionsFormatSweep resume: tables to process tables total switch",
-        {"#_sweep.Queue.size", sweep.Queue.size()},
-        {"#_Tables.size", Tables.size()},
-        {"#_num_0", (sweep.TargetIsShardIdx ? "shardidx" : "position")},
+        {"sweepQueueSize", sweep.Queue.size()},
+        {"tablesCount", Tables.size()},
+        {"detail", (sweep.TargetIsShardIdx ? "shardidx" : "position")},
         {"schemeshardId", TabletID()});
 
     sweep.Status = TTablePartitionsFormatSweepState::EStatus::Running;
@@ -281,9 +281,9 @@ void TSchemeShard::CancelTablePartitionsFormatSweep(NIceDb::TNiceDb& db) {
     auto& sweep = TablePartitionsFormatSweep;
 
     YDB_LOG_NOTICE("TablePartitionsFormatSweep cancel: tables to process tables total switch",
-        {"#_sweep.Queue.size", sweep.Queue.size()},
-        {"#_Tables.size", Tables.size()},
-        {"#_num_0", (sweep.TargetIsShardIdx ? "shardidx" : "position")},
+        {"sweepQueueSize", sweep.Queue.size()},
+        {"tablesCount", Tables.size()},
+        {"detail", (sweep.TargetIsShardIdx ? "shardidx" : "position")},
         {"schemeshardId", TabletID()});
 
     ClearTablePartitionsFormatSweep(db);
@@ -339,9 +339,9 @@ void TSchemeShard::ContinueTablePartitionsFormatSweep() {
     }
 
     YDB_LOG_NOTICE("TablePartitionsFormatSweep continue: tables to process tables total switch",
-        {"#_sweep.Queue.size", sweep.Queue.size()},
-        {"#_Tables.size", Tables.size()},
-        {"#_num_0", (sweep.TargetIsShardIdx ? "shardidx" : "position")},
+        {"sweepQueueSize", sweep.Queue.size()},
+        {"tablesCount", Tables.size()},
+        {"detail", (sweep.TargetIsShardIdx ? "shardidx" : "position")},
         {"schemeshardId", TabletID()});
 
     Send(SelfId(), new TEvPrivate::TEvProgressTablePartitionsFormatSweep);

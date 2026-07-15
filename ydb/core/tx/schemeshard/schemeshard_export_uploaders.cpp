@@ -125,7 +125,7 @@ protected:
         TFileUpload& upload = Files.front();
 
         YDB_LOG_DEBUG("Put file response",
-            {"#_upload.Path", upload.Path},
+            {"uploadPath", upload.Path},
             {"self", this->SelfId()},
             {"result", result});
 

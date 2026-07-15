@@ -94,7 +94,7 @@ public:
         YDB_LOG_INFO_CTX(context.Ctx, "HandleReply",
             {"tabletId", context.SS->TabletID()},
             {"debugHint", DebugHint()},
-            {"#_ev->Get()->ToString", ev->Get()->ToString()});
+            {"message", ev->Get()->ToString()});
 
         const auto tabletId = TTabletId(ev->Get()->Record.GetOrigin());
         const auto status = ev->Get()->Record.GetStatus();

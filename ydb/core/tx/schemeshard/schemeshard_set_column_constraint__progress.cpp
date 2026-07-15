@@ -81,7 +81,7 @@ public:
 
         auto* operationInfoPtr = Self->SetColumnConstraintOperations.FindPtr(BuildId);
         if (!operationInfoPtr) {
-            YDB_LOG_INFO("",
+            YDB_LOG_INFO("TTxReplyAllocate operation not found",
                 {"logPrefix", LogPrefix},
                 {"cookie", AllocateResult->Cookie},
                 {"txId", txId});
@@ -150,7 +150,7 @@ public:
     void OnUnhandledException(TTransactionContext& /*txc*/, const TActorContext& /*ctx*/,
         TIndexBuildInfo* /*operationInfo*/, const std::exception& exc) override
     {
-        YDB_LOG_ERROR("",
+        YDB_LOG_ERROR("TTxReplyAllocate OnUnhandledException",
             {"logPrefix", LogPrefix},
             {"id", BuildId},
             {"exception", exc.what()});
@@ -205,7 +205,7 @@ public:
         BuildId = *operationIdPtr;
         auto* operationInfoPtr = Self->SetColumnConstraintOperations.FindPtr(BuildId);
         if (!operationInfoPtr) {
-            YDB_LOG_INFO("",
+            YDB_LOG_INFO("TTxReplyModify operation not found",
                 {"logPrefix", LogPrefix},
                 {"id", BuildId},
                 {"txId", txId});
@@ -267,7 +267,7 @@ public:
     void OnUnhandledException(TTransactionContext& /*txc*/, const TActorContext& /*ctx*/,
         TIndexBuildInfo* /*operationInfo*/, const std::exception& exc) override
     {
-        YDB_LOG_ERROR("",
+        YDB_LOG_ERROR("TTxReplyModify OnUnhandledException",
             {"logPrefix", LogPrefix},
             {"id", BuildId},
             {"exception", exc.what()});
@@ -298,7 +298,7 @@ public:
         BuildId = *operationIdPtr;
         auto* operationInfoPtr = Self->SetColumnConstraintOperations.FindPtr(BuildId);
         if (!operationInfoPtr) {
-            YDB_LOG_INFO("",
+            YDB_LOG_INFO("TTxReplyCompleted operation not found",
                 {"logPrefix", LogPrefix},
                 {"id", BuildId},
                 {"txId", txId});
@@ -341,7 +341,7 @@ public:
     void OnUnhandledException(TTransactionContext& /*txc*/, const TActorContext& /*ctx*/,
         TIndexBuildInfo* /*operationInfo*/, const std::exception& exc) override
     {
-        YDB_LOG_ERROR("",
+        YDB_LOG_ERROR("TTxReplyCompleted OnUnhandledException",
             {"logPrefix", LogPrefix},
             {"id", BuildId},
             {"exception", exc.what()});
@@ -492,12 +492,12 @@ public:
         TIndexBuildInfo* operationInfo, const std::exception& exc) override
     {
         if (!operationInfo) {
-            YDB_LOG_NOTICE("",
+            YDB_LOG_NOTICE("TTxReplyValidateRowCondition OnUnhandledException: operation not found",
                 {"logPrefix", LogPrefix},
                 {"id", BuildId});
             return;
         }
-        YDB_LOG_ERROR("",
+        YDB_LOG_ERROR("TTxReplyValidateRowCondition OnUnhandledException",
             {"logPrefix", LogPrefix},
             {"id", BuildId},
             {"exception", exc.what()});
@@ -566,7 +566,7 @@ public:
     void OnUnhandledException(TTransactionContext& /*txc*/, const TActorContext& /*ctx*/,
         TIndexBuildInfo* /*operationInfo*/, const std::exception& exc) override
     {
-        YDB_LOG_ERROR("",
+        YDB_LOG_ERROR("TTxReplyRetrySetColumnConstraint OnUnhandledException",
             {"logPrefix", LogPrefix},
             {"id", BuildId},
             {"exception", exc.what()});
@@ -620,7 +620,7 @@ private:
             operationInfo.ToValidateShards.emplace_back(partition->ShardIdx);
             YDB_LOG_DEBUG("InitiateValidationShards: added shard",
                 {"logPrefix", LogPrefix},
-                {"#_partition->ShardIdx", partition->ShardIdx});
+                {"shardIdx", partition->ShardIdx});
         }
 
         return true;
@@ -815,12 +815,12 @@ public:
         TIndexBuildInfo* operationInfo, const std::exception& exc) override
     {
         if (!operationInfo) {
-            YDB_LOG_NOTICE("",
+            YDB_LOG_NOTICE("TTxProgressSetColumnConstraint OnUnhandledException: operation not found",
                 {"logPrefix", LogPrefix},
                 {"id", BuildId});
             return;
         }
-        YDB_LOG_ERROR("",
+        YDB_LOG_ERROR("TTxProgressSetColumnConstraint OnUnhandledException",
             {"logPrefix", LogPrefix},
             {"id", BuildId},
             {"exception", exc.what()});

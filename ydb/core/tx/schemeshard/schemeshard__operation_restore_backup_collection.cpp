@@ -101,7 +101,7 @@ public:
         YDB_LOG_INFO_CTX(context.Ctx, "Found incremental backups to restore",
             {"tabletId", context.SS->TabletID()},
             {"debugHint", DebugHint()},
-            {"#_incrementalBackupNames.size", incrementalBackupNames.size()});
+            {"incrementalBackupCount", incrementalBackupNames.size()});
 
         context.OnComplete.Send(context.SS->SelfId(), new TEvPrivate::TEvRunIncrementalRestore(backupCollectionPathId, OperationId, incrementalBackupNames));
 

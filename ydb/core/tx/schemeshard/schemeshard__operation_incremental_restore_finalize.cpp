@@ -114,7 +114,7 @@ class TIncrementalRestoreFinalizeOp: public TSubOperationWithContext {
                     {"debugHint", DebugHint()},
                     {"tablePathId", tablePathId},
                     {"version", table->AlterVersion},
-                    {"#_table->AlterData->AlterVersion", table->AlterData->AlterVersion});
+                    {"alterVersion", table->AlterData->AlterVersion});
 
                 // Note: Parent index version update is deferred to TFinalizationPropose::SyncIndexSchemaVersions()
                 // which runs after coordinator confirmation, ensuring consistency if datashard proposals fail.
@@ -130,7 +130,7 @@ class TIncrementalRestoreFinalizeOp: public TSubOperationWithContext {
                             {"tabletId", context.SS->TabletID()},
                             {"debugHint", DebugHint()},
                             {"shardIdx", shardIdx},
-                            {"#_(tablet", context.SS->ShardInfos[shardIdx].TabletID});
+                            {"tabletId", context.SS->ShardInfos[shardIdx].TabletID});
                     }
                 }
             }
@@ -270,7 +270,7 @@ class TIncrementalRestoreFinalizeOp: public TSubOperationWithContext {
                 {"tabletId", context.SS->TabletID()});
             YDB_LOG_INFO_CTX(context.Ctx, "SyncIndexSchemaVersions: Processing target table paths",
                 {"tabletId", context.SS->TabletID()},
-                {"#_finalize.GetTargetTablePaths().size", finalize.GetTargetTablePaths().size()});
+                {"targetTablePathsCount", finalize.GetTargetTablePaths().size()});
 
             NIceDb::TNiceDb db(context.GetDB());
             THashSet<TPathId> publishedMainTables;
@@ -319,7 +319,7 @@ class TIncrementalRestoreFinalizeOp: public TSubOperationWithContext {
                     {"tabletId", context.SS->TabletID()},
                     {"implTablePathId", implTablePathId},
                     {"version", table->AlterVersion},
-                    {"#_table->AlterData->AlterVersion", table->AlterData->AlterVersion});
+                    {"alterVersion", table->AlterData->AlterVersion});
 
                 // Release AlterData tracking before FinishAlter resets it
                 if (table->ReleaseAlterData(OperationId)) {
@@ -359,7 +359,7 @@ class TIncrementalRestoreFinalizeOp: public TSubOperationWithContext {
                             YDB_LOG_INFO_CTX(context.Ctx, "SyncIndexSchemaVersions: Index AlterVersion updated",
                                 {"tabletId", context.SS->TabletID()},
                                 {"oldVersion", oldVersion},
-                                {"#_context.SS->Indexes[indexPathId]->AlterVersion", context.SS->Indexes[indexPathId]->AlterVersion});
+                                {"indexAlterVersion", context.SS->Indexes[indexPathId]->AlterVersion});
 
                             context.OnComplete.PublishToSchemeBoard(OperationId, indexPathId);
 

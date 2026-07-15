@@ -12,7 +12,7 @@ NOperationQueue::EStartStatus TSchemeShard::StartBackgroundCompaction(const TSha
     const auto& shardIdx = info.ShardIdx;
     auto it = ShardInfos.find(shardIdx);
     if (it == ShardInfos.end()) {
-        YDB_LOG_WARN_CTX(ctx, "At",
+        YDB_LOG_WARN_CTX(ctx, "[BackgroundCompaction] Failed to resolve shard info for background compaction",
             {"compaction", shardIdx},
             {"schemeshard", TabletID()});
 
@@ -22,7 +22,7 @@ NOperationQueue::EStartStatus TSchemeShard::StartBackgroundCompaction(const TSha
     const auto& datashardId = it->second.TabletID;
     const auto& pathId = it->second.PathId;
 
-    YDB_LOG_INFO_CTX(ctx, "Next wakeup in shards waiting after shards shards at schemeshard",
+    YDB_LOG_INFO_CTX(ctx, "[BackgroundCompaction] Compacting",
         {"pathId", pathId},
         {"datashard", datashardId},
         {"compactionInfo", info},
@@ -56,7 +56,7 @@ void TSchemeShard::OnBackgroundCompactionTimeout(const TShardCompactionInfo& inf
     const auto& shardIdx = info.ShardIdx;
     auto it = ShardInfos.find(shardIdx);
     if (it == ShardInfos.end()) {
-        YDB_LOG_WARN_CTX(ctx, "At",
+        YDB_LOG_WARN_CTX(ctx, "[BackgroundCompaction] Failed to resolve shard info for background compaction",
             {"compaction", shardIdx},
             {"schemeshard", TabletID()});
         return;
@@ -65,7 +65,7 @@ void TSchemeShard::OnBackgroundCompactionTimeout(const TShardCompactionInfo& inf
     const auto& datashardId = it->second.TabletID;
     const auto& pathId = it->second.PathId;
 
-    YDB_LOG_INFO_CTX(ctx, "Next wakeup in shards waiting after shards shards at schemeshard",
+    YDB_LOG_INFO_CTX(ctx, "[BackgroundCompaction] Compacting",
         {"pathId", pathId},
         {"datashard", datashardId},
         {"compactionInfo", info},

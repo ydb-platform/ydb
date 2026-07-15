@@ -174,20 +174,20 @@ struct TSchemeShard::TTxRunConditionalErase: public TSchemeShard::TRwTxBase {
 
         if (tableShardInfo.NextCondErase > now) {
             YDB_LOG_DEBUG_CTX(ctx, "Skip conditional erase",
-                {"#_logContext(now)", logContext(now)});
+                {"logContext", logContext(now)});
             return false;
         }
 
         if (!Self->ShardInfos.contains(tableShardInfo.ShardIdx)) {
             YDB_LOG_WARN_CTX(ctx, "Unable to resolve shard info",
-                {"#_logContext(now)", logContext(now)});
+                {"logContext", logContext(now)});
             return false;
         }
 
         const TShardInfo& shardInfo = Self->ShardInfos.at(tableShardInfo.ShardIdx);
 
         YDB_LOG_DEBUG_CTX(ctx, "TTxRunConditionalErase DoExecuteOnShard",
-            {"#_logContext(now)", logContext(now)});
+            {"logContext", logContext(now)});
 
         const TInstant wallClock = now - expireAfter;
 

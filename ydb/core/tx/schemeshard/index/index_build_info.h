@@ -733,7 +733,7 @@ public:
 
         YDB_LOG_DEBUG_COMP(NKikimrServices::BUILD_INDEX, "Restored index build",
             {"id", indexInfo->Id},
-            {"#_*indexInfo", *indexInfo});
+            {"indexInfo", *indexInfo});
     }
 
     template<class TRow>

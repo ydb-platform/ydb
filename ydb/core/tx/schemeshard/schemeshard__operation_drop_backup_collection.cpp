@@ -180,7 +180,7 @@ void CleanupIncrementalRestoreState(const TPathId& backupCollectionPathId, TOper
 
     YDB_LOG_INFO_CTX(context.Ctx, "CleanupIncrementalRestoreState: Cleaned up incremental restore states",
         {"tabletId", context.SS->TabletID()},
-        {"#_statesToCleanup.size", statesToCleanup.size()});
+        {"statesToCleanupCount", statesToCleanup.size()});
 }
 
 class TPropose : public TSubOperationState {
@@ -542,7 +542,7 @@ public:
         YDB_LOG_INFO_CTX(context.Ctx, "Cleaned up incremental restore operations",
             {"tabletId", context.SS->TabletID()},
             {"debugHint", DebugHint()},
-            {"#_operationsToCleanup.size", operationsToCleanup.size()});
+            {"operationsToCleanupCount", operationsToCleanup.size()});
 
         return true;
     }

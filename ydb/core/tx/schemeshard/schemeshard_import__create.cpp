@@ -224,7 +224,7 @@ struct TSchemeShard::TImport::TTxCreate: public TSchemeShard::TXxport::TTxBase {
 
         YDB_LOG_DEBUG("TImport::TTxCreate: DoExecute");
         YDB_LOG_TRACE("Message:\n",
-            {"#_request", request.ShortDebugString()});
+            {"request", request.ShortDebugString()});
 
         auto response = MakeHolder<TEvImport::TEvCreateImportResponse>(request.GetTxId());
 
@@ -397,7 +397,7 @@ private:
             {"status", status},
             {"error", errorMessage});
         YDB_LOG_TRACE("Message:\n",
-            {"#_response->Record", response->Record.ShortDebugString()});
+            {"responseRecord", response->Record.ShortDebugString()});
 
         auto& entry = *response->Record.MutableResponse()->MutableEntry();
         entry.SetStatus(status);
@@ -1055,7 +1055,7 @@ private:
             itemLogStr << ", item# " << item->ToString(itemIdx);
         }
         YDB_LOG_NOTICE("Cancelling",
-            {"#_TImport::TTxProgress", marker},
+            {"progressMarker", marker},
             {"info", importInfo},
             {"itemLogStr", itemLogStr});
 
@@ -1614,7 +1614,7 @@ private:
             {"txId", record.GetTxId()},
             {"status", record.GetStatus()});
         YDB_LOG_TRACE("Message:\n",
-            {"#_record", record.ShortDebugString()});
+            {"record", record.ShortDebugString()});
 
         auto txId = TTxId(record.GetTxId());
         if (!Self->TxIdToImport.contains(txId)) {
@@ -1747,7 +1747,7 @@ private:
             {"txId", record.GetTxId()},
             {"status", record.GetStatus()});
         YDB_LOG_TRACE("Message:\n",
-            {"#_record", record.ShortDebugString()});
+            {"record", record.ShortDebugString()});
 
         auto txId = TTxId(record.GetTxId());
         if (!Self->TxIdToImport.contains(txId)) {

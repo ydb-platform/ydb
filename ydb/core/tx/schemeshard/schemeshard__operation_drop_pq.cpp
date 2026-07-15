@@ -53,7 +53,7 @@ public:
 
         if (!txState->ShardsInProgress.contains(idx)) {
             YDB_LOG_INFO_CTX(context.Ctx, "Ignored repeated drop tablet reply for txId % tablet",
-                {"#_OperationId.GetTxId", OperationId.GetTxId()},
+                {"txId", OperationId.GetTxId()},
                 {"tabletId", tabletId});
             return false;
         }

@@ -123,7 +123,7 @@ public:
                 Y_UNREACHABLE();
             }
 
-            YDB_LOG_DEBUG_CTX(ctx, "At Send",
+            YDB_LOG_DEBUG_CTX(ctx, "TSysViewsRosterUpdate Send",
                 {"sysViewsRosterUpdate", ctx.SelfID},
                 {"schemeshard", SelfTabletId},
                 {"TEvModifySchemeTransaction", request->Record.ShortDebugString()});
@@ -145,7 +145,7 @@ public:
             cFunc(TEvents::TEvPoison::EventType, PassAway);
             default:
                 YDB_LOG_CRIT_CTX(*TlsActivationContext, "TSysViewsRosterUpdate StateUpdateSysViewFolder unexpected event 0x%08x",
-                    {"#_ev->GetTypeRewrite", ev->GetTypeRewrite()});
+                    {"eventType", ev->GetTypeRewrite()});
         }
     }
 
@@ -153,7 +153,7 @@ private:
 
     void SubscribeToCompletion(TTxId txId) const {
         const auto& ctx = TlsActivationContext->AsActorContext();
-        YDB_LOG_DEBUG_CTX(ctx, "At Send TEvNotifyTxCompletion txId",
+        YDB_LOG_DEBUG_CTX(ctx, "TSysViewsRosterUpdate Send TEvNotifyTxCompletion",
             {"sysViewsRosterUpdate", ctx.SelfID},
             {"schemeshard", SelfTabletId},
             {"txId", txId});
@@ -168,10 +168,10 @@ private:
         const TTxId txId(record.GetTxId());
         const auto& modifyInfo = AwaitingModifySchemeRequests.at(txId);
 
-        YDB_LOG_DEBUG_CTX(ctx, "At Handle TEvModifySchemeTransactionResult",
+        YDB_LOG_DEBUG_CTX(ctx, "TSysViewsRosterUpdate Handle TEvModifySchemeTransactionResult",
             {"sysViewsRosterUpdate", ctx.SelfID},
             {"schemeshard", SelfTabletId},
-            {"#_modifyInfo.DebugString", modifyInfo.DebugString()},
+            {"modifyInfo", modifyInfo.DebugString()},
             {"status", status});
 
         switch (status) {
@@ -182,10 +182,10 @@ private:
             SubscribeToCompletion(txId);
             break;
         default:
-            YDB_LOG_ERROR_CTX(ctx, "At failed",
+            YDB_LOG_ERROR_CTX(ctx, "TSysViewsRosterUpdate modify scheme transaction failed",
                 {"sysViewsRosterUpdate", ctx.SelfID},
                 {"schemeshard", SelfTabletId},
-                {"#_modifyInfo.DebugString", modifyInfo.DebugString()},
+                {"modifyInfo", modifyInfo.DebugString()},
                 {"reason", record.GetReason()});
 
             AwaitingModifySchemeRequests.erase(txId);
@@ -193,7 +193,7 @@ private:
         }
 
         if (AwaitingModifySchemeRequests.empty()) {
-            YDB_LOG_DEBUG_CTX(ctx, "At Send TEvRosterUpdateFinished",
+            YDB_LOG_DEBUG_CTX(ctx, "TSysViewsRosterUpdate Send TEvRosterUpdateFinished",
                 {"sysViewsRosterUpdate", ctx.SelfID},
                 {"schemeshard", SelfTabletId});
             Send(ctx.SelfID, new NSysView::TEvSysView::TEvRosterUpdateFinished());
@@ -205,15 +205,15 @@ private:
         const TTxId txId(record.GetTxId());
         const auto& modifyInfo = AwaitingModifySchemeRequests.at(txId);
 
-        YDB_LOG_DEBUG_CTX(ctx, "At Handle TEvNotifyTxCompletionResult",
+        YDB_LOG_DEBUG_CTX(ctx, "TSysViewsRosterUpdate Handle TEvNotifyTxCompletionResult",
             {"sysViewsRosterUpdate", ctx.SelfID},
             {"schemeshard", SelfTabletId},
-            {"#_modifyInfo.DebugString", modifyInfo.DebugString()});
+            {"modifyInfo", modifyInfo.DebugString()});
 
         AwaitingModifySchemeRequests.erase(txId);
 
         if (AwaitingModifySchemeRequests.empty()) {
-            YDB_LOG_DEBUG_CTX(ctx, "At Send TEvRosterUpdateFinished",
+            YDB_LOG_DEBUG_CTX(ctx, "TSysViewsRosterUpdate Send TEvRosterUpdateFinished",
                 {"sysViewsRosterUpdate", ctx.SelfID},
                 {"schemeshard", SelfTabletId});
             Send(ctx.SelfID, new NSysView::TEvSysView::TEvRosterUpdateFinished());

@@ -104,11 +104,11 @@ public:
         if (IsMutableOperation) {
             YDB_LOG_NOTICE_COMP(NKikimrServices::BUILD_INDEX, "Reply",
                 {"logPrefix", LogPrefix},
-                {"#_Response->Record", Response->Record.ShortDebugString()});
+                {"responseRecord", Response->Record.ShortDebugString()});
         } else {
             YDB_LOG_DEBUG_COMP(NKikimrServices::BUILD_INDEX, "Reply",
                 {"logPrefix", LogPrefix},
-                {"#_Response->Record", Response->Record.ShortDebugString()});
+                {"responseRecord", Response->Record.ShortDebugString()});
         }
 
         Send(Request->Sender, std::move(Response), 0, Request->Cookie);

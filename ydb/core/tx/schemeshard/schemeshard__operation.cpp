@@ -497,7 +497,7 @@ struct TSchemeShard::TTxOperationProgress: public NTabletFlatExecutor::TTransact
 
         if (!Self->Operations.contains(OpId.GetTxId())) {
             YDB_LOG_WARN_CTX(ctx, "TTxOperationProgress Execute for unknown txId",
-                {"#_OpId.GetTxId", OpId.GetTxId()});
+                {"txId", OpId.GetTxId()});
             return true;
         }
 
@@ -561,7 +561,7 @@ template <>
 void OutOfScopeEventHandler<TEvDataShard::TEvSchemaChanged>(const TEvDataShard::TEvSchemaChanged::TPtr& ev, TOperationContext& context) {
     const auto txId = ev->Get()->Record.GetTxId();
     YDB_LOG_DEBUG_CTX(context.Ctx, "TTxOperationReply< > execute at send out-of-scope reply, for txId",
-        {"#_ev->GetTypeName", ev->GetTypeName()},
+        {"eventType", ev->GetTypeName()},
         {"schemeshard", context.SS->TabletID()},
         {"txId", txId});
     const TActorId ackTo = ev->Get()->GetSource();
@@ -620,7 +620,7 @@ struct TTxOperationReply : public NTabletFlatExecutor::TTransactionBase<TSchemeS
         ISubOperation::TPtr part = findActiveSubOperation(OperationId);
 
         YDB_LOG_DEBUG_CTX(ctx, "TTxOperationReply< > execute",
-            {"#_EvReply->GetTypeName", EvReply->GetTypeName()},
+            {"eventType", EvReply->GetTypeName()},
             {"operationId", OperationId},
             {"schemeshard", Self->TabletID()},
             {"message", ISubOperationState::DebugReply(EvReply)});
@@ -633,7 +633,7 @@ struct TTxOperationReply : public NTabletFlatExecutor::TTransactionBase<TSchemeS
 
             } else {
                 YDB_LOG_WARN_CTX(ctx, "TTxOperationReply< > execute at unknown operation or suboperation is already done, event is out-of-scope",
-                    {"#_EvReply->GetTypeName", EvReply->GetTypeName()},
+                    {"eventType", EvReply->GetTypeName()},
                     {"operationId", OperationId},
                     {"schemeshard", Self->TabletID()});
 
@@ -648,7 +648,7 @@ struct TTxOperationReply : public NTabletFlatExecutor::TTransactionBase<TSchemeS
 
     void Complete(const TActorContext& ctx) override {
         YDB_LOG_DEBUG_CTX(ctx, "TTxOperationReply< > complete",
-            {"#_EvReply->GetTypeName", EvReply->GetTypeName()},
+            {"eventType", EvReply->GetTypeName()},
             {"operationId", OperationId},
             {"schemeshard", Self->TabletID()});
         OnComplete.ApplyOnComplete(Self, ctx);
@@ -1717,7 +1717,7 @@ bool TOperation::IsReadyToNotify(const TActorContext& ctx) const {
     YDB_LOG_DEBUG_CTX(ctx, "TOperation IsReadyToNotify ready / is",
         {"txId", TxId},
         {"parts", ReadyToNotifyParts.size()},
-        {"#_Parts.size", Parts.size()},
+        {"partsCount", Parts.size()},
         {"published", (IsPublished() ? "true" : "false")});
 
     return IsReadyToNotify();
@@ -1751,7 +1751,7 @@ bool TOperation::IsReadyToDone(const TActorContext& ctx) const {
     YDB_LOG_DEBUG_CTX(ctx, "TOperation IsReadyToDone ready",
         {"txId", TxId},
         {"parts", DoneParts.size()},
-        {"#_Parts.size", Parts.size()});
+        {"partsCount", Parts.size()});
 
     return DoneParts.size() == Parts.size();
 }
@@ -1760,7 +1760,7 @@ bool TOperation::IsReadyToPropose(const TActorContext& ctx) const {
     YDB_LOG_DEBUG_CTX(ctx, "TOperation IsReadyToPropose ready",
         {"txId", TxId},
         {"parts", ReadyToProposeParts.size()},
-        {"#_Parts.size", Parts.size()});
+        {"partsCount", Parts.size()});
 
     return IsReadyToPropose();
 }

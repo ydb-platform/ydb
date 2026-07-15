@@ -305,8 +305,8 @@ TVector<ISubOperation::TPtr> CreateNewExternalDataSource(TOperationId id,
     YDB_LOG_INFO_CTX(context.Ctx, "CreateNewExternalDataSource, opId feature flag EnableReplaceIfExistsForExternalEntities tx",
         {"tabletId", context.SS->TabletID()},
         {"id", id},
-        {"#_context.SS->EnableReplaceIfExistsForExternalEntities", context.SS->EnableReplaceIfExistsForExternalEntities},
-        {"#_tx", tx.ShortDebugString()});
+        {"enableReplaceIfExists", context.SS->EnableReplaceIfExistsForExternalEntities},
+        {"transaction", tx.ShortDebugString()});
 
     auto errorResult = [&id](NKikimrScheme::EStatus status, const TStringBuf& msg) -> TVector<ISubOperation::TPtr> {
         return {CreateReject(id, status, TStringBuilder() << "Invalid TCreateExternalDataSource request: " << msg)};

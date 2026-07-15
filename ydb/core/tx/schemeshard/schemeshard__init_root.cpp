@@ -53,7 +53,7 @@ struct TSchemeShard::TTxInitRoot : public TSchemeShard::TRwTxBase {
             if (response.Error) {
                 YDB_LOG_ERROR_CTX(ctx, "TTxInitRoot DoExecute error creating user",
                     {"path", rootName},
-                    {"#_defaultUser.GetName", defaultUser.GetName()},
+                    {"defaultUserName", defaultUser.GetName()},
                     {"error", response.Error});
             } else {
                 auto& sid = Self->LoginProvider.Sids[defaultUser.GetName()];
@@ -91,7 +91,7 @@ struct TSchemeShard::TTxInitRoot : public TSchemeShard::TRwTxBase {
                     if (response.Error) {
                         YDB_LOG_ERROR_CTX(ctx, "TTxInitRoot DoExecute error modifying group: with",
                             {"path", rootName},
-                            {"#_defaultGroup.GetName", defaultGroup.GetName()},
+                            {"defaultGroupName", defaultGroup.GetName()},
                             {"member", member},
                             {"error", response.Error});
                     } else {

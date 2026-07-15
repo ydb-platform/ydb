@@ -153,7 +153,7 @@ public:
         TTxState* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
 
-        YDB_LOG_INFO_CTX(context.Ctx, "ProgressState operation",
+        YDB_LOG_INFO_CTX(context.Ctx, "ProgressState",
             {"debugHint", DebugHint()},
             {"type", TTxState::TypeName(txState->TxType)},
             {"tablet", ssId});
@@ -238,7 +238,7 @@ public:
 
         Y_ABORT_UNLESS(txState->PlanStep);
 
-        YDB_LOG_INFO_CTX(context.Ctx, "ProgressState operation",
+        YDB_LOG_INFO_CTX(context.Ctx, "ProgressState",
             {"debugHint", DebugHint()},
             {"type", TTxState::TypeName(txState->TxType)},
             {"tablet", ssId});

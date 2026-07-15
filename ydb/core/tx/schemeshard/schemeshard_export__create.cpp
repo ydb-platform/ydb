@@ -125,7 +125,7 @@ struct TSchemeShard::TExport::TTxCreate: public TSchemeShard::TXxport::TTxBase {
 
         YDB_LOG_DEBUG("TExport::TTxCreate: DoExecute");
         YDB_LOG_TRACE("Message:\n",
-            {"#_request", request.ShortDebugString()});
+            {"request", request.ShortDebugString()});
 
         auto response = MakeHolder<TEvExport::TEvCreateExportResponse>(request.GetTxId());
 
@@ -304,7 +304,7 @@ private:
             {"status", status},
             {"error", errorMessage});
         YDB_LOG_TRACE("Message:\n",
-            {"#_response->Record", response->Record.ShortDebugString()});
+            {"responseRecord", response->Record.ShortDebugString()});
 
         auto& exprt = *response->Record.MutableResponse()->MutableEntry();
         exprt.SetStatus(status);
@@ -854,7 +854,7 @@ private:
         const auto& item = exportInfo.Items.at(itemIdx);
 
         YDB_LOG_NOTICE("Cancelling",
-            {"#_TExport::TTxProgress", marker},
+            {"progressMarker", marker},
             {"info", exportInfo},
             {"item", item.ToString(itemIdx)});
 
@@ -1129,7 +1129,7 @@ private:
             {"txId", record.GetTxId()},
             {"status", record.GetStatus()});
         YDB_LOG_TRACE("Message:\n",
-            {"#_record", record.ShortDebugString()});
+            {"record", record.ShortDebugString()});
 
         auto txId = TTxId(record.GetTxId());
         if (!Self->TxIdToExport.contains(txId)) {

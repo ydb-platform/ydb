@@ -28,7 +28,7 @@ public:
         const auto& settings = request.GetSettings();
         YDB_LOG_NOTICE("DoExecute",
             {"logPrefix", LogPrefix},
-            {"#_request", request.ShortDebugString()});
+            {"request", request.ShortDebugString()});
 
         Response = MakeHolder<TEvIndexBuilder::TEvCreateResponse>(request.GetTxId());
 

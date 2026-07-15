@@ -395,8 +395,8 @@ TVector<ISubOperation::TPtr> CreateNewExternalTable(TOperationId id, const TTxTr
     YDB_LOG_INFO_CTX(context.Ctx, "CreateNewExternalTable, opId feature flag EnableReplaceIfExistsForExternalEntities tx",
         {"tabletId", context.SS->TabletID()},
         {"id", id},
-        {"#_context.SS->EnableReplaceIfExistsForExternalEntities", context.SS->EnableReplaceIfExistsForExternalEntities},
-        {"#_tx", tx.ShortDebugString()});
+        {"enableReplaceIfExists", context.SS->EnableReplaceIfExistsForExternalEntities},
+        {"transaction", tx.ShortDebugString()});
 
     auto errorResult = [&id](NKikimrScheme::EStatus status, const TStringBuf& msg) -> TVector<ISubOperation::TPtr> {
         return {CreateReject(id, status, TStringBuilder() << "Invalid TCreateExternalTable request: " << msg)};

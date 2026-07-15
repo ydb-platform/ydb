@@ -304,8 +304,8 @@ NOperationQueue::EStartStatus TSchemeShard::StartForcedCompaction(const TShardId
 
     auto it = ShardInfos.find(shardIdx);
     if (it == ShardInfos.end()) {
-        YDB_LOG_WARN_CTX(ctx, "At",
-            {"compaction", shardIdx},
+        YDB_LOG_WARN_CTX(ctx, "[ForcedCompaction] Failed to resolve shard info for forced compaction",
+            {"shardIdx", shardIdx},
             {"schemeshard", TabletID()});
 
         CompleteForcedCompactionForShard(shardIdx, ctx);
@@ -315,7 +315,7 @@ NOperationQueue::EStartStatus TSchemeShard::StartForcedCompaction(const TShardId
     const auto& datashardId = it->second.TabletID;
     const auto& pathId = it->second.PathId;
 
-    YDB_LOG_INFO_CTX(ctx, "Next wakeup in shards shards at schemeshard",
+    YDB_LOG_INFO_CTX(ctx, "[ForcedCompaction] Compacting",
         {"pathId", pathId},
         {"datashard", datashardId},
         {"in", ForcedCompactionQueue->GetWakeupDelta()},
@@ -367,7 +367,7 @@ void TSchemeShard::HandleForcedCompactionResult(TEvDataShard::TEvCompactTableRes
         record.GetPathId().GetLocalId());
 
     if (shardIdx == InvalidShardIdx) {
-        YDB_LOG_WARN_CTX(ctx, "At",
+        YDB_LOG_WARN_CTX(ctx, "[ForcedCompaction] Failed to resolve shard info for compaction result",
             {"pathId", pathId},
             {"datashard", tabletId},
             {"schemeshard", TabletID()});
@@ -449,7 +449,7 @@ void TSchemeShard::ProcessForcedCompactionOnSplitMerge(
             YDB_LOG_WARN_CTX(ctx, "But removed in-flight src shards setting TotalShardCount to 0 dst shards for at schemeshard",
                 {"totalShardCount", compaction->TotalShardCount},
                 {"removedSrcShardCount", removedSrcShardCount},
-                {"#_dstShardIdxs.size", dstShardIdxs.size()},
+                {"dstShardIdxsCount", dstShardIdxs.size()},
                 {"compaction", compaction->Id},
                 {"tablePathId", tablePathId},
                 {"tabletID", TabletID()});
@@ -463,7 +463,7 @@ void TSchemeShard::ProcessForcedCompactionOnSplitMerge(
 
         YDB_LOG_INFO_CTX(ctx, "Src shards with dst shards for new at schemeshard",
             {"removedSrcShardCount", removedSrcShardCount},
-            {"#_dstShardIdxs.size", dstShardIdxs.size()},
+            {"dstShardIdxsCount", dstShardIdxs.size()},
             {"compaction", compaction->Id},
             {"tablePathId", tablePathId},
             {"totalShardCount", compaction->TotalShardCount},
@@ -492,8 +492,8 @@ void TSchemeShard::OnForcedCompactionTimeout(const TShardIdx& shardIdx) {
 
     auto it = ShardInfos.find(shardIdx);
     if (it == ShardInfos.end()) {
-        YDB_LOG_WARN_CTX(ctx, "At",
-            {"compaction", shardIdx},
+        YDB_LOG_WARN_CTX(ctx, "[ForcedCompaction] Failed to resolve shard info for forced compaction",
+            {"shardIdx", shardIdx},
             {"schemeshard", TabletID()});
         CompleteForcedCompactionForShard(shardIdx, ctx);
         return;
@@ -502,7 +502,7 @@ void TSchemeShard::OnForcedCompactionTimeout(const TShardIdx& shardIdx) {
     const auto& datashardId = it->second.TabletID;
     const auto& pathId = it->second.PathId;
 
-    YDB_LOG_INFO_CTX(ctx, "Next wakeup in shards shards at schemeshard",
+    YDB_LOG_INFO_CTX(ctx, "[ForcedCompaction] Compacting",
         {"pathId", pathId},
         {"datashard", datashardId},
         {"in", ForcedCompactionQueue->GetWakeupDelta()},

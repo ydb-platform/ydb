@@ -11,7 +11,7 @@ NOperationQueue::EStartStatus TSchemeShard::StartBorrowedCompaction(const TShard
 
     auto it = ShardInfos.find(shardIdx);
     if (it == ShardInfos.end()) {
-        YDB_LOG_WARN_CTX(ctx, "At",
+        YDB_LOG_WARN_CTX(ctx, "[BorrowedCompaction] Failed to resolve shard info for borrowed compaction",
             {"compaction", shardIdx},
             {"schemeshard", TabletID()});
 
@@ -51,7 +51,7 @@ void TSchemeShard::OnBorrowedCompactionTimeout(const TShardIdx& shardIdx) {
 
     auto it = ShardInfos.find(shardIdx);
     if (it == ShardInfos.end()) {
-        YDB_LOG_WARN_CTX(ctx, "At",
+        YDB_LOG_WARN_CTX(ctx, "[BorrowedCompaction] Failed to resolve shard info for borrowed compaction",
             {"compaction", shardIdx},
             {"schemeshard", TabletID()});
         return;

@@ -161,7 +161,7 @@ public:
             {"path", parentPathStr},
             {"secretName", secretName},
             {"opId", OperationId},
-            {"#_parts)", secretDescrWithoutSecretParts.ShortDebugString()});
+            {"secretDescription", secretDescrWithoutSecretParts.ShortDebugString()});
 
         auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(ssId));
 

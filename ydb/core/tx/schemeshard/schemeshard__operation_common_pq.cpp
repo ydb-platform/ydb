@@ -273,8 +273,8 @@ bool CollectPQConfigChanged(const TOperationId& operationId,
             {"shardIdx", shardIdx},
             {"shard", shardId},
             {"await", txState.ShardsInProgress.size()},
-            {"#_txState.State", TTxState::StateName(txState.State)},
-            {"#_txState.ReadyForNotifications", txState.ReadyForNotifications},
+            {"state", TTxState::StateName(txState.State)},
+            {"readyForNotifications", txState.ReadyForNotifications},
             {"schemeshard", ssId});
     }
 
@@ -324,8 +324,8 @@ bool CollectPQConfigChanged(const TOperationId& operationId,
         {"shardIdx", shardIdx},
         {"shard", shardId},
         {"await", txState.ShardsInProgress.size()},
-        {"#_txState.State", TTxState::StateName(txState.State)},
-        {"#_txState.ReadyForNotifications", txState.ReadyForNotifications},
+        {"state", TTxState::StateName(txState.State)},
+        {"readyForNotifications", txState.ReadyForNotifications},
         {"schemeshard", ssId});
 
     return txState.ShardsInProgress.empty();
@@ -409,7 +409,7 @@ bool TConfigureParts::HandleReply(TEvPersQueue::TEvUpdateConfigResponse::TPtr& e
 bool TConfigureParts::ProgressState(TOperationContext& context) {
     TTabletId ssId = context.SS->SelfTabletId();
 
-    YDB_LOG_INFO_CTX(context.Ctx, "HandleReply ProgressState",
+    YDB_LOG_INFO_CTX(context.Ctx, "ProgressState",
         {"debugHint", DebugHint()},
         {"schemeshard", ssId});
 

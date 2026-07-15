@@ -72,9 +72,9 @@ public:
             {"opId", operationId},
             {"alterVersion", volume->AlterData->AlterVersion},
             {"defaultPartitions", volume->DefaultPartitionCount},
-            {"#_volume->AlterData->DefaultPartitionCount", volume->AlterData->DefaultPartitionCount},
+            {"defaultPartitionCount", volume->AlterData->DefaultPartitionCount},
             {"explicitChannelProfiles", volume->ExplicitChannelProfileCount},
-            {"#_volume->AlterData->ExplicitChannelProfileCount", volume->AlterData->ExplicitChannelProfileCount});
+            {"explicitChannelProfileCount", volume->AlterData->ExplicitChannelProfileCount});
 
         bool needMoreShards = ApplySharding(
             operationId.GetTxId(),

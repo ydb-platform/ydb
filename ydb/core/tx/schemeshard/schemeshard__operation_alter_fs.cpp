@@ -482,7 +482,7 @@ TTxState& TAlterFileStore::PrepareChanges(
 
     YDB_LOG_DEBUG_CTX(context.Ctx, "AlterFileStore AlterVersion",
         {"txid", operationId.GetTxId()},
-        {"#_fs->AlterVersion", fs->AlterVersion});
+        {"alterVersion", fs->AlterVersion});
 
     context.SS->PersistAddFileStoreAlter(db, item->PathId, fs);
     context.SS->PersistTxState(db, operationId);

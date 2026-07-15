@@ -439,7 +439,7 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
                 {"name", properties.FileName});
             if (!CheckAvailableInImport(properties.PathType)) {
                 YDB_LOG_DEBUG("Not available in imports",
-                    {"#_properties.FileName", properties.FileName});
+                    {"fileName", properties.FileName});
                 continue;
             }
 

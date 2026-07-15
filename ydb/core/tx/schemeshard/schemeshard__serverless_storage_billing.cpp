@@ -124,9 +124,9 @@ struct TSchemeShard::TTxServerlessStorageBilling : public TTransactionBase<TSche
                 {"now", now},
                 {"lastBillTime", last},
                 {"lastBilled", lastBilled.Start},
-                {"#_lastBilled.End", lastBilled.End},
+                {"lastBilledEnd", lastBilled.End},
                 {"toBill", toBill.Start},
-                {"#_toBill.End", toBill.End},
+                {"toBillEnd", toBill.End},
                 {"at", TimeToNextBill});
             return true;
         }
@@ -141,9 +141,9 @@ struct TSchemeShard::TTxServerlessStorageBilling : public TTransactionBase<TSche
                 {"now", now},
                 {"lastBillTime", last},
                 {"lastBilled", lastBilled.Start},
-                {"#_lastBilled.End", lastBilled.End},
+                {"lastBilledEnd", lastBilled.End},
                 {"toBill", toBill.Start},
-                {"#_toBill.End", toBill.End},
+                {"toBillEnd", toBill.End},
                 {"at", TimeToNextBill});
         }
 
@@ -201,9 +201,9 @@ struct TSchemeShard::TTxServerlessStorageBilling : public TTransactionBase<TSche
             {"now", now},
             {"lastBillTime", last},
             {"lastBilled", lastBilled.Start},
-            {"#_lastBilled.End", lastBilled.End},
+            {"lastBilledEnd", lastBilled.End},
             {"toBill", toBill.Start},
-            {"#_toBill.End", toBill.End},
+            {"toBillEnd", toBill.End},
             {"at", TimeToNextBill});
 
         auto request = MakeHolder<NMetering::TEvMetering::TEvWriteMeteringJson>(billRecord);

@@ -114,7 +114,7 @@ bool TCreateParts::HandleReply(TEvHive::TEvAdoptTabletReply::TPtr& ev, TOperatio
         {"tabletId", context.SS->SelfTabletId()});
     YDB_LOG_DEBUG_CTX(context.Ctx, "HandleReply TEvAdoptTablet message%",
         {"debugHint", DebugHint()},
-        {"#_DebugReply(ev)", DebugReply(ev)});
+        {"reply", DebugReply(ev)});
 
     NIceDb::TNiceDb db(context.GetDB());
 
@@ -315,7 +315,7 @@ bool TCreateParts::ProgressState(TOperationContext& context) {
     TTxState* txState = context.SS->FindTx(OperationId);
     Y_ABORT_UNLESS(txState);
 
-    YDB_LOG_INFO_CTX(context.Ctx, "ProgressState operation",
+    YDB_LOG_INFO_CTX(context.Ctx, "ProgressState",
         {"debugHint", DebugHint()},
         {"type", TTxState::TypeName(txState->TxType)},
         {"tablet", ssId});
@@ -325,7 +325,7 @@ bool TCreateParts::ProgressState(TOperationContext& context) {
         || txState->TxType == TTxState::TxBackup
         || txState->TxType == TTxState::TxRestore) {
         if (NTableState::CheckPartitioningChangedForTableModification(*txState, context)) {
-            YDB_LOG_INFO_CTX(context.Ctx, "ProgressState SourceTablePartitioningChangedForModification tx",
+            YDB_LOG_INFO_CTX(context.Ctx, "ProgressState source table partitioning changed for modification",
                 {"debugHint", DebugHint()},
                 {"type", TTxState::TypeName(txState->TxType)});
             NTableState::UpdatePartitioningForTableModification(OperationId, *txState, context);
@@ -636,7 +636,7 @@ bool CollectSchemaChangedImpl(
     auto pTablet = txState.SchemeChangeNotificationReceived.FindPtr(shardIdx);
     if (pTablet && generation && (pTablet->second >= *generation)) {
         YDB_LOG_DEBUG_CTX(context.Ctx, "CollectSchemaChanged Ignore as outdated shard",
-            {"#_TEvSchemaChangedTraits<TEvent>::GetName", TEvSchemaChangedTraits<TEvent>::GetName()},
+            {"eventName", TEvSchemaChangedTraits<TEvent>::GetName()},
             {"operationId", operationId},
             {"shardIdx", shardIdx},
             {"shardId", shardId},
@@ -669,13 +669,13 @@ bool CollectSchemaChangedImpl(
     txState.ShardsInProgress.erase(shardIdx);
 
     YDB_LOG_DEBUG_CTX(context.Ctx, "CollectSchemaChanged accept left",
-        {"#_TEvSchemaChangedTraits<TEvent>::GetName", TEvSchemaChangedTraits<TEvent>::GetName()},
+        {"eventName", TEvSchemaChangedTraits<TEvent>::GetName()},
         {"operationId", operationId},
         {"shardIdx", shardIdx},
         {"shard", shardId},
         {"await", txState.ShardsInProgress.size()},
-        {"#_txState.State", TTxState::StateName(txState.State)},
-        {"#_txState.ReadyForNotifications", txState.ReadyForNotifications},
+        {"state", TTxState::StateName(txState.State)},
+        {"readyForNotifications", txState.ReadyForNotifications},
         {"schemeshard", ssId});
 
     if (txState.ShardsInProgress.empty()) {
@@ -1094,18 +1094,18 @@ bool TProposedWaitParts::HandleReplyImpl(const TEvent& ev, TOperationContext& co
 
     YDB_LOG_INFO_CTX(context.Ctx, "HandleReply",
         {"debugHint", DebugHint()},
-        {"#_TEvSchemaChangedTraits<TEvent>::GetName", TEvSchemaChangedTraits<TEvent>::GetName()},
+        {"eventName", TEvSchemaChangedTraits<TEvent>::GetName()},
         {"tablet", ssId});
     YDB_LOG_DEBUG_CTX(context.Ctx, "HandleReply",
         {"debugHint", DebugHint()},
-        {"#_TEvSchemaChangedTraits<TEvent>::GetName", TEvSchemaChangedTraits<TEvent>::GetName()},
+        {"eventName", TEvSchemaChangedTraits<TEvent>::GetName()},
         {"tablet", ssId},
         {"message", evRecord.ShortDebugString()});
 
     if (!CollectSchemaChanged(OperationId, ev, context)) {
         YDB_LOG_DEBUG_CTX(context.Ctx, "HandleReply CollectSchemaChanged: false",
             {"debugHint", DebugHint()},
-            {"#_TEvSchemaChangedTraits<TEvent>::GetName", TEvSchemaChangedTraits<TEvent>::GetName()});
+            {"eventName", TEvSchemaChangedTraits<TEvent>::GetName()});
         return false;
     }
 
@@ -1115,7 +1115,7 @@ bool TProposedWaitParts::HandleReplyImpl(const TEvent& ev, TOperationContext& co
     if (!txState.ReadyForNotifications) {
         YDB_LOG_DEBUG_CTX(context.Ctx, "HandleReply ReadyForNotifications: false",
             {"debugHint", DebugHint()},
-            {"#_TEvSchemaChangedTraits<TEvent>::GetName", TEvSchemaChangedTraits<TEvent>::GetName()});
+            {"eventName", TEvSchemaChangedTraits<TEvent>::GetName()});
         return false;
     }
 
@@ -1250,7 +1250,7 @@ void AbortRelatedOperations(TOperationId operationId, const THashSet<TTxId>& rel
             continue;
         }
 
-        YDB_LOG_NOTICE_CTX(context.Ctx, "",
+        YDB_LOG_NOTICE_CTX(context.Ctx, "Dependent transaction waiting for parent transaction",
             {"logPrefix", logPrefix},
             {"dependentTransaction", operationId.GetTxId()},
             {"parentTransaction", otherTxId},
@@ -1401,7 +1401,7 @@ void AbortUnsafeDropOperation(const TOperationId& opId, const TTxId& txId, TOper
     Y_ABORT_UNLESS(txState);
 
     YDB_LOG_NOTICE_CTX(context.Ctx, "AbortUnsafe",
-        {"#_TTxState::TypeName(txState->TxType)", TTxState::TypeName(txState->TxType)},
+        {"txType", TTxState::TypeName(txState->TxType)},
         {"opId", opId},
         {"txId", txId},
         {"ssId", context.SS->TabletID()});

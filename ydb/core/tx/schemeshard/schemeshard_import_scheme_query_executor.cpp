@@ -118,8 +118,7 @@ class TSchemeQueryExecutor: public TActorBootstrapped<TSchemeQueryExecutor> {
         auto logMessage = TStringBuilder() << "TSchemeQueryExecutor Reply"
             << ", self: " << SelfId()
             << ", status: " << status;
-        YDB_LOG_INFO("",
-            {"logMessage", logMessage});
+        YDB_LOG_INFO(logMessage.c_str());
 
         std::visit([&]<typename T>(T& value) {
             if constexpr (std::is_same_v<T, TString>) {
@@ -127,8 +126,7 @@ class TSchemeQueryExecutor: public TActorBootstrapped<TSchemeQueryExecutor> {
             } else if constexpr (std::is_same_v<T, NKikimrSchemeOp::TModifyScheme>) {
                 logMessage << ", prepared query: " << value.ShortDebugString().Quote();
             }
-            YDB_LOG_DEBUG("",
-                {"logMessage", logMessage});
+            YDB_LOG_DEBUG(logMessage.c_str());
             Send(ReplyTo, new TEvPrivate::TEvImportSchemeQueryResult(ImportId, ItemIdx, status, std::move(value)));
         }, result);
 

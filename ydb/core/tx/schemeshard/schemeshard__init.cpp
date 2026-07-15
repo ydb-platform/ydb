@@ -1358,8 +1358,8 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
         RETURN_IF_NO_PRECHARGED(Self->ReadSysValue(db, Schema::SysParam_MaxIncompatibleChange, Self->MaxIncompatibleChange));
         if (Self->MaxIncompatibleChange > Schema::MaxIncompatibleChangeSupported) {
             YDB_LOG_ERROR_CTX_COMP(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "TTxInit, unsupported changes detected: MaxIncompatibleChange MaxIncompatibleChangeSupported restarting!",
-                {"#_Self->MaxIncompatibleChange", Self->MaxIncompatibleChange},
-                {"#_Schema::MaxIncompatibleChangeSupported", Schema::MaxIncompatibleChangeSupported});
+                {"maxIncompatibleChange", Self->MaxIncompatibleChange},
+                {"maxIncompatibleChangeSupported", Schema::MaxIncompatibleChangeSupported});
             Self->BreakTabletAndRestart(ctx);
             Broken = true;
             return true;
@@ -5297,9 +5297,9 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     YDB_LOG_ERROR_CTX_COMP(ctx, NKikimrServices::BUILD_INDEX, "Init unhandled exception",
                         {"stepName", stepName},
                         {"id", buildInfo.Id},
-                        {"#_TypeName(exc)", TypeName(exc)},
-                        {"#_exc.what", exc.what()},
-                        {"#_TBackTrace::FromCurrentException().PrintToString", TBackTrace::FromCurrentException().PrintToString()},
+                        {"exceptionType", TypeName(exc)},
+                        {"exceptionMessage", exc.what()},
+                        {"backtrace", TBackTrace::FromCurrentException().PrintToString()},
                         {"TIndexBuildInfo", buildInfo});
 
                     // in-memory volatile state:

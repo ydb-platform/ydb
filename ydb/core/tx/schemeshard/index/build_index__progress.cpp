@@ -150,7 +150,7 @@ private:
             {"logPrefix", LogPrefix},
             {"debug", Debug()},
             {"uploader", Uploader},
-            {"#_ev->Sender", ev->Sender});
+            {"sender", ev->Sender});
 
         if (!Uploader) {
             return;
@@ -279,9 +279,9 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateIndexPropose(
     }
 
     YDB_LOG_NOTICE("CreateIndexPropose",
-        {"#_buildInfo.Id", buildInfo.Id},
-        {"#_buildInfo.State", buildInfo.State},
-        {"#_propose->Record", propose->Record.ShortDebugString()});
+        {"buildId", buildInfo.Id},
+        {"buildState", buildInfo.State},
+        {"proposeRecord", propose->Record.ShortDebugString()});
 
     return propose;
 }
@@ -309,9 +309,9 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> DropBuildPropose(
     modifyScheme.MutableDrop()->SetName(path->Name);
 
     YDB_LOG_NOTICE("DropBuildPropose",
-        {"#_buildInfo.Id", buildInfo.Id},
-        {"#_buildInfo.State", buildInfo.State},
-        {"#_propose->Record", propose->Record.ShortDebugString()});
+        {"buildId", buildInfo.Id},
+        {"buildState", buildInfo.State},
+        {"proposeRecord", propose->Record.ShortDebugString()});
 
     return propose;
 }
@@ -377,9 +377,9 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateBuildPropose(
         policy.SetMaxPartitionsCount(0);
 
         YDB_LOG_NOTICE("CreateBuildPropose",
-            {"#_buildInfo.Id", buildInfo.Id},
-            {"#_buildInfo.State", buildInfo.State},
-            {"#_propose->Record", propose->Record.ShortDebugString()});
+            {"buildId", buildInfo.Id},
+            {"buildState", buildInfo.State},
+            {"proposeRecord", propose->Record.ShortDebugString()});
 
         return propose;
     }
@@ -406,9 +406,9 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateBuildPropose(
             }
         }
         YDB_LOG_NOTICE("CreateBuildPropose",
-            {"#_buildInfo.Id", buildInfo.Id},
-            {"#_buildInfo.State", buildInfo.State},
-            {"#_propose->Record", propose->Record.ShortDebugString()});
+            {"buildId", buildInfo.Id},
+            {"buildState", buildInfo.State},
+            {"proposeRecord", propose->Record.ShortDebugString()});
         return propose;
     }
 
@@ -420,7 +420,7 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateBuildPropose(
     static constexpr std::string_view LogPrefix = "Create build table boundaries for ";
     YDB_LOG_DEBUG("Table",
         {"logPrefix", LogPrefix},
-        {"#_buildInfo.Id", buildInfo.Id},
+        {"buildId", buildInfo.Id},
         {"suffix", suffix},
         {"count", count},
         {"parts", parts},
@@ -431,7 +431,7 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateBuildPropose(
         for (auto i = from + step, e = from + count; i < e; i += step) {
             YDB_LOG_DEBUG("Table",
                 {"logPrefix", LogPrefix},
-                {"#_buildInfo.Id", buildInfo.Id},
+                {"buildId", buildInfo.Id},
                 {"suffix", suffix},
                 {"value", i});
             auto cell = TCell::Make(i);
@@ -443,9 +443,9 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateBuildPropose(
     }
 
     YDB_LOG_NOTICE("CreateBuildPropose",
-        {"#_buildInfo.Id", buildInfo.Id},
-        {"#_buildInfo.State", buildInfo.State},
-        {"#_propose->Record", propose->Record.ShortDebugString()});
+        {"buildId", buildInfo.Id},
+        {"buildState", buildInfo.State},
+        {"proposeRecord", propose->Record.ShortDebugString()});
 
     return propose;
 }
@@ -475,9 +475,9 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateBuildSequencePropose(
     }
 
     YDB_LOG_NOTICE("CreateBuildSequencePropose",
-        {"#_buildInfo.Id", buildInfo.Id},
-        {"#_buildInfo.State", buildInfo.State},
-        {"#_propose->Record", propose->Record.ShortDebugString()});
+        {"buildId", buildInfo.Id},
+        {"buildState", buildInfo.State},
+        {"proposeRecord", propose->Record.ShortDebugString()});
 
     return propose;
 }
@@ -513,9 +513,9 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateBuildFulltextPropose(
     op.SetName(TString::Join(NTableIndex::ImplTable, NTableIndex::NKMeans::BuildSuffix0));
 
     YDB_LOG_NOTICE("CreateBuildPropose",
-        {"#_buildInfo.Id", buildInfo.Id},
-        {"#_buildInfo.State", buildInfo.State},
-        {"#_propose->Record", propose->Record.ShortDebugString()});
+        {"buildId", buildInfo.Id},
+        {"buildState", buildInfo.State},
+        {"proposeRecord", propose->Record.ShortDebugString()});
 
     return propose;
 }
@@ -552,9 +552,9 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateBuildFulltextRowIdSrcP
     op.SetName(TString::Join(NTableIndex::ImplTable, NTableIndex::NFulltext::RowIdSrcBuildSuffix));
 
     YDB_LOG_NOTICE("CreateBuildFulltextRowIdSrcPropose",
-        {"#_buildInfo.Id", buildInfo.Id},
-        {"#_buildInfo.State", buildInfo.State},
-        {"#_propose->Record", propose->Record.ShortDebugString()});
+        {"buildId", buildInfo.Id},
+        {"buildState", buildInfo.State},
+        {"proposeRecord", propose->Record.ShortDebugString()});
 
     return propose;
 }
@@ -604,8 +604,8 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> AlterMainTablePropose(
     *propose->Record.AddTransaction() = modifyScheme;
 
     YDB_LOG_NOTICE("AlterMainTablePropose",
-        {"#_buildInfo.Id", buildInfo.Id},
-        {"#_propose->Record", propose->Record.ShortDebugString()});
+        {"buildId", buildInfo.Id},
+        {"proposeRecord", propose->Record.ShortDebugString()});
 
     return propose;
 }
@@ -628,9 +628,9 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> PrepareValidationPropose(
     modifyScheme.MutablePrepareIndexValidation()->SetTableName(NTableIndex::ImplTable);
 
     YDB_LOG_NOTICE("PrepareValidationPropose",
-        {"#_buildInfo.Id", buildInfo.Id},
-        {"#_buildInfo.State", buildInfo.State},
-        {"#_propose->Record", propose->Record.ShortDebugString()});
+        {"buildId", buildInfo.Id},
+        {"buildState", buildInfo.State},
+        {"proposeRecord", propose->Record.ShortDebugString()});
 
     return propose;
 }
@@ -664,9 +664,9 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> ApplyPropose(
     }
 
     YDB_LOG_NOTICE("ApplyPropose",
-        {"#_buildInfo.Id", buildInfo.Id},
-        {"#_buildInfo.State", buildInfo.State},
-        {"#_propose->Record", propose->Record.ShortDebugString()});
+        {"buildId", buildInfo.Id},
+        {"buildState", buildInfo.State},
+        {"proposeRecord", propose->Record.ShortDebugString()});
 
     return propose;
 }
@@ -690,9 +690,9 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CancelPropose(
     indexBuild.SetBuildIndexId(ui64(buildInfo.Id));
 
     YDB_LOG_NOTICE("CancelPropose",
-        {"#_buildInfo.Id", buildInfo.Id},
-        {"#_buildInfo.State", buildInfo.State},
-        {"#_propose->Record", propose->Record.ShortDebugString()});
+        {"buildId", buildInfo.Id},
+        {"buildState", buildInfo.State},
+        {"proposeRecord", propose->Record.ShortDebugString()});
 
     return propose;
 }
@@ -716,9 +716,9 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> DropColumnsPropose(
     buildInfo.SerializeToProto(ss, columnBuild->MutableSettings());
 
     YDB_LOG_NOTICE("DropColumnsPropose",
-        {"#_buildInfo.Id", buildInfo.Id},
-        {"#_buildInfo.State", buildInfo.State},
-        {"#_propose->Record", propose->Record.ShortDebugString()});
+        {"buildId", buildInfo.Id},
+        {"buildState", buildInfo.State},
+        {"proposeRecord", propose->Record.ShortDebugString()});
 
     return propose;
 }
@@ -750,9 +750,9 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> AlterSequencePropose(
     seq->SetRestart(true);
 
     YDB_LOG_NOTICE("AlterSequencePropose",
-        {"#_buildInfo.Id", buildInfo.Id},
-        {"#_buildInfo.State", buildInfo.State},
-        {"#_propose->Record", propose->Record.ShortDebugString()});
+        {"buildId", buildInfo.Id},
+        {"buildState", buildInfo.State},
+        {"proposeRecord", propose->Record.ShortDebugString()});
 
     return propose;
 }
@@ -881,7 +881,7 @@ private:
         FillScanRequestSeed(ev->Record);
         YDB_LOG_NOTICE("TTxBuildProgress: TEvSampleKRequest",
             {"logPrefix", LogPrefix},
-            {"#_(autodetect)", ev->Record.ShortDebugString()});
+            {"autodetectRecord", ev->Record.ShortDebugString()});
 
         ToTabletSend.emplace(shardId, std::move(ev));
     }
@@ -2603,7 +2603,7 @@ private:
         YDB_LOG_NOTICE("TTxBuildProgress: Performing cross shard unique index",
             {"logPrefix", LogPrefix},
             {"validation", BuildId},
-            {"#_buildInfo.State", buildInfo.State});
+            {"buildState", buildInfo.State});
 
         auto path = GetBuildPath(Self, buildInfo, NTableIndex::ImplTable);
         TTableInfo::TPtr table = Self->Tables.at(path->PathId);
@@ -2671,11 +2671,11 @@ public:
         YDB_LOG_NOTICE("TTxBuildProgress",
             {"logPrefix", LogPrefix},
             {"execute", BuildId},
-            {"#_buildInfo.State", buildInfo.State});
+            {"buildState", buildInfo.State});
         YDB_LOG_DEBUG("TTxBuildProgress",
             {"logPrefix", LogPrefix},
             {"execute", BuildId},
-            {"#_buildInfo.State", buildInfo.State},
+            {"buildState", buildInfo.State},
             {"buildInfo", buildInfo});
 
         if (buildInfo.IsBroken) {
@@ -3235,13 +3235,13 @@ public:
                 buildInfo.KMeans.State != TIndexBuildInfo::TKMeans::Filter) {
                 YDB_LOG_DEBUG("InitiateShard range",
                     {"logPrefix", LogPrefix},
-                    {"#_x->ShardIdx", x->ShardIdx},
-                    {"#_buildInfo.KMeans.RangeToDebugStr(shardRange)", buildInfo.KMeans.RangeToDebugStr(shardRange)});
+                    {"shardIdx", x->ShardIdx},
+                    {"shardRange", buildInfo.KMeans.RangeToDebugStr(shardRange)});
                 buildInfo.AddParent(shardRange, x->ShardIdx);
             } else {
                 YDB_LOG_DEBUG("InitiateShard",
                     {"logPrefix", LogPrefix},
-                    {"#_x->ShardIdx", x->ShardIdx});
+                    {"shardIdx", x->ShardIdx});
             }
             auto [it, emplaced] = buildInfo.Shards.emplace(x->ShardIdx, TIndexBuildShardStatus{std::move(shardRange), ""});
             Y_ENSURE(emplaced);
@@ -3428,7 +3428,7 @@ public:
 
         YDB_LOG_NOTICE("TTxReply",
             {"logPrefix", LogPrefix},
-            {"#_TypeName<TEvResponse>", TypeName<TEvResponse>()},
+            {"eventType", TypeName<TEvResponse>()},
             {"id", BuildId},
             {"shardId", shardId},
             {"shardIdx", shardIdx});
@@ -3441,7 +3441,7 @@ public:
         auto& buildInfo = *buildInfoPtr->get();
         YDB_LOG_DEBUG("TTxReply",
             {"logPrefix", LogPrefix},
-            {"#_TypeName<TEvResponse>", TypeName<TEvResponse>()},
+            {"eventType", TypeName<TEvResponse>()},
             {"TIndexBuildInfo", buildInfo},
             {"record", ResponseShortDebugString()},
             {"shardId", shardId},
@@ -3454,7 +3454,7 @@ public:
         if (buildInfo.State != TIndexBuildInfo::EState::Filling) {
             YDB_LOG_NOTICE("TTxReply superfluous state event",
                 {"logPrefix", LogPrefix},
-                {"#_TypeName<TEvResponse>", TypeName<TEvResponse>()},
+                {"eventType", TypeName<TEvResponse>()},
                 {"id", BuildId},
                 {"TIndexBuildInfo", buildInfo});
             return true;
@@ -3463,7 +3463,7 @@ public:
         if (!buildInfo.InProgressShards.contains(shardIdx)) {
             YDB_LOG_NOTICE("TTxReply superfluous shard event",
                 {"logPrefix", LogPrefix},
-                {"#_TypeName<TEvResponse>", TypeName<TEvResponse>()},
+                {"eventType", TypeName<TEvResponse>()},
                 {"id", BuildId},
                 {"TIndexBuildInfo", buildInfo});
             return true;
@@ -3476,12 +3476,12 @@ public:
         if (actualSeqNo != recordSeqNo) {
             YDB_LOG_DEBUG("TTxReply ignore progress message by seqNo actual seqNo for the shard",
                 {"logPrefix", LogPrefix},
-                {"#_TypeName<TEvResponse>", TypeName<TEvResponse>()},
+                {"eventType", TypeName<TEvResponse>()},
                 {"TIndexBuildInfo", buildInfo},
                 {"shardId", shardId},
                 {"shardIdx", shardIdx},
                 {"is", Self->Generation()},
-                {"#_shardStatus.SeqNoRound", shardStatus.SeqNoRound},
+                {"seqNoRound", shardStatus.SeqNoRound},
                 {"record", record.ShortDebugString()});
             Y_ENSURE(actualSeqNo > recordSeqNo);
             return true;

@@ -188,7 +188,7 @@ public:
     bool ProgressState(TOperationContext& context) override {
         TTabletId ssId = context.SS->SelfTabletId();
 
-        YDB_LOG_INFO_CTX(context.Ctx, "HandleReply ProgressState",
+        YDB_LOG_INFO_CTX(context.Ctx, "ProgressState",
             {"debugHint", DebugHint()},
             {"tablet", ssId});
 
@@ -231,13 +231,13 @@ public:
         TTxState* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
 
-        YDB_LOG_INFO_CTX(context.Ctx, "ProgressState operation",
+        YDB_LOG_INFO_CTX(context.Ctx, "ProgressState",
             {"debugHint", DebugHint()},
             {"type", TTxState::TypeName(txState->TxType)},
             {"tablet", ssId});
 
         if (NTableState::CheckPartitioningChangedForTableModification(*txState, context)) {
-            YDB_LOG_INFO_CTX(context.Ctx, "ProgressState SourceTablePartitioningChangedForModification tx",
+            YDB_LOG_INFO_CTX(context.Ctx, "ProgressState source table partitioning changed for modification",
                 {"debugHint", DebugHint()},
                 {"type", TTxState::TypeName(txState->TxType)});
             NTableState::UpdatePartitioningForTableModification(OperationId, *txState, context);

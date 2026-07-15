@@ -40,8 +40,8 @@ bool TTxStoreTopicStats::PersistSingleStats(const TPathId& pathId, const TStatsQ
     if (newStats.DataSize < newStats.UsedReserveSize) {
         YDB_LOG_WARN_CTX(ctx, "Got wrong periodic topic stats at partition DataSize must be greater than or equal to UsedReserveSize but DataSize UsedReserveSize",
             {"pathId", pathId},
-            {"#_rec.GetDataSize", rec.GetDataSize()},
-            {"#_rec.GetUsedReserveSize", rec.GetUsedReserveSize()});
+            {"dataSize", rec.GetDataSize()},
+            {"usedReserveSize", rec.GetUsedReserveSize()});
         return true;
     }
 
@@ -97,8 +97,8 @@ void TSchemeShard::Handle(TEvPersQueue::TEvPeriodicTopicStats::TPtr& ev, const T
 
     YDB_LOG_INFO_CTX(ctx, "Got periodic topic stats at partition DataSize UsedReserveSize",
         {"pathId", pathId},
-        {"#_rec.GetDataSize", rec.GetDataSize()},
-        {"#_rec.GetUsedReserveSize", rec.GetUsedReserveSize()});
+        {"dataSize", rec.GetDataSize()},
+        {"usedReserveSize", rec.GetUsedReserveSize()});
 
     TStatsId statsId(pathId);
     switch(TopicStatsQueue.Add(statsId, ev.Release())) {

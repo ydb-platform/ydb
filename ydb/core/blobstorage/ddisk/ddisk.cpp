@@ -63,6 +63,7 @@ void TEvWrite::ChecksumPayload() {
     Y_ABORT_UNLESS(GetPayloadCount() > 0);
     CheckInstructionPointsAtPayloadZero(Record.GetInstruction());
 
+    Record.ClearChecksums();
     AddChecksum(CalculatePayloadChecksums(GetPayload(0)));
 }
 
@@ -70,6 +71,7 @@ void TEvWritePersistentBuffer::ChecksumPayload() {
     Y_ABORT_UNLESS(GetPayloadCount() > 0);
     CheckInstructionPointsAtPayloadZero(Record.GetInstruction());
 
+    Record.ClearChecksums();
     AddChecksum(CalculatePayloadChecksums(GetPayload(0)));
 }
 
@@ -77,6 +79,7 @@ void TEvWritePersistentBuffers::ChecksumPayload() {
     Y_ABORT_UNLESS(GetPayloadCount() > 0);
     CheckInstructionPointsAtPayloadZero(Record.GetInstruction());
 
+    Record.ClearChecksums();
     AddChecksum(CalculatePayloadChecksums(GetPayload(0)));
 }
 

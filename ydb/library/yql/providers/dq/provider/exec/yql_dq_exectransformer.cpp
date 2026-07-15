@@ -20,7 +20,6 @@
 #include <yql/essentials/core/dq_integration/yql_dq_integration.h>
 #include <ydb/library/yql/providers/dq/planner/execution_planner.h>
 #include <ydb/library/yql/providers/dq/provider/yql_dq_gateway.h>
-#include <ydb/library/yql/providers/dq/provider/yql_dq_control.h>
 
 #include <ydb/library/yql/dq/type_ann/dq_type_ann.h>
 #include <ydb/library/yql/dq/runtime/dq_tasks_runner.h>
@@ -507,9 +506,9 @@ private:
             fileLink = State->FileStorage->PutFileStripped(path, md5);
         }
 
-        UploadCache_->ModulesMapping.emplace(objectId  + DqStrippedSuffied, path);
+        UploadCache_->ModulesMapping.emplace(objectId  + DqStrippedSuffied(), path);
 
-        return std::make_tuple(fileLink->GetPath(), objectId + DqStrippedSuffied);
+        return std::make_tuple(fileLink->GetPath(), objectId + DqStrippedSuffied());
     }
 
     std::tuple<TString, TString> GetPathAndObjectId(const TFilePathWithMd5& pathWithMd5) const {

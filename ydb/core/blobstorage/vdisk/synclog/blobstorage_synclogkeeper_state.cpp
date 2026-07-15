@@ -411,7 +411,7 @@ namespace NKikimr {
                 return {};
             }
 
-            ui32 pagesInMemory = SyncLogPtr->GetNumberOfPagesInMemory();
+            const ui32 pagesInMemory = SyncLogPtr->GetNumberOfPagesInMemory();
             // find mem pages to write to disk
             const bool stillMemOverflow = pagesInMemory > MaxMemPages;
             const ui64 firstLsnToKeep = CalculateFirstLsnToKeep();
@@ -424,7 +424,7 @@ namespace NKikimr {
                 // free pages in case of memory overflow
                 ui32 freeNPages;
                 if (stillMemOverflow) {
-                    ui32 leavePages = Max<ui32>(1, MaxMemPages / 2);
+                    const ui32 leavePages = Max<ui32>(1, MaxMemPages / 2);
                     freeNPages = pagesInMemory - leavePages;
                 } else {
                     freeNPages = 0;

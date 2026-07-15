@@ -493,6 +493,7 @@ private:
                 if (NArrow::TArrowToYdbConverter::NeedInplaceConversion(typeInRequest, ci.PType)) {
                     ColumnsToConvertInplace[name] = ci.PType;
                 }
+
                 if (isColumnTable && ci.PType.GetTypeId() == NScheme::NTypeIds::Interval) {
                     ColumnsToConvertInplace[name] = ci.PType;
                 }
@@ -783,6 +784,7 @@ private:
                     if (!ExtractBatch(errorMessage)) {
                         return ReplyWithError(Ydb::StatusIds::BAD_REQUEST, errorMessage, ctx);
                     }
+
                     if (!ColumnsToConvertInplace.empty()) {
                         auto convertResult = NArrow::InplaceConvertColumns(Batch, ColumnsToConvertInplace);
                         if (!convertResult.ok()) {

@@ -39,8 +39,7 @@ void ReplyPersQueueError(
     logStr << " error: " << error;
 
     if (logDebug) {
-        YDB_LOG_DEBUG_CTX(ctx, "Dump logStr",
-            {"logStr", logStr});
+        YDB_LOG_DEBUG_CTX(ctx, logStr);
     } else {
         YDB_LOG_WARN_CTX(ctx, logStr);
     }

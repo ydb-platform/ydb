@@ -47,7 +47,7 @@ void TDLQMoverActor::Bootstrap() {
         TopicName = Settings.DestinationTopic;
         RegisterWithSameMailbox(NDescriber::CreateDescriberActor(SelfId(), Settings.Database, { TopicName }));
     }
-    YDB_LOG_DEBUG("Dump NPQLOGPREFIX, QUEUE, #_num_0",
+    YDB_LOG_DEBUG("Dump QUEUE, queueItems",
         {"logPrefix", NPQ_LOG_PREFIX},
         {"QUEUE", Queue.size()},
         {"queueItems", JoinRange(", ", Queue.begin(), Queue.end())});
@@ -243,7 +243,7 @@ void TDLQMoverActor::Handle(TEvPartitionWriter::TEvWriteResponse::TPtr& ev) {
 
     auto* result = ev->Get();
     if (!result->IsSuccess()) {
-        YDB_LOG_ERROR("Write",
+        YDB_LOG_ERROR("Write error",
             {"logPrefix", NPQ_LOG_PREFIX},
             {"error", result->GetError().Reason});
         return ReplyError(Ydb::StatusIds::INTERNAL_ERROR, TStringBuilder() << "Write error: " << result->GetError().Reason);

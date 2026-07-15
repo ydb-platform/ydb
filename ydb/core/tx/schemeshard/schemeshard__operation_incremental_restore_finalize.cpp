@@ -130,7 +130,7 @@ class TIncrementalRestoreFinalizeOp: public TSubOperationWithContext {
                             {"tabletId", context.SS->TabletID()},
                             {"debugHint", DebugHint()},
                             {"shardIdx", shardIdx},
-                            {"tabletId", context.SS->ShardInfos[shardIdx].TabletID});
+                            {"shardTabletId", context.SS->ShardInfos[shardIdx].TabletID});
                     }
                 }
             }

@@ -9195,7 +9195,7 @@ void TSchemeShard::Handle(NKikimr::NTestShard::TEvControlResponse::TPtr& ev, con
 
     TSubTxId partId = Operations.at(txId)->FindRelatedPartByTabletId(tabletId, ctx);
     if (partId == InvalidSubTxId) {
-        YDB_LOG_WARN_CTX(ctx, "Got TEvControlResponse but partId in unknown for",
+        YDB_LOG_WARN_CTX(ctx, "Got TEvControlResponse but partId in unknown",
             {"txId", txId},
             {"tabletId", tabletId},
             {"schemeshard", TabletID()});

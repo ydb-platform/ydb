@@ -12,7 +12,6 @@
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::BUILD_INDEX
 
-
 namespace NKikimr {
 namespace NSchemeShard {
 
@@ -383,7 +382,9 @@ public:
         auto& operationInfo = *operationInfoPtr->get();
 
         if (operationInfo.IsCancelled) {
-            LOG_I("TTxReplyValidateRowCondition: operation is cancelled, ignoring message, id# " << BuildId);
+            YDB_LOG_INFO("TTxReplyValidateRowCondition: operation is cancelled, ignoring message",
+                {"logPrefix", LogPrefix},
+                {"id", BuildId});
             return true;
         }
 
@@ -729,7 +730,9 @@ public:
             case TSetColumnConstraintOperationInfo::EOperationState::LockingNullWrites: {
                 // If cancelled, skip to Finishing to release locks without setting constraint
                 if (operationInfo.IsCancelled) {
-                    LOG_I("TTxProgressSetColumnConstraint: operation cancelled in LockingNullWrites, jumping to Finishing, id# " << BuildId);
+                    YDB_LOG_INFO("TTxProgressSetColumnConstraint: operation cancelled in LockingNullWrites, jumping to Finishing",
+                        {"logPrefix", LogPrefix},
+                        {"id", BuildId});
                     NIceDb::TNiceDb db(txc.DB);
                     ChangeState(BuildId, TSetColumnConstraintOperationInfo::EOperationState::Finishing);
                     Progress(BuildId);
@@ -752,7 +755,9 @@ public:
             case TSetColumnConstraintOperationInfo::EOperationState::Validating: {
                 // If cancelled, skip to Finishing to release locks without setting constraint
                 if (operationInfo.IsCancelled) {
-                    LOG_I("TTxProgressSetColumnConstraint: operation cancelled in Validating, jumping to Finishing, id# " << BuildId);
+                    YDB_LOG_INFO("TTxProgressSetColumnConstraint: operation cancelled in Validating, jumping to Finishing",
+                        {"logPrefix", LogPrefix},
+                        {"id", BuildId});
                     NIceDb::TNiceDb db(txc.DB);
                     ChangeState(BuildId, TSetColumnConstraintOperationInfo::EOperationState::Finishing);
                     Progress(BuildId);

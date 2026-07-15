@@ -2,7 +2,7 @@
 #include "schemeshard_set_column_constraint.h"
 #include "index/index_build_info.h"
 
-#define LOG_D(stream) LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << Self->SelfTabletId() << "][SetColumnConstraint] " << stream)
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
 
 namespace NKikimr::NSchemeShard {
 
@@ -20,7 +20,9 @@ struct TSchemeShard::TIndexBuilder::TTxForgetSetColumnConstraint: public TRwTxBa
 
     void DoExecute(TTransactionContext &txc, const TActorContext &ctx) override {
         const auto& request = Request->Get()->Record;
-        LOG_D("TIndexBuilder::TTxForgetSetColumnConstraint DoExecute " << request.ShortDebugString());
+        YDB_LOG_DEBUG_CTX(ctx, "][SetColumnConstraint] TIndexBuilder::TTxForgetSetColumnConstraint DoExecute",
+            {"selfTabletId", Self->SelfTabletId()},
+            {"request", request.ShortDebugString()});
 
         auto response = MakeHolder<TEvSetColumnConstraint::TEvForgetResponse>(request.GetTxId());
         TPath database = TPath::Resolve(request.GetDatabaseName(), Self);
@@ -68,7 +70,9 @@ struct TSchemeShard::TIndexBuilder::TTxForgetSetColumnConstraint: public TRwTxBa
     }
 
     void DoComplete(const TActorContext &ctx) override {
-        LOG_D("TIndexBuilder::TTxForgetSetColumnConstraint DoComplete " << Request->Get()->Record.ShortDebugString());
+        YDB_LOG_DEBUG_CTX(ctx, "][SetColumnConstraint] TIndexBuilder::TTxForgetSetColumnConstraint DoComplete",
+            {"selfTabletId", Self->SelfTabletId()},
+            {"requestRecord", Request->Get()->Record.ShortDebugString()});
         SideEffects.ApplyOnComplete(Self, ctx);
     }
 

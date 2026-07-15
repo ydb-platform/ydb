@@ -113,10 +113,10 @@ public:
 
         if (record.GetStatus() != NKikimrProto::EReplyStatus::OK && record.GetStatus() != NKikimrProto::EReplyStatus::ALREADY) {
             TStringBuilder errMsg;
-            errMsg << DebugHint()
-                   << " Unexpected answer status from hive "
+            errMsg << " Unexpected answer status from hive "
                    << ", msg: " << record.ShortDebugString()
-                   << ", at schemeshard: " << ssId;
+                   << ", at schemeshard: " << ssId << " ";
+            NActors::NStructuredLog::TTextWriter().Write(errMsg, DebugHint());
             YDB_LOG_ERROR_CTX(context.Ctx, "Drop ext subdomain error",
                 {"errMsg", errMsg});
             Y_VERIFY_DEBUG_S(false, errMsg);

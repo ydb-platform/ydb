@@ -179,7 +179,7 @@ public:
                 YDB_LOG_DEBUG_CTX(context.Ctx, "Send TEvCreateReplication to controller",
                     {"tabletId", context.SS->TabletID()},
                     {"debugHint", DebugHint()},
-                    {"tabletId", tabletId},
+                    {"replicationTabletId", tabletId},
                     {"ev", ev->ToString()});
                 context.OnComplete.BindMsgToPipe(OperationId, tabletId, pathId, ev.Release());
             }
@@ -207,7 +207,7 @@ public:
             YDB_LOG_WARN_CTX(context.Ctx, "Ignoring unexpected TEvCreateReplicationResult",
                 {"tabletId", context.SS->TabletID()},
                 {"debugHint", DebugHint()},
-                {"tabletId", tabletId},
+                {"replicationTabletId", tabletId},
                 {"status", static_cast<int>(status)});
             return false;
         }

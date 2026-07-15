@@ -136,11 +136,10 @@ struct TSchemeShard::TTxCleanDroppedPaths : public TTransactionBase<TSchemeShard
                     << ", PathId# " << pathId
                     << ", AllChildrenCount# " << path->AllChildrenCount
                     << ", at schemeshard: " << Self->TabletID());
-                LOG_ERROR_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                    "TTxCleanDroppedPaths: skip dropped path with children, DbRefCount is miscounted"
-                    << ", PathId# " << pathId
-                    << ", AllChildrenCount# " << path->AllChildrenCount
-                    << ", at schemeshard: " << Self->TabletID());
+                YDB_LOG_ERROR_CTX(ctx, "TTxCleanDroppedPaths: skip dropped path with children, DbRefCount is miscounted",
+                    {"pathId", pathId},
+                    {"allChildrenCount", path->AllChildrenCount},
+                    {"schemeshard", Self->TabletID()});
                 ++SkippedCount;
             } else if (path->DbRefCount == 0 && path->Dropped()) {
                 YDB_LOG_DEBUG_CTX(ctx, "TTxCleanDroppedPaths: PersistRemovePath",

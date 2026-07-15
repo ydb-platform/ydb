@@ -533,7 +533,7 @@ public:
         const auto& tableName = op.GetTableName();
         const auto& streamName = op.GetStreamDescription().GetName();
 
-        YDB_LOG_NOTICE_CTX(context.Ctx, "TNewCdcStreamAtTable Propose ",
+        YDB_LOG_NOTICE_CTX(context.Ctx, "TNewCdcStreamAtTable Propose",
             {"tabletId", context.SS->TabletID()},
             {"opId", OperationId},
             {"stream", workingDir},

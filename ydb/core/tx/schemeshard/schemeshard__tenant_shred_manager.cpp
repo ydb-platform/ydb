@@ -19,7 +19,7 @@ NOperationQueue::EStartStatus TTenantShredManager::StartShredOperation(const TSh
     auto ctx = SchemeShard->ActorContext();
     auto it = SchemeShard->ShardInfos.find(shardIdx);
     if (it == SchemeShard->ShardInfos.end()) {
-        YDB_LOG_WARN_CTX(ctx, "[TenantShredManager] [Start] Failed to resolve shard info for",
+        YDB_LOG_WARN_CTX(ctx, "[TenantShredManager] [Start] Failed to resolve shard info",
             {"shred", shardIdx},
             {"schemeshard", SchemeShard->TabletID()});
         return NOperationQueue::EStartStatus::EOperationRemove;
@@ -30,7 +30,7 @@ NOperationQueue::EStartStatus TTenantShredManager::StartShredOperation(const TSh
         {"pathId", pathId},
         {"tabletId", tabletId},
         {"generation", Generation},
-        {"tabletId", SchemeShard->TabletID()});
+        {"schemeShardTabletId", SchemeShard->TabletID()});
 
     std::unique_ptr<IEventBase> request = nullptr;
     switch (it->second.TabletType) {
@@ -217,13 +217,13 @@ void TTenantShredManager::FinishShred(NIceDb::TNiceDb& db, const TTabletId& tabl
         YDB_LOG_WARN_CTX(ctx, "[TenantShredManager] [Finished] Failed to resolve shard info for ms at schemeshard",
             {"tabletId", tabletId},
             {"in", duration.MilliSeconds()},
-            {"tabletId", SchemeShard->TabletID()});
+            {"schemeShardTabletId", SchemeShard->TabletID()});
     } else {
         YDB_LOG_INFO_CTX(ctx, "[TenantShredManager] [Finished] Shred is completed for ms at schemeshard",
             {"tabletId", tabletId},
             {"shardIdx", shardIdx},
             {"in", duration.MilliSeconds()},
-            {"tabletId", SchemeShard->TabletID()});
+            {"schemeShardTabletId", SchemeShard->TabletID()});
     }
 
     bool wasRunning = ActivePipes.erase(shardIdx) > 0;
@@ -272,7 +272,7 @@ void TTenantShredManager::HandleDisconnect(TTabletId tabletId, const TActorId& c
         it->second != clientId) {
         return;
     }
-    YDB_LOG_INFO_CTX(ctx, "[TenantShredManager] [Disconnect] Shred disconnect to",
+    YDB_LOG_INFO_CTX(ctx, "[TenantShredManager] [Disconnect] Shred disconnect",
         {"tablet", tabletId},
         {"schemeshard", SchemeShard->TabletID()});
     WaitingShardsCounter->Inc();
@@ -319,7 +319,7 @@ bool TTenantShredManager::Restore(NIceDb::TNiceDb& db) {
         // Max generation should not be removed.
         std::erase(generationsToCleanup, Generation);
 
-        CleanupOldGenerationsOnRestore(db, generationsToCleanup); 
+        CleanupOldGenerationsOnRestore(db, generationsToCleanup);
     }
     {
         auto rowset = db.Table<Schema::WaitingShredShards>().Range().Select();
@@ -388,10 +388,9 @@ void TTenantShredManager::CleanupOldGenerationsOnRestore(NIceDb::TNiceDb& db, co
             // This should never occur because of the way the collection is initialized. Nevertheless, throwing
             // an assertion from non-core logic—which includes the obsolete record shredding mechanism—is risky,
             // so only a warning is output.
-            LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                "[TenantShredManager] Restore: Invalid element in collection: " << generation << 
-                " >= current shredding generation " << Generation << 
-                ". Element will be skipped. This should never occur.");
+            YDB_LOG_WARN_CTX(ctx, "[TenantShredManager] Restore: Invalid element in >= current shredding generation Element will be skipped. This should never occur",
+                {"collection", generation},
+                {"generation", Generation});
         } else {
             db.Table<Schema::TenantShredGenerations>().Key(generation).Delete();
         }

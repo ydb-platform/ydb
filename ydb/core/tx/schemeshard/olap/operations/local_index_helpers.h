@@ -67,9 +67,9 @@ inline bool ConvertOlapIndexToCreationConfig(
         for (ui32 colId : indexProto.GetCountMinSketch().GetColumnIds()) {
             auto it = columnIdToName.find(colId);
             if (it == columnIdToName.end()) {
-                LOG_ERROR_S(*TlsActivationContext, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                    "ConvertOlapIndexToCreationConfig: CountMinSketch column ID " << colId
-                    << " not found in columnIdToName map for index '" << indexProto.GetName() << "'");
+                YDB_LOG_ERROR_COMP(NKikimrServices::FLAT_TX_SCHEMESHARD, "ConvertOlapIndexToCreationConfig: CountMinSketch column ID not found in columnIdToName map for index",
+                    {"colId", colId},
+                    {"indexName", indexProto.GetName()});
                 return false;
             }
             config.AddKeyColumnNames(it->second);
@@ -169,9 +169,9 @@ inline bool ConvertOlapIndexToRequested(
             for (ui32 colId : src.GetCountMinSketch().GetColumnIds()) {
                 auto it = columnIdToName.find(colId);
                 if (it == columnIdToName.end()) {
-                    LOG_ERROR_S(*TlsActivationContext, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                        "ConvertOlapIndexToRequested: CountMinSketch column ID " << colId
-                        << " not found in columnIdToName map for index '" << src.GetName() << "'");
+                    YDB_LOG_ERROR_COMP(NKikimrServices::FLAT_TX_SCHEMESHARD, "ConvertOlapIndexToRequested: CountMinSketch column ID not found in columnIdToName map for index",
+                        {"colId", colId},
+                        {"indexName", src.GetName()});
                     return false;
                 }
                 sketch->AddColumnNames(it->second);
@@ -180,8 +180,7 @@ inline bool ConvertOlapIndexToRequested(
         }
         case NKikimrSchemeOp::TOlapIndexDescription::kMaxIndex:
         case NKikimrSchemeOp::TOlapIndexDescription::IMPLEMENTATION_NOT_SET:
-            YDB_LOG_ERROR_COMP(NKikimrServices::FLAT_TX_SCHEMESHARD,
-                Sprintf("ConvertOlapIndexToRequested: unimplemented olap index type '%s'", src.GetClassName().c_str()));
+            YDB_LOG_ERROR_COMP(NKikimrServices::FLAT_TX_SCHEMESHARD, Sprintf("ConvertOlapIndexToRequested: unimplemented olap index type '%s'", src.GetClassName().c_str()));
             return false;
     }
 
@@ -253,8 +252,7 @@ inline bool ConvertRequestedIndexToCreationConfig(
         }
         case NKikimrSchemeOp::TOlapIndexRequested::IMPLEMENTATION_NOT_SET:
         case NKikimrSchemeOp::TOlapIndexRequested::kMaxIndex:
-            YDB_LOG_ERROR_COMP(NKikimrServices::FLAT_TX_SCHEMESHARD,
-                Sprintf("ConvertRequestedIndexToCreationConfig: unimplemented olap index type '%s'", indexProto.GetClassName().c_str()));
+            YDB_LOG_ERROR_COMP(NKikimrServices::FLAT_TX_SCHEMESHARD, Sprintf("ConvertRequestedIndexToCreationConfig: unimplemented olap index type '%s'", indexProto.GetClassName().c_str()));
             return false;
     }
 
@@ -329,8 +327,7 @@ inline bool ConvertRequestedIndexToAlteringConfig(
         }
 
         default: {
-            YDB_LOG_ERROR_COMP(NKikimrServices::FLAT_TX_SCHEMESHARD,
-                Sprintf("ConvertRequestedIndexToAlteringConfig: unimplemented olap index type '%s'", indexProto.GetClassName().c_str()));
+            YDB_LOG_ERROR_COMP(NKikimrServices::FLAT_TX_SCHEMESHARD, Sprintf("ConvertRequestedIndexToAlteringConfig: unimplemented olap index type '%s'", indexProto.GetClassName().c_str()));
             return false;
         }
     }
@@ -443,8 +440,7 @@ inline bool ConvertCreationConfigToRequested(
             return true;
         }
         default:
-            YDB_LOG_ERROR_COMP(NKikimrServices::FLAT_TX_SCHEMESHARD,
-                Sprintf("ConvertCreationConfigToRequested: unimplemented index type '%s'", EIndexType_Name(config.GetType()).c_str()));
+            YDB_LOG_ERROR_COMP(NKikimrServices::FLAT_TX_SCHEMESHARD, Sprintf("ConvertCreationConfigToRequested: unimplemented index type '%s'", EIndexType_Name(config.GetType()).c_str()));
             return false;
     }
 

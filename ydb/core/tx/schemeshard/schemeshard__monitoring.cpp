@@ -2493,8 +2493,8 @@ struct TSchemeShard::TTxMoveShardToStoragePool : public NTabletFlatExecutor::TTr
         auto* info = Self->ShardInfos.FindPtr(shardIdx);
         if (!info) {
             // Shard deleted between Hive ack and persist; nothing to record.
-            LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                "TTxMoveShardToStoragePool: shard " << shardIdx << " no longer exists, skipping persist");
+            YDB_LOG_WARN_CTX(ctx, "TTxMoveShardToStoragePool: shard no longer exists, skipping persist",
+                {"shardIdx", shardIdx});
             return true;
         }
 
@@ -2503,8 +2503,8 @@ struct TSchemeShard::TTxMoveShardToStoragePool : public NTabletFlatExecutor::TTr
         Self->PersistChannelsBinding(db, shardIdx, info->BindedChannels);
         Persisted = true;
 
-        LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-            "TTxMoveShardToStoragePool: persisted new channel bindings for shard " << shardIdx);
+        YDB_LOG_DEBUG_CTX(ctx, "TTxMoveShardToStoragePool: persisted new channel bindings for shard",
+            {"shardIdx", shardIdx});
         return true;
     }
 

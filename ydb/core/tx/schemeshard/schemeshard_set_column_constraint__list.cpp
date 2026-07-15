@@ -4,6 +4,8 @@
 #include <ydb/core/tx/schemeshard/schemeshard_impl.h>
 #include <ydb/core/tx/schemeshard/schemeshard_set_column_constraint.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::BUILD_INDEX
+
 namespace NKikimr::NSchemeShard {
 
 using namespace NTabletFlatExecutor;
@@ -24,7 +26,9 @@ public:
 
     bool DoExecute(TTransactionContext&, const TActorContext&) override {
         const auto& record = Request->Get()->Record;
-        LOG_D("TTxListSetColumnConstraint::DoExecute " << record.ShortDebugString());
+        YDB_LOG_DEBUG("TTxListSetColumnConstraint::DoExecute",
+            {"logPrefix", LogPrefix},
+            {"record", record.ShortDebugString()});
 
         Response = MakeHolder<TEvSetColumnConstraint::TEvListResponse>();
 

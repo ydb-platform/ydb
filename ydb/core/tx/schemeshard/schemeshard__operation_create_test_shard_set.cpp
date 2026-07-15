@@ -82,7 +82,7 @@ public:
         TTabletId ssId = context.SS->SelfTabletId();
         TTabletId tabletId = TTabletId(ev->Get()->Record.GetTabletId());
 
-        YDB_LOG_INFO_CTX(context.Ctx, "HandleReply TEvControlResponse at",
+        YDB_LOG_INFO_CTX(context.Ctx, "HandleReply TEvControlResponse",
             {"debugHint", DebugHint()},
             {"schemeshard", ssId},
             {"tablet", tabletId});
@@ -250,7 +250,7 @@ public:
         const TString& parentPathStr = Transaction.GetWorkingDir();
         const TString& name = op.GetName();
 
-        YDB_LOG_NOTICE_CTX(context.Ctx, "TCreateTestShardSet Propose ",
+        YDB_LOG_NOTICE_CTX(context.Ctx, "TCreateTestShardSet Propose",
             {"path", parentPathStr},
             {"name", name},
             {"opId", OperationId},

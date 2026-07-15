@@ -451,7 +451,7 @@ public:
             YDB_LOG_INFO_CTX(context.Ctx, "ProgressState ExtSubDomain hive already exists",
                 {"tabletId", context.SS->TabletID()},
                 {"debugHint", DebugHint()},
-                {"tabletId", subdomainHiveTabletId});
+                {"subdomainHiveTabletId", subdomainHiveTabletId});
             SendPublishPathRequest(txState->TargetPathId, context);
         }
 

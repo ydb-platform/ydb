@@ -145,7 +145,7 @@ public:
         const TString& parentPathStr = Transaction.GetWorkingDir();
         const TString& name = drop.GetName();
 
-        YDB_LOG_NOTICE_CTX(context.Ctx, "TDropTestShardSet Propose ",
+        YDB_LOG_NOTICE_CTX(context.Ctx, "TDropTestShardSet Propose",
             {"path", parentPathStr},
             {"name", name},
             {"opId", OperationId},

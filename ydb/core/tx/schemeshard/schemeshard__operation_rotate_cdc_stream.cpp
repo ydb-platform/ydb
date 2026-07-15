@@ -128,7 +128,7 @@ public:
         const auto& newStreamName = newStreamDesc.GetName();
         const auto acceptExisted = !Transaction.GetFailOnExist();
 
-        YDB_LOG_NOTICE_CTX(context.Ctx, "TRotateCdcStream Propose ",
+        YDB_LOG_NOTICE_CTX(context.Ctx, "TRotateCdcStream Propose",
             {"tabletId", context.SS->TabletID()},
             {"opId", OperationId},
             {"oldStream", workingDir},
@@ -527,14 +527,14 @@ public:
         const auto& oldStreamName = op.GetOldStreamName();
         const auto& newStreamName = op.GetNewStream().GetStreamDescription().GetName();
 
-        YDB_LOG_NOTICE_CTX(context.Ctx, "TRotateCdcStreamAtTable Propose / / ",
+        YDB_LOG_NOTICE_CTX(context.Ctx, "TRotateCdcStreamAtTable Propose",
             {"tabletId", context.SS->TabletID()},
             {"opId", OperationId},
             {"oldStream", workingDir},
             {"tableName", tableName},
             {"oldStreamName", oldStreamName},
             {"newStream", workingDir},
-            {"tableName", tableName},
+            {"dupTableName", tableName},
             {"newStreamName", newStreamName});
 
         auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), context.SS->TabletID());

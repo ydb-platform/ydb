@@ -1416,7 +1416,9 @@ private:
 
         auto shardId = FillScanRequestCommon(ev->Record, shardIdx, buildInfo);
 
-        LOG_N("TTxBuildProgress: TEvBuildIndexCreateRequest (fulltext rowid prepass): " << ev->Record.ShortDebugString());
+        YDB_LOG_NOTICE("TTxBuildProgress: TEvBuildIndexCreateRequest (fulltext rowid",
+            {"logPrefix", LogPrefix},
+            {"record", ev->Record.ShortDebugString()});
 
         ToTabletSend.emplace(shardId, std::move(ev));
     }
@@ -2428,14 +2430,16 @@ private:
             // Compact rowid-mode prepass: copy the main table into the row-id source table (a generic
             // secondary-index build over __ydb_row_id), then go back through CreateBuild (to build the
             // 0build posting table) and the posting fill.
-            LOG_D("FillFulltextIndex RowIdSrc");
+            YDB_LOG_DEBUG("FillFulltextIndex RowIdSrc",
+                {"logPrefix", LogPrefix});
             if (NoShardsAdded(buildInfo)) {
                 AddAllShards(buildInfo);
             }
             done = SendToShards(buildInfo, [&](TShardIdx shardIdx) { SendBuildFulltextRowIdSrcRequest(shardIdx, buildInfo); }) &&
                 buildInfo.DoneShards.size() == buildInfo.Shards.size();
             if (done) {
-                LOG_D("FillFulltextIndex RowIdSrc Done");
+                YDB_LOG_DEBUG("FillFulltextIndex RowIdSrc Done",
+                    {"logPrefix", LogPrefix});
                 ClearDoneShards(txc, buildInfo);
                 NIceDb::TNiceDb db{txc.DB};
                 buildInfo.SubState = TIndexBuildInfo::ESubState::None;
@@ -2688,7 +2692,9 @@ public:
             for (auto& txId: buildInfo.DependencyTxIds) {
                 msg << " " << txId;
             }
-            LOG_N(msg);
+            YDB_LOG_NOTICE("",
+                {"logPrefix", LogPrefix},
+                {"msg", msg});
             return true;
         }
 
@@ -3973,7 +3979,10 @@ public:
             THashSet<TIndexBuildId> deps = std::move(Self->TxIdToDependentIndexBuild.at(txId));
             Self->TxIdToDependentIndexBuild.erase(txId);
             for (auto& dependentBuildId: deps) {
-                LOG_N("TTxReply txId: " << txId << " : trying to resume dependent index build " << dependentBuildId);
+                YDB_LOG_NOTICE("TTxReply trying to resume dependent index build",
+                    {"logPrefix", LogPrefix},
+                    {"txId", txId},
+                    {"dependentBuildId", dependentBuildId});
                 if (Self->IndexBuilds.contains(dependentBuildId)) {
                     auto& buildInfo = *Self->IndexBuilds.at(dependentBuildId);
                     buildInfo.DependencyTxIds.erase(txId);
@@ -4186,7 +4195,10 @@ public:
                 auto it = Self->PathsById.find(buildInfo.TablePathId);
                 if (it != Self->PathsById.end() && it->second->PathState == NKikimrSchemeOp::EPathStateCopying) {
                     auto copyTxId = it->second->LastTxId;
-                    LOG_I("TTxReply : Waiting for txId " << copyTxId << " to retry index build id# " << BuildId);
+                    YDB_LOG_INFO("TTxReply Waiting for txId to retry index build",
+                        {"logPrefix", LogPrefix},
+                        {"copyTxId", copyTxId},
+                        {"id", BuildId});
                     buildInfo.DependencyTxIds.insert(copyTxId);
                     Self->TxIdToDependentIndexBuild[copyTxId].insert(buildInfo.Id);
                     // subscribe to tx notification

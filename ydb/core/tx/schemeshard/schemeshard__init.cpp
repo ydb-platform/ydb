@@ -15,6 +15,8 @@
 #include <ydb/core/tx/schemeshard/index/index_build_info.h>
 #include <ydb/core/util/pb.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
+
 namespace NKikimr {
 namespace NSchemeShard {
 
@@ -1490,11 +1492,9 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     const TPathId pathId = std::get<0>(rec);
                     const TPathId parentPathId = std::get<1>(rec);
                     if (pathId != Self->RootPathId() && !Self->PathsById.contains(parentPathId)) {
-                        LOG_ERROR_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                            "TTxInit: parent path row is missing from the local database"
-                                << ", synthesizing an in-memory dropped placeholder parent"
-                                << ", pathId: " << pathId
-                                << ", parentPathId: " << parentPathId);
+                        YDB_LOG_ERROR_CTX(ctx, "TTxInit: parent path row is missing from the local database synthesizing an in-memory dropped placeholder parent",
+                            {"pathId", pathId},
+                            {"parentPathId", parentPathId});
                         TPathElement::TPtr placeholder = new TPathElement(
                             parentPathId, Self->RootPathId(), Self->RootPathId(),
                             TStringBuilder() << "__orphan_placeholder_"
@@ -3941,13 +3941,12 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     const bool orphanTarget = !Self->PathsById.contains(txState.TargetPathId);
                     const bool orphanSource = bool(txState.SourcePathId) && !Self->PathsById.contains(txState.SourcePathId);
                     if (orphanTarget || orphanSource) {
-                        LOG_ERROR_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                            "TTxInit for TxInFlight: " << (orphanTarget ? "target" : "source")
-                                << " path element not found, skipping tx restore and removing its rows"
-                                << ", txId: " << operationId.GetTxId()
-                                << ", partId: " << operationId.GetSubTxId()
-                                << ", TxType: " << TTxState::TypeName(txState.TxType)
-                                << ", pathId: " << (orphanTarget ? txState.TargetPathId : txState.SourcePathId));
+                        YDB_LOG_ERROR_CTX(ctx, "TTxInit for path element not found, skipping tx restore and removing its rows",
+                            {"txInFlight", (orphanTarget ? "target" : "source")},
+                            {"txId", operationId.GetTxId()},
+                            {"partId", operationId.GetSubTxId()},
+                            {"txType", TTxState::TypeName(txState.TxType)},
+                            {"pathId", (orphanTarget ? txState.TargetPathId : txState.SourcePathId)});
                         Self->PersistRemoveTx(db, operationId, txState);
                         skippedOrphanTxs.insert(operationId);
                         skippedOrphanTxIds.insert(operationId.GetTxId());

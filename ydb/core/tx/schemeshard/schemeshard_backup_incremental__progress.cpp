@@ -131,8 +131,9 @@ public:
         Y_ABORT_UNLESS(shardInfo.TabletType == ETabletType::PersQueue);
 
         if (!Self->Topics.contains(shardInfo.PathId)) {
-            LOG_E("Topic with pathId# " << shardInfo.PathId
-                << " not found, likely dropped concurrently, ignoring offload status");
+            YDB_LOG_ERROR("Topic with not found, likely dropped concurrently, ignoring offload status",
+                {"logPrefix", GetLogPrefix()},
+                {"pathId", shardInfo.PathId});
             return;
         }
         const auto& topic = Self->Topics.at(shardInfo.PathId);

@@ -427,7 +427,7 @@ bool TConfigureParts::ProgressState(TOperationContext& context) {
                 "topicName is empty"
                     <<", pathId: " << txState->TargetPathId);
 
-    TTopicInfo::TPtr pqGroup = context.SS->Topics.at(txState->TargetPathId);
+    auto& pqGroup = context.SS->Topics.Update(txState->TargetPathId, context.MemChanges);
     Y_VERIFY_S(pqGroup,
                 "pqGroup is null"
                     << ", pathId " << txState->TargetPathId);
@@ -789,7 +789,7 @@ void TPropose::PersistState(const TTxState& txState,
     context.SS->ClearDescribePathCaches(Path);
     context.OnComplete.PublishToSchemeBoard(OperationId, PathId);
 
-    TTopicInfo::TPtr pqGroup = context.SS->Topics.at(PathId);
+    auto& pqGroup = context.SS->Topics.Update(PathId, context.MemChanges);
 
     NKikimrPQ::TPQTabletConfig tabletConfig = pqGroup->GetTabletConfig();
     NKikimrPQ::TPQTabletConfig newTabletConfig = pqGroup->AlterData->GetTabletConfig();

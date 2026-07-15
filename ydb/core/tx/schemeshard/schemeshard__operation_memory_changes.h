@@ -3,10 +3,11 @@
 #include "schemeshard_identificators.h"
 #include "schemeshard_info_types.h"
 #include "schemeshard_path_element.h"
-#include "schemeshard_self_ref_map.h"
 
 #include <ydb/core/tx/schemeshard/olap/table/table.h>
 
+#include <util/generic/hash.h>
+#include <util/generic/hash_set.h>
 #include <util/generic/ptr.h>
 #include <util/generic/stack.h>
 
@@ -76,8 +77,17 @@ class TMemoryChanges: public TSimpleRefCount<TMemoryChanges> {
 
     TStack<std::function<void()>> SelfRefUndos;
 
+    // Dedup: at most one value snapshot per (self-ref map, path) per tx, so
+    // repeated Update() on the same object doesn't re-copy it.
+    THashMap<const void*, THashSet<TPathId>> UpdateSnapshotted;
+
 public:
     ~TMemoryChanges() = default;
+
+    // True the first time this (map, path) is snapshotted for Update this tx.
+    bool NeedsUpdateSnapshot(const void* map, const TPathId& id) {
+        return UpdateSnapshotted[map].insert(id).second;
+    }
 
     void GrabNewTxState(TSchemeShard* ss, const TOperationId& op);
 
@@ -121,19 +131,10 @@ public:
     void GrabSharedShard(TSchemeShard* ss, const TShardIdx& shardIdx, const TPathId& pathId);
 
 
-    // Self-ref maps record their own rollback here at mutation time (see
-    // TSelfRefMap::Set), replacing the per-map GrabNew*/Grab* + UnDo branches:
-    // one closure per forward mutation, undone LIFO. A forward Set cannot be
-    // applied without recording its undo.
-    template <class V>
-    void RecordSelfRef(TSelfRefMap<V>& map, const TPathId& id, V old) {
-        SelfRefUndos.push([&map, id, old = std::move(old)]() {
-            if (old) {
-                map.UndoRestore(id, old);
-            } else {
-                map.UndoErase(id);
-            }
-        });
+    // TSelfRefMap::Set records its own rollback closure here (undone LIFO),
+    // replacing the per-map GrabNew*/Grab* + UnDo branches.
+    void RecordSelfRefUndo(std::function<void()> undo) {
+        SelfRefUndos.push(std::move(undo));
     }
 
     void UnDo(TSchemeShard* ss);

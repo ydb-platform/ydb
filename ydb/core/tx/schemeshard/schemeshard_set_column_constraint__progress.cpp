@@ -545,7 +545,7 @@ private:
         }
         Y_ENSURE(path.LockedBy() == operationInfo.LockTxId);
 
-        TTableInfo::TPtr table = Self->Tables.at(path->PathId);
+        auto table = Self->Tables.at(path->PathId);
 
         for (const auto* partition : table->GetPartitions()) {
             // We can initate shards after schemeshard's reboot.

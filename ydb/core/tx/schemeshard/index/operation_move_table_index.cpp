@@ -66,9 +66,9 @@ public:
         txState->PlanStep = step;
         context.SS->PersistTxPlanStep(db, OperationId, step);
 
-        TTableIndexInfo::TPtr indexData = context.SS->Indexes.at(dstPath.Base()->PathId);
+        auto indexData = context.SS->Indexes.at(dstPath.Base()->PathId);
         context.SS->PersistTableIndex(db, dstPath.Base()->PathId);
-        context.SS->Indexes.Set(dstPath.Base()->PathId, indexData->AlterData, context.MemChanges);
+        context.SS->Indexes.Set({.Path = dstPath.Base()->PathId, .Value = indexData->AlterData, .Changes = context.MemChanges});
 
         dstPath->StepCreated = step;
         context.SS->PersistCreateStep(db, dstPath.Base()->PathId, step);
@@ -513,7 +513,7 @@ public:
 
         const auto srcIndexInfo = context.SS->Indexes.at(srcPath.Base()->PathId);
         auto newIndexData = TTableIndexInfo::NotExistedYet(srcIndexInfo->Type);
-        context.SS->Indexes.Set(dstPath.Base()->PathId, newIndexData, context.MemChanges);
+        context.SS->Indexes.Set({.Path = dstPath.Base()->PathId, .Value = newIndexData, .Changes = context.MemChanges});
         newIndexData->AlterData = srcIndexInfo->GetNextVersion();
 
 

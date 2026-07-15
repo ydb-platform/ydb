@@ -100,7 +100,7 @@ public:
 
         txState->ClearShardsInProgress();
 
-        TSequenceInfo::TPtr sequenceInfo = context.SS->Sequences.at(txState->TargetPathId);
+        auto sequenceInfo = context.SS->Sequences.at(txState->TargetPathId);
         Y_ABORT_UNLESS(sequenceInfo);
         TSequenceInfo::TPtr alterData = sequenceInfo->AlterData;
         Y_ABORT_UNLESS(alterData);
@@ -202,7 +202,7 @@ public:
         TPathElement::TPtr path = context.SS->PathsById.at(pathId);
 
         Y_VERIFY_S(context.SS->Sequences.contains(pathId), "Sequence not found. PathId: " << pathId);
-        TSequenceInfo::TPtr sequenceInfo = context.SS->Sequences.at(pathId);
+        auto sequenceInfo = context.SS->Sequences.at(pathId);
         Y_ABORT_UNLESS(sequenceInfo);
         TSequenceInfo::TPtr alterData = sequenceInfo->AlterData;
         Y_ABORT_UNLESS(alterData);
@@ -212,7 +212,7 @@ public:
         path->StepCreated = step;
         context.SS->PersistCreateStep(db, pathId, step);
 
-        context.SS->Sequences.Set(pathId, alterData, context.MemChanges);
+        context.SS->Sequences.Set({.Path = pathId, .Value = alterData, .Changes = context.MemChanges});
         context.SS->PersistSequenceAlterRemove(db, pathId);
         context.SS->PersistSequence(db, pathId, *alterData);
 
@@ -563,7 +563,7 @@ public:
         }
         context.SS->PersistPath(db, dstPath->PathId);
 
-        context.SS->Sequences.Set(pathId, sequenceInfo, context.MemChanges);
+        context.SS->Sequences.Set({.Path = pathId, .Value = sequenceInfo, .Changes = context.MemChanges});
         context.SS->PersistSequence(db, pathId, *sequenceInfo);
         context.SS->PersistSequenceAlter(db, pathId, *alterData);
 

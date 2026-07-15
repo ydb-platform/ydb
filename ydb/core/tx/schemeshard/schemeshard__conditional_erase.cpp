@@ -267,7 +267,7 @@ private:
         auto mainPath = Self->PathsById.at(mainPathId);
 
         Y_ABORT_UNLESS(Self->Tables.contains(mainPathId));
-        auto mainTable = Self->Tables.at(mainPathId);
+        auto mainTable = Self->Tables.MutableUntracked(mainPathId);
 
         for (const auto& [_, childPathId] : mainPath->GetChildren()) {
             Y_ABORT_UNLESS(Self->PathsById.contains(childPathId));
@@ -297,7 +297,7 @@ private:
 
     TTableIndexInfo::TPtr GetIndex(TPathElement::TPtr indexPath) const {
         Y_ABORT_UNLESS(Self->Indexes.contains(indexPath->PathId));
-        return Self->Indexes.at(indexPath->PathId);
+        return Self->Indexes.MutableUntracked(indexPath->PathId);
     }
 
     std::pair<TPathId, TTableInfo::TPtr> GetIndexImplTable(TPathElement::TPtr indexPath) const {
@@ -309,7 +309,7 @@ private:
             Y_ABORT_UNLESS(!childPath->Dropped());
 
             Y_ABORT_UNLESS(Self->Tables.contains(indexImplPathId));
-            return std::make_pair(indexImplPathId, Self->Tables.at(indexImplPathId));
+            return std::make_pair(indexImplPathId, Self->Tables.MutableUntracked(indexImplPathId));
         }
 
         Y_ABORT("Unreachable");

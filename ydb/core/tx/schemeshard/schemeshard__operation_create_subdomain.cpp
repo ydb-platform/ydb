@@ -310,7 +310,7 @@ public:
         }
 
         Y_ABORT_UNLESS(!context.SS->SubDomains.contains(newNode->PathId));
-        auto& subDomainInfo = context.SS->SubDomains.Emplace(newNode->PathId);
+        auto& subDomainInfo = context.SS->SubDomains.EmplaceUntracked(newNode->PathId);
         subDomainInfo = new TSubDomainInfo();
         subDomainInfo->SetAlter(alter);
 

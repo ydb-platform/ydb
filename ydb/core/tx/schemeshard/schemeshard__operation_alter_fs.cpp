@@ -161,7 +161,7 @@ public:
         Y_ABORT_UNLESS(txState->TxType == TTxState::TxAlterFileStore);
         TPathId pathId = txState->TargetPathId;
 
-        auto fs = context.SS->FileStoreInfos.at(pathId);
+        auto& fs = context.SS->FileStoreInfos.MutableUntracked(pathId);
         Y_VERIFY_S(fs, "FileStore info is null. PathId: " << pathId);
 
         TPathElement::TPtr path = context.SS->PathsById.at(pathId);
@@ -345,7 +345,7 @@ THolder<TProposeResponse> TAlterFileStore::Propose(
 
     Y_ABORT_UNLESS(path.Base()->IsCreateFinished());
 
-    auto fs = context.SS->FileStoreInfos.at(path.Base()->PathId);
+    auto& fs = context.SS->FileStoreInfos.MutableUntracked(path.Base()->PathId);
     Y_VERIFY_S(fs, "FileStore info is null. PathId: " << path.Base()->PathId);
 
     if (fs->AlterConfig) {

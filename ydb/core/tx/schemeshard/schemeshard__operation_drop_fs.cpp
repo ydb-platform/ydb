@@ -68,7 +68,7 @@ public:
             context.OnComplete.DeleteShard(shard.Idx);
         }
 
-        TFileStoreInfo::TPtr fs = context.SS->FileStoreInfos.at(pathId);
+        auto fs = context.SS->FileStoreInfos.at(pathId);
 
         const auto oldFileStoreSpace = fs->GetFileStoreSpace();
         auto domainDir = context.SS->PathsById.at(context.SS->ResolvePathIdForDomain(path));

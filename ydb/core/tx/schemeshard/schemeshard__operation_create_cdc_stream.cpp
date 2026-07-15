@@ -66,7 +66,7 @@ public:
         context.SS->PersistCreateStep(db, pathId, step);
 
         context.SS->PersistCdcStream(db, pathId);
-        context.SS->CdcStreams.Set(pathId, stream->AlterData, context.MemChanges);
+        context.SS->CdcStreams.Set({.Path = pathId, .Value = stream->AlterData, .Changes = context.MemChanges});
 
         context.SS->TabletCounters->Simple()[COUNTER_CDC_STREAMS_COUNT].Add(1);
         context.SS->ClearDescribePathCaches(path);
@@ -330,7 +330,7 @@ public:
         streamPath.Base()->PathType = TPathElement::EPathType::EPathTypeCdcStream;
         streamPath.Base()->UserAttrs->AlterData = userAttrs;
 
-        context.SS->CdcStreams.Set(pathId, stream, context.MemChanges);
+        context.SS->CdcStreams.Set({.Path = pathId, .Value = stream, .Changes = context.MemChanges});
 
         streamPath.DomainInfo()->IncPathsInside(context.SS);
         IncAliveChildrenSafeWithUndo(OperationId, tablePath, context); // for correct discard of ChildrenExist prop
@@ -363,7 +363,7 @@ protected:
 
         // Override table schema version with coordinated version from AlterData
         Y_ABORT_UNLESS(context.SS->Tables.contains(pathId));
-        auto table = context.SS->Tables.at(pathId);
+        auto& table = context.SS->Tables.Update(pathId, context.MemChanges);
         table->InitAlterData(OperationId);
         notice.SetTableSchemaVersion(*table->AlterData->CoordinatedSchemaVersion);
 

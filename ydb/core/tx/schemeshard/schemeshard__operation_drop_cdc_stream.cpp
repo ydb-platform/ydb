@@ -227,7 +227,7 @@ protected:
         auto path = context.SS->PathsById.at(pathId);
 
         Y_ABORT_UNLESS(context.SS->Tables.contains(pathId));
-        auto table = context.SS->Tables.at(pathId);
+        auto& table = context.SS->Tables.Update(pathId, context.MemChanges);
 
         auto& notice = *tx.MutableDropCdcStreamNotice();
         pathId.ToProto(notice.MutablePathId());

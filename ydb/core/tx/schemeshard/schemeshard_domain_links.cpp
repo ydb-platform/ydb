@@ -19,7 +19,7 @@ THolder<TEvSchemeShard::TEvSyncTenantSchemeShard> TParentDomainLink::MakeSyncMsg
     auto& rootPath = Self->PathsById.at(Self->RootPathId());
 
     Y_ABORT_UNLESS(Self->PathsById.contains(Self->RootPathId()));
-    auto& rootSubdomain = Self->SubDomains.at(Self->RootPathId());
+    auto rootSubdomain = Self->SubDomains.at(Self->RootPathId());
 
     TEvSchemeShard::TEvSyncTenantSchemeShard* ptr = new TEvSchemeShard::TEvSyncTenantSchemeShard({
         .DomainKey = Self->ParentDomainId,

@@ -67,7 +67,7 @@ public:
                    << " at tabletId# " << ssId);
 
         TTxState* txState = context.SS->FindTxSafe(OperationId, TTxState::TxCreateOlapStore);
-        TOlapStoreInfo::TPtr pendingInfo = context.SS->OlapStores.at(txState->TargetPathId);
+        auto pendingInfo = context.SS->OlapStores.at(txState->TargetPathId);
         Y_ABORT_UNLESS(pendingInfo);
         Y_ABORT_UNLESS(pendingInfo->AlterData);
         TOlapStoreInfo::TPtr storeInfo = pendingInfo->AlterData;
@@ -160,11 +160,11 @@ public:
         path->StepCreated = step;
         context.SS->PersistCreateStep(db, pathId, step);
 
-        TOlapStoreInfo::TPtr pending = context.SS->OlapStores.at(pathId);
+        auto pending = context.SS->OlapStores.at(pathId);
         Y_ABORT_UNLESS(pending);
         TOlapStoreInfo::TPtr store = pending->AlterData;
         Y_ABORT_UNLESS(store);
-        context.SS->OlapStores.Set(pathId, store, context.MemChanges);
+        context.SS->OlapStores.Set({.Path = pathId, .Value = store, .Changes = context.MemChanges});
 
         context.SS->PersistOlapStoreAlterRemove(db, pathId);
         context.SS->PersistOlapStore(db, pathId, *store);
@@ -462,7 +462,7 @@ public:
 
         TOlapStoreInfo::TPtr pending = std::make_shared<TOlapStoreInfo>();
         pending->AlterData = storeInfo;
-        context.SS->OlapStores.Set(pathId, pending, context.MemChanges);
+        context.SS->OlapStores.Set({.Path = pathId, .Value = pending, .Changes = context.MemChanges});
         context.SS->PersistOlapStore(db, pathId, *pending);
         context.SS->PersistOlapStoreAlter(db, pathId, *storeInfo);
 

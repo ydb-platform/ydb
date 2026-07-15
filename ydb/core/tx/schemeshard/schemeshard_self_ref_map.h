@@ -1,48 +1,95 @@
 #pragma once
 
 #include "schemeshard_path_ref.h"
+#include "schemeshard__operation_memory_changes.h"
 
 #include <ydb/core/scheme/scheme_pathid.h>
 
 #include <util/generic/hash.h>
+#include <util/generic/ptr.h>
 #include <util/generic/vector.h>
 #include <util/system/yassert.h>
 
 #include <functional>
+#include <memory>
 
 namespace NKikimr::NSchemeShard {
 
 class TSchemeShard;
 
-// Teardown interface: every TSelfRefMap registers itself (via SetSchemeShard)
-// so TSchemeShard::Clear() disarms+drops all of them by iterating one registry
-// instead of a hand-maintained per-map list (which had already drifted).
+// Maps a value pointer type to its read-only (const-pointee) counterpart, so
+// at() can hand out a non-mutating view whatever smart pointer V uses.
+namespace NSelfRefDetail {
+    template <class P> struct TConstView;
+    template <class T> struct TConstView<TIntrusivePtr<T>> { using type = TIntrusiveConstPtr<T>; };
+    template <class T> struct TConstView<TIntrusiveConstPtr<T>> { using type = TIntrusiveConstPtr<T>; };
+    template <class T> struct TConstView<std::shared_ptr<T>> { using type = std::shared_ptr<const T>; };
+}
+
+// Deep-copy a value for an Update() undo snapshot. Generic pointers copy-construct
+// the pointee; TTableInfo needs DeepCopy — its Partitions are raw pointers into
+// PartitionStore and must be re-pointed at the copy's own store, else a restored
+// snapshot dangles.
+template <class T>
+TIntrusivePtr<T> SelfRefUndoClone(const TIntrusivePtr<T>& p) {
+    return p ? TIntrusivePtr<T>(new T(*p)) : TIntrusivePtr<T>();
+}
+template <class T>
+std::shared_ptr<T> SelfRefUndoClone(const std::shared_ptr<T>& p) {
+    return p ? std::make_shared<T>(*p) : std::shared_ptr<T>();
+}
+inline TIntrusivePtr<TTableInfo> SelfRefUndoClone(const TIntrusivePtr<TTableInfo>& p) {
+    return p ? TTableInfo::DeepCopy(*p) : TIntrusivePtr<TTableInfo>();
+}
+
+// Teardown interface: every TSelfRefMap registers (via SetSchemeShard) so
+// TSchemeShard::Clear() iterates one registry instead of a per-map list.
 class ISelfRefMap {
 public:
     virtual ~ISelfRefMap() = default;
     virtual void clear() = 0;
 
-    // Debug invariant: Refs mirror Map 1:1 and every self-ref points at a live
-    // path. Checked after TMemoryChanges::UnDo to catch rollback drift (a
-    // forgotten Grab, a snapshot the undo forgot to reconcile) at the
-    // transaction that caused it, not at a distant later decrement.
+    // Debug: Refs mirror Map 1:1 and every self-ref points at a live path.
+    // Checked after UnDo to catch rollback drift at its cause, not later.
     virtual void DebugCheckConsistency(const std::function<bool(const TPathId&)>& pathExists) const = 0;
+
+    // Debug: feed every held self-ref to a DbRefCount reconciliation pass.
+    virtual void DebugForEachRef(const std::function<void(const TPathRef&)>& fn) const = 0;
 };
 
-// A THashMap<TPathId, V> whose entries own a TPathRef self-reference on their
-// path: inserting a new key acquires it, erasing releases it. Replaces the
-// manual AcquireSelfDbRef/ReleaseSelfDbRef pairing for path-owning info maps
-// (Tables, Topics, CdcStreams, ...). Intentionally has no operator[]: insertion
-// goes through Set/Emplace so a read of a missing key can never silently insert
-// and acquire a bogus reference.
+// THashMap<TPathId, V> whose entries own a TPathRef self-ref (insert acquires,
+// erase releases). No operator[], so a missing-key read can't silently acquire.
 template <class V>
 class TSelfRefMap : public ISelfRefMap {
     using TInner = THashMap<TPathId, V>;
+    using TElem = std::remove_reference_t<decltype(*std::declval<V&>())>;
 
 public:
     using iterator = typename TInner::iterator;
     using const_iterator = typename TInner::const_iterator;
     using value_type = typename TInner::value_type;
+    using TConstView = typename NSelfRefDetail::TConstView<V>::type;
+
+    // Named arguments for Set (C++20 designated initializers at the call site):
+    //   Foo.Set({.Path = id, .Value = info, .Changes = context.MemChanges});
+    struct TSetArgs {
+        TPathId Path;
+        V Value;
+        TMemoryChanges& Changes;
+    };
+
+    // `reason` is this map's name, logged on every DbRefCount change for the
+    // self-ref (so traces say "CdcStreams", not a shared "type info record").
+    explicit TSelfRefMap(const char* reason)
+        : Reason(reason)
+    {}
+
+    // Non-copyable, non-movable: refs mirror live DbRefCounts and the map is
+    // registered by address, so a copy would double-acquire and orphan the entry.
+    TSelfRefMap(const TSelfRefMap&) = delete;
+    TSelfRefMap& operator=(const TSelfRefMap&) = delete;
+    TSelfRefMap(TSelfRefMap&&) = delete;
+    TSelfRefMap& operator=(TSelfRefMap&&) = delete;
 
     // Registers into the owner's teardown list; without this SS stays null and
     // the first acquire fails loudly, so registration cannot be silently missed.
@@ -51,10 +98,8 @@ public:
         registry.push_back(this);
     }
 
-    // Whole-map destruction is whole-graph teardown: disarm rather than let
-    // ~TPathRef release against other TSchemeShard members dying in an
-    // unspecified order. Makes teardown self-contained (no reliance on the
-    // IsBeingDestroyed guard for these maps).
+    // Whole-map destruction is whole-graph teardown: disarm, don't release
+    // against other TSchemeShard members dying in an unspecified order.
     ~TSelfRefMap() override {
         for (auto& [id, ref] : Refs) {
             ref.Disarm();
@@ -62,51 +107,68 @@ public:
     }
 
     // Read-only view for APIs that take a const THashMap& (never for mutation).
-    operator const TInner&() const {
+    const TInner& AsMap() const {
         return Map;
     }
 
-    // Insert or assign, acquiring the self-ref when the key is new, and record
-    // the matching rollback on `changes` in the same act — so a forward mutation
-    // can never be applied without its undo (the bug class GrabNew*/Grab* left
-    // open). TChanges is a template param only to avoid a header cycle with
-    // TMemoryChanges; the sole caller passes TMemoryChanges.
-    template <class TChanges>
-    V& Set(const TPathId& id, V value, TChanges& changes) {
-        auto it = Map.find(id);
+    // Insert or assign, acquiring when the key is new, and record the matching
+    // rollback on Changes in the same act — a mutation can't skip its undo.
+    V& Set(TSetArgs args) {
+        auto it = Map.find(args.Path);
         if (it == Map.end()) {
-            changes.RecordSelfRef(*this, id, V{});
-            it = Map.emplace(id, std::move(value)).first;
-            Refs.emplace(id, TPathRef(SS, id, "type info record"));
+            args.Changes.RecordSelfRefUndo([this, id = args.Path]() { UndoErase(id); });
+            it = Map.emplace(args.Path, std::move(args.Value)).first;
+            Refs.emplace(args.Path, TPathRef(SS, args.Path, Reason));
         } else {
-            changes.RecordSelfRef(*this, id, it->second);
-            it->second = std::move(value);
+            args.Changes.RecordSelfRefUndo([this, id = args.Path, old = it->second]() { UndoRestore(id, old); });
+            it->second = std::move(args.Value);
         }
         return it->second;
     }
 
-    // Insert or assign, acquiring when new, WITHOUT recording an undo. For init
-    // restore (no operation to roll back) and SubDomains (which records its own
-    // rollback via TMemoryChanges::GrabDomain because it also refreshes counters).
+    // Acquire-if-new insert or assign WITHOUT recording undo. For init restore
+    // and SubDomains (which self-manages rollback via GrabDomain).
     V& SetUntracked(const TPathId& id, V value) {
         auto it = Map.find(id);
         if (it == Map.end()) {
             it = Map.emplace(id, std::move(value)).first;
-            Refs.emplace(id, TPathRef(SS, id, "type info record"));
+            Refs.emplace(id, TPathRef(SS, id, Reason));
         } else {
             it->second = std::move(value);
         }
         return it->second;
     }
 
-    // Insert a default-constructed value if absent (acquiring), return the ref.
-    V& Emplace(const TPathId& id) {
+    // Insert a default-constructed value if absent (acquiring), without recording
+    // an undo — SubDomains-only, paired with a manual GrabDomain like SetUntracked.
+    V& EmplaceUntracked(const TPathId& id) {
         auto it = Map.find(id);
         if (it == Map.end()) {
             it = Map.emplace(id, V{}).first;
-            Refs.emplace(id, TPathRef(SS, id, "type info record"));
+            Refs.emplace(id, TPathRef(SS, id, Reason));
         }
         return it->second;
+    }
+
+    // Mutable access that records the rollback in the same act, so an in-place
+    // mutation (CreateNextVersion, FinishAlter, ...) can't skip its undo. The
+    // snapshot is a single struct copy (nested TIntrusivePtr members are shared)
+    // and deduped per tx, so it is cheap. The only way to get mutable access.
+    V& Update(const TPathId& id, TMemoryChanges& changes) {
+        V& slot = Map.at(id);
+        if (changes.NeedsUpdateSnapshot(this, id)) {
+            changes.RecordSelfRefUndo([this, id, snap = SelfRefUndoClone(slot)]() {
+                UndoRestore(id, snap);
+            });
+        }
+        return slot;
+    }
+
+    // Mutable access WITHOUT recording undo — for non-transactional callers
+    // (init restore, stats, background scans) that have no TMemoryChanges to roll
+    // back into. Operations must use Update() so their mutation is undoable.
+    V& MutableUntracked(const TPathId& id) {
+        return Map.at(id);
     }
 
     size_t erase(const TPathId& id) {
@@ -114,36 +176,14 @@ public:
         return Map.erase(id);
     }
 
-    // Undo-only: restore a snapshot value without acquiring. TMemoryChanges
-    // rolls DbRefCount back wholesale via the Paths snapshot, so a re-added
-    // entry only needs an armed (adopted) ref so a later real erase releases.
-    V& UndoRestore(const TPathId& id, V value) {
-        auto& slot = Map[id];
-        slot = std::move(value);
-        if (!Refs.contains(id)) {
-            Refs.emplace(id, TPathRef(TPathRef::Adopt, SS, id, "type info record"));
-        }
-        return slot;
-    }
-
-    // Undo-only: drop an entry created during the tx. Disarm rather than
-    // release: the path and its DbRefCount are rolled back by the Paths
-    // snapshot, and PathsById may already be gone when this runs.
-    void UndoErase(const TPathId& id) {
-        if (auto it = Refs.find(id); it != Refs.end()) {
-            it->second.Disarm();
-            Refs.erase(it);
-        }
-        Map.erase(id);
-    }
-
     void erase(iterator it) {
         Refs.erase(it->first);
         Map.erase(it);
     }
 
-    V& at(const TPathId& id) { return Map.at(id); }
-    const V& at(const TPathId& id) const { return Map.at(id); }
+    // Read-only: the pointee is const, so at(id)->Mutate() won't compile —
+    // mutation must go through Update(id, changes) so the undo can't be skipped.
+    TConstView at(const TPathId& id) const { return Map.at(id); }
     iterator find(const TPathId& id) { return Map.find(id); }
     const_iterator find(const TPathId& id) const { return Map.find(id); }
     V* FindPtr(const TPathId& id) { return Map.FindPtr(id); }
@@ -176,7 +216,38 @@ public:
         }
     }
 
+    void DebugForEachRef(const std::function<void(const TPathRef&)>& fn) const override {
+        for (const auto& [id, ref] : Refs) {
+            fn(ref);
+        }
+    }
+
 private:
+    // Undo is driven only by TMemoryChanges; ops must never call these.
+    friend class TMemoryChanges;
+
+    // Restore a snapshot value without acquiring: the Paths snapshot owns the
+    // DbRefCount rollback, so the re-added ref is adopted (armed, not acquired).
+    V& UndoRestore(const TPathId& id, V value) {
+        auto& slot = Map[id];
+        slot = std::move(value);
+        if (!Refs.contains(id)) {
+            Refs.emplace(id, TPathRef(TPathRef::Adopt, SS, id, Reason));
+        }
+        return slot;
+    }
+
+    // Drop a tx-created entry. Disarm not release: Paths owns the counter
+    // rollback and PathsById may already be gone here.
+    void UndoErase(const TPathId& id) {
+        if (auto it = Refs.find(id); it != Refs.end()) {
+            it->second.Disarm();
+            Refs.erase(it);
+        }
+        Map.erase(id);
+    }
+
+    const char* Reason;
     TSchemeShard* SS = nullptr;
     TInner Map;
     THashMap<TPathId, TPathRef> Refs;

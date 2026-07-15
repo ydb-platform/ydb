@@ -175,7 +175,7 @@ public:
             // shared lock), then builds the fulltext index in rowid mode. See the provisioning prefix
             // in build_index__progress.cpp.
             const auto classification = NTableIndex::ClassifyFulltextRowId(
-                tableInfo, tablePath.Base()->GetChildren(), Self->Indexes, indexDesc, explain);
+                tableInfo, tablePath.Base()->GetChildren(), Self->Indexes.AsMap(), indexDesc, explain);
             auto enableRowIdMode = [&]() {
                 indexDesc.MutableFulltextIndexDescription()->SetUseRowIdAsDocId(true);
                 // Fulltext index builds always carry a TFulltextIndexDescription. JSON index builds
@@ -362,7 +362,7 @@ public:
 
 private:
     bool Prepare(TIndexBuildInfo& buildInfo, const NKikimrIndexBuilder::TIndexBuildSettings& settings,
-                 TTableInfo::TPtr tableInfo, TString& explain) {
+                 TTableInfo::TCPtr tableInfo, TString& explain) {
         Y_ASSERT(settings.has_index());
         const auto& index = settings.index();
 

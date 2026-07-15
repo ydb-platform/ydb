@@ -326,10 +326,10 @@ void TSchemeShard::AbortOperationPropose(const TTxId txId, TOperationContext& co
 
     context.MemChanges.UnDo(context.SS);
 
-    // expected empty here; disarm defensively, UnDo owns the counters
-    for (auto& [key, ref] : operation->Publications) {
-        ref.Disarm();
-    }
+    // Propose-time abort runs before publication (which happens post-plan), so
+    // no publication refs should exist yet and UnDo owns the counter rollback.
+    Y_VERIFY_DEBUG_S(operation->Publications.empty(),
+        "unexpected publication refs on propose abort, tx: " << txId);
 
     // And remove aborted operation from existence
     Operations.erase(txId);

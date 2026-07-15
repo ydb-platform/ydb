@@ -293,7 +293,7 @@ public:
     // disarms+drops them all by iteration (no hand-maintained list to forget).
     TVector<ISelfRefMap*> SelfRefMaps;
 
-    TSelfRefMap<TTableInfo::TPtr> Tables;
+    TSelfRefMap<TTableInfo::TPtr> Tables{"Tables"};
     THashMap<TPathId, TTableInfo::TPtr> TTLEnabledTables;
 
     // Batch processing for conditional erase responses
@@ -303,11 +303,11 @@ public:
     TDuration CondEraseResponseBatchMaxTime = TDuration::MilliSeconds(100);
     ui32 MaxTTLShardsInFlight = 0;
 
-    TSelfRefMap<TTableIndexInfo::TPtr> Indexes;
-    TSelfRefMap<TCdcStreamInfo::TPtr> CdcStreams;
-    TSelfRefMap<TSequenceInfo::TPtr> Sequences;
-    TSelfRefMap<TReplicationInfo::TPtr> Replications;
-    TSelfRefMap<TBlobDepotInfo::TPtr> BlobDepots;
+    TSelfRefMap<TTableIndexInfo::TPtr> Indexes{"Indexes"};
+    TSelfRefMap<TCdcStreamInfo::TPtr> CdcStreams{"CdcStreams"};
+    TSelfRefMap<TSequenceInfo::TPtr> Sequences{"Sequences"};
+    TSelfRefMap<TReplicationInfo::TPtr> Replications{"Replications"};
+    TSelfRefMap<TBlobDepotInfo::TPtr> BlobDepots{"BlobDepots"};
 
     THashMap<TPathId, TTxId> TablesWithSnapshots;
     THashMap<TTxId, TSet<TPathId>> SnapshotTables;
@@ -315,24 +315,24 @@ public:
 
     THashMap<TPathId, TTxId> LockedPaths;
 
-    TSelfRefMap<TTopicInfo::TPtr> Topics;
-    TSelfRefMap<TRtmrVolumeInfo::TPtr> RtmrVolumes;
-    TSelfRefMap<TSolomonVolumeInfo::TPtr> SolomonVolumes;
-    TSelfRefMap<TSubDomainInfo::TPtr> SubDomains;
-    TSelfRefMap<TBlockStoreVolumeInfo::TPtr> BlockStoreVolumes;
-    TSelfRefMap<TFileStoreInfo::TPtr> FileStoreInfos;
-    TSelfRefMap<TKesusInfo::TPtr> KesusInfos;
-    TSelfRefMap<TOlapStoreInfo::TPtr> OlapStores;
-    TSelfRefMap<TExternalTableInfo::TPtr> ExternalTables;
-    TSelfRefMap<TExternalDataSourceInfo::TPtr> ExternalDataSources;
-    TSelfRefMap<TViewInfo::TPtr> Views;
-    TSelfRefMap<TResourcePoolInfo::TPtr> ResourcePools;
-    TSelfRefMap<TBackupCollectionInfo::TPtr> BackupCollections;
-    TSelfRefMap<TSysViewInfo::TPtr> SysViews;
-    TSelfRefMap<TSecretInfo::TPtr> Secrets;
-    TSelfRefMap<TStreamingQueryInfo::TPtr> StreamingQueries;
+    TSelfRefMap<TTopicInfo::TPtr> Topics{"Topics"};
+    TSelfRefMap<TRtmrVolumeInfo::TPtr> RtmrVolumes{"RtmrVolumes"};
+    TSelfRefMap<TSolomonVolumeInfo::TPtr> SolomonVolumes{"SolomonVolumes"};
+    TSelfRefMap<TSubDomainInfo::TPtr> SubDomains{"SubDomains"};
+    TSelfRefMap<TBlockStoreVolumeInfo::TPtr> BlockStoreVolumes{"BlockStoreVolumes"};
+    TSelfRefMap<TFileStoreInfo::TPtr> FileStoreInfos{"FileStoreInfos"};
+    TSelfRefMap<TKesusInfo::TPtr> KesusInfos{"KesusInfos"};
+    TSelfRefMap<TOlapStoreInfo::TPtr> OlapStores{"OlapStores"};
+    TSelfRefMap<TExternalTableInfo::TPtr> ExternalTables{"ExternalTables"};
+    TSelfRefMap<TExternalDataSourceInfo::TPtr> ExternalDataSources{"ExternalDataSources"};
+    TSelfRefMap<TViewInfo::TPtr> Views{"Views"};
+    TSelfRefMap<TResourcePoolInfo::TPtr> ResourcePools{"ResourcePools"};
+    TSelfRefMap<TBackupCollectionInfo::TPtr> BackupCollections{"BackupCollections"};
+    TSelfRefMap<TSysViewInfo::TPtr> SysViews{"SysViews"};
+    TSelfRefMap<TSecretInfo::TPtr> Secrets{"Secrets"};
+    TSelfRefMap<TStreamingQueryInfo::TPtr> StreamingQueries{"StreamingQueries"};
     THashSet<TPathId> TableInBackupCollections;
-    TSelfRefMap<TTestShardSetInfo::TPtr> TestShardSets;
+    TSelfRefMap<TTestShardSetInfo::TPtr> TestShardSets{"TestShardSets"};
 
     TTempDirsState TempDirsState;
 
@@ -529,7 +529,7 @@ public:
         return pId == RootPathId();
     }
 
-    bool IsServerlessDomain(TSubDomainInfo::TPtr domainInfo) const {
+    bool IsServerlessDomain(const TSubDomainInfo::TConstPtr& domainInfo) const {
         const auto& resourcesDomainId = domainInfo->GetResourcesDomainId();
         return !IsDomainSchemeShard && resourcesDomainId && resourcesDomainId != ParentDomainId;
     }
@@ -842,7 +842,7 @@ public:
     // table index
     void PersistTableIndex(NIceDb::TNiceDb& db, const TPathId& pathId);
     void PersistTableIndexAlterData(NIceDb::TNiceDb& db, const TPathId& pathId);
-    void PersistTableIndexAlterVersion(NIceDb::TNiceDb& db, const TPathId& pathId, const TTableIndexInfo::TPtr indexInfo);
+    void PersistTableIndexAlterVersion(NIceDb::TNiceDb& db, const TPathId& pathId, const TIntrusiveConstPtr<TTableIndexInfo>& indexInfo);
 
     // cdc stream
     void PersistCdcStream(NIceDb::TNiceDb& db, const TPathId& pathId);
@@ -1341,14 +1341,14 @@ public:
     void DescribeTableIndex(const TPathId& pathId, const TString& name,
         bool fillConfig, bool fillBoundaries, NKikimrSchemeOp::TIndexDescription& entry
     ) const;
-    void DescribeTableIndex(const TPathId& pathId, const TString& name, TTableIndexInfo::TPtr indexInfo,
+    void DescribeTableIndex(const TPathId& pathId, const TString& name, const TIntrusiveConstPtr<TTableIndexInfo>& indexInfo,
         bool fillConfig, bool fillBoundaries, NKikimrSchemeOp::TIndexDescription& entry
     ) const;
     void DescribeCdcStream(const TPathId& pathId, const TString& name, NKikimrSchemeOp::TCdcStreamDescription& desc);
-    void DescribeCdcStream(const TPathId& pathId, const TString& name, TCdcStreamInfo::TPtr info, NKikimrSchemeOp::TCdcStreamDescription& desc);
+    void DescribeCdcStream(const TPathId& pathId, const TString& name, const TIntrusiveConstPtr<TCdcStreamInfo>& info, NKikimrSchemeOp::TCdcStreamDescription& desc);
     void DescribeSequence(const TPathId& pathId, const TString& name,
         NKikimrSchemeOp::TSequenceDescription& desc, bool fillSetVal = false);
-    void DescribeSequence(const TPathId& pathId, const TString& name, TSequenceInfo::TPtr info,
+    void DescribeSequence(const TPathId& pathId, const TString& name, const TIntrusiveConstPtr<TSequenceInfo>& info,
         NKikimrSchemeOp::TSequenceDescription& desc, bool fillSetVal = false);
     void DescribeReplication(const TPathId& pathId, const TString& name, NKikimrSchemeOp::TReplicationDescription& desc);
     void DescribeReplication(const TPathId& pathId, const TString& name, TReplicationInfo::TPtr info, NKikimrSchemeOp::TReplicationDescription& desc);

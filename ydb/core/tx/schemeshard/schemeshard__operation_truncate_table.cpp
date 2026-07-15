@@ -141,7 +141,7 @@ public:
 
         const auto path = TPath::Init(txState->TargetPathId, context.SS);
 
-        auto table = context.SS->Tables.at(path.Base()->PathId);
+        auto& table = context.SS->Tables.Update(path.Base()->PathId, context.MemChanges);
         table->AlterVersion += 1;
         context.SS->PersistTableAlterVersion(db, path.Base()->PathId, table);
 
@@ -275,7 +275,7 @@ public:
         // Begin create local transaction
 
         Y_ABORT_UNLESS(context.SS->Tables.contains(tablePath.Base()->PathId));
-        TTableInfo::TPtr table = context.SS->Tables.at(tablePath.Base()->PathId);
+        auto table = context.SS->Tables.at(tablePath.Base()->PathId);
         Y_ABORT_UNLESS(table->GetPartitions().size());
 
         {

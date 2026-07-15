@@ -1526,12 +1526,12 @@ void TSchemeShard::DescribeTableIndex(const TPathId& pathId, const TString& name
 {
     auto it = Indexes.FindPtr(pathId);
     Y_ABORT_UNLESS(it, "TableIndex is not found");
-    TTableIndexInfo::TPtr indexInfo = *it;
+    const TIntrusiveConstPtr<TTableIndexInfo>& indexInfo = *it;
 
     DescribeTableIndex(pathId, name, indexInfo, fillConfig, fillBoundaries, entry);
 }
 
-void TSchemeShard::DescribeTableIndex(const TPathId& pathId, const TString& name, TTableIndexInfo::TPtr indexInfo,
+void TSchemeShard::DescribeTableIndex(const TPathId& pathId, const TString& name, const TIntrusiveConstPtr<TTableIndexInfo>& indexInfo,
     bool fillConfig, bool fillBoundaries, NKikimrSchemeOp::TIndexDescription& entry) const
 {
     Y_ABORT_UNLESS(indexInfo, "Empty index info");
@@ -1626,10 +1626,10 @@ void TSchemeShard::DescribeCdcStream(const TPathId& pathId, const TString& name,
     Y_VERIFY_S(CdcStreams.contains(pathId), "Cdc stream not found"
         << ": pathId# " << pathId
         << ", name# " << name);
-    DescribeCdcStream(pathId, name, CdcStreams.at(pathId), desc);
+    DescribeCdcStream(pathId, name, CdcStreams.MutableUntracked(pathId), desc);
 }
 
-void TSchemeShard::DescribeCdcStream(const TPathId& pathId, const TString& name, TCdcStreamInfo::TPtr info,
+void TSchemeShard::DescribeCdcStream(const TPathId& pathId, const TString& name, const TIntrusiveConstPtr<TCdcStreamInfo>& info,
         NKikimrSchemeOp::TCdcStreamDescription& desc)
 {
     Y_VERIFY_S(info, "Empty cdc stream info"
@@ -1660,7 +1660,7 @@ void TSchemeShard::DescribeSequence(const TPathId& pathId, const TString& name,
     DescribeSequence(pathId, name, it->second, desc, fillSetVal);
 }
 
-void TSchemeShard::DescribeSequence(const TPathId& pathId, const TString& name, TSequenceInfo::TPtr info,
+void TSchemeShard::DescribeSequence(const TPathId& pathId, const TString& name, const TIntrusiveConstPtr<TSequenceInfo>& info,
         NKikimrSchemeOp::TSequenceDescription& desc, bool fillSetVal)
 {
     Y_VERIFY_S(info, "Empty sequence info"

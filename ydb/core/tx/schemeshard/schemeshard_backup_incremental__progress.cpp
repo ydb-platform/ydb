@@ -129,7 +129,7 @@ public:
                 << " not found, likely dropped concurrently, ignoring offload status");
             return;
         }
-        const auto& topic = Self->Topics.at(shardInfo.PathId);
+        const auto& topic = Self->Topics.MutableUntracked(shardInfo.PathId);
 
         if (!topic->Partitions.contains(partitionId)) {
             LOG_E("Partition with id# " << partitionId << " not found in topic with pathId# " << shardInfo.PathId);

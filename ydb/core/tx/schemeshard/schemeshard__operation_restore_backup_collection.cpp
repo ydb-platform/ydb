@@ -464,7 +464,7 @@ bool CreateLongIncrementalRestoreOp(
 bool CreateIncrementalBackupPathStateOps(
     TOperationId opId,
     const TTxTransaction& tx,
-    const TBackupCollectionInfo::TPtr& bc,
+    const TIntrusiveConstPtr<TBackupCollectionInfo>& bc,
     const TPath& bcPath,
     const TVector<TString>& incrBackupNames,
     TOperationContext& context,

@@ -93,10 +93,10 @@ public:
             context.SS->TabletCounters->Simple()[COUNTER_TABLE_INDEXES_COUNT].Add(1);
 
             Y_ABORT_UNLESS(context.SS->Indexes.contains(dstPathId));
-            TTableIndexInfo::TPtr indexData = context.SS->Indexes.at(dstPathId);
+            auto indexData = context.SS->Indexes.at(dstPathId);
             Y_ABORT_UNLESS(indexData->AlterData, "AlterData must be valid after TTableIndexInfo::Create");
             context.SS->PersistTableIndex(db, dstPathId);
-            context.SS->Indexes.Set(dstPathId, indexData->AlterData, context.MemChanges);
+            context.SS->Indexes.Set({.Path = dstPathId, .Value = indexData->AlterData, .Changes = context.MemChanges});
         }
 
         // Drop the source index path (stored in SourcePathId)
@@ -256,7 +256,7 @@ public:
         }
 
         Y_ABORT_UNLESS(context.SS->Indexes.contains(srcPath.Base()->PathId));
-        TTableIndexInfo::TPtr srcIndexInfo = context.SS->Indexes.at(srcPath.Base()->PathId);
+        auto srcIndexInfo = context.SS->Indexes.at(srcPath.Base()->PathId);
 
         // Verify the column table's schema proto and the scheme tree agree that srcName exists.
         // The TPropose state operation relies on this invariant when renaming the index in schema,
@@ -354,7 +354,7 @@ public:
         srcPath.Base()->DropTxId = OperationId.GetTxId();
         srcPath.Base()->LastTxId = OperationId.GetTxId();
 
-        context.SS->Indexes.Set(newIndexPath->PathId, newIndexData, context.MemChanges);
+        context.SS->Indexes.Set({.Path = newIndexPath->PathId, .Value = newIndexData, .Changes = context.MemChanges});
 
         context.OnComplete.ActivateTx(OperationId);
 

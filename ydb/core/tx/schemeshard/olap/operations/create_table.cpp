@@ -618,7 +618,7 @@ public:
             }
 
             if (auto olapStorePath = parentPath.FindOlapStore()) {
-                storeInfo = context.SS->OlapStores.at(olapStorePath->PathId);
+                storeInfo = context.SS->OlapStores.MutableUntracked(olapStorePath->PathId);
                 Y_ABORT_UNLESS(storeInfo, "Unexpected failure to find an tablestore info");
 
                 NSchemeShard::TPath::TChecker storeChecks = olapStorePath.Check();

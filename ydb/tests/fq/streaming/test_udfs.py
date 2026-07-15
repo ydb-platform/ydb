@@ -198,7 +198,7 @@ END DO
         logger.info("Node with query restarted")
 
         time.sleep(5)
-        second_node = list(kikimr_udfs.cluster.nodes.values())[1]
+        second_node = list(kikimr_udfs.cluster.slots.values())[1]
         kikimr_udfs.ydb_client = YdbClient(database=kikimr_udfs.endpoint.database, endpoint=f"grpc://{second_node.host}:{second_node.port}", enable_discovery=False)
         kikimr_udfs.ydb_client.wait_connection()
         logger.info("Checking query state after restart")

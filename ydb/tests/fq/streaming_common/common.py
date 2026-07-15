@@ -4,6 +4,7 @@ import time
 import yatest.common
 import ydb
 import pytest
+import random
 
 from typing import Optional
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
@@ -37,6 +38,7 @@ def get_ydb_config(request):
     enable_streaming_queries = param.get("enable_streaming_queries", True)
     enable_streaming_partition_balancing = param.get("use_partition_balancing", True)
     enable_user_attributes_in_topic_query = param.get("enable_user_attributes_in_topic_query", True)
+    is_compatibility_tests = param.get("is_compatibility_tests", False)
 
     extra_feature_flags = {
         "enable_external_data_sources",
@@ -44,6 +46,7 @@ def get_ydb_config(request):
         "enable_topics_sql_io_operations",
         "enable_streaming_queries_pq_sink_deduplication",
         "enable_external_data_source_auth_method_iam",
+        "allow_ydb_requests_without_database"
     }
     if enable_shared_reading_in_streaming_queries:
         extra_feature_flags.add("enable_shared_reading_in_streaming_queries")
@@ -57,7 +60,7 @@ def get_ydb_config(request):
         disabled_feature_flags.append("enable_user_attributes_in_topic_query")
 
     config = KikimrConfigGenerator(
-        erasure=Erasure.MIRROR_3_DC,
+        erasure=Erasure.NONE,
         pq_client_service_types=["yandex-query"],
         extra_feature_flags=extra_feature_flags,
         disabled_feature_flags=disabled_feature_flags,
@@ -78,20 +81,23 @@ def get_ydb_config(request):
                 "service_id": "ydb",
                 "microservice_id": "data-plane",
                 "resource_type": "resource-manager.cloud",
-                "enable_ssl": False,
+          #      "enable_ssl": False,
             },
         },
         default_clusteradmin="root@builtin",
         use_in_memory_pdisks=False,
+        log_prefix="logfile_main_"
     )
 
     config.yaml_config["log_config"]["default_level"] = 8
     if "auth_config" not in config.yaml_config:
         config.yaml_config["auth_config"] = {}
-    config.yaml_config["auth_config"]["local_metadata_service"] = {
-        "host": os.environ.get("VM_METADATA_EMULATOR_HOST", "localhost"),
-        "port": int(os.environ.get("VM_METADATA_EMULATOR_PORT", 80)),
-    }
+
+    if not is_compatibility_tests:
+        config.yaml_config["auth_config"]["local_metadata_service"] = {
+            "host": os.environ.get("VM_METADATA_EMULATOR_HOST", "localhost"),
+            "port": int(os.environ.get("VM_METADATA_EMULATOR_PORT", 80)),
+        }
     return config
 
 
@@ -138,12 +144,15 @@ class Kikimr:
         self.cluster = KiKiMR(config)
         self.cluster.start(timeout_seconds=timeout_seconds)
 
-        self.first_node = list(self.cluster.nodes.values())[0]
+        # Затем добавить dynamic ноды (slots) для конкретного тенанта/БД
+        self.cluster.register_and_start_slots(database="/Root", count=2)
+
+        self.first_node = random.choice(list(self.cluster.slots.values()))
         self.endpoint = Endpoint(f"{self.first_node.host}:{self.first_node.port}", f"/{config.domain_name}")
         self.ydb_client = YdbClient(
             database=self.endpoint.database,
             endpoint=f"grpc://{self.endpoint.endpoint}",
-            enable_discovery=enable_discovery,
+            enable_discovery=False#enable_discovery,
         )
         self.ydb_client.wait_connection()
 
@@ -173,7 +182,7 @@ class StreamingTestBase(TestYdsBase):
         """)
 
     def monitoring_endpoint(self, kikimr: Kikimr, node_id: int) -> str:
-        node = kikimr.cluster.nodes[node_id]
+        node = kikimr.cluster.slots[node_id]
         return f"http://localhost:{node.mon_port}"
 
     def get_sensors(self, kikimr: Kikimr, node_id: int, counters: str) -> Sensors:
@@ -185,7 +194,7 @@ class StreamingTestBase(TestYdsBase):
     ) -> int:
         sum = 0
         found = False
-        for node_id in kikimr.cluster.nodes:
+        for node_id in kikimr.cluster.slots:
             sensor = self.get_sensors(kikimr, node_id, "kqp").find_sensor(
                 {"path": path, "subsystem": "checkpoint_coordinator", "sensor": metric_name}
             )
@@ -224,7 +233,7 @@ class StreamingTestBase(TestYdsBase):
     ) -> int:
         sum = 0
         found = False
-        for node_id in kikimr.cluster.nodes:
+        for node_id in kikimr.cluster.slots:
             sensor = self.get_sensors(kikimr, node_id, "kqp").find_sensor(
                 {"path": path, "subsystem": "streaming_queries", "sensor": metric_name}
             )
@@ -309,7 +318,7 @@ class StreamingTestBase(TestYdsBase):
         return endpoint, refs[0], paths[0]
 
     def roll(self, kikimr):
-        all_nodes = [(id, n, "node") for id, n in kikimr.cluster.nodes.items()] + [
+        all_nodes = [(id, n, "node") for id, n in kikimr.cluster.slots.items()] + [
             (id, n, "slot") for id, n in kikimr.cluster.slots.items()
         ]
 

@@ -1119,13 +1119,13 @@ FROM `{table_name}`"""
 
         def restart_node():
             restart_node_id = None
-            for node_id in kikimr.cluster.nodes:
+            for node_id in kikimr.cluster.slots:
                 count = self.get_actor_count(kikimr, node_id, "DQ_PQ_READ_ACTOR")
                 if count:
                     restart_node_id = node_id
             assert restart_node_id is not None
             logger.debug(f"Restart node {restart_node_id}")
-            node = kikimr.cluster.nodes[restart_node_id]
+            node = kikimr.cluster.slots[restart_node_id]
             node.stop()
             node.start()
 
@@ -1196,13 +1196,13 @@ FROM `{table_name}`"""
         self.wait_completed_checkpoints(kikimr, path)
 
         restart_node_id = None
-        for node_id in kikimr.cluster.nodes:
+        for node_id in kikimr.cluster.slots:
             count = self.get_actor_count(kikimr, node_id, "DQ_PQ_READ_ACTOR")
             if count:
                 restart_node_id = node_id
 
         logger.debug(f"Restart node {restart_node_id}")
-        node = kikimr.cluster.nodes[restart_node_id]
+        node = kikimr.cluster.slots[restart_node_id]
         node.stop()
         node.start()
 

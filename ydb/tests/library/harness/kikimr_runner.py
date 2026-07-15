@@ -103,7 +103,7 @@ class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
         )
 
         if configurator.use_log_files:
-            self.__make_log_file_name("logfile_")
+            self.__make_log_file_name(self.__configurator.log_prefix)
             kwargs = {
                 "stdout_file": os.path.join(self.__working_dir, "stdout"),
                 "stderr_file": os.path.join(self.__working_dir, "stderr"),

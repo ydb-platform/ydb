@@ -1,4 +1,6 @@
 #include "kafka_offset_commit_actor.h"
+
+#include <ydb/core/base/appdata.h>
 #include "kafka_metadata_service.h"
 
 namespace NKafka {
@@ -22,6 +24,10 @@ void TKafkaOffsetCommitActor::Die(const TActorContext& ctx) {
         Kqp->CloseKqpSession(ctx);
     }
     TBase::Die(ctx);
+}
+
+TString TKafkaOffsetCommitActor::GetMetadataDatabasePath() const {
+    return NKikimr::AppData()->FeatureFlags.GetEnableServerlessTransactions() ? Context->DatabasePath : Context->ResourceDatabasePath;
 }
 
 void TKafkaOffsetCommitActor::Handle(NKikimr::NGRpcProxy::V1::TEvPQProxy::TEvCloseSession::TPtr& ev, const TActorContext& ctx) {
@@ -144,13 +150,14 @@ void TKafkaOffsetCommitActor::SendGenerationCheckRequest(const TActorContext& ct
 
     Kqp->SendYqlRequest(Sprintf(CHECK_GROUP_GENERATION.c_str(),
                         NKikimr::NGRpcProxy::V1::TKafkaConsumerGroupsMetaInitManager::GetInstant()
-                        ->FormPathToResourceTable(Context->ResourceDatabasePath).c_str()),
+                        ->FormPathToResourceTable(GetMetadataDatabasePath()).c_str()),
              params.Build(), 0, ctx);
 }
 
 void TKafkaOffsetCommitActor::Handle(NKikimr::NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const TActorContext& ctx) {
     const auto& record = ev->Get()->Record;
-    if (TryRequestConsumerMetadataTablesCreation(record.GetYdbStatus(), Context->ResourceDatabasePath, ctx)) {
+    KAFKA_LOG_D("KafkaOffsetCommitActor Context->DatabasePath=" << Context->DatabasePath);
+    if (TryRequestConsumerMetadataTablesCreation(record.GetYdbStatus(), GetMetadataDatabasePath(), ctx)) {
         Error = COORDINATOR_NOT_AVAILABLE;
         SendFailedForAllPartitions(Error, ctx);
         return;
@@ -202,7 +209,11 @@ void TKafkaOffsetCommitActor::Handle(NGRpcProxy::V1::TEvPQProxy::TEvAuthResultOk
     if (Message->GenerationId == -1) {
         SendCommits(ctx);
     } else {
-        Kqp = std::make_unique<TKqpTxHelper>(Context->ResourceDatabasePath);
+        if (!NKikimr::AppData()->FeatureFlags.GetEnableServerlessTransactions()) {
+            Kqp = std::make_unique<TKqpTxHelper>(Context->ResourceDatabasePath);
+        } else {
+            Kqp = std::make_unique<TKqpTxHelper>(Context->DatabasePath);
+        }
         Kqp->SendCreateSessionRequest(ctx);
     }
 
@@ -351,6 +362,11 @@ void TKafkaOffsetCommitActor::SendAuthRequest(const NActors::TActorContext& ctx)
 }
 
 void TKafkaOffsetCommitActor::Bootstrap(const NActors::TActorContext& ctx) {
+    if (Context->KafkaTableFeatureFlagChanged(NKikimr::AppData()->FeatureFlags.GetEnableServerlessTransactions())) {
+        Error = EKafkaErrors::COORDINATOR_NOT_AVAILABLE;
+        SendFailedForAllPartitions(Error, ctx);
+        return;
+    }
     SendAuthRequest(ctx);
     Become(&TKafkaOffsetCommitActor::StateWork);
 }

@@ -22,8 +22,15 @@ if (!ProducerInRequestIsValid(ev->Get()->Request)) { \
 
 namespace NKafka {
 
-    void TTransactionActor::Handle(TEvKafka::TEvAddPartitionsToTxnRequest::TPtr& ev, const TActorContext&){
+    void TTransactionActor::Handle(TEvKafka::TEvAddPartitionsToTxnRequest::TPtr& ev, const TActorContext& ctx){
         KAFKA_LOG_D("Received ADD_PARTITIONS_TO_TXN request");
+        if (KafkaTableFeatureFlagChanged()) {
+            KAFKA_LOG_D("EnableServerlessTransactions feature flag changed; reconnect to rebind Kafka metadata tables.");
+            SendFailResponse<TAddPartitionsToTxnResponseData>(ev, EKafkaErrors::COORDINATOR_NOT_AVAILABLE,
+                "EnableServerlessTransactions feature flag changed; reconnect to rebind Kafka metadata tables.");
+            Die(ctx);
+            return;
+        }
         VALIDATE_PRODUCER_IN_REQUEST(TAddPartitionsToTxnResponseData);
 
         for (auto& topicInRequest : ev->Get()->Request->Topics) {
@@ -37,14 +44,28 @@ namespace NKafka {
     // Method does nothing. In Kafka it will add __consumer_offsets topic to transaction, but
     // in YDB Topics we store offsets in table and do not need this extra action.
     // Thus we can just ignore this request.
-    void TTransactionActor::Handle(TEvKafka::TEvAddOffsetsToTxnRequest::TPtr& ev, const TActorContext&) {
+    void TTransactionActor::Handle(TEvKafka::TEvAddOffsetsToTxnRequest::TPtr& ev, const TActorContext& ctx) {
         KAFKA_LOG_D("Received ADD_OFFSETS_TO_TXN request");
+        if (KafkaTableFeatureFlagChanged()) {
+            KAFKA_LOG_D("EnableServerlessTransactions feature flag changed; reconnect to rebind Kafka metadata tables.");
+            SendFailResponse<TAddOffsetsToTxnResponseData>(ev, EKafkaErrors::COORDINATOR_NOT_AVAILABLE,
+                "EnableServerlessTransactions feature flag changed; reconnect to rebind Kafka metadata tables.");
+            Die(ctx);
+            return;
+        }
         VALIDATE_PRODUCER_IN_REQUEST(TAddOffsetsToTxnResponseData);
         SendOkResponse<TAddOffsetsToTxnResponseData>(ev);
     }
 
-    void TTransactionActor::Handle(TEvKafka::TEvTxnOffsetCommitRequest::TPtr& ev, const TActorContext&) {
+    void TTransactionActor::Handle(TEvKafka::TEvTxnOffsetCommitRequest::TPtr& ev, const TActorContext& ctx) {
         KAFKA_LOG_D("Received TXN_OFFSET_COMMIT request");
+        if (KafkaTableFeatureFlagChanged()) {
+            KAFKA_LOG_D("EnableServerlessTransactions feature flag changed; reconnect to rebind Kafka metadata tables.");
+            SendFailResponse<TTxnOffsetCommitResponseData>(ev, EKafkaErrors::COORDINATOR_NOT_AVAILABLE,
+                "EnableServerlessTransactions feature flag changed; reconnect to rebind Kafka metadata tables.");
+            Die(ctx);
+            return;
+        }
         VALIDATE_PRODUCER_IN_REQUEST(TTxnOffsetCommitResponseData);
 
         // save offsets for future use
@@ -81,6 +102,13 @@ namespace NKafka {
     */
     void TTransactionActor::Handle(TEvKafka::TEvEndTxnRequest::TPtr& ev, const TActorContext& ctx) {
         KAFKA_LOG_D("Received END_TXN request");
+        if (KafkaTableFeatureFlagChanged()) {
+            KAFKA_LOG_D("EnableServerlessTransactions feature flag changed; reconnect to rebind Kafka metadata tables.");
+            SendFailResponse<TEndTxnResponseData>(ev, EKafkaErrors::COORDINATOR_NOT_AVAILABLE,
+                "EnableServerlessTransactions feature flag changed; reconnect to rebind Kafka metadata tables.");
+            Die(ctx);
+            return;
+        }
         VALIDATE_PRODUCER_IN_REQUEST(TEndTxnResponseData);
 
         bool txnAborted = !ev->Get()->Request->Committed;
@@ -118,10 +146,11 @@ namespace NKafka {
 
     void TTransactionActor::Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const TActorContext& ctx) {
         KAFKA_LOG_D("Received query response from KQP for " << GetAsStr(LastSentToKqpRequest) << " request");
-        KAFKA_LOG_D("TTransactionActor ResourceDatabasePath=" << ResourceDatabasePath);
+        const TString metadataDatabasePath = GetMetadataDatabasePath();
+        KAFKA_LOG_D("TTransactionActor metadataDatabasePath=" << metadataDatabasePath);
         const auto ydbStatus = ev->Get()->Record.GetYdbStatus();
-        bool requestedTableCreation = TryRequestProducerMetadataTablesCreation(ydbStatus, ResourceDatabasePath, ctx)
-                || TryRequestConsumerMetadataTablesCreation(ydbStatus, ResourceDatabasePath, ctx);
+        bool requestedTableCreation = TryRequestProducerMetadataTablesCreation(ydbStatus, metadataDatabasePath, ctx)
+                || TryRequestConsumerMetadataTablesCreation(ydbStatus, metadataDatabasePath, ctx);
         if (requestedTableCreation) {
             SendFailResponse<TEndTxnResponseData>(EndTxnRequestPtr, EKafkaErrors::COORDINATOR_NOT_AVAILABLE,
                 "Kafka metadata tables are not initialized yet. Please retry.");
@@ -152,7 +181,13 @@ namespace NKafka {
     }
 
     void TTransactionActor::StartKqpSession(const TActorContext& ctx) {
-        Kqp = std::make_unique<TKqpTxHelper>(ResourceDatabasePath);
+        if (KafkaTableFeatureFlagChanged()) {
+            SendFailResponse<TEndTxnResponseData>(EndTxnRequestPtr, EKafkaErrors::COORDINATOR_NOT_AVAILABLE,
+                "EnableServerlessTransactions feature flag changed; reconnect to rebind Kafka metadata tables.");
+            Die(ctx);
+            return;
+        }
+        Kqp = std::make_unique<TKqpTxHelper>(GetMetadataDatabasePath());
         KAFKA_LOG_D("Sending create session request to KQP for database " << DatabasePath);
         Kqp->SendCreateSessionRequest(ctx);
     }
@@ -213,6 +248,13 @@ namespace NKafka {
         return TAppData::TimeProvider->Now().MilliSeconds() - CreatedAt.MilliSeconds() > TxnTimeoutMs;
     }
 
+    bool TTransactionActor::KafkaTableFeatureFlagChanged() const {
+        if (ResourceDatabasePath == DatabasePath) {
+            return false;
+        }
+        return InitialServerlessTransactionsFlagValue != NKikimr::AppData()->FeatureFlags.GetEnableServerlessTransactions();
+    }
+
     template<class EventType>
     bool TTransactionActor::ProducerInRequestIsValid(TMessagePtr<EventType> kafkaRequest) {
         return *kafkaRequest->TransactionalId == TransactionalId
@@ -224,20 +266,26 @@ namespace NKafka {
         return NPersQueue::GetFullTopicPath(DatabasePath, topicName);
     }
 
+    TString TTransactionActor::GetMetadataDatabasePath() const {
+        return NKikimr::AppData()->FeatureFlags.GetEnableServerlessTransactions() ? DatabasePath : ResourceDatabasePath;
+    }
+
     TString TTransactionActor::GetYqlWithTablesNames() {
+        const TString metadataDatabasePath = GetMetadataDatabasePath();
+
         const TString& templateStr = OffsetsToCommit.empty() ?  NKafkaTransactionSql::SELECT_FOR_VALIDATION_WITHOUT_CONSUMERS : NKafkaTransactionSql::SELECT_FOR_VALIDATION_WITH_CONSUMERS;
 
         TString templateWithProducerStateTable = std::regex_replace(
             templateStr.c_str(),
             std::regex("<producer_state_table_name>"),
-            NKikimr::NGRpcProxy::V1::TTransactionalProducersInitManager::GetInstant()->FormPathToResourceTable(ResourceDatabasePath).c_str()
+            NKikimr::NGRpcProxy::V1::TTransactionalProducersInitManager::GetInstant()->FormPathToResourceTable(metadataDatabasePath).c_str()
         );
 
         if (!OffsetsToCommit.empty()) {
             return std::regex_replace(
                 templateWithProducerStateTable.c_str(),
                 std::regex("<consumer_state_table_name>"),
-                NKikimr::NGRpcProxy::V1::TKafkaConsumerGroupsMetaInitManager::GetInstant()->FormPathToResourceTable(ResourceDatabasePath).c_str()
+                NKikimr::NGRpcProxy::V1::TKafkaConsumerGroupsMetaInitManager::GetInstant()->FormPathToResourceTable(metadataDatabasePath).c_str()
             );
         }
 

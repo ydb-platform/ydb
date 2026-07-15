@@ -98,6 +98,7 @@ public:
     void FillMapWithGroupRequests();
     void ReplyError(const TActorContext& ctx);
     void Die(const TActorContext &ctx);
+    TString GetMetadataDatabasePath() const;
 
     TStringBuilder LogPrefix() const {
         return TStringBuilder() << "TKafkaOffsetFetchActor{GroupId=" << Message->GroupId.value() << ",DatabasePath=" << DatabasePath << "}: ";

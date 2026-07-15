@@ -44,6 +44,7 @@ namespace NKafka {
                 ProducerInstanceId(producerInstanceId),
                 DatabasePath(databasePath),
                 ResourceDatabasePath(resourceDatabasePath),
+                InitialServerlessTransactionsFlagValue(NKikimr::AppData()->FeatureFlags.GetEnableServerlessTransactions()),
                 TxnTimeoutMs(txnTimeoutMs),
                 CreatedAt(TAppData::TimeProvider->Now()) {};
 
@@ -98,9 +99,11 @@ namespace NKafka {
             // helper methods
             void Die(const TActorContext &ctx);
             bool TxnExpired();
+            bool KafkaTableFeatureFlagChanged() const;
             template<class EventType>
             bool ProducerInRequestIsValid(TMessagePtr<EventType> kafkaRequest);
             TString GetFullTopicPath(const TString& topicName);
+            TString GetMetadataDatabasePath() const;
             TString GetYqlWithTablesNames();
             NYdb::TParams BuildSelectParams();
             THolder<NKikimr::NKqp::TEvKqp::TEvQueryRequest> BuildAddKafkaOperationsRequest(const TString& kqpTransactionId);
@@ -123,6 +126,7 @@ namespace NKafka {
             // helper fields
             const TString DatabasePath;
             const TString ResourceDatabasePath;
+            const bool InitialServerlessTransactionsFlagValue;
             // This field need to preserve request details between several requests to KQP
             // In case something goes off road, we can always send error back to client
             TAutoPtr<TEventHandle<TEvKafka::TEvEndTxnRequest>> EndTxnRequestPtr;

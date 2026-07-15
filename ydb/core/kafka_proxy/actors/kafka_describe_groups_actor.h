@@ -95,6 +95,7 @@ private:
         const TString& protoStr);
     NYdb::TParams BuildSelectParams();
     TString GetYqlWithTableNames(const TString& templateStr);
+    TString GetMetadataDatabasePath() const;
     std::shared_ptr<TDescribeGroupsResponseData> BuildResponse();
     void SendToKqpDescribeGroupsMetadataRequest(const TActorContext& ctx);
     void SendFailResponse(EKafkaErrors errorCode, const std::optional<TString>& errorMessage = std::nullopt);

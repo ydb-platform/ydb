@@ -25,9 +25,20 @@ NActors::IActor* CreateKafkaListGroupsActor(const TContext::TPtr context, const 
 }
 
 void TKafkaListGroupsActor::Bootstrap(const NActors::TActorContext& ctx) {
-    Kqp = std::make_unique<TKqpTxHelper>(Context->ResourceDatabasePath);
+    if (!NKikimr::AppData()->FeatureFlags.GetEnableServerlessTransactions()) {
+        Kqp = std::make_unique<TKqpTxHelper>(Context->ResourceDatabasePath);
+    } else {
+        Kqp = std::make_unique<TKqpTxHelper>(Context->DatabasePath);
+    }
+    if (Context->KafkaTableFeatureFlagChanged(NKikimr::AppData()->FeatureFlags.GetEnableServerlessTransactions())) {
+        KAFKA_LOG_D("EnableServerlessTransactions feature flag changed; reconnect to rebind Kafka metadata tables.");
+        SendFailResponse(EKafkaErrors::COORDINATOR_NOT_AVAILABLE,
+            "EnableServerlessTransactions feature flag changed; reconnect to rebind Kafka metadata tables.");
+        Die(ctx);
+        return;
+    }
     if (NKikimr::AppData()->FeatureFlags.GetEnableKafkaNativeBalancing()) {
-        if (Context->ResourceDatabasePath == AppData(ctx)->TenantName) {
+        if (!NKikimr::AppData()->FeatureFlags.GetEnableServerlessTransactions() && Context->ResourceDatabasePath == AppData(ctx)->TenantName) {
             Kqp->SendInitTableRequest(ctx, NKikimr::NGRpcProxy::V1::TKafkaConsumerGroupsMetaInitManager::GetInstant());
         } else {
             StartKqpSession(ctx);
@@ -61,7 +72,7 @@ void TKafkaListGroupsActor::Handle(NKqp::TEvKqp::TEvCreateSessionResponse::TPtr&
 
 void TKafkaListGroupsActor::Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const TActorContext& ctx) {
     KAFKA_LOG_D("Received query response from KQP ListGroups request");
-    if (TryRequestConsumerMetadataTablesCreation(ev->Get()->Record.GetYdbStatus(), Context->ResourceDatabasePath, ctx)) {
+    if (TryRequestConsumerMetadataTablesCreation(ev->Get()->Record.GetYdbStatus(), GetMetadataDatabasePath(), ctx)) {
         SendFailResponse(EKafkaErrors::COORDINATOR_NOT_AVAILABLE,
             "Kafka metadata tables are not initialized yet. Please retry.");
         Die(ctx);
@@ -103,6 +114,10 @@ void TKafkaListGroupsActor::Die(const TActorContext &ctx) {
     TBase::Die(ctx);
 }
 
+TString TKafkaListGroupsActor::GetMetadataDatabasePath() const {
+    return NKikimr::AppData()->FeatureFlags.GetEnableServerlessTransactions() ? Context->DatabasePath : Context->ResourceDatabasePath;
+}
+
 void TKafkaListGroupsActor::StartKqpSession(const TActorContext& ctx) {
     KAFKA_LOG_D("Sending create session request to KQP for database " << DatabasePath);
     Kqp->SendCreateSessionRequest(ctx);
@@ -130,7 +145,7 @@ TString TKafkaListGroupsActor::GetYqlWithTableNames(const TString& templateStr) 
     TString templateWithConsumerStateTable = std::regex_replace(
         templateStr.c_str(),
         std::regex("<consumer_state_table_name>"),
-        NKikimr::NGRpcProxy::V1::TKafkaConsumerGroupsMetaInitManager::GetInstant()->FormPathToResourceTable(Context->ResourceDatabasePath).c_str()
+        NKikimr::NGRpcProxy::V1::TKafkaConsumerGroupsMetaInitManager::GetInstant()->FormPathToResourceTable(GetMetadataDatabasePath()).c_str()
     );
     return templateWithConsumerStateTable;
 }

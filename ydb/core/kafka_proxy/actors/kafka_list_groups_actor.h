@@ -78,6 +78,7 @@ private:
     TListGroupsResponseData ParseGroupsMetadata(const NKqp::TEvKqp::TEvQueryResponse& response);
 
     TString GetYqlWithTableNames(const TString& templateStr);
+    TString GetMetadataDatabasePath() const;
     TMaybe<TString> GetErrorFromYdbResponse(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev);
     NYdb::TParams BuildSelectParams();
     std::shared_ptr<TListGroupsResponseData> BuildResponse(TListGroupsResponseData responseData);

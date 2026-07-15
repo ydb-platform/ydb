@@ -4899,6 +4899,102 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
         UNIT_ASSERT_VALUES_EQUAL(offsetFetchResponse->Groups[0].Topics[0].Partitions[0].CommittedOffset, 2);
     }
 
+    Y_UNIT_TEST(TransactionsFailAfterEnablingServerlessTransactionsFlagAtRuntime) {
+        TInsecureTestServer testServer("1", false, true);
+        TKafkaTestClient kafkaClient(testServer.Port);
+        NYdb::NTopic::TTopicClient pqClient(*testServer.Driver);
+
+        TString inputTopicName = TStringBuilder() << "input-topic-" << RandomNumber<ui64>();
+        TString outputTopicName = TStringBuilder() << "output-topic-" << RandomNumber<ui64>();
+        TString consumerName = "my-consumer";
+
+        CreateTopic(pqClient, inputTopicName, 3, {consumerName});
+        CreateTopic(pqClient, outputTopicName, 3, {consumerName});
+
+        auto inputProduceResponse = kafkaClient.Produce({inputTopicName, 0}, {{"key1", "val1"}, {"key2", "val2"}, {"key3", "val3"}});
+        UNIT_ASSERT_VALUES_EQUAL(inputProduceResponse->Responses[0].PartitionResponses[0].ErrorCode, EKafkaErrors::NONE_ERROR);
+
+        auto runTransaction = [&](TKafkaTestClient& client, const TString& transactionalId, ui64 offsetToCommit, const std::pair<TString, TString>& recordToProduce) {
+            auto initProducerIdResp = client.InitProducerId(transactionalId, 30000);
+            UNIT_ASSERT_VALUES_EQUAL(initProducerIdResp->ErrorCode, EKafkaErrors::NONE_ERROR);
+            TProducerInstanceId producerInstanceId = {initProducerIdResp->ProducerId, initProducerIdResp->ProducerEpoch};
+
+            std::unordered_map<TString, std::vector<ui32>> topicPartitionsToAddToTxn;
+            topicPartitionsToAddToTxn[outputTopicName] = std::vector<ui32>{0};
+            auto addPartsResponse = client.AddPartitionsToTxn(transactionalId, producerInstanceId, topicPartitionsToAddToTxn);
+            UNIT_ASSERT_VALUES_EQUAL(addPartsResponse->Results[0].Results[0].ErrorCode, EKafkaErrors::NONE_ERROR);
+
+            auto produceResponse = client.Produce({outputTopicName, 0}, {recordToProduce}, 0, producerInstanceId, transactionalId);
+            UNIT_ASSERT_VALUES_EQUAL(produceResponse->Responses[0].PartitionResponses[0].ErrorCode, EKafkaErrors::NONE_ERROR);
+
+            std::vector<TString> topicsToSubscribe;
+            topicsToSubscribe.push_back(outputTopicName);
+            TString protocolName = "range";
+            auto consumerInfo = client.JoinAndSyncGroupAndWaitPartitions(topicsToSubscribe, consumerName, 3, protocolName, 3, 15000);
+
+            auto addOffsetsResponse = client.AddOffsetsToTxn(transactionalId, producerInstanceId, consumerName);
+            UNIT_ASSERT_VALUES_EQUAL(addOffsetsResponse->ErrorCode, EKafkaErrors::NONE_ERROR);
+
+            std::unordered_map<TString, std::vector<std::pair<ui32, ui64>>> offsetsToCommit;
+            offsetsToCommit[inputTopicName] = std::vector<std::pair<ui32, ui64>>{{0, offsetToCommit}};
+            auto txnOffsetCommitResponse = client.TxnOffsetCommit(transactionalId, producerInstanceId, consumerName, consumerInfo.GenerationId, offsetsToCommit);
+            UNIT_ASSERT_VALUES_EQUAL(txnOffsetCommitResponse->Topics[0].Partitions[0].ErrorCode, EKafkaErrors::NONE_ERROR);
+
+            auto endTxnResponse = client.EndTxn(transactionalId, producerInstanceId, true);
+            UNIT_ASSERT_VALUES_EQUAL(endTxnResponse->ErrorCode, EKafkaErrors::NONE_ERROR);
+        };
+
+        UNIT_ASSERT(!testServer.KikimrServer->GetRuntime()->GetAppData().FeatureFlags.GetEnableServerlessTransactions());
+        runTransaction(kafkaClient, TStringBuilder() << "tx-producer-flag-off-" << RandomNumber<ui64>(), 2, {"out-key-1", "out-val-1"});
+
+        testServer.KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableServerlessTransactions(true);
+        UNIT_ASSERT(testServer.KikimrServer->GetRuntime()->GetAppData().FeatureFlags.GetEnableServerlessTransactions());
+
+        auto initProducerIdResp = kafkaClient.InitProducerId(TStringBuilder() << "tx-producer-flag-on-" << RandomNumber<ui64>(), 30000);
+        UNIT_ASSERT_VALUES_EQUAL(initProducerIdResp->ErrorCode, EKafkaErrors::COORDINATOR_NOT_AVAILABLE);
+
+        auto fetchResponse = kafkaClient.Fetch({{outputTopicName, {0}}});
+        UNIT_ASSERT_VALUES_EQUAL(fetchResponse->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
+        auto recordsBatch = ReadFetchRecords(fetchResponse->Responses[0].Partitions[0].Records);
+        UNIT_ASSERT_VALUES_EQUAL(recordsBatch.Records.size(), 1);
+
+        TKafkaTestClient newConnectionClient(testServer.Port);
+        runTransaction(newConnectionClient, TStringBuilder() << "tx-producer-flag-on-" << RandomNumber<ui64>(), 2, {"out-key-2", "out-val-2"});
+    }
+
+    Y_UNIT_TEST(BalancerRequestFailsAfterEnablingServerlessTransactionsFlagAtRuntime) {
+        TInsecureTestServer testServer("1", false, true);
+        testServer.KikimrServer->GetRuntime()->SetLogPriority(NKikimrServices::PERSQUEUE, NActors::NLog::PRI_ERROR);
+
+        TString topicName = TStringBuilder() << "/Root/topic-" << RandomNumber<ui64>();
+        TString group = "consumer-0";
+        TString protocolName = "range";
+        ui64 minActivePartitions = 12;
+
+        {
+            NYdb::NTopic::TTopicClient pqClient(*testServer.Driver);
+            CreateTopic(pqClient, topicName, minActivePartitions, {group});
+        }
+
+        UNIT_ASSERT(!testServer.KikimrServer->GetRuntime()->GetAppData().FeatureFlags.GetEnableServerlessTransactions());
+
+        TKafkaTestClient clientA(testServer.Port);
+        clientA.PlainAuthenticateToKafka("ouruser@/Root", "ourUserPassword");
+
+        std::vector<TString> topics = {topicName};
+        auto readInfoA = clientA.JoinAndSyncGroupAndWaitPartitions(topics, group, minActivePartitions, protocolName, minActivePartitions, 15000);
+        UNIT_ASSERT_VALUES_EQUAL(
+            clientA.Heartbeat(readInfoA.MemberId, readInfoA.GenerationId, group)->ErrorCode,
+            static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
+
+        testServer.KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableServerlessTransactions(true);
+        UNIT_ASSERT(testServer.KikimrServer->GetRuntime()->GetAppData().FeatureFlags.GetEnableServerlessTransactions());
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            clientA.Heartbeat(readInfoA.MemberId, readInfoA.GenerationId, group)->ErrorCode,
+            static_cast<TKafkaInt16>(EKafkaErrors::COORDINATOR_NOT_AVAILABLE));
+    }
+
     Y_UNIT_TEST(Several_Subsequent_Transactions_Scenario) {
         TInsecureTestServer testServer("1", false, true);
         TKafkaTestClient kafkaClient(testServer.Port);

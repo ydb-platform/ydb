@@ -429,7 +429,7 @@ void TKafkaSaslAuthActor::HandleNavigate(TEvTxProxySchemeCache::TEvNavigateKeySe
             }
         }
 
-        if (!NKikimr::AppData()->FeatureFlags.GetEnableServerlessTransactions() && IsServerless) {
+        if (IsServerless) {
             GetPathByPathId(navigate->ResultSet.front().DomainInfo->GetResourcesDomainKey());
             Become(&TKafkaSaslAuthActor::StateResolveSharedDatabase);
             return;

@@ -4,6 +4,7 @@
 #include <ydb/core/raw_socket/sock_config.h>
 #include <ydb/core/util/address_classifier.h>
 #include <ydb/core/kafka_proxy/kafka_transactions_coordinator.h>
+#include <ydb/core/kafka_proxy/actors/txn_actor_response_builder.h>
 #include <ydb/core/kafka_proxy/actors/kafka_balancer_actor.h>
 #include <ydb/core/kafka_proxy/actors/kafka_metadata_actor.h>
 
@@ -121,6 +122,8 @@ public:
             KAFKA_LOG_D("Do not require authentication. Setting Context->ResourceDatabasePath = NKikimr::AppData()->TenantName.");
             Context->DatabasePath = NKikimr::AppData()->TenantName;
             Context->ResourceDatabasePath = NKikimr::AppData()->TenantName;
+            Context->InitialServerlessTransactionsFlagValue = NKikimr::AppData()->FeatureFlags.GetEnableServerlessTransactions();
+            KAFKA_LOG_D("Setting InitialServerlessTransactionsFlagValue = " << Context->InitialServerlessTransactionsFlagValue.value());
         }
 
         MtlsAuthStage = NO_CERT_YET;
@@ -353,6 +356,12 @@ protected:
     }
 
     void HandleMessage(const TRequestHeaderData* header, const TMessagePtr<TAddPartitionsToTxnRequestData>& message) {
+        if (Context->KafkaTableFeatureFlagChanged(NKikimr::AppData()->FeatureFlags.GetEnableServerlessTransactions())) {
+            Send(Context->ConnectionId, new TEvKafka::TEvResponse(header->CorrelationId,
+                NKafkaTransactions::BuildResponse<TAddPartitionsToTxnResponseData>(message, EKafkaErrors::COORDINATOR_NOT_AVAILABLE),
+                EKafkaErrors::COORDINATOR_NOT_AVAILABLE));
+            return;
+        }
         Send(MakeTransactionsServiceID(SelfId().NodeId()), new TEvKafka::TEvAddPartitionsToTxnRequest(
             header->CorrelationId,
             message,
@@ -363,6 +372,12 @@ protected:
     }
 
     void HandleMessage(const TRequestHeaderData* header, const TMessagePtr<TAddOffsetsToTxnRequestData>& message) {
+        if (Context->KafkaTableFeatureFlagChanged(NKikimr::AppData()->FeatureFlags.GetEnableServerlessTransactions())) {
+            Send(Context->ConnectionId, new TEvKafka::TEvResponse(header->CorrelationId,
+                NKafkaTransactions::BuildResponse<TAddOffsetsToTxnResponseData>(message, EKafkaErrors::COORDINATOR_NOT_AVAILABLE),
+                EKafkaErrors::COORDINATOR_NOT_AVAILABLE));
+            return;
+        }
         Send(MakeTransactionsServiceID(SelfId().NodeId()), new TEvKafka::TEvAddOffsetsToTxnRequest(
             header->CorrelationId,
             message,
@@ -373,6 +388,12 @@ protected:
     }
 
     void HandleMessage(const TRequestHeaderData* header, const TMessagePtr<TTxnOffsetCommitRequestData>& message) {
+        if (Context->KafkaTableFeatureFlagChanged(NKikimr::AppData()->FeatureFlags.GetEnableServerlessTransactions())) {
+            Send(Context->ConnectionId, new TEvKafka::TEvResponse(header->CorrelationId,
+                NKafkaTransactions::BuildResponse<TTxnOffsetCommitResponseData>(message, EKafkaErrors::COORDINATOR_NOT_AVAILABLE),
+                EKafkaErrors::COORDINATOR_NOT_AVAILABLE));
+            return;
+        }
         Send(MakeTransactionsServiceID(SelfId().NodeId()), new TEvKafka::TEvTxnOffsetCommitRequest(
             header->CorrelationId,
             message,
@@ -383,6 +404,12 @@ protected:
     }
 
     void HandleMessage(const TRequestHeaderData* header, const TMessagePtr<TEndTxnRequestData>& message) {
+        if (Context->KafkaTableFeatureFlagChanged(NKikimr::AppData()->FeatureFlags.GetEnableServerlessTransactions())) {
+            Send(Context->ConnectionId, new TEvKafka::TEvResponse(header->CorrelationId,
+                NKafkaTransactions::BuildResponse<TEndTxnResponseData>(message, EKafkaErrors::COORDINATOR_NOT_AVAILABLE),
+                EKafkaErrors::COORDINATOR_NOT_AVAILABLE));
+            return;
+        }
         Send(MakeTransactionsServiceID(SelfId().NodeId()), new TEvKafka::TEvEndTxnRequest(
             header->CorrelationId,
             message,
@@ -589,6 +616,8 @@ protected:
         Context->IsServerless = event->IsServerless;
         KAFKA_LOG_D("event->ResourceDatabasePath=" << event->ResourceDatabasePath);
         Context->ResourceDatabasePath = event->ResourceDatabasePath ? NKikimr::CanonizePath(event->ResourceDatabasePath) : Context->DatabasePath;
+        Context->InitialServerlessTransactionsFlagValue = NKikimr::AppData()->FeatureFlags.GetEnableServerlessTransactions();
+        KAFKA_LOG_D("Context->InitialServerlessTransactionsFlagValue=" << Context->InitialServerlessTransactionsFlagValue.value());
 
         KAFKA_LOG_D("Authentication successful. SID=" << Context->UserToken->GetUserSID());
         if (Context->SaslMechanism != "MTLS") {

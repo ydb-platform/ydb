@@ -103,6 +103,7 @@ namespace NKafka {
             EKafkaErrors KqpStatusToKafkaError(Ydb::StatusIds::StatusCode status);
             std::optional<TProducerState> ParseProducerState(NKqp::TEvKqp::TEvQueryResponse::TPtr ev);
             TString GetYqlWithTableName(const TString& templateStr);
+            TString GetMetadataDatabasePath() const;
             TString LogPrefix();
             TString GetAsStr(EInitProducerIdKqpRequests request);
         };

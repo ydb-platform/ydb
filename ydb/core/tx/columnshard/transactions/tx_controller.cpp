@@ -112,13 +112,7 @@ bool TTxController::Load(NTabletFlatExecutor::TTransactionContext& txc) {
 std::shared_ptr<TTxController::ITransactionOperator> TTxController::UpdateTxSourceInfo(
     const TFullTxInfo& tx, NTabletFlatExecutor::TTransactionContext& txc) {
     auto op = GetTxOperator(tx.GetTxId(), ETxOperatorStatus::InProgress);
-<<<<<<< HEAD
     op->ResetStatusOnUpdate();
-=======
-    const bool sourceChanged = op->GetTxInfo().Source != tx.Source;
-    op->ResetStatusOnUpdate(sourceChanged);
-
->>>>>>> 5427ca9d9ef (fix TxProgress enqueue (#43594))
     auto& txInfo = op->MutableTxInfo();
     txInfo.Source = tx.Source;
     txInfo.MinStep = tx.MinStep;
@@ -189,17 +183,6 @@ bool TTxController::ExecuteOnCancel(const ui64 txId, NTabletFlatExecutor::TTrans
     return true;
 }
 
-bool TTxController::ExecuteOnCancel(const ui64 txId, NTabletFlatExecutor::TTransactionContext& txc) {
-    ITransactionOperator::TPtr op = MoveOperatorToCompleting(txId);
-    AFL_VERIFY(op->GetTxInfo().PlanStep == 0)("tx_id", txId)("plan_step", op->GetTxInfo().PlanStep);
-
-    op->ExecuteOnAbort(Owner, txc);
-
-    NIceDb::TNiceDb db(txc.DB);
-    Schema::EraseTxInfo(db, txId);
-    return true;
-}
-
 bool TTxController::CompleteOnCancel(const ui64 txId, const TActorContext& ctx) {
     auto opIt = CompletingOperators.find(txId);
     AFL_VERIFY(opIt != CompletingOperators.end())("tx_id", txId);
@@ -240,13 +223,9 @@ void TTxController::ProgressOnExecute(const ui64 txId, NTabletFlatExecutor::TTra
     ITransactionOperator::TPtr op = MoveOperatorToCompleting(txId);
     NIceDb::TNiceDb db(txc.DB);
     Counters.OnFinishPlannedTx(op->GetOpType());
-<<<<<<< HEAD
     YDB_LOG_NOTICE("",
         {"event", "finished_tx"},
         {"txId", txId});
-=======
-    AFL_NOTICE(NKikimrServices::TX_COLUMNSHARD_TX)("event", "finished_tx")("tx_id", txId);
->>>>>>> 5427ca9d9ef (fix TxProgress enqueue (#43594))
     Schema::EraseTxInfo(db, txId);
 }
 
@@ -442,13 +421,9 @@ std::shared_ptr<TTxController::ITransactionOperator> TTxController::StartPropose
     auto txInfoPtr = GetTxInfo(txInfo.TxId, ETxOperatorStatus::Any);
     if (txInfoPtr.has_value()) {
         if (IsTxCompleting(txInfo.TxId) || !txOperator->CheckAllowUpdate(*txInfoPtr)) {
-<<<<<<< HEAD
             YDB_LOG_WARN("",
                 {"error", "incorrect duplication"},
                 {"actualTx", txInfoPtr->DebugString()});
-=======
-            AFL_WARN(NKikimrServices::TX_COLUMNSHARD_TX)("error", "incorrect duplication")("actual_tx", txInfoPtr->DebugString());
->>>>>>> 5427ca9d9ef (fix TxProgress enqueue (#43594))
             TTxController::TProposeResult proposeResult(NKikimrTxColumnShard::EResultStatus::ERROR,
                 TStringBuilder() << "Another commit TxId# " << txInfo.TxId << " has already been proposed");
             txOperator->SetProposeStartInfo(proposeResult);
@@ -489,18 +464,12 @@ void TTxController::StartProposeOnComplete(ITransactionOperator& txOperator, con
 }
 
 void TTxController::FinishProposeOnExecute(const ui64 txId, NTabletFlatExecutor::TTransactionContext& txc) {
-<<<<<<< HEAD
     YDB_LOG_CREATE_CONTEXT(
         {"method", "TTxController::FinishProposeOnExecute"},
         {"txId", txId});
     if (auto txOperator = GetTxOperator(txId, ETxOperatorStatus::InProgress, /*optional*/ true)) {
         YDB_LOG_DEBUG("",
             {"event", "start"});
-=======
-    NActors::TLogContextGuard lGuard = NActors::TLogContextBuilder::Build()("method", "TTxController::FinishProposeOnExecute")("tx_id", txId);
-    if (auto txOperator = GetTxOperator(txId, ETxOperatorStatus::InProgress, /*optional*/ true)) {
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_TX)("event", "start");
->>>>>>> 5427ca9d9ef (fix TxProgress enqueue (#43594))
         txOperator->FinishProposeOnExecute(Owner, txc);
         Counters.OnFinishProposeOnExecute(txOperator->GetOpType());
     } else {

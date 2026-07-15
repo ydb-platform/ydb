@@ -94,17 +94,11 @@ private:
                 op->TxBroken = op->TxBroken.value_or(false) || lock.IsBroken();
                 AFL_VERIFY(op->WaitShardsBrokenFlags.erase(Self->TabletID()));
                 AFL_VERIFY(op->WaitShardsResultAck.erase(Self->TabletID()));
-<<<<<<< HEAD
                 YDB_LOG_DEBUG_COMP(NKikimrServices::TX_COLUMNSHARD_TX, "",
                     {"event", "remove_tablet_id"},
                     {"waitBrokenFlags", JoinSeq(",", op->WaitShardsBrokenFlags)},
                     {"waitResultAck", JoinSeq(",", op->WaitShardsResultAck)},
                     {"receive", Self->TabletID()});
-=======
-                AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_TX)("event", "remove_tablet_id")(
-                    "wait_broken_flags", JoinSeq(",", op->WaitShardsBrokenFlags))("wait_result_ack", JoinSeq(",", op->WaitShardsResultAck))(
-                    "receive", Self->TabletID());
->>>>>>> 5427ca9d9ef (fix TxProgress enqueue (#43594))
                 txController.WriteTxOperatorInfo(txc, TxId, op->SerializeToProto().SerializeAsString());
             } else {
                 op->SelfBrokenFlagPersisted = true;
@@ -166,13 +160,9 @@ private:
                 // but we can proceed right away if we have collected all the broken flags from the secondary
                 op->InitializeRequests(*Self);
             } else {
-<<<<<<< HEAD
                 YDB_LOG_WARN_COMP(NKikimrServices::TX_COLUMNSHARD_TX, "",
                     {"event", "repeated shard broken_flag info"},
                     {"shardId", TabletId});
-=======
-                AFL_WARN(NKikimrServices::TX_COLUMNSHARD_TX)("event", "repeated shard broken_flag info")("shard_id", TabletId);
->>>>>>> 5427ca9d9ef (fix TxProgress enqueue (#43594))
                 // we cannot send the ack here, because the previous transaction (that successfully erased TabletId) may be not completed yet
             }
             return true;
@@ -206,7 +196,6 @@ private:
             auto op =
                 txController.GetTxOperatorAs<TEvWriteCommitPrimaryTransactionOperator>(TxId, ETxOperatorStatus::InProgress, /*optional*/ true);
             if (!op) {
-<<<<<<< HEAD
                 YDB_LOG_DEBUG_COMP(NKikimrServices::TX_COLUMNSHARD_TX, "",
                     {"event", "ack_tablet_duplication"},
                     {"receive", TabletId},
@@ -223,18 +212,6 @@ private:
                     {"event", "ack_tablet_duplication"},
                     {"wait", JoinSeq(",", op->WaitShardsResultAck)},
                     {"receive", TabletId});
-=======
-                AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_TX)("event", "ack_tablet_duplication")("receive", TabletId)(
-                    "reason", "operation absent");
-            } else if (op->WaitShardsResultAck.erase(TabletId)) {
-                AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_TX)("event", "ack_tablet")("wait", JoinSeq(",", op->WaitShardsResultAck))(
-                    "receive", TabletId);
-                txController.WriteTxOperatorInfo(txc, TxId, op->SerializeToProto().SerializeAsString());
-                op->CheckFinished(*Self);
-            } else {
-                AFL_WARN(NKikimrServices::TX_COLUMNSHARD_TX)("event", "ack_tablet_duplication")("wait", JoinSeq(",", op->WaitShardsResultAck))(
-                    "receive", TabletId);
->>>>>>> 5427ca9d9ef (fix TxProgress enqueue (#43594))
             }
             return true;
         }

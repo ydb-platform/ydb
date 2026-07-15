@@ -441,7 +441,7 @@ In {{ ydb-short-name }} tables, vectors are stored as a serialized byte sequence
 
     {% note info %}
 
-    The `ConvertVectorToBytes` function assumes that the client uses a processor with [little-endian byte order](https://en.wikipedia.org/wiki/%D0%9F%D0%BE%D1%80%D1%8F%D0%B4%D0%BE%D0%BA_%D0%B1%D0%B0%D0%B9%D1%82%D0%BE%D0%B2), such as x86_64. If a different byte order is used, the `ConvertVectorToBytes` function must be adapted.
+    The `ConvertVectorToBytes` function assumes that the client uses a processor with [little-endian byte order](https://en.wikipedia.org/wiki/Endianness), such as x86_64. If a different byte order is used, the `ConvertVectorToBytes` function must be adapted.
 
     {% endnote %}
 
@@ -640,7 +640,7 @@ In {{ ydb-short-name }} tables, vectors are stored as a serialized byte sequence
 
     {% note info %}
 
-    The `ConvertVectorToBytes` function assumes that the client uses a processor with [little-endian byte order](https://en.wikipedia.org/wiki/%D0%9F%D0%BE%D1%80%D1%8F%D0%B4%D0%BE%D0%BA_%D0%B1%D0%B0%D0%B9%D1%82%D0%BE%D0%B2), such as x86_64. If a different byte order is used, the `ConvertVectorToBytes` function must be adapted.
+    The `ConvertVectorToBytes` function assumes that the client uses a processor with [little-endian byte order](https://en.wikipedia.org/wiki/Endianness), such as x86_64. If a different byte order is used, the `ConvertVectorToBytes` function must be adapted.
 
     {% endnote %}
 
@@ -1200,6 +1200,7 @@ The parameters used when creating an index of type `vector_kmeans_tree` are desc
 
       System.out.println("Table index `" + indexName + "` for table `" + tableName + "` added");
   }
+
   ```
 
 - Python

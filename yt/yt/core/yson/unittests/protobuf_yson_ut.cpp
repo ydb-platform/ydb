@@ -1012,6 +1012,24 @@ TEST(TYsonToProtobufTest, KeepUnknownFields)
     EXPECT_TRUE(AreNodesEqual(ConvertToNode(TYsonString(newYsonString)), ConvertToNode(ysonString)));
 }
 
+TEST(TYsonToProtobufTest, RejectWireTypeMismatch)
+{
+    // Field 2 is a submessage (length-delimited) in TNestedMessage but a uint32 (varint) in TMessage,
+    // so reparsing across schemas hits a wire-type mismatch that used to abort the process.
+    NYT::NYson::NProto::TNestedMessage message;
+    message.mutable_nested_message()->set_int32_field(42);
+    TString protobufString = message.SerializeAsString();
+
+    TString ysonString;
+    TStringOutput ysonOutputStream(ysonString);
+    TYsonWriter ysonWriter(&ysonOutputStream, EYsonFormat::Pretty);
+    ArrayInputStream protobufInput(protobufString.data(), protobufString.length());
+
+    EXPECT_THROW_WITH_ERROR_CODE(
+        ParseProtobuf(&ysonWriter, &protobufInput, ReflectProtobufMessageType<NYT::NYson::NProto::TMessage>()),
+        EErrorCode::InvalidProtobufWireFormat);
+}
+
 TEST(TYsonToProtobufTest, Entities)
 {
     TProtobufWriterOptions options;

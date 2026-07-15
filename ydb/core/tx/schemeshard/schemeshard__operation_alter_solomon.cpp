@@ -251,12 +251,15 @@ public:
         }
 
         if (status == NKikimrProto::BLOCKED) {
-            // Hive returned BLOCKED for this owner. Keep the timeout armed;
-            // when it fires, this actor will retry the request.
+            // Hive persists BLOCKED after deleting all tablets for an owner. It
+            // never unblocks that owner, so this tenant SchemeShard is already
+            // being deleted and retrying the rolling update would be pointless.
+            Y_ABORT_UNLESS(!SS->IsDomainSchemeShard);
             LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                          DebugHint() << " CreateTablet BLOCKED"
                                      << ", shardIdx: " << expectedShardIdx
                                      << ", message: " << record.ShortDebugString());
+            PassAway();
             return;
         }
 

@@ -1,17 +1,40 @@
 # Authentication using environment variables
 
-When using this method, the authentication mode and its parameters are defined by the environment that an application is run in, [as described here](../../reference/ydb-sdk/auth.md#env).
+Authentication via environment variables allows you to avoid hard‑coding credentials in code: the SDK or JDBC driver determines the mode itself based on the `YDB_*` variables in the process environment. This method is convenient for containers, CI/CD, and cloud deployment, where secrets are passed through the environment. Typical steps: set the required environment variables, create an authentication provider (or connect via JDBC without explicit properties), and execute a query. Details about the mode selection order are in the [Authentication](../../reference/ydb-sdk/auth.md#env) section; basic connection is in the [driver initialization](./init.md) recipe. Other methods: [token](./auth-access-token.md), [anonymous](./auth-anonymous.md), [metadata](./auth-metadata.md), [service account](./auth-service-account.md), [login and password](./auth-static.md).
+
+When using this method, the authentication mode and its parameters are determined by the environment in which the application runs, in the [order described here](../../reference/ydb-sdk/auth.md#env).
 
 By setting one of the following environment variables, you can control the authentication method:
 
-* `YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS=<path/to/sa_key_file>` — use a service account key file in Yandex Cloud.
-* `YDB_ANONYMOUS_CREDENTIALS="1"` — use anonymous authentication. Useful for testing against a Docker container with {{ ydb-short-name }}.
-* `YDB_METADATA_CREDENTIALS="1"` — use the metadata service inside Yandex Cloud (Yandex Cloud Function or VM).
-* `YDB_ACCESS_TOKEN_CREDENTIALS=<access_token>` — use token-based authentication.
+* `YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS=<path/to/sa_key_file>` — use a service account file in Yandex Cloud.
+* `YDB_ANONYMOUS_CREDENTIALS="1"` — use anonymous authentication. Relevant for testing against a Docker container with {{ ydb-short-name }}.
+* `YDB_METADATA_CREDENTIALS="1"` — use the metadata service inside Yandex Cloud (Yandex Function or virtual machine).
+* `YDB_ACCESS_TOKEN_CREDENTIALS=<access_token>` — use token authentication.
 
-Below are examples of authentication using environment variables in different {{ ydb-short-name }} SDKs.
+Below are authentication code examples using environment variables in different {{ ydb-short-name }} SDKs.
 
 {% list tabs %}
+
+- C++
+
+  {% list tabs %}
+
+  - Native SDK
+
+    ```cpp
+    #include <ydb-cpp-sdk/client/driver/driver.h>
+    #include <ydb-cpp-sdk/client/helpers/helpers.h>
+
+    NYdb::TDriver CreateDriverFromEnvironment(const std::string& connectionString) {
+        return NYdb::TDriver(NYdb::CreateFromEnvironment(connectionString));
+    }
+    ```
+
+  - userver
+
+    {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+  {% endlist %}
 
 - Go
 
@@ -89,32 +112,73 @@ Below are examples of authentication using environment variables in different {{
   - Native SDK
 
     ```java
-    public void work(String connectionString) {
-        AuthProvider authProvider = new EnvironAuthProvider();
+    import tech.ydb.auth.iam.CloudAuthHelper;
+    import tech.ydb.common.transaction.TxMode;
+    import tech.ydb.core.grpc.GrpcTransport;
+    import tech.ydb.query.QueryClient;
+    import tech.ydb.query.result.ResultSetReader;
+    import tech.ydb.query.tools.QueryReader;
+    import tech.ydb.query.tools.SessionRetryContext;
 
-        try (GrpcTransport transport = GrpcTransport.forConnectionString(connectionString)
-                .withAuthProvider(authProvider)
-                .build();
-             QueryClient queryClient = QueryClient.newClient(transport).build()) {
+    public class EnvironAuthExample {
+        public static void main(String[] args) throws Exception {
+            // Connection string from environment variable or local {{ ydb-short-name }} by default
+            String connectionString = System.getenv().getOrDefault(
+                    "YDB_CONNECTION_STRING", "grpc://localhost:2136/local");
 
-            doWork(queryClient);
+            // Authentication mode is determined by YDB_* environment variables
+            try (GrpcTransport transport = GrpcTransport.forConnectionString(connectionString)
+                    .withAuthProvider(CloudAuthHelper.getAuthProviderFromEnviron())
+                    .build();
+                 QueryClient queryClient = QueryClient.newClient(transport).build()) {
+
+                SessionRetryContext retryCtx = SessionRetryContext.create(queryClient).build();
+                QueryReader reader = retryCtx.supplyResult(
+                        session -> QueryReader.readFrom(session.createQuery("SELECT 1", TxMode.NONE))
+                ).join().getValue();
+
+                // Connection check: output the result of SELECT 1
+                ResultSetReader rs = reader.getResultSet(0);
+                if (rs.next()) {
+                    System.out.println("SELECT 1 = " + rs.getColumn(0).getInt32());
+                }
+            }
         }
     }
     ```
 
   - JDBC
 
+    The JDBC driver reads the environment variables `YDB_*` in the order described in the [Authentication](../../reference/ydb-sdk/auth.md#env) section. You do not need to pass credentials explicitly — an empty `Properties` object is sufficient.
+
+
     ```java
-    public void work() throws SQLException {
-        // No explicit credentials: the driver reads YDB_* environment variables in the order
-        // described in [Authentication](../../reference/ydb-sdk/auth.md#env)
-        try (Connection connection = DriverManager.getConnection("jdbc:ydb:grpc://localhost:2136/local", new Properties())) {
-            doWork(connection);
+    import java.sql.Connection;
+    import java.sql.DriverManager;
+    import java.sql.Properties;
+    import java.sql.ResultSet;
+    import java.sql.SQLException;
+    import java.sql.Statement;
+
+    public class EnvironAuthJdbcExample {
+        public static void main(String[] args) throws SQLException {
+            String jdbcUrl = System.getenv().getOrDefault(
+                    "YDB_JDBC_URL", "jdbc:ydb:grpc://localhost:2136/local");
+
+            // Empty properties: the driver will choose the authentication method based on environment variables
+            try (Connection connection = DriverManager.getConnection(jdbcUrl, new Properties());
+                 Statement statement = connection.createStatement();
+                 ResultSet rs = statement.executeQuery("SELECT 1")) {
+                if (rs.next()) {
+                    System.out.println("SELECT 1 = " + rs.getInt(1));
+                }
+            }
         }
     }
     ```
 
-    In Spring Boot, ORMs, and other JDBC wrappers, use the same JDBC URL; credentials from the environment are picked up the same way as in the example above (for example via `spring.datasource.url`).
+
+    In Spring Boot, ORM, and other third‑party frameworks built on JDBC, specify the same JDBC connection string; credentials from environment variables are picked up by the driver just like in the example above (for example, via `spring.datasource.url`).
 
   {% endlist %}
 
@@ -135,7 +199,6 @@ Below are examples of authentication using environment variables in different {{
         return driver
     }
   ```
-
 
 - Python
 
@@ -167,6 +230,20 @@ Below are examples of authentication using environment variables in different {{
     ```
 
   {% endlist %}
+
+- C#
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+- Rust
+
+  ```rust
+  use ydb::{ClientBuilder, FromEnvCredentials, YdbResult};
+
+  let client = ClientBuilder::new_from_connection_string(std::env::var("YDB_CONNECTION_STRING")?)?
+      .with_credentials(FromEnvCredentials::new()?)
+      .client()?;
+  ```
 
 - PHP
 

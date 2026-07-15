@@ -1,16 +1,100 @@
 # Bulk upsert of data
 
-{{ ydb-short-name }} supports bulk insert of many rows without atomicity guarantees. The write is split into several independent transactions, each touching a single partition, with parallel execution. This makes the approach more efficient than plain YQL. On success, the `BulkUpsert` method guarantees that all data passed in the request is inserted.
+{{ ydb-short-name }} supports bulk upsert of a large number of rows without atomicity guarantees. Data writes are split into multiple independent transactions, each affecting a single partition, and executed in parallel. This approach is therefore more efficient than `YQL`. On success, the `BulkUpsert` method guarantees insertion of all data passed in the request.
 
 {% note warning %}
 
-When you load data to [column-oriented tables](../../concepts/datamodel/table.md#column-oriented-tables) using `BulkUpsert`, you must provide values for **all** columns, even `NULL` values.
+When using `BulkUpsert` to insert data into [columnar tables](../../concepts/datamodel/table.md#column-oriented-tables), you must provide values for **all** columns, including `NULL` values.
 
 {% endnote %}
 
-Below are examples of using the {{ ydb-short-name }} SDK built-in tools for bulk insert:
+Below are code examples that use the built‑in {{ ydb-short-name }} SDK facilities for performing bulk upsert:
 
 {% list tabs %}
+
+- C++
+
+  {% list tabs %}
+
+  - Native SDK
+
+    ```cpp
+    #include <ydb-cpp-sdk/client/table/table.h>
+
+    void BulkUpsertLogs(const NYdb::TDriver& driver) {
+      NYdb::NTable::TTableClient client(driver);
+
+      constexpr int kBatchSize = 1000;
+      NYdb::TValueBuilder rowsBuilder;
+      rowsBuilder.BeginList();
+      for (int i = 0; i < kBatchSize; ++i) {
+          rowsBuilder.AddListItem()
+              .BeginStruct()
+              .AddMember("App").Utf8("App_" + std::to_string(i / 256))
+              .AddMember("Host").Utf8("192.168.0." + std::to_string(i % 256))
+              .AddMember("Timestamp")
+                  .Timestamp(TInstant::Now() + TDuration::Seconds(i))
+              .AddMember("HttpCode").Uint32(static_cast<uint32_t>(i % 113 == 0 ? 404 : 200))
+              .AddMember("Message")
+                  .Utf8(i % 3 == 0 ? "GET / HTTP/1.1" : "GET /images/logo.png HTTP/1.1")
+              .EndStruct();
+      }
+      rowsBuilder.EndList();
+
+      NYdb::TValue rows = rowsBuilder.Build();
+
+      NYdb::NStatusHelpers::ThrowOnError(client.RetryOperationSync(
+          [&rows](NYdb::NTable::TTableClient& client) {
+              return client.BulkUpsert("/local/bulk_upsert_example", NYdb::TValue{rows}).GetValueSync();
+          },
+          NYdb::NTable::TRetryOperationSettings()
+              .Idempotent(true)
+      ));
+    }
+    ```
+
+  - userver
+
+    ```cpp
+    #include <userver/ydb/io/supported_types.hpp>
+    #include <userver/ydb/table.hpp>
+
+    struct LogMessage final {
+        ydb::Utf8 App;
+        ydb::Utf8 Host;
+        std::chrono::system_clock::time_point Timestamp;
+        std::uint32_t HttpCode;
+        ydb::Utf8 Message;
+    };
+
+    void BulkUpsertLogs(ydb::TableClient& client) {
+        constexpr int kBatchSize = 1000;
+        std::vector<LogMessage> rows;
+        rows.reserve(kBatchSize);
+
+        for (int i = 0; i < kBatchSize; ++i) {
+            rows.push_back({
+                .App = ydb::Utf8{"App_" + std::to_string(i / 256)},
+                .Host = ydb::Utf8{"192.168.0." + std::to_string(i % 256)},
+                .Timestamp = std::chrono::system_clock::now() + std::chrono::seconds{i},
+                .HttpCode = static_cast<std::uint32_t>(i % 113 == 0 ? 404 : 200),
+                .Message = ydb::Utf8{
+                    i % 3 == 0 ? "GET / HTTP/1.1" : "GET /images/logo.png HTTP/1.1"
+                },
+            });
+        }
+
+        client.BulkUpsert(
+            "/local/bulk_upsert_example",
+            rows,
+            ydb::OperationSettings{
+                .is_idempotent = true,
+            }
+        );
+    }
+    ```
+
+  {% endlist %}
 
 - Go
 
@@ -18,16 +102,14 @@ Below are examples of using the {{ ydb-short-name }} SDK built-in tools for bulk
 
   - Native SDK
 
-    {% cut "Bulk upsert with native {{ ydb-short-name }} data" %}
+    {% cut "Batch upsert native {{ ydb-short-name }} data" %}
 
     ```go
     package main
 
     import (
       "context"
-      "fmt"
       "os"
-      "time"
 
       "github.com/ydb-platform/ydb-go-sdk/v3"
       "github.com/ydb-platform/ydb-go-sdk/v3/table"
@@ -94,7 +176,7 @@ Below are examples of using the {{ ydb-short-name }} SDK built-in tools for bulk
 
     {% endcut %}
 
-    {% cut "Bulk upsert `CSV` data" %}
+    {% cut "Batch upsert `CSV`" %}
 
     ```go
     package main
@@ -133,7 +215,7 @@ Below are examples of using the {{ ydb-short-name }} SDK built-in tools for bulk
         []byte(csv),
         table.WithCsvHeader(),
         table.WithCsvSkipRows(2),
-        table.WithCsvNullValue([]byte("hello")), // "hello" would be interpreted as NULL
+        table.WithCsvNullValue([]byte("hello")), // string "hello" will be interpreted as NULL
       ))
       if err != nil {
         fmt.Printf("unexpected error: %v", err)
@@ -143,9 +225,10 @@ Below are examples of using the {{ ydb-short-name }} SDK built-in tools for bulk
 
     {% endcut %}
 
-    {% cut "Bulk upsert `Apache Arrow` data" %}
+    {% cut "Batch upsert `Apache Arrow`" %}
 
-    In the following example, the [arrow package](https://pkg.go.dev/github.com/apache/arrow-go/v18/arrow) is used to prepare the data.
+    The following example uses the [arrow](https://pkg.go.dev/github.com/apache/arrow-go/v18/arrow) package to prepare data.
+
 
     ```go
     package main
@@ -154,7 +237,6 @@ Below are examples of using the {{ ydb-short-name }} SDK built-in tools for bulk
       "bytes"
       "context"
       "fmt"
-      "os"
 
       "github.com/apache/arrow-go/v18/arrow"
       "github.com/apache/arrow-go/v18/arrow/array"
@@ -223,105 +305,187 @@ Below are examples of using the {{ ydb-short-name }} SDK built-in tools for bulk
         fmt.Printf("unexpected error: %v", err)
       }
     }
+
     ```
 
     {% endcut %}
 
   - database/sql
 
-    The {{ ydb-short-name }} `database/sql` driver does not support non-transactional bulk insert.
-    For bulk insert, use [transactional insert](./upsert.md).
+    The `database/sql` driver implementation for {{ ydb-short-name }} does not support non‑transactional bulk upsert.
+    For bulk upsert you should use [transactional upsert](./upsert.md).
 
   {% endlist %}
 
 - Java
+
+  Bulk upsert via `BulkUpsert` is more efficient than transactional YQL for large data volumes. For small row sets see [UPSERT](./upsert.md). The table schema is described in the [Tables](../../concepts/datamodel/table.md) section.
 
   {% list tabs %}
 
   - Native SDK
 
     ```java
-    private static final String TABLE_NAME = "bulk_upsert";
-    private static final int BATCH_SIZE = 1000;
+    import java.time.Instant;
+    import java.util.ArrayList;
+    import java.util.List;
 
-    public static void main(String[] args) {
-        String connectionString = args[0];
+    import tech.ydb.auth.NopAuthProvider;
+    import tech.ydb.common.transaction.TxMode;
+    import tech.ydb.core.grpc.GrpcTransport;
+    import tech.ydb.query.QueryClient;
+    import tech.ydb.query.result.ResultSetReader;
+    import tech.ydb.query.tools.QueryReader;
+    import tech.ydb.query.tools.SessionRetryContext;
+    import tech.ydb.table.TableClient;
+    import tech.ydb.table.query.Params;
+    import tech.ydb.table.settings.BulkUpsertSettings;
+    import tech.ydb.table.values.ListType;
+    import tech.ydb.table.values.ListValue;
+    import tech.ydb.table.values.PrimitiveType;
+    import tech.ydb.table.values.PrimitiveValue;
+    import tech.ydb.table.values.StructType;
+    import tech.ydb.table.values.Value;
 
-        try (GrpcTransport transport = GrpcTransport.forConnectionString(connectionString)
-                .withAuthProvider(NopAuthProvider.INSTANCE) // use anonymous credentials
-                .build()) {
+    public class BulkUpsertExample {
+        private static final String TABLE_NAME = "bulk_upsert";
+        private static final int BATCH_SIZE = 1000;
 
-            // For bulk upsert, the full table path needs to be specified
-            String tablePath = transport.getDatabase() + "/" + TABLE_NAME;
-            try (TableClient tableClient = TableClient.newClient(transport).build()) {
-                SessionRetryContext retryCtx = SessionRetryContext.create(tableClient).build();
-                execute(retryCtx, tablePath);
+        public static void main(String[] args) {
+            String connectionString = System.getenv().getOrDefault(
+                    "YDB_CONNECTION_STRING", "grpc://localhost:2136/local");
+
+            try (GrpcTransport transport = GrpcTransport.forConnectionString(connectionString)
+                    .withAuthProvider(NopAuthProvider.INSTANCE)
+                    .build();
+                 QueryClient queryClient = QueryClient.newClient(transport).build();
+                 TableClient tableClient = TableClient.newClient(transport).build()) {
+
+                SessionRetryContext queryRetry = SessionRetryContext.create(queryClient).build();
+                SessionRetryContext tableRetry = SessionRetryContext.create(tableClient).build();
+
+                // Creating a table for bulk upsert
+                queryRetry.supplyResult(session -> QueryReader.readFrom(session.createQuery("""
+                        CREATE TABLE IF NOT EXISTS bulk_upsert (
+                            app Text,
+                            timestamp Timestamp,
+                            host Text,
+                            http_code Uint32,
+                            message Text,
+                            PRIMARY KEY (app, timestamp, host)
+                        );
+                        """, TxMode.NONE, Params.empty())
+                )).join().getValue();
+
+                // Full path to the table: /local/bulk_upsert
+                String tablePath = transport.getDatabase() + "/" + TABLE_NAME;
+
+                StructType rowType = StructType.of(
+                        "app", PrimitiveType.Text,
+                        "timestamp", PrimitiveType.Timestamp,
+                        "host", PrimitiveType.Text,
+                        "http_code", PrimitiveType.Uint32,
+                        "message", PrimitiveType.Text
+                );
+
+                // Generating a batch of records
+                List<Value<?>> rows = new ArrayList<>(BATCH_SIZE);
+                for (int i = 0; i < BATCH_SIZE; i++) {
+                    rows.add(rowType.newValue(
+                            "app", PrimitiveValue.newText("App_" + i / 256),
+                            "timestamp", PrimitiveValue.newTimestamp(Instant.now().plusSeconds(i)),
+                            "host", PrimitiveValue.newText("192.168.0." + i % 256),
+                            "http_code", PrimitiveValue.newUint32(i % 113 == 0 ? 404 : 200),
+                            "message", PrimitiveValue.newText(
+                                    i % 3 == 0 ? "GET / HTTP/1.1" : "GET /images/logo.png HTTP/1.1")
+                    ));
+                }
+
+                ListValue batch = ListType.of(rowType).newValue(rows);
+
+                // Bulk upsert without atomicity of the entire batch
+                tableRetry.supplyStatus(session ->
+                        session.executeBulkUpsert(tablePath, batch, new BulkUpsertSettings())
+                ).join().expectSuccess("bulk upsert failed");
+
+                // Checking the row count
+                QueryReader countReader = queryRetry.supplyResult(session -> QueryReader.readFrom(
+                        session.createQuery(
+                                "SELECT COUNT(*) AS cnt FROM bulk_upsert", TxMode.NONE, Params.empty())
+                )).join().getValue();
+
+                ResultSetReader rs = countReader.getResultSet(0);
+                if (rs.next()) {
+                    System.out.println("Строк в таблице bulk_upsert: " + rs.getColumn("cnt").getUint64());
+                }
             }
         }
-    }
-
-    public static void execute(SessionRetryContext retryCtx, String tablePath) {
-        // table description
-        StructType structType = StructType.of(
-            "app", PrimitiveType.Text,
-            "timestamp", PrimitiveType.Timestamp,
-            "host", PrimitiveType.Text,
-            "http_code", PrimitiveType.Uint32,
-            "message", PrimitiveType.Text
-        );
-
-        // generate batch of records
-        List<Value<?>> list = new ArrayList<>(50);
-        for (int i = 0; i < BATCH_SIZE; i += 1) {
-            // add a new row as a struct value
-            list.add(structType.newValue(
-                "app", PrimitiveValue.newText("App_" + String.valueOf(i / 256)),
-                "timestamp", PrimitiveValue.newTimestamp(Instant.now().plusSeconds(i)),
-                "host", PrimitiveValue.newText("192.168.0." + i % 256),
-                "http_code", PrimitiveValue.newUint32(i % 113 == 0 ? 404 : 200),
-                "message", PrimitiveValue.newText(i % 3 == 0 ? "GET / HTTP/1.1" : "GET /images/logo.png HTTP/1.1")
-            ));
-        }
-
-        // Create list of structs
-        ListValue rows = ListType.of(structType).newValue(list);
-        // Do retry operation on errors with best effort
-        retryCtx.supplyStatus(
-            session -> session.executeBulkUpsert(tablePath, rows, new BulkUpsertSettings())
-        ).join().expectSuccess("bulk upsert problem");
     }
     ```
 
   - JDBC
 
     ```java
-    private static final int BATCH_SIZE = 1000;
+    import java.sql.Connection;
+    import java.sql.DriverManager;
+    import java.sql.PreparedStatement;
+    import java.sql.ResultSet;
+    import java.sql.SQLException;
+    import java.sql.Statement;
+    import java.sql.Timestamp;
+    import java.time.Instant;
 
-    public static void main(String[] args) {
-        String connectionUrl = args[0];
+    public class JdbcBulkUpsertExample {
+        private static final int BATCH_SIZE = 1000;
 
-        try (Connection conn = DriverManager.getConnection(connectionUrl)) {
-            try (PreparedStatement ps = conn.prepareStatement(
-                    "BULK UPSERT INTO bulk_upsert (app, timestamp, host, http_code, message) VALUES (?, ?, ?, ?, ?);"
-            )) {
-                for (int i = 0; i < BATCH_SIZE; i += 1) {
-                    ps.setString(1, "App_" + String.valueOf(i / 256));
-                    ps.setTimestamp(2, Timestamp.from(Instant.now().plusSeconds(i)));
-                    ps.setString(3, "192.168.0." + i % 256);
-                    ps.setLong(4, i % 113 == 0 ? 404 : 200);
-                    ps.setString(5, i % 3 == 0 ? "GET / HTTP/1.1" : "GET /images/logo.png HTTP/1.1");
-                    ps.addBatch();
+        public static void main(String[] args) throws SQLException {
+            String url = System.getenv().getOrDefault(
+                    "YDB_JDBC_URL", "jdbc:ydb:grpc://localhost:2136/local");
+
+            try (Connection conn = DriverManager.getConnection(url)) {
+                try (Statement stmt = conn.createStatement()) {
+                    stmt.execute("""
+                            CREATE TABLE IF NOT EXISTS bulk_upsert (
+                                app Text,
+                                timestamp Timestamp,
+                                host Text,
+                                http_code Uint32,
+                                message Text,
+                                PRIMARY KEY (app, timestamp, host)
+                            );
+                            """);
                 }
 
-                ps.executeBatch();
+                String bulkSql = """
+                        BULK UPSERT INTO bulk_upsert (app, timestamp, host, http_code, message)
+                        VALUES (?, ?, ?, ?, ?);
+                        """;
+
+                try (PreparedStatement ps = conn.prepareStatement(bulkSql)) {
+                    for (int i = 0; i < BATCH_SIZE; i++) {
+                        ps.setString(1, "App_" + i / 256);
+                        ps.setTimestamp(2, Timestamp.from(Instant.now().plusSeconds(i)));
+                        ps.setString(3, "192.168.0." + i % 256);
+                        ps.setLong(4, i % 113 == 0 ? 404 : 200);
+                        ps.setString(5, i % 3 == 0 ? "GET / HTTP/1.1" : "GET /images/logo.png HTTP/1.1");
+                        ps.addBatch();
+                    }
+                    ps.executeBatch();
+                }
+
+                try (Statement stmt = conn.createStatement();
+                     ResultSet rs = stmt.executeQuery("SELECT COUNT(*) AS cnt FROM bulk_upsert")) {
+                    if (rs.next()) {
+                        System.out.println("Строк в таблице bulk_upsert: " + rs.getLong("cnt"));
+                    }
+                }
             }
-        } catch (SQLException e) {
-            e.printStackTrace();
         }
     }
     ```
 
-    In Spring Boot, Hibernate, JOOQ, and other ORM stacks on JDBC you can run native YQL (including from repositories and `@Query`). The driver tries to optimize large inserts; `UPDATE`, `INSERT`, `DELETE`, `UPSERT` through JDBC are batched on the driver side when appropriate.
+
+    In Spring Boot, Hibernate, JOOQ and other frameworks built on top of ORM over JDBC you can execute native YQL (including from repositories and `@Query`). The driver aims to optimize large inserts; operations `UPDATE`, `INSERT`, `DELETE`, `UPSERT` that go through JDBC are automatically grouped into batches on the driver side when needed.
 
   {% endlist %}
 
@@ -450,7 +614,8 @@ Below are examples of using the {{ ydb-short-name }} SDK built-in tools for bulk
 
       client
           .table_client()
-          .retry_execute_bulk_upsert("/local/tablename".into(), rows)
+          .bulk_upsert("/local/tablename", rows)
+          .idempotent(true)
           .await?;
 
       Ok(())

@@ -2,9 +2,41 @@
 
 <!-- markdownlint-disable blanks-around-fences -->
 
-Below are examples of anonymous authentication in different {{ ydb-short-name }} SDKs.
+Anonymous authentication does not transmit credentials — {{ ydb-short-name }} SDK connects to the database without a token, login, or password. This is the default mode for local development and testing against a Docker container with {{ ydb-short-name }}. Typical steps: specify the connection string, explicitly or implicitly select the anonymous provider, and execute a query. For details, see the [Authentication](../../reference/ydb-sdk/auth.md) section; basic connection is covered in the [driver initialization](./init.md) recipe. Other methods: [token](./auth-access-token.md), [environment variables](./auth-env.md), [metadata](./auth-metadata.md), [service account](./auth-service-account.md), [login and password](./auth-static.md).
+
+Below are code examples of anonymous authentication in different {{ ydb-short-name }} SDKs.
 
 {% list tabs %}
+
+- C++
+
+  {% list tabs %}
+
+  - Native SDK
+
+    Anonymous authentication is the default authentication.
+    You can explicitly enable anonymous authentication as follows:
+
+
+    ```cpp
+    #include <ydb-cpp-sdk/client/driver/driver.h>
+    #include <ydb-cpp-sdk/client/types/credentials/credentials.h>
+
+    NYdb::TDriver CreateDriverAnonymous() {
+        auto config = NYdb::TDriverConfig("grpc://localhost:2136/local")
+            .SetCredentialsProviderFactory(NYdb::CreateInsecureCredentialsProviderFactory());
+
+        return NYdb::TDriver(config);
+    }
+    ```
+
+  - userver
+
+    If you do not set `credentials-provider` in the static config, do not specify `databases.*.credentials`, and do not place `token`, `iam_jwt_params`, and the `user`/`password` pair in secdist for this database, the driver will use anonymous mode by default.
+
+    Initialization code `ydb::YdbComponent`, obtaining `ydb::TableClient`, and starting `components::MinimalServerComponentList` — as in the example from [init.md](./init.md).
+
+  {% endlist %}
 
 - Go
 
@@ -12,15 +44,15 @@ Below are examples of anonymous authentication in different {{ ydb-short-name }}
 
   - Native SDK
 
-    Anonymous authentication is the default.
-    You can enable it explicitly as follows:
+    Anonymous authentication is the default authentication.
+    You can explicitly enable anonymous authentication as follows:
+
 
     ```go
     package main
 
     import (
       "context"
-      "os"
 
       "github.com/ydb-platform/ydb-go-sdk/v3"
     )
@@ -42,8 +74,9 @@ Below are examples of anonymous authentication in different {{ ydb-short-name }}
 
   - database/sql
 
-    Anonymous authentication is the default.
-    You can enable it explicitly as follows:
+    Anonymous authentication is the default authentication.
+    You can explicitly enable anonymous authentication as follows:
+
 
     ```go
     package main
@@ -86,15 +119,37 @@ Below are examples of anonymous authentication in different {{ ydb-short-name }}
   - Native SDK
 
     ```java
-    public void work(String connectionString) {
-        AuthProvider authProvider = NopAuthProvider.INSTANCE;
+    import tech.ydb.common.transaction.TxMode;
+    import tech.ydb.auth.NopAuthProvider;
+    import tech.ydb.core.grpc.GrpcTransport;
+    import tech.ydb.query.QueryClient;
+    import tech.ydb.query.result.ResultSetReader;
+    import tech.ydb.query.tools.QueryReader;
+    import tech.ydb.query.tools.SessionRetryContext;
 
-        try (GrpcTransport transport = GrpcTransport.forConnectionString(connectionString)
-                .withAuthProvider(authProvider)
-                .build();
-             QueryClient queryClient = QueryClient.newClient(transport).build()) {
+    public class AnonymousAuthExample {
+        public static void main(String[] args) throws Exception {
+            // Connection string from environment variable or local {{ ydb-short-name }} by default
+            String connectionString = System.getenv().getOrDefault(
+                    "YDB_CONNECTION_STRING", "grpc://localhost:2136/local");
 
-            doWork(queryClient);
+            try (GrpcTransport transport = GrpcTransport.forConnectionString(connectionString)
+                    // Explicitly specify anonymous authentication (default mode)
+                    .withAuthProvider(NopAuthProvider.INSTANCE)
+                    .build();
+                 QueryClient queryClient = QueryClient.newClient(transport).build()) {
+
+                SessionRetryContext retryCtx = SessionRetryContext.create(queryClient).build();
+                QueryReader reader = retryCtx.supplyResult(
+                        session -> QueryReader.readFrom(session.createQuery("SELECT 1", TxMode.NONE))
+                ).join().getValue();
+
+                // Connection check: output the result of SELECT 1
+                ResultSetReader rs = reader.getResultSet(0);
+                if (rs.next()) {
+                    System.out.println("SELECT 1 = " + rs.getColumn(0).getInt32());
+                }
+            }
         }
     }
     ```
@@ -102,15 +157,31 @@ Below are examples of anonymous authentication in different {{ ydb-short-name }}
   - JDBC
 
     ```java
-    public void work() throws SQLException {
-        // Connection with no extra options — anonymous authentication
-        try (Connection connection = DriverManager.getConnection("jdbc:ydb:grpc://localhost:2136/local")) {
-            doWork(connection);
+    import java.sql.Connection;
+    import java.sql.DriverManager;
+    import java.sql.ResultSet;
+    import java.sql.SQLException;
+    import java.sql.Statement;
+
+    public class AnonymousAuthJdbcExample {
+        public static void main(String[] args) throws SQLException {
+            String jdbcUrl = System.getenv().getOrDefault(
+                    "YDB_JDBC_URL", "jdbc:ydb:grpc://localhost:2136/local");
+
+            // Connection without additional properties — anonymous authentication
+            try (Connection connection = DriverManager.getConnection(jdbcUrl);
+                 Statement statement = connection.createStatement();
+                 ResultSet rs = statement.executeQuery("SELECT 1")) {
+                if (rs.next()) {
+                    System.out.println("SELECT 1 = " + rs.getInt(1));
+                }
+            }
         }
     }
     ```
 
-    In Spring Boot, ORMs, and other JDBC wrappers, use the same JDBC URL as above (for example `spring.datasource.url`).
+
+    In Spring Boot, ORM, and other third‑party frameworks around JDBC, the connection is set with the same JDBC connection string as above (for example, `spring.datasource.url`).
 
   {% endlist %}
 
@@ -142,22 +213,26 @@ Below are examples of anonymous authentication in different {{ ydb-short-name }}
 
   {% endlist %}
 
-- C# (.NET)
+- C#
 
   ```C#
-  using Ydb.Sdk;
-  using Ydb.Sdk.Auth;
+  using Ydb.Sdk.Ado;
 
-  const string endpoint = "grpc://localhost:2136";
-  const string database = "/local";
+  await using var dataSource = new YdbDataSource("Host=localhost;Port=2136;Database=/local");
+  await using var connection = await dataSource.OpenConnectionAsync();
+  ```
 
-  var config = new DriverConfig(
-      endpoint: endpoint,
-      database: database,
-      credentials: new AnonymousProvider()
-  );
 
-  await using var driver = await Driver.CreateInitialized(config);
+  For Entity Framework and linq2db, use the same connectionString.
+
+- Rust
+
+  ```rust
+  use ydb::{AnonymousCredentials, ClientBuilder, YdbResult};
+
+  let client = ClientBuilder::new_from_connection_string("grpc://localhost:2136?database=local")?
+      .with_credentials(AnonymousCredentials::new())
+      .client()?;
   ```
 
 - PHP

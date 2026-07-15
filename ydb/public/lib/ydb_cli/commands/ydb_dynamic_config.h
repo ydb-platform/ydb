@@ -88,6 +88,34 @@ private:
     ui64 NodeId;
 };
 
+class TCommandConfigMerge : public TYdbReadOnlyCommand {
+public:
+    TCommandConfigMerge();
+    void Config(TConfig& config) override;
+    int Run(TConfig& config) override;
+
+private:
+    TString StaticConfigPath;
+    TString DynamicConfigPath;
+    TString OutputPath;
+};
+
+class TCommandConfigCleanupV2 : public TYdbReadOnlyCommand {
+public:
+    TCommandConfigCleanupV2();
+    void Config(TConfig& config) override;
+    int Run(TConfig& config) override;
+
+private:
+    TString InputPath;
+    TString OutputPath;
+};
+
+class TCommandConfigMigration : public TClientCommandTree {
+public:
+    TCommandConfigMigration();
+};
+
 class TCommandVolatileConfig : public TClientCommandTree {
 public:
     TCommandVolatileConfig();

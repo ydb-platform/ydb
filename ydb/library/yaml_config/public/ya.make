@@ -1,6 +1,10 @@
 LIBRARY()
 
 SRCS(
+    migration/config_migration.cpp
+    migration/config_migration.h
+    storage_defaults.cpp
+    storage_defaults.h
     yaml_config.cpp
     yaml_config.h
 )

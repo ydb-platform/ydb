@@ -1,4 +1,5 @@
 #include <ydb/public/lib/ydb_cli/commands/ydb_root_common.h>
+#include <ydb/public/lib/ydb_cli/commands/ydb_dynamic_config.h>
 #include <ydb/public/lib/ydb_cli/commands/ydb_service_topic.h>
 #include <ydb/public/lib/ydb_cli/common/completion.h>
 #include <ydb/public/lib/ydb_cli/common/completion_graph_json.h>
@@ -114,6 +115,17 @@ Y_UNIT_TEST_SUITE(CompletionData) {
         CollectCompletionErrors(chooser, "ydb", errors);
 
         UNIT_ASSERT_C(errors.empty(), FormatErrors(errors));
+    }
+
+    Y_UNIT_TEST(ConfigMigrationCommandsAreScopedToClusterConfig) {
+        NDynamicConfig::TCommandConfig clusterConfig(false, true);
+        auto* migration = static_cast<TClientCommand&>(clusterConfig).FindNextCommand("migration");
+        UNIT_ASSERT(migration);
+        UNIT_ASSERT(migration->FindNextCommand("merge"));
+        UNIT_ASSERT(migration->FindNextCommand("cleanup-v2"));
+
+        NDynamicConfig::TCommandConfig databaseConfig(false, false);
+        UNIT_ASSERT(!static_cast<TClientCommand&>(databaseConfig).FindNextCommand("migration"));
     }
 }
 

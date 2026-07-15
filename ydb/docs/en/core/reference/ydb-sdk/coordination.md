@@ -300,7 +300,7 @@ Your client application must monitor the session state, because it can rely on t
 
 - C++
 
-  In the C++ SDK, a background session is maintained and automatically restores the connection to the {{ ydb-short-name }} cluster.
+  In the C++ SDK, the established session maintains and automatically restores the connection to the {{ ydb-short-name }} cluster in the background.
 
 - Go
 
@@ -727,7 +727,7 @@ You can update (replace) the semaphore data bound at its creation using the meth
 
 - Java
 
-  Data update — the method `updateSemaphore` (step 4 in the “Creating a semaphore” example). The call does not require acquiring the semaphore and does not affect it.
+  Data update — the method `updateSemaphore` (step 4 in the “Creating a semaphore” example). The call does not require acquiring the semaphore and does not result in it.
 
 - Rust
 
@@ -743,7 +743,7 @@ You can update (replace) the semaphore data bound at its creation using the meth
 
 {% endlist %}
 
-This call does not require acquiring the semaphore and does not affect it. If you need the data to be updated by only a single client, you must ensure this explicitly, for example by acquiring the semaphore, updating the data, and releasing the semaphore back.
+This call does not require acquiring the semaphore and does not result in it. If you need the data to be updated by only a single client, you must ensure this explicitly, for example by acquiring the semaphore, updating the data, and releasing the semaphore back.
 
 ### Getting semaphore data {#describe-semaphore}
 

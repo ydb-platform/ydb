@@ -144,7 +144,7 @@ Below are code examples of enabling logging in different {{ ydb-short-name }} SD
 
     {% cut "Implement custom package logging" %}
 
-    You can implement a custom logging package based on driver events in the tracing package `github.com/ydb-platform/ydb-go-sdk/v3/trace`. The tracing package `github.com/ydb-platform/ydb-go-sdk/v3/trace` contains descriptions of all driver events that are traced.
+    You can implement a custom logging package based on driver events in the tracing package `github.com/ydb-platform/ydb-go-sdk/v3/trace`. The tracing package `github.com/ydb-platform/ydb-go-sdk/v3/trace` contains descriptions of all logged driver events.
 
     {% endcut %}
 
@@ -316,7 +316,7 @@ Below are code examples of enabling logging in different {{ ydb-short-name }} SD
 
     {% cut "Implement custom package logging" %}
 
-    You can implement a custom logging package based on driver events in the tracing package `github.com/ydb-platform/ydb-go-sdk/v3/trace`. The tracing package `github.com/ydb-platform/ydb-go-sdk/v3/trace` contains descriptions of all traced driver events.
+    You can implement a custom logging package based on driver events in the tracing package `github.com/ydb-platform/ydb-go-sdk/v3/trace`. The tracing package `github.com/ydb-platform/ydb-go-sdk/v3/trace` contains descriptions of all logged driver events.
 
     {% endcut %}
 

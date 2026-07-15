@@ -1,6 +1,6 @@
 # Data insertion
 
-Below are code examples using the {{ ydb-short-name }} SDK's built-in upsert capabilities:
+Below are code examples using the {{ ydb-short-name }} SDK's built-in data insertion capabilities:
 
 {% list tabs %}
 
@@ -280,7 +280,7 @@ Below are code examples using the {{ ydb-short-name }} SDK's built-in upsert cap
 
 - Java
 
-  The [UPSERT INTO](../../yql/reference/syntax/upsert_into.md) operation inserts a row or updates an existing one by primary key without a prior read. For bulk non‑atomic loading, see [batch upsert](./bulk-upsert.md). The table schema is described in the [Tables](../../concepts/datamodel/table.md) section.
+  The [UPSERT INTO](../../yql/reference/syntax/upsert_into.md) operation inserts a row or updates an existing one by primary key without a prior read. For bulk non‑atomic loading, see [batch insert](./bulk-upsert.md). The table schema is described in the [Tables](../../concepts/datamodel/table.md) section.
 
   {% list tabs %}
 

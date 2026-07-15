@@ -21,6 +21,7 @@ namespace NInterconnect {
         TDuration Duration;                 // test duration
         bool UseProtobufWithPayload;        // store payload separately
         ui32 RdmaMode;                      // rdma params bitmap, 0 - not used
+        TDuration DelayBeforeMeasurements;   // warm-up period excluded from reported stats
     };
 
     // Aggregated throughput/RTT statistics of a finished (or just-terminated)

@@ -48,7 +48,13 @@ IActor *CreateInterconnectLoadTest(const NKikimr::TEvLoadTestRequest::TInterconn
         .IntervalMax = cmd.HasIntervalMaxUs() ? TDuration::MicroSeconds(cmd.GetIntervalMaxUs()) : TDuration::Zero(),
         .SoftLoad = cmd.HasSoftLoad() && cmd.GetSoftLoad(),
         .Duration = TDuration::Seconds(cmd.GetDurationSeconds()),
-        .UseProtobufWithPayload = cmd.HasUseProtobufWithPayload() && cmd.GetUseProtobufWithPayload()
+        .UseProtobufWithPayload = cmd.HasUseProtobufWithPayload() && cmd.GetUseProtobufWithPayload(),
+        // Warm-up period: samples generated during this initial delay are excluded
+        // from the reported throughput/RTT statistics (see MeasurementStartTime in
+        // ydb/library/actors/interconnect/load.cpp), by analogy with
+        // DelayBeforeMeasurementsSeconds used by other load actors (e.g.
+        // ydb/core/load_test/persistent_buffer_write.cpp).
+        .DelayBeforeMeasurements = TDuration::Seconds(cmd.GetDelayBeforeMeasurementsSeconds()),
     };
 
     for (const auto& node : cmd.GetNodeHops())

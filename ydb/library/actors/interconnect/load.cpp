@@ -150,6 +150,14 @@ namespace NInterconnect {
         ui64 NumDropped = 0;
         std::shared_ptr<std::atomic_uint64_t> Traffic;
 
+        // Warm-up: samples generated before MeasurementStartTime are excluded from
+        // the reported throughput/RTT statistics (see Params.DelayBeforeMeasurements).
+        TMonotonic MeasurementStartTime = TMonotonic::Zero();
+
+        bool IsMeasuring(TMonotonic when) const {
+            return when >= MeasurementStartTime;
+        }
+
 
     public:
         static constexpr IActor::EActivityType ActorActivityType() {
@@ -181,6 +189,7 @@ namespace NInterconnect {
 
             Become(&TLoadActor::StateFunc);
             NextMessageTimestamp = ctx.Monotonic();
+            MeasurementStartTime = NextMessageTimestamp + Params.DelayBeforeMeasurements;
             ResetThroughput(NextMessageTimestamp, *Traffic);
             GenerateMessages(ctx);
             ctx.Schedule(Params.Duration, new TEvents::TEvPoisonPill);
@@ -212,7 +221,9 @@ namespace NInterconnect {
                     }
                     ev.Reset(new TEvLoadMessage(Hops, id, payload ? &payload : nullptr));
                 }
-                UpdateThroughput(ev->CalculateSerializedSizeCached());
+                if (IsMeasuring(ctx.Monotonic())) {
+                    UpdateThroughput(ev->CalculateSerializedSizeCached());
+                }
                 ctx.Send(FirstHop, ev.Release(), IEventHandle::MakeFlags(Params.Channel, 0), cookie);
 
                 // register in the map
@@ -240,12 +251,15 @@ namespace NInterconnect {
             const auto& record = ev->Get()->Record;
             auto it = InFly.find(record.GetId());
             if (it != InFly.end()) {
-                // record message rtt
-                const TDuration rtt = ctx.Monotonic() - it->second.SendTimestamp;
-                UpdateHistogram(ctx.Monotonic(), rtt);
+                const TMonotonic now = ctx.Monotonic();
+                if (IsMeasuring(now)) {
+                    // record message rtt
+                    const TDuration rtt = now - it->second.SendTimestamp;
+                    UpdateHistogram(now, rtt);
 
-                // update throughput
-                UpdateThroughput(ev->Get()->CalculateSerializedSizeCached());
+                    // update throughput
+                    UpdateThroughput(ev->Get()->CalculateSerializedSizeCached());
+                }
 
                 // remove message from the in fly map
                 InFly.erase(it);

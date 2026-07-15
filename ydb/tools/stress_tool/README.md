@@ -98,6 +98,9 @@ level; the tool's own result table only prints a short summary row per test.
 - `Tag` - a unique numeric identifier for the load source.
 - `Name` - a human readable name for the load, shown in the results table.
 - `DurationSeconds` - the duration of the load application in seconds.
+- `DelayBeforeMeasurementsSeconds` - warm-up period (default 15s); throughput/RTT
+  samples generated before this delay has elapsed are excluded from the
+  reported statistics.
 - `InFlyMax` - the maximum number of concurrently in-flight messages.
 - `NodeHops` - the sequence of node ids the message is routed through before
   coming back to the load actor. For a single-node run use `[1]` (loopback to

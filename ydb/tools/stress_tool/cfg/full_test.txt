@@ -156,6 +156,7 @@ InterconnectTestList: {
             Tag: 1
             Name: "interconnect_smoke"
             DurationSeconds: 30
+            DelayBeforeMeasurementsSeconds: 5
             InFlyMax: 8
             NodeHops: [1]
             SizeMin: 4096

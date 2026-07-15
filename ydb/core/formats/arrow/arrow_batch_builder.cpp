@@ -81,6 +81,10 @@ arrow::Status AppendCell(arrow::RecordBatchBuilder& builder, const TCell& cell, 
 }
 
 arrow::Status AppendCell(arrow::RecordBatchBuilder& builder, const TCell& cell, ui32 colNum, NScheme::TTypeInfo type) {
+    if (type.GetTypeId() == NScheme::NTypeIds::Interval && builder.GetField(colNum)->type()->id() == arrow::Type::INT64) {
+        return AppendCell<arrow::Int64Type>(builder, cell, colNum);
+    }
+
     arrow::Status result;
     auto callback = [&]<typename TType>(TTypeWrapper<TType> typeHolder) {
         Y_UNUSED(typeHolder);

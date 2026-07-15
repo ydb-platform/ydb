@@ -789,6 +789,7 @@ private:
                             return ReplyWithError(Ydb::StatusIds::BAD_REQUEST,
                                 TStringBuilder() << "Cannot convert arrow batch inplace:" << convertResult.status().ToString(), ctx);
                         }
+
                         Batch = *convertResult;
                     }
                 }

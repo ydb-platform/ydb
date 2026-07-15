@@ -571,15 +571,16 @@ TString EscapeJsString(const TString& in) {
     return out;
 }
 
-TString RenderLwTraceShardLogUrl(const TString& provider, const TString& probe, ui64 tabletId) {
+TString RenderLwTraceShardLogUrl(const TString& provider, const TString& probe, ui64 tabletId, ui32 nodeId) {
     const TString traceId = TStringBuilder() << "." << provider << "." << probe << ".alsrt100000";
-    return TStringBuilder() << "../trace?mode=log&id=" << traceId << "&f=tabletId=" << tabletId;
+    return TStringBuilder() << "/node/" << nodeId << "/trace?mode=log&id=" << traceId << "&f=tabletId=" << tabletId;
 }
 
-TString RenderLwTraceShardLinks(const TString& vizPage, const TString& provider, const TString& probe, ui64 tabletId, const TString& title)
+TString RenderLwTraceShardLinks(
+    const TString& vizPage, const TString& provider, const TString& probe, ui64 tabletId, ui32 nodeId, const TString& title)
 {
     const TString tabletIdStr = ToString(tabletId);
-    const TString traceUrl = RenderLwTraceShardLogUrl(provider, probe, tabletId);
+    const TString traceUrl = RenderLwTraceShardLogUrl(provider, probe, tabletId, nodeId);
     const TString safeTitle = TEscapeHtml(title);
     const TString safeVizPage = TEscapeHtml(vizPage);
     const TString safeTraceUrl = TEscapeHtml(traceUrl);
@@ -590,9 +591,9 @@ TString RenderLwTraceShardLinks(const TString& vizPage, const TString& provider,
     return html.Str();
 }
 
-TString RenderScanTracesPage(ui64 tabletId) {
+TString RenderScanTracesPage(ui64 tabletId, ui32 nodeId) {
     const TString tabletIdStr = ToString(tabletId);
-    const TString traceUrl = RenderLwTraceShardLogUrl("YDB_CS_SCAN", "StartScan", tabletId);
+    const TString traceUrl = RenderLwTraceShardLogUrl("YDB_CS_SCAN", "StartScan", tabletId, nodeId);
     TStringStream html;
     html << "<h3>Traces for all scans on shard</h3>";
     html << "<p>Trace source: <a href=\"" << TEscapeHtml(traceUrl) << "\">" << TEscapeHtml(traceUrl) << "</a></p>";
@@ -718,9 +719,11 @@ TString TTxMonitoring::RenderMainPage() {
     html << "<h3><a href=\"app?page=compaction&TabletID=" << cgi.Get("TabletID") << "\"> Compaction </a></h3>";
     html << "<h3><a href=\"app?page=scan&TabletID=" << cgi.Get("TabletID") << "\"> Scan </a></h3>";
     html << "<h3><a href=\"app?page=portions&TabletID=" << TEscapeHtml(cgi.Get("TabletID")) << "\"> Portions </a></h3>";
-    html << "<h3>" << RenderLwTraceShardLinks("scan_traces", "YDB_CS_SCAN", "StartScan", Self->TabletID(), "Traces for all scans on shard")
+    html << "<h3>" << RenderLwTraceShardLinks("scan_traces", "YDB_CS_SCAN", "StartScan", Self->TabletID(), Self->SelfId().NodeId(),
+                          "Traces for all scans on shard")
          << "</h3>";
-    html << "<h3><a href=\"" << TEscapeHtml(RenderLwTraceShardLogUrl("YDB_CS_DATA_SOURCE", "StartSourceProcessing", Self->TabletID()))
+    html << "<h3><a href=\""
+         << TEscapeHtml(RenderLwTraceShardLogUrl("YDB_CS_DATA_SOURCE", "StartSourceProcessing", Self->TabletID(), Self->SelfId().NodeId()))
          << "\"> Traces for all portions on shard </a></h3>";
 
     html << "<h3>Tiering Errors</h3>";
@@ -962,6 +965,21 @@ TString TTxMonitoring::RenderPortionsPage() {
                 return new Date(planStep).toISOString();
             }
 
+            function textWidth(ctx, text) {
+                return ctx.measureText(text).width;
+            }
+
+            function drawCenteredBarLabel(ctx, text, x, barW, barTop, barH) {
+                const tw = textWidth(ctx, text);
+                const fitsInside = barW >= tw + 4 && barH >= 14;
+                ctx.textAlign = 'center';
+                ctx.textBaseline = fitsInside ? 'middle' : 'bottom';
+                const textY = fitsInside ? barTop + barH / 2 : barTop - 3;
+                ctx.fillText(text, x + barW / 2, textY);
+                ctx.textAlign = 'left';
+                ctx.textBaseline = 'alphabetic';
+            }
+
             function* generateIntersectionData(ranges) {
                 const points = [];
                 for (const [minPk, maxPk] of ranges) {
@@ -1000,9 +1018,8 @@ TString TTxMonitoring::RenderPortionsPage() {
 
             function drawIntersections(canvas, portions, pkLabels) {
                 const ctx = canvas.getContext('2d');
-                const padding = 50;
-                const width = canvas.width - 2 * padding;
-                const height = canvas.height - 2 * padding;
+                const paddingTop = 50;
+                const paddingBottom = 50;
                 ctx.clearRect(0, 0, canvas.width, canvas.height);
 
                 if (!portions.length) {
@@ -1026,72 +1043,83 @@ TString TTxMonitoring::RenderPortionsPage() {
                 pkMin -= 0.05 * pkDx;
                 pkMax += 0.05 * pkDx;
 
+                const actualPkMin = Math.min(...portions.map(p => p.pkMin));
+                const actualPkMax = Math.max(...portions.map(p => p.pkMax));
+                const bottomLeftLabel = formatPk(actualPkMin, portions, pkLabels);
+                const bottomRightLabel = formatPk(actualPkMax, portions, pkLabels);
+                ctx.font = '11px sans-serif';
+                let maxYLabelWidth = 0;
+                for (let tick = 1; tick <= maxIntersections; ++tick) {
+                    maxYLabelWidth = Math.max(maxYLabelWidth, textWidth(ctx, String(tick)));
+                }
+                const paddingLeft = Math.max(50, maxYLabelWidth + 16);
+                const paddingRight = Math.max(50, textWidth(ctx, bottomRightLabel) + 10);
+                const width = canvas.width - paddingLeft - paddingRight;
+                const height = canvas.height - paddingTop - paddingBottom;
+
                 ctx.strokeStyle = '#ddd';
-                ctx.strokeRect(padding, padding, width, height);
+                ctx.strokeRect(paddingLeft, paddingTop, width, height);
 
                 if (!intersections.length || maxIntersections === 0) {
                     ctx.fillStyle = '#666';
-                    ctx.fillText('No overlapping PK ranges', padding, padding + 20);
+                    ctx.fillText('No overlapping PK ranges', paddingLeft, paddingTop + 20);
                     return;
                 }
 
                 const yMax = maxIntersections * 1.1 + 1;
                 ctx.fillStyle = '#666';
-                ctx.font = '11px sans-serif';
                 for (let tick = 1; tick <= maxIntersections; ++tick) {
-                    const y = padding + height - (tick / yMax) * height;
+                    const y = paddingTop + height - (tick / yMax) * height;
                     ctx.strokeStyle = '#eee';
                     ctx.beginPath();
-                    ctx.moveTo(padding, y);
-                    ctx.lineTo(padding + width, y);
+                    ctx.moveTo(paddingLeft, y);
+                    ctx.lineTo(paddingLeft + width, y);
                     ctx.stroke();
                     ctx.fillStyle = '#666';
-                    ctx.fillText(String(tick), 8, y + 4);
+                    ctx.textAlign = 'right';
+                    ctx.fillText(String(tick), paddingLeft - 8, y + 4);
+                    ctx.textAlign = 'left';
                 }
 
                 for (const [pk, w, n] of intersections) {
-                    const x = pkToX(pk, pkMin, pkMax, width, padding);
-                    const barW = Math.max(1, pkToX(pk + w, pkMin, pkMax, width, padding) - x);
+                    const x = pkToX(pk, pkMin, pkMax, width, paddingLeft);
+                    const barW = Math.max(1, pkToX(pk + w, pkMin, pkMax, width, paddingLeft) - x);
                     const barH = (n / yMax) * height;
-                    const barTop = padding + height - barH;
+                    const barTop = paddingTop + height - barH;
                     ctx.fillStyle = 'rgba(100, 100, 200, 0.6)';
                     ctx.strokeStyle = 'black';
                     ctx.setLineDash([4, 2]);
                     ctx.fillRect(x, barTop, barW, barH);
                     ctx.strokeRect(x, barTop, barW, barH);
                     ctx.setLineDash([]);
-                    if (barW >= 14) {
-                        ctx.fillStyle = '#111';
-                        ctx.fillText(String(n), x + barW / 2 - 4, barTop + barH / 2 + 4);
-                    }
+                    ctx.fillStyle = '#111';
+                    drawCenteredBarLabel(ctx, String(n), x, barW, barTop, barH);
                 }
 
                 ctx.fillStyle = '#333';
                 ctx.font = '12px sans-serif';
                 ctx.save();
-                ctx.translate(15, padding + height / 2);
+                ctx.translate(Math.min(15, paddingLeft / 3), paddingTop + height / 2);
                 ctx.rotate(-Math.PI / 2);
                 ctx.fillText('intersection count', 0, 0);
                 ctx.restore();
-                const actualPkMin = Math.min(...portions.map(p => p.pkMin));
-                const actualPkMax = Math.max(...portions.map(p => p.pkMax));
                 ctx.fillStyle = '#666';
                 ctx.font = '11px sans-serif';
-                ctx.fillText(formatPk(actualPkMin, portions, pkLabels), padding, padding + height + 20);
-                const rightLabel = formatPk(actualPkMax, portions, pkLabels);
-                ctx.fillText(rightLabel, padding + width - Math.min(200, rightLabel.length * 6), padding + height + 20);
+                ctx.fillText(bottomLeftLabel, paddingLeft, paddingTop + height + 20);
+                ctx.textAlign = 'right';
+                ctx.fillText(bottomRightLabel, paddingLeft + width, paddingTop + height + 20);
+                ctx.textAlign = 'left';
             }
 
             function drawPortions(canvas, portions, maxLevel, pkLabels, compressed) {
                 const ctx = canvas.getContext('2d');
-                const padding = 50;
-                const width = canvas.width - 2 * padding;
-                const height = canvas.height - 2 * padding;
+                const paddingTop = 50;
+                const paddingBottom = 50;
                 ctx.clearRect(0, 0, canvas.width, canvas.height);
 
                 if (!portions.length) {
                     ctx.fillStyle = '#666';
-                    ctx.fillText('No portions', padding, padding + 20);
+                    ctx.fillText('No portions', 50, 70);
                     return;
                 }
 
@@ -1112,23 +1140,38 @@ TString TTxMonitoring::RenderPortionsPage() {
                 planMin -= 0.05 * planDy;
                 planMax += 0.05 * planDy;
 
+                const actualPkMin = Math.min(...portions.map(p => p.pkMin));
+                const actualPkMax = Math.max(...portions.map(p => p.pkMax));
+                const bottomLeftLabel = formatPk(actualPkMin, portions, pkLabels);
+                const bottomRightLabel = formatPk(actualPkMax, portions, pkLabels);
+                const planMinLabel = formatPlanStep(planMin);
+                const planMaxLabel = formatPlanStep(planMax);
+                ctx.font = '11px sans-serif';
+                const paddingLeft = Math.max(
+                    50,
+                    Math.max(textWidth(ctx, planMinLabel), textWidth(ctx, planMaxLabel)) + 12
+                );
+                const paddingRight = Math.max(50, textWidth(ctx, bottomRightLabel) + 10);
+                const width = canvas.width - paddingLeft - paddingRight;
+                const height = canvas.height - paddingTop - paddingBottom;
+
                 ctx.strokeStyle = '#ddd';
-                ctx.strokeRect(padding, padding, width, height);
+                ctx.strokeRect(paddingLeft, paddingTop, width, height);
                 ctx.fillStyle = '#333';
                 const pkViewSuffix = compressed ? ', compressed' : '';
                 const pkAxisLabel = 'pk (' + (data.pk0Name || '') + ', ' + (data.pk0ArrowType || '') + pkViewSuffix + ')';
-                ctx.fillText(pkAxisLabel, padding, padding - 10);
+                ctx.fillText(pkAxisLabel, paddingLeft, paddingTop - 10);
                 ctx.save();
-                ctx.translate(15, padding + height / 2);
+                ctx.translate(Math.min(15, paddingLeft / 3), paddingTop + height / 2);
                 ctx.rotate(-Math.PI / 2);
                 ctx.fillText('plan_step', 0, 0);
                 ctx.restore();
 
                 for (const p of portions) {
-                    const x = pkToX(p.pkMin, pkMin, pkMax, width, padding);
-                    const w = Math.max(1, pkToX(p.pkMax, pkMin, pkMax, width, padding) - x);
-                    const yTop = planStepToY(p.planStepMax, planMin, planMax, height, padding);
-                    const yBottom = planStepToY(p.planStepMin, planMin, planMax, height, padding);
+                    const x = pkToX(p.pkMin, pkMin, pkMax, width, paddingLeft);
+                    const w = Math.max(1, pkToX(p.pkMax, pkMin, pkMax, width, paddingLeft) - x);
+                    const yTop = planStepToY(p.planStepMax, planMin, planMax, height, paddingTop);
+                    const yBottom = planStepToY(p.planStepMin, planMin, planMax, height, paddingTop);
                     const h = Math.max(1, yBottom - yTop);
                     ctx.fillStyle = levelColor(p.compactionLevel, maxLevel);
                     ctx.strokeStyle = p.compactionLevel === 0 ? 'red' : 'black';
@@ -1140,13 +1183,12 @@ TString TTxMonitoring::RenderPortionsPage() {
 
                 ctx.fillStyle = '#666';
                 ctx.font = '11px sans-serif';
-                const actualPkMin = Math.min(...portions.map(p => p.pkMin));
-                const actualPkMax = Math.max(...portions.map(p => p.pkMax));
-                ctx.fillText(formatPk(actualPkMin, portions, pkLabels), padding, padding + height + 20);
-                const rightLabel = formatPk(actualPkMax, portions, pkLabels);
-                ctx.fillText(rightLabel, padding + width - Math.min(200, rightLabel.length * 6), padding + height + 20);
-                ctx.fillText(formatPlanStep(planMin), 5, padding + height);
-                ctx.fillText(formatPlanStep(planMax), 5, padding + 10);
+                ctx.fillText(bottomLeftLabel, paddingLeft, paddingTop + height + 20);
+                ctx.textAlign = 'right';
+                ctx.fillText(bottomRightLabel, paddingLeft + width, paddingTop + height + 20);
+                ctx.fillText(planMinLabel, paddingLeft - 8, paddingTop + height);
+                ctx.fillText(planMaxLabel, paddingLeft - 8, paddingTop + 10);
+                ctx.textAlign = 'left';
                 ctx.font = '12px sans-serif';
             }
 
@@ -1236,7 +1278,7 @@ bool TColumnShard::OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev, const T
     }
 
     if (cgi.Has("page") && cgi.Get("page") == "scan_traces") {
-        ctx.Send(ev->Sender, new NMon::TEvRemoteHttpInfoRes(RenderScanTracesPage(TabletID())));
+        ctx.Send(ev->Sender, new NMon::TEvRemoteHttpInfoRes(RenderScanTracesPage(TabletID(), ctx.SelfID.NodeId())));
         return true;
     }
 

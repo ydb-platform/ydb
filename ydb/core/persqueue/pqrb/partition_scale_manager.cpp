@@ -270,13 +270,12 @@ TPartitionScaleManager::TBuildSplitScaleRequestResult TPartitionScaleManager::Bu
             return {.Split = Nothing(), .Remove = true};
         }
 
-        YDB_LOG_DEBUG("Partition split ranges. Mid#",
+        YDB_LOG_DEBUG("Partition split ranges",
             {"logPrefix", LogPrefix()},
             {"fromHex", ToHex(from)},
             {"toHex", ToHex(to)},
             {"midHex", ToHex(mid)},
-            {"partition", partitionId},
-            {"from", "To#"});
+            {"partition", partitionId});
 
         TPartitionSplit split;
         split.set_partition(partitionId);

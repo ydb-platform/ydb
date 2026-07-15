@@ -176,7 +176,7 @@ void TPartitionFamily::Release(const TActorContext& ctx, ETargetStatus targetSta
         return;
     }
 
-    YDB_LOG_INFO("Release partitions Target status",
+    YDB_LOG_INFO("Release partitions. Target status",
         {"logPrefix", LogPrefix()},
         {"lockedPartitions", JoinRange(", ", LockedPartitions.begin(), LockedPartitions.end())},
         {"targetStatus", targetStatus});
@@ -223,7 +223,7 @@ bool TPartitionFamily::Unlock(const TActorId& sender, ui32 partitionId, const TA
     --Session->ReleasingPartitionCount;
 
     if (!LockedPartitions.empty()) {
-        YDB_LOG_DEBUG("Partition was unlocked but wait else",
+        YDB_LOG_DEBUG("Partition was unlocked, but wait",
             {"logPrefix", LogPrefix()},
             {"partitionId", partitionId},
             {"lockedPartitions", JoinRange(", ", LockedPartitions.begin(), LockedPartitions.end())});

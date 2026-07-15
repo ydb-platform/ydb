@@ -144,7 +144,7 @@ void TPersQueueReadBalancer::InitDone(const TActorContext &ctx) {
         }
         return s;
     };
-    YDB_LOG_DEBUG("Dump logPrefix, getInitLog",
+    YDB_LOG_DEBUG("BALANCER INIT DONE dump logPrefix, getInitLog",
         {"logPrefix", LogPrefix()},
         {"getInitLog", getInitLog()});
 

@@ -287,7 +287,7 @@ FROM my_table;
 
 * `Random()` — число с плавающей точкой (Double) от 0 до 1;
 * `RandomNumber()` — целое число из всего диапазона Uint64;
-* `RandomUuid()` — [Uuid version 4](https://tools.ietf.org/html/rfc4122#section-4.4). Для первичных ключей строковых таблиц рассмотрите ключевые генераторы из [модуля `Uuid`](../udf/list/uuid.md).
+* `RandomUuid()` — [Uuid version 4](https://tools.ietf.org/html/rfc4122#section-4.4). Для первичных ключей таблиц {{ ydb-short-name }} рассмотрите генераторы значений из [модуля `Uuid`](../udf/list/uuid.md).
 
 ### Сигнатуры
 

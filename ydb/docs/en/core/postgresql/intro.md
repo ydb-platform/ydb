@@ -25,7 +25,7 @@ The following capabilities are **no longer supported**:
 | --- | --- |
 | psql, pgAdmin, or PostgreSQL drivers | [{{ ydb-short-name }} CLI](../reference/ydb-cli/index.md), [Embedded UI](../reference/embedded-ui/index.md), [{{ ydb-short-name }} SDK](../reference/ydb-sdk/index.md), or the [JDBC driver](https://github.com/ydb-platform/ydb-jdbc-driver) |
 | PostgreSQL SQL syntax | [YQL](../yql/reference/index.md) — {{ ydb-short-name }}'s native SQL dialect |
-| `pg_dump` + `pg-convert` import | [YDB tools dump/restore](../reference/ydb-cli/export-import/tools-dump.md) or [data migration integrations](../integrations/data-migration/index.md) |
+| `pg_dump` + `pg-convert` import | [YDB tools dump/restore](../reference/ydb-cli/export-import/tools-dump.md) or [data migration integrations](../integrations/migration/index.md) |
 | BI tools via pgwire (for example, FineBI) | Native connectors: [Superset](../integrations/visualization/superset.md), [Grafana](../integrations/visualization/grafana.md), or a driver supported by your tool |
 
 For a step-by-step overview of supported client options, see [Getting started](../dev/getting-started.md).

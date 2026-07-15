@@ -2,9 +2,122 @@
 
 <!-- markdownlint-disable blanks-around-fences -->
 
-Below are examples of authentication with the metadata service in different {{ ydb-short-name }} SDKs.
+Authentication via the metadata service obtains an IAM token from the virtual machine or Yandex Cloud function HTTP endpoint. This method is intended for applications that run inside Yandex Cloud and do not store keys in code. Typical steps: create a metadata provider, open a transport with a secure connection to {{ ydb-short-name }} in the cloud, and execute a request. Details — in the [Authentication](../../reference/ydb-sdk/auth.md) section; basic connection — in the [driver initialization](./init.md) recipe. Other methods: [token](./auth-access-token.md), [anonymous](./auth-anonymous.md), [environment variables](./auth-env.md), [service account](./auth-service-account.md), [login and password](./auth-static.md).
+
+Below are authentication code examples using the metadata service in different {{ ydb-short-name }} SDKs.
 
 {% list tabs %}
+
+- C++
+
+  {% list tabs %}
+
+  - Native SDK
+
+    ```cpp
+    #include <ydb-cpp-sdk/client/driver/driver.h>
+    #include <ydb-cpp-sdk/client/iam/iam.h>
+
+    NYdb::TDriver CreateDriverWithMetadataCredentials(
+        const std::string& connectionString,
+        const std::string& internalCA)
+    {
+        auto config = NYdb::TDriverConfig(connectionString)
+            .UseSecureConnection(internalCA)
+            .SetCredentialsProviderFactory(NYdb::CreateIamCredentialsProviderFactory());
+
+        return NYdb::TDriver(config);
+    }
+    ```
+
+  - userver
+
+    There is no ready configuration for the metadata service in `ydb::YdbComponent` — you need a custom `ydb::CredentialsProviderComponent` with `NYdb::CreateIamCredentialsProviderFactory()`.
+
+    {% cut "static config" %}
+
+    ```yaml
+    ydb:
+        credentials-provider: ydb-metadata-credentials
+        databases:
+            db:
+                endpoint: grpcs://localhost:2135
+                database: /local
+                credentials: {}
+    ```
+
+    {% endcut %}
+
+    {% cut "secdist" %}
+
+    `<PEM>` – Yandex Cloud certificates.
+
+
+    ```json
+    {
+      "ydb_settings": {
+        "db": {
+          "secure_connection_cert": "<PEM>"
+        }
+      }
+    }
+    ```
+
+    {% endcut %}
+
+
+    ```cpp
+    #include <userver/components/component_base.hpp>
+    #include <userver/components/minimal_server_component_list.hpp>
+    #include <userver/storages/secdist/component.hpp>
+    #include <userver/storages/secdist/provider_component.hpp>
+    #include <userver/utils/daemon_run.hpp>
+    #include <userver/ydb/component.hpp>
+    #include <userver/ydb/credentials.hpp>
+    #include <userver/ydb/table.hpp>
+
+    #include <ydb-cpp-sdk/client/iam/iam.h>
+
+    class YdbMetadataCredentials final : public ydb::CredentialsProviderComponent {
+    public:
+        static constexpr std::string_view kName = "ydb-metadata-credentials";
+
+        using ydb::CredentialsProviderComponent::CredentialsProviderComponent;
+
+        std::shared_ptr<NYdb::ICredentialsProviderFactory> CreateCredentialsProviderFactory(
+            const yaml_config::YamlConfig&) const override
+        {
+            return NYdb::CreateIamCredentialsProviderFactory();
+        }
+    };
+
+    class MyYdbWorker final : public components::ComponentBase {
+    public:
+        static constexpr std::string_view kName = "my-ydb-worker";
+
+        MyYdbWorker(const components::ComponentConfig& config, const components::ComponentContext& context)
+            : components::ComponentBase(config, context),
+              table_client_(context.FindComponent<ydb::YdbComponent>().GetTableClient("db"))
+        {
+            // ...
+        }
+
+    private:
+        std::shared_ptr<ydb::TableClient> table_client_;
+    };
+
+    int main(int argc, char* argv[]) {
+        auto component_list = components::MinimalServerComponentList()
+            .Append<components::DefaultSecdistProvider>()
+            .Append<components::Secdist>()
+            .Append<YdbMetadataCredentials>()
+            .Append<ydb::YdbComponent>()
+            .Append<MyYdbWorker>();
+        return utils::DaemonMain(argc, argv, component_list);
+    }
+    ```
+
+  {% endlist %}
 
 - Go
 
@@ -84,15 +197,37 @@ Below are examples of authentication with the metadata service in different {{ y
   - Native SDK
 
     ```java
-    public void work(String connectionString) {
-        AuthProvider authProvider = CloudAuthHelper.getMetadataAuthProvider();
+    import tech.ydb.auth.iam.CloudAuthHelper;
+    import tech.ydb.common.transaction.TxMode;
+    import tech.ydb.core.grpc.GrpcTransport;
+    import tech.ydb.query.QueryClient;
+    import tech.ydb.query.result.ResultSetReader;
+    import tech.ydb.query.tools.QueryReader;
+    import tech.ydb.query.tools.SessionRetryContext;
 
-        try (GrpcTransport transport = GrpcTransport.forConnectionString(connectionString)
-                .withAuthProvider(authProvider)
-                .build();
-             QueryClient queryClient = QueryClient.newClient(transport).build()) {
+    public class MetadataAuthExample {
+        public static void main(String[] args) throws Exception {
+            // Connection string from an environment variable or the default local {{ ydb-short-name }}
+            String connectionString = System.getenv().getOrDefault(
+                    "YDB_CONNECTION_STRING", "grpc://localhost:2136/local");
 
-            doWork(queryClient);
+            // Token is requested from the virtual machine metadata service or from a function in Yandex Cloud
+            try (GrpcTransport transport = GrpcTransport.forConnectionString(connectionString)
+                    .withAuthProvider(CloudAuthHelper.getMetadataAuthProvider())
+                    .build();
+                 QueryClient queryClient = QueryClient.newClient(transport).build()) {
+
+                SessionRetryContext retryCtx = SessionRetryContext.create(queryClient).build();
+                QueryReader reader = retryCtx.supplyResult(
+                        session -> QueryReader.readFrom(session.createQuery("SELECT 1", TxMode.NONE))
+                ).join().getValue();
+
+                // Connection check: output the result of SELECT 1
+                ResultSetReader rs = reader.getResultSet(0);
+                if (rs.next()) {
+                    System.out.println("SELECT 1 = " + rs.getColumn(0).getInt32());
+                }
+            }
         }
     }
     ```
@@ -100,21 +235,37 @@ Below are examples of authentication with the metadata service in different {{ y
   - JDBC
 
     ```java
-    public void work() throws SQLException {
-        Properties props = new Properties();
-        props.setProperty("useMetadata", "true");
-        try (Connection connection = DriverManager.getConnection("jdbc:ydb:grpc://localhost:2136/local", props)) {
-            doWork(connection);
-        }
+    import java.sql.Connection;
+    import java.sql.DriverManager;
+    import java.sql.Properties;
+    import java.sql.ResultSet;
+    import java.sql.SQLException;
+    import java.sql.Statement;
 
-        // You can also set useMetadata in the JDBC URL
-        try (Connection connection = DriverManager.getConnection("jdbc:ydb:grpc://localhost:2136/local?useMetadata=true")) {
-            doWork(connection);
+    public class MetadataAuthJdbcExample {
+        public static void main(String[] args) throws SQLException {
+            String jdbcUrl = System.getenv().getOrDefault(
+                    "YDB_JDBC_URL", "jdbc:ydb:grpc://localhost:2136/local");
+
+            // Authentication via Yandex Cloud metadata service
+            Properties props = new Properties();
+            props.setProperty("useMetadata", "true");
+
+            try (Connection connection = DriverManager.getConnection(jdbcUrl, props);
+                 Statement statement = connection.createStatement();
+                 ResultSet rs = statement.executeQuery("SELECT 1")) {
+                if (rs.next()) {
+                    System.out.println("SELECT 1 = " + rs.getInt(1));
+                }
+            }
         }
     }
     ```
 
-    In Spring Boot, ORMs, and other JDBC wrappers, pass the same JDBC URLs and parameters (`useMetadata` in the URL or in the data source properties) as in the example above.
+
+    The `useMetadata` option can also be specified directly in the JDBC URL: `jdbc:ydb:grpc://localhost:2136/local?useMetadata=true`.
+
+    In Spring Boot, ORM, and other third‑party frameworks around JDBC, pass the same JDBC URL and parameters (`useMetadata` in the URL or in the data source properties) as in the example above.
 
   {% endlist %}
 
@@ -152,24 +303,27 @@ Below are examples of authentication with the metadata service in different {{ y
 
   {% endlist %}
 
-- C# (.NET)
+- C#
 
   ```C#
-  using Ydb.Sdk;
-  using Ydb.Sdk.Yc;
+  using Ydb.Sdk.Ado;
 
-  var metadataProvider = new MetadataProvider();
+  await using var dataSource = new YdbDataSource(
+      "Host=ydb.serverless.yandexcloud.net;Port=2135;Database=/ru-central1/<folder-id>/<database-id>;EnableMetadataCredentials=True");
+  await using var connection = await dataSource.OpenConnectionAsync();
+  ```
 
-  // Await initial IAM token.
-  await metadataProvider.Initialize();
 
-  var config = new DriverConfig(
-      endpoint: endpoint, // Database endpoint, "grpcs://host:port"
-      database: database, // Full database path
-      credentials: metadataProvider
-  );
+  For Entity Framework and linq2db, use the same connectionString.
 
-  await using var driver = await Driver.CreateInitialized(config);
+- Rust
+
+  ```rust
+  use ydb::{ClientBuilder, MetadataUrlCredentials, YdbResult};
+
+  let client = ClientBuilder::new_from_connection_string("grpc://localhost:2136?database=local")?
+      .with_credentials(MetadataUrlCredentials::new())
+      .client()?;
   ```
 
 - PHP

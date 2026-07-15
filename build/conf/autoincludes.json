@@ -2,6 +2,7 @@
     "devtools/ya",
     "library/cpp/geo",
     "util",
-    "yql/essentials"
+    "yql/essentials",
+    "yt/yt/flow"
 ]
 

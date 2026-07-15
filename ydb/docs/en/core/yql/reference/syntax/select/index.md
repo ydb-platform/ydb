@@ -166,9 +166,6 @@ If the underlying queries have one of the `ORDER BY/LIMIT/DISCARD/INTO RESULT` o
 * [VIEW secondary_index](secondary_index.md)
 
 * [VIEW vector_index](vector_index.md)
-<<<<<<< HEAD
+* [VIEW fulltext_index](fulltext_index.md)
 
 {% endif %}
-=======
-* [VIEW fulltext_index](fulltext_index.md)
->>>>>>> a76423f7b3c (Fulltext index docs (#34824))

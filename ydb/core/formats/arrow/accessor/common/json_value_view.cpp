@@ -36,9 +36,6 @@ std::optional<TString> TJsonValueView::JsonNumberToString(double jsonNumber) {
 TJsonValueView TJsonValueView::OfBinaryJson(const TStringBuf& blob) {
     TJsonValueView result(EKind::BinaryJson);
     result.Bytes = blob;
-    if (!blob.empty()) {
-        AFL_VERIFY(NBinaryJson::IsValidBinaryJson(blob));
-    }
     return result;
 }
 

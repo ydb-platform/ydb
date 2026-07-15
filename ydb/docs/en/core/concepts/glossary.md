@@ -629,7 +629,7 @@ In addition, there is a **root SchemeShard** that stores information about datab
 
 #### TxAllocator {#txallocator}
 
-**TxAllocator** or **transaction allocator** is a system tablet that allocates unique transaction identifiers ( [TxID](#txid)) in the cluster. Typically, there are several such tablets in the cluster, from which the [transaction proxy](#transaction-proxy) pre-allocates and caches ranges for local issuance within a single process.
+**TxAllocator** or **transaction allocator** is a system tablet that allocates unique transaction identifiers ([TxID](#txid)) in the cluster. Typically, there are several such tablets in the cluster, from which the [transaction proxy](#transaction-proxy) pre-allocates and caches ranges for local issuance within a single process.
 
 #### Coordinator {#coordinator}
 

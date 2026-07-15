@@ -407,12 +407,15 @@ public:
                 }
             };
 
+        auto rpcSettings = TRpcRequestSettings::Make(settings);
+        rpcSettings.PreferredEndpoint = TEndpointKey(GetNodeIdFromSession(sessionId));
+
         Connections_->Run<Ydb::Query::V1::QueryService, Ydb::Query::DeleteSessionRequest, Ydb::Query::DeleteSessionResponse>(
             std::move(request),
             responseCb,
             &Ydb::Query::V1::QueryService::Stub::AsyncDeleteSession,
             DbDriverState_,
-            TRpcRequestSettings::Make(settings));
+            rpcSettings);
 
         return promise.GetFuture();
     }

@@ -2,7 +2,7 @@
 
 Конвертер SQL-диалектов — это сервис, преобразующий SQL-запросы, написанные на других диалектах (PostgreSQL, MySQL, ClickHouse и других), в синтаксис [YQL](../../yql/reference/index.md). Сервис предназначен для упрощения переноса существующих запросов в {{ ydb-name }} и снижения порога входа для разработчиков, уже знакомых с другими СУБД.
 
-Конвертер доступен как отдельное веб-приложение по адресу [ydb-dialect-converter.website.yandexcloud.net](https://ydb-dialect-converter.website.yandexcloud.net/), а также встроен в [плагин DBeaver для {{ ydb-short-name }}](../gui/dbeaver-plugin.md#convert-dialect) и [плагин VS Code для {{ ydb-short-name }}](../gui/vscode-plugin.md). Пользователь вставляет запрос на исходном диалекте, выбирает диалект из списка и получает версию того же запроса на YQL.
+Конвертер доступен как отдельное веб-приложение по адресу [ydb-dialect-converter.website.yandexcloud.net](https://ydb-dialect-converter.website.yandexcloud.net/). Пользователь вставляет запрос на исходном диалекте, выбирает диалект из списка и получает версию того же запроса на YQL.
 
 ## Как пользоваться {#usage}
 
@@ -73,6 +73,5 @@
 
 - [Веб-интерфейс конвертера SQL-диалектов](https://ydb-dialect-converter.website.yandexcloud.net/)
 - [{#T}](sqlglot.md)
-- [{#T}](../gui/dbeaver-plugin.md)
 - [YQL Reference](../../yql/reference/index.md)
 - [SQLGlot](https://github.com/tobymao/sqlglot)

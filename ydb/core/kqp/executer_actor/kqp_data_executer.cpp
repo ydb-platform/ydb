@@ -712,7 +712,7 @@ private:
             for (const auto& [stageId, stageInfo] : TasksGraph.GetStagesInfo()) {
                 if (stageInfo.Meta.IsOlap()) {
                     HasOlapTable = true;
-                    AFL_ENSURE(GetSnapshot().IsValid()); // OLAP queries can't be executed without snapshot
+                    AFL_ENSURE(!ReadOnlyTx || GetSnapshot().IsValid());
                     ResourceSnapshotRequired = true;
                 }
             }

@@ -255,28 +255,24 @@ void TCommandTPCCRun::Config(TConfig& config) {
             .Optional().StoreTrue(&RunConfig->NoDelays);
 
     auto txModeOpt = config.Opts->AddLongOption(
-        "tx-mode", TStringBuilder() << "Transaction mode: serializable-rw, snapshot-rw, or read-committed-rw")
+        "tx-mode", TStringBuilder() << "Transaction mode: serializable-rw or snapshot-rw")
             .OptionalArgument("STRING").StoreMappedResult(&RunConfig->TxMode, [runConfig = RunConfig](const TString& value) {
                 if (value == "serializable-rw") {
-                    runConfig->MixedTxMode = false;
                     return NQuery::TTxSettings::SerializableRW();
                 } else if (value == "snapshot-rw") {
-                    runConfig->MixedTxMode = false;
                     return NQuery::TTxSettings::SnapshotRW();
                 } else if (value == "read-committed-rw") {
                     // Experimental isolation level. Hidden from help at current time.
-                    runConfig->MixedTxMode = false;
                     return NQuery::TTxSettings::ReadCommittedRW();
                 } else if (value == "mixed") {
+                    // This option is useful for stress tests. Hidden from help.
                     runConfig->MixedTxMode = true;
                     return NQuery::TTxSettings::SerializableRW();
                 }
-                throw yexception() << "Invalid transaction mode: " << value
-                    << ". Valid values are: serializable-rw, snapshot-rw, read-committed-rw";
+                throw yexception() << "Invalid transaction mode: " << value << ". Valid values are: serializable-rw, snapshot-rw";
             }).DefaultValue("serializable-rw")
             .Completer(NLastGetopt::NComp::Choice({{"serializable-rw", "Serializable read-write"},
-                                                   {"snapshot-rw", "Snapshot read-write"},
-                                                   {"read-committed-rw", "Read Committed read-write"}}));
+                                                   {"snapshot-rw", "Snapshot read-write"}}));
 
     auto txModeWeightSerializableOpt = config.Opts->AddLongOption(
         "tx-mode-weight-serializable",

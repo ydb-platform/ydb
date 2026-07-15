@@ -621,7 +621,9 @@ void TBlocksDirtyMap::EraseFinished(
     for (ui64 lsn: eraseOk) {
         auto item = Inflight.GetValue(lsn);
         if (!item) {
-            // The item was deleted when the host was disabled.
+            // The record already left the inflight map: deleted when the host
+            // was disabled, or this is a belated ack (for example a duplicate
+            // response after a retry). Nothing to do.
             continue;
         }
         auto& inflight = item->Value;
@@ -635,7 +637,9 @@ void TBlocksDirtyMap::EraseFinished(
     for (ui64 lsn: eraseFailed) {
         auto item = Inflight.GetValue(lsn);
         if (!item) {
-            // The item was deleted when the host was disabled.
+            // The record already left the inflight map: deleted when the host
+            // was disabled, or this is a belated failure. Nothing to track
+            // anymore.
             continue;
         }
         auto& inflight = item->Value;

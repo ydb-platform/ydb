@@ -664,6 +664,89 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
         UNIT_ASSERT_VALUES_EQUAL(0, dirtyMap.GetInflightCount());
     }
 
+    // A late erase response for a record that already left the inflight map
+    // must be a no-op, not a crash of the tablet. Covers both a late success
+    // and a late failure for a forgotten lsn; the sequence that leads to this
+    // state in production is pinned by
+    // ShouldIgnoreLateEraseAckAfterHostDisabled below.
+    Y_UNIT_TEST(ShouldIgnoreLateEraseAckForForgottenLsn)
+    {
+        const auto vchunkConfig = MakeTestVChunkConfig();
+        TBlocksDirtyMap dirtyMap(
+            vchunkConfig,
+            DefaultBlockSize,
+            DefaultVChunkSize / DefaultBlockSize);
+
+        const auto range = TBlockRange64::WithLength(10, 10);
+        dirtyMap.RegisterInflightWrite(100, range);
+        dirtyMap
+            .WriteFinished(100, range, MakePrimaryHosts(), MakePrimaryHosts());
+
+        auto flushHint = dirtyMap.MakeFlushHint(1);
+        UNIT_ASSERT(!flushHint.Empty());
+        for (const auto& [route, hint]: flushHint.GetAllHints()) {
+            dirtyMap.FlushFinished(route, MakeLsnVector(hint.Segments), {});
+        }
+
+        auto eraseHints = dirtyMap.MakeEraseHint(1);
+        UNIT_ASSERT(!eraseHints.Empty());
+        dirtyMap.EraseFinished(THostIndex{0}, {100}, {});
+        dirtyMap.EraseFinished(THostIndex{1}, {100}, {});
+        dirtyMap.EraseFinished(THostIndex{2}, {100}, {});
+        UNIT_ASSERT_VALUES_EQUAL(0, dirtyMap.GetInflightCount());
+
+        // A late success and a late failure for the forgotten lsn: the
+        // record is long gone, both must be no-ops.
+        dirtyMap.EraseFinished(THostIndex{2}, {100}, {});
+        dirtyMap.EraseFinished(THostIndex{2}, {}, {100});
+        UNIT_ASSERT_VALUES_EQUAL(0, dirtyMap.GetInflightCount());
+    }
+
+    // The sequence that forgets a record while its host still owes a
+    // response: the erase on one host does not complete in time, the host
+    // gets disabled and the record is dropped from tracking, and only then
+    // the genuine response from that host arrives. It must be a no-op.
+    Y_UNIT_TEST(ShouldIgnoreLateEraseAckAfterHostDisabled)
+    {
+        auto vchunkConfig = MakeTestVChunkConfig();
+        TBlocksDirtyMap dirtyMap(
+            vchunkConfig,
+            DefaultBlockSize,
+            DefaultVChunkSize / DefaultBlockSize);
+
+        const auto range = TBlockRange64::WithLength(10, 10);
+        dirtyMap.RegisterInflightWrite(100, range);
+        dirtyMap
+            .WriteFinished(100, range, MakePrimaryHosts(), MakePrimaryHosts());
+
+        auto flushHint = dirtyMap.MakeFlushHint(1);
+        UNIT_ASSERT(!flushHint.Empty());
+        for (const auto& [route, hint]: flushHint.GetAllHints()) {
+            dirtyMap.FlushFinished(route, MakeLsnVector(hint.Segments), {});
+        }
+
+        auto eraseHints = dirtyMap.MakeEraseHint(1);
+        UNIT_ASSERT(!eraseHints.Empty());
+        dirtyMap.EraseFinished(THostIndex{0}, {100}, {});
+        dirtyMap.EraseFinished(THostIndex{1}, {100}, {});
+        // The erase on host 2 does not complete in time: the request is
+        // marked failed and re-queued.
+        dirtyMap.EraseFinished(THostIndex{2}, {}, {100});
+        UNIT_ASSERT_VALUES_EQUAL(1, dirtyMap.GetInflightCount());
+
+        // The host gets disabled; the re-queued erase is confirmed on its
+        // behalf and the record leaves the inflight map.
+        vchunkConfig.DisableHost(2);
+        dirtyMap.UpdateConfig(vchunkConfig);
+        auto retryHints = dirtyMap.MakeEraseHint(1);
+        UNIT_ASSERT(retryHints.Empty());
+        UNIT_ASSERT_VALUES_EQUAL(0, dirtyMap.GetInflightCount());
+
+        // The genuine response from the disabled host finally arrives.
+        dirtyMap.EraseFinished(THostIndex{2}, {100}, {});
+        UNIT_ASSERT_VALUES_EQUAL(0, dirtyMap.GetInflightCount());
+    }
+
     Y_UNIT_TEST(ShouldWriteAndFlushAndEraseWhenAdditionalHandOffDesired)
     {
         auto vchunkConfig = MakeTestVChunkConfig();

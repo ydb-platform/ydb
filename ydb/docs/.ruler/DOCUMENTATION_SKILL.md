@@ -1,385 +1,379 @@
-# Документаторский скилл YDB
+# YDB Documentation Skill
 
-Этот скилл помогает разработчикам писать документацию для YDB с соблюдением всех правил структуры, стиля и языков.
+This skill helps developers write documentation for YDB while following all structure, style, and language rules.
 
-**Использование:** Разработчик описывает что нужно написать, скилл сам определяет где и как это разместить, в какие разделы прорастить, генерирует статьи на RU и EN одновременно.
+**Usage:** A developer describes what needs to be documented, the skill automatically determines where and how to place it, which sections to propagate to, and generates articles in RU and EN simultaneously.
 
 ---
 
-## Рабочий процесс
+## Workflow
 
-### Этап 0: Подготовка информации (ВАЖНО!)
+### Stage 0: Information Preparation (IMPORTANT!)
 
-**Перед использованием скилла разработчик должен подготовить:**
-- Описание функциональности (что это делает)
-- Параметры, аргументы, опции
-- Возвращаемые значения, результаты
-- Примеры использования (код, команды, конфиг)
-- Ограничения и предусловия
-- Связанные функции или концепции
-- Ссылки на PR, Issue, спецификацию
+**Before using the skill, the developer must prepare:**
+- Feature description (what it does)
+- Parameters, arguments, options
+- Return values, results
+- Usage examples (code, commands, config)
+- Limitations and prerequisites
+- Related functions or concepts
+- Links to PR, Issue, specification
 
-Скилл анализирует эту информацию и создает документацию. **Нейронка не может придумать детали из ничего - нужна фактура!**
+The skill analyzes this information and creates documentation. **An AI cannot invent details from nothing - factual information is required!**
 
-### Этап 1: Сбор информации от пользователя
+### Stage 1: Gathering Information from User
 
-Скилл задаёт следующие вопросы:
+The skill asks the following questions:
 
-**Q1. Предоставь полную фактуру** (обязательно)
-- Всю информацию о том, что нужно документировать
-- Описание, параметры, примеры, ограничения, контекст
-- Чем больше информации, тем качественнее документация
-- Пример:
+**Q1. Provide complete factual information** (required)
+- All information about what needs to be documented
+- Description, parameters, examples, limitations, context
+- The more information provided, the higher quality the documentation
+- Example:
   ```
-  JDBC драйвер для YDB.
-  - Поддерживает стандартный JDBC API
-  - Основные классы: JdbcDriver, JdbcConnection, JdbcStatement
-  - Параметры подключения: url, user, password, poolSize, etc
-  - Примеры: (привести код подключения, выполнения запросов)
-  - Работает с pooling, transactions, prepared statements
-  - Лимиты: max connections, timeout settings
+  JDBC driver for YDB.
+  - Supports standard JDBC API
+  - Main classes: JdbcDriver, JdbcConnection, JdbcStatement
+  - Connection parameters: url, user, password, poolSize, etc
+  - Examples: (provide connection and query execution code)
+  - Works with pooling, transactions, prepared statements
+  - Limits: max connections, timeout settings
   ```
 
-**Q2. В каких PR/Issue реализован этот функционал?** (опционально)
-- Список URL PR или номеров (например: #38700, #39123)
-- Помогает скиллу понять контекст и детали реализации
-- Если есть - скилл может прочитать PR для большей точности
+**Q2. Which PR/Issue implements this functionality?** (optional)
+- List of PR URLs or numbers (e.g.: #38700, #39123)
+- Helps the skill understand implementation context and details
+- If provided - skill can read the PR for greater accuracy
 
-**Q3. Целевая аудитория** (обязательно, выбор один или несколько)
-- `all` — все пользователи
-- `newcomers` — новички, впервые работающие с YDB
-- `app-developers` — разработчики приложений
-- `devops` — DevOps инженеры
-- `security-engineers` — инженеры по безопасности
-- `contributors` — контрибьюторы YDB
-- `analysts` — аналитики данных
+**Q3. Target audience** (required, choose one or more)
+- `all` — all users
+- `newcomers` — beginners, first time working with YDB
+- `app-developers` — application developers
+- `devops` — DevOps engineers
+- `security-engineers` — security engineers
+- `contributors` — YDB contributors
+- `analysts` — data analysts
 
-**Q4. Жанр контента** (обязательно, выбор, может быть несколько)
-- `theory` — теоретический материал, концепции
-- `guide` — практическое пошаговое руководство
-- `reference` — справочная информация, полный каталог
-- `recipe` — мини-руководство для конкретной задачи
-- `faq` — часто задаваемый вопрос и ответ
+**Q4. Content genre** (required, can choose multiple)
+- `theory` — theoretical material, concepts
+- `guide` — practical step-by-step guide
+- `reference` — reference information, complete catalog
+- `recipe` — mini-guide for a specific task
+- `faq` — frequently asked question and answer
 
-**Q5. Примеры использования для контекста** (опционально)
-- Существующие примеры кода, ссылки на примеры
-- Помогает скиллу лучше понять контекст
+**Q5. Usage examples for context** (optional)
+- Existing code examples, links to examples
+- Helps the skill better understand the context
 
-**Q6. Название ветки для git** (обязательно)
-- Формат: `feature/описание` или `docs/описание`
-- Пример: `feature/jdbc-driver-docs` или `docs/nfs-backup`
+**Q6. Git branch name** (required)
+- Format: `feature/description` or `docs/description`
+- Example: `feature/jdbc-driver-docs` or `docs/nfs-backup`
 
-**Проверка git:**
-- Скилл проверяет есть ли незакомиченные изменения
-- Если есть — предлагает сделать `git stash`
-- Спрашивает разрешение на создание новой ветки
+**Git check:**
+- Skill checks for uncommitted changes
+- If found - suggests doing `git stash`
+- Asks permission to create new branch
 
-### Этап 2: Анализ и определение плана
+### Stage 2: Analysis and Plan Definition
 
-Скилл выполняет автоматический анализ:
+The skill performs automatic analysis:
 
-1. **Прочитать всю документацию**
-   - Все файлы в `ydb/docs/ru/core/**/*.md`
+1. **Read all documentation**
+   - All files in `ydb/docs/ru/core/**/*.md` and `ydb/docs/en/core/**/*.md`
    - DOCUMENTATION_MODEL.yaml
-   - PR-ы если были указаны пользователем
+   - PRs if specified by user
 
-2. **Определить основную статью**
-   - На основе жанра и аудитории выбрать подходящий раздел из DOCUMENTATION_MODEL
-   - Определить точный путь файла (ydb/docs/ru/core/...)
-   - Выбрать подходящий подраздел (третий уровень из модели)
+2. **Determine main article**
+   - Based on genre and audience, select appropriate section from DOCUMENTATION_MODEL
+   - Determine exact file path (ydb/docs/ru/core/...)
+   - Choose appropriate subsection (third level from model)
 
-3. **Определить прорастания в другие разделы**
+3. **Determine propagation to other sections**
    
-   **Глоссарий:**
-   - Выделить все новые термины, впервые упоминаемые в статье
-   - Написать определения для глоссария
-   - Добавить ссылки на глоссарий в основной текст статьи
-   - Обновить `concepts/glossary.md` (RU + EN)
+   **Glossary:**
+   - Highlight all new terms first mentioned in the article
+   - Write definitions for glossary
+   - Add glossary links in main article text
+   - Update `concepts/glossary.md` (RU + EN)
    
-   **Справка:**
-   - Если в статье есть параметры, опции, API — выделить их
-   - Создать/обновить справочные файлы в `reference/...`
-   - Обновить соответствующие справки (RU + EN)
+   **Reference:**
+   - If article contains parameters, options, API - highlight them
+   - Create/update reference files in `reference/...`
+   - Update corresponding references (RU + EN)
    
-   **Include файлы:**
-   - Если есть переиспользуемые куски (например, процедура экспорта) — вынести в `_includes/`
-   - Использовать `{% include ... %}` в основной статье
+   **Include files:**
+   - If there are reusable chunks (e.g., export procedure) - extract to `_includes/`
+   - Use `{% include ... %}` in main article
    
-   **Рецепты:**
-   - Если есть примеры кода или пошаговые инструкции — добавить в `recipes/...`
-   - Создать отдельный рецепт или добавить в существующий
+   **Recipes:**
+   - If there are code examples or step-by-step instructions - add to `recipes/...`
+   - Create separate recipe or add to existing
    
-   **Кросс-ссылки:**
-   - На основе DOCUMENTATION_MODEL понять какие другие разделы связаны
-   - Найти существующие статьи где имеет смысл добавить ссылку на новую статью
-   - Для каждого места указать где добавить ссылку и какой текст использовать
+   **Cross-references:**
+   - Based on DOCUMENTATION_MODEL understand which other sections are related
+   - Find existing articles where it makes sense to add link to new article
+   - For each place specify where to add link and what text to use
    
-   **Обновление DOCUMENTATION_MODEL:**
-   - Если добавляется новый подраздел (например `dev/jdbc/`) — нужно ли обновить модель?
-   - Добавить новую запись в DOCUMENTATION_MODEL.yaml если нужно
+   **Update DOCUMENTATION_MODEL:**
+   - If new subsection is added (e.g. `dev/jdbc/`) - should the model be updated?
+   - Add new entry to DOCUMENTATION_MODEL.yaml if needed
    
-   **Обновление TOC (меню):**
-   - Проверить файлы `toc_p.yaml` и `toc_i.yaml` в нужном разделе
-   - Определить где должна быть новая статья в иерархии меню
-   - Предложить обновления TOC (RU + EN)
+   **Update TOC (menu):**
+   - Check `toc_p.yaml` and `toc_i.yaml` files in needed section
+   - Determine where new article should be in menu hierarchy
+   - Propose TOC updates (RU + EN)
    
-   **Обновление redirects:**
-   - Если есть рефакторинг структуры или перемещение файлов
-   - ВСЕГДА добавить запись в `redirects.yaml` чтобы старые ссылки не стали 404
-   - Убедиться что все внешние ссылки остаются рабочими
+   **Update redirects:**
+   - If there is structure refactoring or file moves
+   - ALWAYS add entry to `redirects.yaml` so old links don't become 404
+   - Ensure all external links remain working
 
-### Этап 3: Summary и подтверждение
+### Stage 3: Summary and Confirmation
 
-Скилл показывает пользователю полный план:
+The skill shows user the complete plan:
 
 ```
-📋 ПЛАН ДОБАВЛЕНИЯ ДОКУМЕНТАЦИИ
+📋 DOCUMENTATION ADDITION PLAN
 
-🎯 ОСНОВНАЯ СТАТЬЯ
-  📄 Раздел: Для разработчиков приложений → JDBC
-  📝 Путь: ydb/docs/ru/core/dev/jdbc/jdbc-driver.md
-  👥 Аудитория: app-developers
-  📚 Жанры: guide
+🎯 MAIN ARTICLE
+  📄 Section: For Application Developers → JDBC
+  📝 Path: ydb/docs/ru/core/dev/jdbc/jdbc-driver.md
+  👥 Audience: app-developers
+  📚 Genres: guide
   
-📌 ПРОРАСТАНИЯ В ДРУГИЕ РАЗДЕЛЫ
+📌 PROPAGATION TO OTHER SECTIONS
   
-  ✅ ГЛОССАРИЙ
-     Новые термины (5 штук):
-     - Connection Pool — пул соединений для переиспользования
-     - Prepared Statement — подготовленное выражение для переиспользования
-     - Transaction — атомарная операция
-     - Commit — завершение транзакции
-     - Rollback — откат транзакции
-     Файлы: concepts/glossary.md (RU + EN)
+  ✅ GLOSSARY
+     New terms (5 total):
+     - Connection Pool — pool of connections for reuse
+     - Prepared Statement — prepared expression for reuse
+     - Transaction — atomic operation
+     - Commit — transaction completion
+     - Rollback — transaction rollback
+     Files: concepts/glossary.md (RU + EN)
   
-  ✅ СПРАВКА
-     Добавить справку по API JDBC драйвера
-     Файлы:
+  ✅ REFERENCE
+     Add JDBC driver API reference
+     Files:
      - reference/languages-and-apis/java/jdbc-api-reference.md (RU + EN)
      - reference/ydb-sdk/java/jdbc-parameters.md (RU + EN)
   
-  ✅ РЕЦЕПТЫ
-     Добавить мини-руководства с примерами:
+  ✅ RECIPES
+     Add mini-guides with examples:
      - recipes/ydb-sdk/java/jdbc-connection-pool.md
      - recipes/ydb-sdk/java/jdbc-transactions.md
      - recipes/ydb-sdk/java/jdbc-prepared-statements.md
-     Файлы: RU + EN версии
+     Files: RU + EN versions
   
-  ✅ КРОСС-ССЫЛКИ
-     Добавить ссылки на новую статью в:
-     - dev/example-app/ (пример использования JDBC)
-     - integrations/orm/ (интеграция с ORM)
-     - reference/languages-and-apis/index.md (в список API)
+  ✅ CROSS-REFERENCES
+     Add links to new article in:
+     - dev/example-app/ (JDBC usage example)
+     - integrations/orm/ (ORM integration)
+     - reference/languages-and-apis/index.md (in API list)
   
-  ✅ ОБНОВЛЕНИЕ МОДЕЛИ
-     Добавить подраздел в DOCUMENTATION_MODEL.yaml:
-     - dev/jdbc/ (новый подраздел)
-     С описанием: "JDBC драйвер для Java приложений"
+  ✅ UPDATE MODEL
+     Add subsection to DOCUMENTATION_MODEL.yaml:
+     - dev/jdbc/ (new subsection)
+     With description: "JDBC driver for Java applications"
   
-  ✅ ОБНОВЛЕНИЕ TOC (МЕНЮ)
-     Файлы: toc_p.yaml и toc_i.yaml
-     Добавить пункт в меню:
-     - раздел "Для разработчиков приложений"
-     - подраздел "JDBC"
+  ✅ UPDATE TOC (MENU)
+     Files: toc_p.yaml and toc_i.yaml
+     Add menu item:
+     - section "For Application Developers"
+     - subsection "JDBC"
   
-  ✅ ОБНОВЛЕНИЕ REDIRECTS
-     Если есть перемещения файлов — добавить в redirects.yaml
-     Пример: /docs/ru/dev/old-jdbc-path → /docs/ru/dev/jdbc/jdbc-driver
+  ✅ UPDATE REDIRECTS
+     If there are file moves - add to redirects.yaml
+     Example: /docs/ru/dev/old-jdbc-path → /docs/ru/dev/jdbc/jdbc-driver
 
-🌍 ЯЗЫКИ: RU + EN (одновременно, не переводом)
-🔀 ВЕТКА: feature/jdbc-driver-documentation
-📦 ВСЕГО ФАЙЛОВ: примерно 15 новых/обновленных (RU + EN)
+🌍 LANGUAGES: RU + EN (simultaneously, not translation)
+🔀 BRANCH: feature/jdbc-driver-documentation
+📦 TOTAL FILES: approximately 15 new/updated (RU + EN)
 ```
 
-**Скилл спрашивает пользователя:**
+**Skill asks user:**
 ```
-✅ Планы выглядят правильно?
+✅ Does the plan look correct?
 
-Если нет, напиши что нужно изменить:
-- Добавить/убрать раздел прорастания
-- Изменить путь статьи
-- Добавить/убрать кросс-ссылки
-- Другое
+If not, write what needs to be changed:
+- Add/remove propagation section
+- Change article path
+- Add/remove cross-references
+- Other
 ```
 
-Если пользователь хочет что-то изменить:
-- Скилл спрашивает что именно
-- Обновляет план
-- Показывает новый summary
-- Повторяет вопрос
+If user wants to change something:
+- Skill asks what specifically
+- Updates plan
+- Shows new summary
+- Repeats question
 
-Повторяется до тех пор пока пользователь не скажет "ОК, всё правильно"
+Repeats until user says "OK, everything is correct"
 
-### Этап 4: Генерирование файлов
+### Stage 4: File Generation
 
-Когда пользователь подтвердил план, скилл генерирует ВСЕ файлы одновременно в одном call.
+When user confirms plan, skill generates ALL files simultaneously in one call.
 
-**Обязательные правила при генерировании:**
+**Mandatory rules during generation:**
 
-#### Аудитория (из GENERAL_RULES.md)
-При написании скилл должен помнить:
-- **Concepts раздел** — пишется для людей НЕ знакомых с YDB → всё объясняется просто с примерами
-- **Остальная документация** — предполагает разработчика, знакомого с SQL/БД, но не эксперта
-- **Автоматическое исправление** — скилл исправляет грамматические и орфографические ошибки
+#### Audience (from GENERAL_RULES.md)
+When writing, skill must remember:
+- **Concepts section** — written for people NOT familiar with YDB → everything explained simply with examples
+- **Other documentation** — assumes developer familiar with SQL/DB, but not expert
+- **Automatic correction** — skill fixes grammatical and spelling errors
 
-#### Форматирование (из FORMAT_RULES.md)
+#### Formatting (from FORMAT_RULES.md)
 
-**Markdown Linting (обязательно проверять):**
-- **MD032** — Пустые строки вокруг списков
-  - ❌ Неправильно: `Подробнее о функциях:\n- [Func1]`
-  - ✅ Правильно: `Подробнее о функциях:\n\n- [Func1]`
+**Markdown Linting (mandatory to check):**
+- **MD032** — Empty lines around lists
+  - ❌ Wrong: `Read more about functions:\n- [Func1]`
+  - ✅ Correct: `Read more about functions:\n\n- [Func1]`
 - **MD051** — Link anchors must exist
-  - Якоря задаются: `## Заголовок {#my-anchor}` или автоматически из текста
-  - Каждая ссылка `[text](file.md#anchor)` должна иметь соответствующий якорь в целевом файле
+  - Anchors set: `## Heading {#my-anchor}` or automatically from text
+  - Every link `[text](file.md#anchor)` must have corresponding anchor in target file
 - **MD009** — No trailing whitespace
-  - Строки не должны заканчиваться пробелами
-  - Исключение: два пробела для line break (но лучше использовать пустую строку)
+  - Lines must not end with spaces
+  - Exception: two spaces for line break (but better to use empty line)
 
-**Специфичные правила:**
-- SQL код: использовать диалект `yql` (` ```yql `)
-- Блоки "Подробнее о функциях": должны быть оформлены как список с маркером `-`
-- Include файлы: использовать `{% include 'path/to/file.md' %}` для переиспользуемых кусков
-- Все ссылки: относительные пути (без `https://ydb.tech`), заканчивающиеся на `.md`
+**Specific rules:**
+- SQL code: use `yql` dialect (` ```yql `)
+- "Read more about functions" blocks: should be formatted as list with marker `-`
+- Include files: use `{% include 'path/to/file.md' %}` for reusable chunks
+- All links: relative paths (no `https://ydb.tech`), ending with `.md`
 
-#### Контент (из DOCUMENTATION_RULES.md - 15 правил)
+#### Content (from DOCUMENTATION_RULES.md - 15 rules)
 
-**КРИТИЧЕСКИЕ ПРАВИЛА (заблокировать PR если нарушены):**
+**CRITICAL RULES (block PR if violated):**
 
-**Правило 3** — Термин определён ДО первого использования
-- Каждый специфичный термин, параметр, концепция должны быть определены или иметь ссылку ДО первого содержательного использования
-- В коде примеров: если используется параметр (например `FORCE = TRUE`), он должен быть описан в синтаксисе/параметрах страницы
+**Rule 1** — First paragraph defines the concept
+- First paragraph of article must contain definition through more general, widely known terms
+- ❌ Wrong: start with use-cases or examples
+- ✅ Correct: definition → then applications
 
-**Правило 7** — Code примеры не содержат необъяснённых конструкций
-- Каждая функция, оператор, ключевое слово в примере должно быть объяснено на странице или иметь ссылку
-- Если конструкция не объяснена → либо упростить пример, либо добавить ссылку
+**Rule 2** — Task explained BEFORE technical content
+- Before first code block, parameter table, or diagram must be text explaining the task
+- ❌ Wrong: start with code without context
+- ✅ Correct: "here's the task" → then code/table
 
-**Правило 8** — Синтаксическая корректность и согласованность примеров
-- Примеры кода должны быть синтаксически корректными
-- Порядок конструкций в примере должен совпадать с порядком в описании синтаксиса
-- Если пример — фрагмент, а не полная команда → явно указать это
+**Rule 3** — Term defined BEFORE first use
+- Each specific term, parameter, concept must be defined or have link BEFORE first meaningful use
+- In code examples: if parameter is used (e.g. `FORCE = TRUE`), it must be described in syntax/parameters section
 
-**ВЫСОКИЙ ПРИОРИТЕТ (серьёзные проблемы):**
+**Rule 4** — Logical connectivity of sections
+- Each section must logically follow from context
+- First sentence of section must explain connection to article topic
 
-**Правило 1** — Первый абзац определяет понятие
-- Первый абзац статьи должен содержать определение через более общие, широко известные термины
-- ❌ Неправильно: начинать с use-cases или примеров
-- ✅ Правильно: определение → потом применения
+**Rule 5** — Correct hierarchy in lists
+- Special case/subtype must not be at same level as general case
+- Must have explicit hierarchy (subsections or "special case of X" marking)
 
-**Правило 2** — Задача объяснена ДО техсодержимого
-- Перед первым блоком кода, таблицей параметров или схемой должен быть текст, объясняющий задачу
-- ❌ Неправильно: начинать с кода без контекста
-- ✅ Правильно: "вот задача" → потом код/таблица
+**Rule 6** — Limitations accompanied by explanation
+- Each mentioned limitation must be accompanied by explanation of reason or status
+- ❌ Wrong: "operation is not supported"
+- ✅ Correct: "operation is not supported (temporary limitation, planned for v2.0)"
 
-**Правило 6** — Ограничения сопровождаются объяснением
-- Каждое упомянутое ограничение должно сопровождаться объяснением причины или статусом
-- ❌ Неправильно: "операция не поддерживается"
-- ✅ Правильно: "операция не поддерживается (временное ограничение, планируется в v2.0)"
+**Rule 7** — Code examples contain no unexplained constructs
+- Each function, operator, keyword in example must be explained on page or have link
+- If construct not explained → either simplify example or add link
 
-**Правило 9** — Полнота описания поведения
-- Если описывается механизм/поведение → должны быть описаны:
-  - Основной сценарий
-  - Что происходит при обновлении данных
-  - Что происходит при ошибке
-  - Что происходит при перезапуске
+**Rule 8** — Syntactic correctness and consistency of examples
+- Code examples must be syntactically correct
+- Order of constructs in example must match order in syntax description
+- If example is fragment, not complete command → explicitly state this
 
-**Правило 14** — Требования к оформлению
-- Статья должна начинаться с вводного блока, описывающего её содержимое
-- В code примерах: либо только шаблоны (`<endpoint>`), либо только конкретные значения
-- Если есть шаблоны → после блока кода должен быть раздел "Где:" с описанием каждого
+**Rule 9** — Complete behavior description
+- If mechanism/behavior is described → must include:
+  - Main scenario
+  - What happens on data update
+  - What happens on error
+  - What happens on restart
 
-**СРЕДНИЙ ПРИОРИТЕТ (затрудняют использование):**
+**Rule 10** — Prerequisites accompanied by verification method
+- If prerequisite mentioned → must be way to check it or link to instruction
+- ❌ Wrong: "requires enabled flag enable_streaming_queries"
+- ✅ Correct: "requires enabled flag enable_streaming_queries (check with command...)"
 
-**Правило 4** — Логическая связность разделов
-- Каждый раздел должен логически следовать из контекста
-- Первое предложение раздела должно объяснять связь с темой статьи
+**Rule 11** — Differentiation of alternative methods
+- If multiple methods described → must explicitly state what differs and when to use which
+- ❌ Wrong: just list methods
+- ✅ Correct: "method A for..., method B for..., choose based on..."
 
-**Правило 5** — Корректная иерархия в перечислениях
-- Частный случай/подвид не должен стоять на одном уровне с общим случаем
-- Должна быть явная иерархия (подпункты или пометка "частный случай X")
+**Rule 12** — Accuracy of formulations
+- Nouns must be concrete (e.g. "YDB table", not just "table")
+- Verbs must precisely describe action ("creates", "executes", not "manages")
+- Definition must not contain defined term (tautology)
 
-**Правило 10** — Предусловия сопровождаются способом проверки
-- Если упоминается предусловие → должен быть способ его проверить или ссылка на инструкцию
-- ❌ Неправильно: "требуется включённый флаг enable_streaming_queries"
-- ✅ Правильно: "требуется включённый флаг enable_streaming_queries (проверить командой...)"
+**Rule 13** — Visual consistency
+- All diagrams and images must be in unified style
+- Mermaid preferred for diagrams (text source, version-controllable)
 
-**Правило 11** — Разграничение альтернативных способов
-- Если описано несколько способов → должно быть явно указано чем они отличаются и когда какой применять
-- ❌ Неправильно: просто перечислить способы
-- ✅ Правильно: "способ A для..., способ B для..., выбирайте в зависимости от..."
+**Rule 14** — Formatting requirements
+- Article must start with introductory block describing its content
+- In code examples: either only templates (`<endpoint>`), or only concrete values
+- If templates used → after code block must be "Where:" section describing each
 
-**Правило 12** — Точность формулировок
-- Существительные должны быть конкретными (например "таблица YDB", а не просто "таблица")
-- Глаголы должны точно описывать действие ("создаёт", "выполняет", а не "управляет")
-- Определение не должно содержать определяемый термин (тавтология)
+#### Propagation by rules
 
-**НИЗКИЙ ПРИОРИТЕТ (замечание, не блокирует):**
+When deciding what to generate, skill should follow these priorities:
 
-**Правило 13** — Визуальная консистентность
-- Все диаграммы и изображения должны быть в едином стиле
-- Mermaid предпочтительнее для диаграмм (text source, version-controllable)
-
-#### Прорастания по правилам
-
-При определении что генерировать, скилл должен следовать этим приоритетам:
-
-| Место | Когда генерировать | Проверки |
-|-------|-------------------|----------|
-| **Глоссарий** | Всегда, если есть новые термины | Терм определён перед использованием (Rule 3) |
-| **Справка** | Если есть API/параметры | Синтаксис корректен (Rule 8), примеры объяснены (Rule 7) |
-| **Recipes** | Если есть примеры кода | Задача объяснена перед кодом (Rule 2), конструкции объяснены (Rule 7) |
-| **Include файлы** | Если есть повторяющиеся куски | Выносить переиспользуемый контент |
-| **Кросс-ссылки** | Всегда где логически связано | На основе DOCUMENTATION_MODEL |
-| **TOC** | Если добавляется новый уровень | Обновить навигацию в обоих языках |
-| **Redirects** | ВСЕГДА при перемещении | Гарантировать что старые ссылки работают |
+| Place | When to generate | Checks |
+|-------|------------------|--------|
+| **Glossary** | Always if new terms exist | Term defined before use (Rule 3) |
+| **Reference** | If API/parameters exist | Syntax correct (Rule 8), examples explained (Rule 7) |
+| **Recipes** | If code examples exist | Task explained before code (Rule 2), constructs explained (Rule 7) |
+| **Include files** | If reusable chunks exist | Extract reusable content |
+| **Cross-references** | Always where logically connected | Based on DOCUMENTATION_MODEL |
+| **TOC** | If new level added | Update navigation in both languages |
+| **Redirects** | ALWAYS on move | Guarantee old links work |
 
 ---
 
-**Генерируемые файлы:
+**Generated files:**
 
-**Основные файлы:**
-- ✅ Основная статья на русском (ydb/docs/ru/core/...)
-- ✅ Основная статья на английском (ydb/docs/en/core/...)
+**Main files:**
+- ✅ Main article in Russian (ydb/docs/ru/core/...)
+- ✅ Main article in English (ydb/docs/en/core/...)
 
-**Глоссарий:**
-- ✅ Добавить записи в glossary.md (RU)
-- ✅ Добавить записи в glossary.md (EN)
+**Glossary:**
+- ✅ Add entries to glossary.md (RU)
+- ✅ Add entries to glossary.md (EN)
 
-**Справка:**
-- ✅ Новые/обновленные файлы в reference/ (RU + EN)
+**Reference:**
+- ✅ New/updated files in reference/ (RU + EN)
 
-**Include файлы:**
-- ✅ Переиспользуемые куски в _includes/ (RU + EN)
+**Include files:**
+- ✅ Reusable chunks in _includes/ (RU + EN)
 
-**Рецепты:**
-- ✅ Новые рецепты в recipes/ (RU + EN)
+**Recipes:**
+- ✅ New recipes in recipes/ (RU + EN)
 
-**Обновления кросс-ссылок:**
-- ✅ Добавить ссылки в существующие статьи (RU + EN)
+**Cross-reference updates:**
+- ✅ Add links in existing articles (RU + EN)
 
-**Модель документации:**
-- ✅ Обновить DOCUMENTATION_MODEL.yaml (если нужно)
+**Documentation model:**
+- ✅ Update DOCUMENTATION_MODEL.yaml (if needed)
 
-**TOC (меню):**
-- ✅ Обновить toc_p.yaml (RU + EN)
-- ✅ Обновить toc_i.yaml (RU + EN) если нужно
+**TOC (menu):**
+- ✅ Update toc_p.yaml (RU + EN)
+- ✅ Update toc_i.yaml (RU + EN) if needed
 
 **Redirects:**
-- ✅ Обновить redirects.yaml (всегда, если есть перемещения)
+- ✅ Update redirects.yaml (always if moves exist)
 
-### Этап 5: Завершение
+### Stage 5: Completion
 
-Скилл сообщает пользователю:
+Skill informs user:
 
 ```
-✅ ГОТОВО!
+✅ DONE!
 
-Ветка создана: feature/jdbc-driver-documentation
-Всего файлов создано/обновлено: 16
+Branch created: feature/jdbc-driver-documentation
+Total files created/updated: 16
 
-Файлы расположены в ветке. Далее:
+Files are in branch. Next:
 
-1️⃣  Проверь изменения (git status, git diff)
-2️⃣  Закоммитить:
+1️⃣  Check changes (git status, git diff)
+2️⃣  Commit:
     git add .
     git commit -m "Add JDBC driver documentation
 
@@ -391,89 +385,95 @@
     - Updated toc_p.yaml
     - Added DOCUMENTATION_MODEL.yaml entries"
 
-3️⃣  Запушить в GitHub:
+3️⃣  Push to GitHub:
     git push -u origin feature/jdbc-driver-documentation
 
-4️⃣  Создать PR на GitHub и пройти review
+4️⃣  Create PR on GitHub and go through review
 ```
 
 ---
 
-## Важные принципы скилла
+## Important Skill Principles
 
-### 1. RU/EN одновременно
-- Скилл пишет оба языка в одном call, независимо друг от друга
-- Не переводит, а создает аналогичные статьи для каждого языка
-- Уважает локальные культурные нормы (форматирование, примеры, и т.д.)
+### 1. RU/EN simultaneously
+- Skill writes both languages in one call, independently of each other
+- Does not translate, but creates analogous articles for each language
+- Respects local cultural norms (formatting, examples, etc.)
 
-### 2. Модель как навигатор
-- DOCUMENTATION_MODEL.yaml используется как справочник структуры
-- Скилл понимает где что размещать на основе модели
-- Модель может быть обновлена вместе с новой статьей
+### 2. Model as navigator
+- DOCUMENTATION_MODEL.yaml used as structure reference
+- Skill understands where to place things based on model
+- Model can be updated together with new article
 
-### 3. Полнота и внимательность
-- Скилл определяет ВСЕ места где нужны изменения
-- Не забывает про глоссарий, справку, включ-файлы, кросс-ссылки, redirects
-- Всегда спрашивает пользователя перед генерированием
+### 3. Completeness and attentiveness
+- Skill identifies ALL places where changes are needed
+- Does not forget glossary, reference, include-files, cross-references, redirects
+- Always asks user before generating
 
-### 4. Переиспользуемость через include
-- Если есть повторяющиеся куски — вынести в `_includes/`
-- Использовать `{% include 'path/to/file.md' %}` в основной статье
+### 4. Reusability through include
+- If reusable chunks exist - extract to `_includes/`
+- Use `{% include 'path/to/file.md' %}` in main article
 
-### 5. Кросс-ссылки всегда
-- Скилл всегда находит места для кросс-ссылок
-- Смотрит на структуру в DOCUMENTATION_MODEL для понимания что связано
+### 5. Cross-references always
+- Skill always finds places for cross-references
+- Looks at structure in DOCUMENTATION_MODEL to understand what's connected
 
-### 6. Redirects всегда
-- Если есть любые перемещения файлов — ВСЕГДА добавить в redirects.yaml
-- Уважает внешние ссылки, убеждается что они не станут 404
+### 6. Redirects always
+- If any file moves exist - ALWAYS add to redirects.yaml
+- Respects external links, ensures they won't become 404
 
 ---
 
-## Инструкции для агентов
+## Instructions for Agents
 
-**Используя этот скилл:**
+**Using this skill:**
 
-1. Поймите что пользователь хочет написать
-2. Задайте 6 вопросов (Q1-Q6)
-3. Проверьте git статус
-4. Создайте подробный план (Этап 2)
-5. Покажите summary и спросите подтверждение (Этап 3)
-6. Если нужны изменения — обновите план и повторите
-7. Когда пользователь подтвердит — генерируйте ВСЕ файлы (Этап 4)
-8. Сообщите результат и что дальше делать (Этап 5)
+1. Understand what user wants to write
+2. Ask 6 questions (Q1-Q6)
+3. Check git status
+4. Create detailed plan (Stage 2)
+5. Show summary and ask for confirmation (Stage 3)
+6. If changes needed - update plan and repeat
+7. When user confirms - generate ALL files (Stage 4)
+8. Report result and what to do next (Stage 5)
 
-**Обязательно при генерировании:**
-- ✅ Читайте ВСЮ документацию (не экономьте контекст)
-- ✅ Используйте DOCUMENTATION_MODEL.yaml как справочник
-- ✅ Всегда проверяйте что пользователь согласен с планом перед генерированием
-- ✅ Генерируйте RU и EN одновременно, независимо друг от друга
-- ✅ Не забывайте про глоссарий, include-файлы, кросс-ссылки, redirects, TOC, модель
-- ✅ Следуйте ВСЕМ правилам из FORMAT_RULES.md:
-  - MD032 (пустые строки вокруг списков)
-  - MD051 (валидные якоря ссылок)
-  - MD009 (нет trailing whitespace)
-  - SQL код в `yql` диалекте
-  - Все ссылки относительные и заканчивающиеся на `.md`
-- ✅ Следуйте ВСЕМ критическим и высоким приоритетам из DOCUMENTATION_RULES.md:
-  - Rule 3: Термины определены ДО использования
-  - Rule 7: Code примеры объяснены
-  - Rule 8: Code синтаксически корректен
-  - Rule 1: Первый параграф определяет понятие
-  - Rule 2: Задача объяснена ДО кода
-  - Rule 6: Ограничения с объяснением
-  - Rule 9: Полное описание поведения
-  - Rule 14: Правильное оформление (шаблоны vs конкретные значения)
-- ✅ Учитывайте GENERAL_RULES.md:
-  - Для "Concepts" писать для людей НЕ знакомых с YDB
-  - Для остального писать для разработчиков знакомых с SQL/БД
-  - Исправлять грамматические ошибки
+**Mandatory during generation:**
+- ✅ Read ALL documentation (don't skimp on context)
+- ✅ Use DOCUMENTATION_MODEL.yaml as reference
+- ✅ Always verify user agrees with plan before generating
+- ✅ Generate RU and EN simultaneously, independently of each other
+- ✅ Don't forget glossary, include-files, cross-references, redirects, TOC, model
+- ✅ Follow ALL rules from FORMAT_RULES.md:
+  - MD032 (empty lines around lists)
+  - MD051 (valid link anchors)
+  - MD009 (no trailing whitespace)
+  - SQL code in `yql` dialect
+  - All links relative and ending with `.md`
+- ✅ Follow ALL critical and high priority rules from DOCUMENTATION_RULES.md:
+  - Rule 1: First paragraph defines concept
+  - Rule 2: Task explained BEFORE code
+  - Rule 3: Terms defined BEFORE use
+  - Rule 4: Logical connectivity of sections
+  - Rule 5: Correct list hierarchy
+  - Rule 6: Limitations with explanation
+  - Rule 7: Code examples explained
+  - Rule 8: Code syntactically correct
+  - Rule 9: Complete behavior description
+  - Rule 10: Prerequisites with verification
+  - Rule 11: Alternative methods differentiated
+  - Rule 12: Accurate formulations
+  - Rule 13: Visual consistency
+  - Rule 14: Proper formatting (templates vs concrete values)
+- ✅ Consider GENERAL_RULES.md:
+  - For "Concepts" write for people NOT familiar with YDB
+  - For other content write for developers familiar with SQL/DB
+  - Fix grammatical errors
 
-**Запрещено:**
-- ❌ Генерировать без подтверждения пользователя
-- ❌ Забывать про какие-то части (глоссарий, справка, кросс-ссылки и т.д.)
-- ❌ Нарушать критические правила (Rule 3, 7, 8 из DOCUMENTATION_RULES)
-- ❌ Создавать дублирующийся контент вместо переиспользования через include
-- ❌ Игнорировать redirects при перемещениях файлов
-- ❌ Использовать HTML в markdown без необходимости
-- ❌ Использовать inline code для визуального выделения (только для console/IDE контента)
+**Prohibited:**
+- ❌ Generate without user confirmation
+- ❌ Forget any parts (glossary, reference, cross-references, etc.)
+- ❌ Violate critical rules (Rule 1, 2, 3 from DOCUMENTATION_RULES)
+- ❌ Create duplicate content instead of reuse through include
+- ❌ Ignore redirects on file moves
+- ❌ Use HTML in markdown without necessity
+- ❌ Use inline code for visual highlighting (only for console/IDE content)

@@ -1,13 +1,16 @@
 # Отладочное чтение из топика
 
-При разработке [потоковых запросов](../../concepts/streaming-query/streaming-query.md) бывает полезно быстро посмотреть, какие данные поступают в [топик](../../concepts/datamodel/topic.md), без создания полноценного потокового запроса. Для этого можно выполнить обычный `SELECT` с параметром `STREAMING = TRUE`.
+При разработке [потоковых запросов](../../concepts/streaming-query/streaming-query.md) бывает полезно быстро посмотреть, какие данные поступают в [топик](../../concepts/datamodel/topic.md), без создания полноценного потокового запроса. Для этого выполните обычный `SELECT` из топика.
+
+Подробное описание чтения из топика — в статье [{#T}](../../concepts/query_execution/topics.md).
 
 {% note warning %}
 
-Этот способ предназначен только для отладки и проверки данных в топике. Для промышленного использования создавайте потоковые запросы через [CREATE STREAMING QUERY](../../yql/reference/syntax/create-streaming-query.md).
+Чтение через `SELECT` предназначено только для отладки. Для промышленного использования создавайте [потоковые запросы](../../concepts/streaming-query/streaming-query.md) через [CREATE STREAMING QUERY](../../yql/reference/syntax/create-streaming-query.md).
 
 {% endnote %}
 
+<<<<<<< HEAD
 {% note info %}
 
 В примерах `ydb_source` — это заранее созданный [внешний источник данных](../../concepts/datamodel/external_data_source.md), а `topic_name` / `input_topic` — топики, доступные через него.
@@ -56,8 +59,10 @@ WITH (
 LIMIT 5
 ```
 
+=======
+>>>>>>> bed1a355b29 (YDBDOCS-2109 added docs on topic reading/writing (#39856))
 ## См. также
 
-* [{#T}](../../concepts/streaming-query/streaming-query.md)
-* [{#T}](../../dev/streaming-query/streaming-query-formats.md) — поддерживаемые форматы данных
-* [{#T}](../../yql/reference/syntax/select/streaming.md) — описание `STREAMING = TRUE` в справочнике YQL
+* [{#T}](../../concepts/query_execution/topics.md)
+* [{#T}](../../yql/reference/syntax/select/streaming.md)
+* [{#T}](../../dev/streaming-query/streaming-query-formats.md)

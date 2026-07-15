@@ -10,7 +10,11 @@
 
 {% endnote %}
 
+<<<<<<< HEAD
 ## Подготовка источника данных для работы с топиками
+=======
+Возможно обогащение данных из [локальных и внешних топиков](../../concepts/query_execution/topics.md#local-external-topics).
+>>>>>>> bed1a355b29 (YDBDOCS-2109 added docs on topic reading/writing (#39856))
 
 Создайте внешний источник данных для работы с топиками. Для хранения токена используется [секрет](../../yql/reference/syntax/create-secret.md), источник создаётся через [CREATE EXTERNAL DATA SOURCE](../../yql/reference/syntax/create-external-data-source.md).
 

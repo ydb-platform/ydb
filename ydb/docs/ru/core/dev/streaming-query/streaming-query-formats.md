@@ -18,7 +18,11 @@
 
 [Примеры парсинга данных в пользовательских форматах](#parsing).
 
+<<<<<<< HEAD
 В примерах на этой странице `ydb_source` — это заранее созданный [внешний источник данных](../../concepts/datamodel/external_data_source.md), `input_topic` и `output_topic` — топики, доступные через него, а `output_table` — таблица {{ ydb-short-name }}.
+=======
+В примерах на этой странице `input_topic` и `output_topic` — [топики](../../concepts/datamodel/topic.md) в текущей базе данных, а `output_table` — таблица {{ ydb-short-name }}. Для топиков в другой базе см. [локальные и внешние топики](../../concepts/query_execution/topics.md#local-external-topics).
+>>>>>>> bed1a355b29 (YDBDOCS-2109 added docs on topic reading/writing (#39856))
 
 ## Форматы при записи данных {#write_formats}
 

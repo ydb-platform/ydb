@@ -2,10 +2,22 @@
 
 В этом разделе собраны минимальные примеры [потоковых запросов](../../concepts/streaming-query/streaming-query.md) для наиболее распространённых сценариев. Сначала описан базовый шаблон чтения данных из топика, затем — варианты полноценной работы с данными: обработка данных и запись результатов в топик в формате JSON, в топик в виде строки и в таблицу. Каждый пример можно использовать как отправную точку для собственных задач.
 
+<<<<<<< HEAD
+=======
+В примерах ниже используются [локальные и внешние топики](../../concepts/query_execution/topics.md#local-external-topics). Обозначения:
+
+- `ext_source` — заранее созданный [`external data source`](../../concepts/datamodel/external_data_source.md);
+- `input_topic` — топик, откуда читаются данные;
+- `output_topic` — топик, куда записываются результаты;
+- `output_table` — таблица {{ ydb-short-name }}, куда записываются результаты.
+
+
+>>>>>>> bed1a355b29 (YDBDOCS-2109 added docs on topic reading/writing (#39856))
 ## Чтение данных из топика {#topic-read}
 
-Чтение данных из топика выполняется с помощью `SELECT ... FROM ... WITH (FORMAT, SCHEMA)`. Блок `WITH` указывает формат входных данных и схему — какие поля ожидаются в каждом сообщении и их типы. Этот шаблон используется во всех последующих примерах.
+Чтение структурированных сообщений выполняется с помощью `SELECT ... FROM ... WITH (FORMAT, SCHEMA)`. Блок `WITH` задаёт формат входных данных и схему — какие поля ожидаются в каждом сообщении и их типы.
 
+<<<<<<< HEAD
 {% note info %}
 
 Работа с топиками выполняется через [external data source](../../concepts/datamodel/external_data_source.md).
@@ -20,12 +32,20 @@
 {% endnote %}
 
 Следующий фрагмент показывает чтение событий из топика в формате JSON. Он используется внутри [CREATE STREAMING QUERY](../../yql/reference/syntax/create-streaming-query.md) в блоке `DO BEGIN ... END DO`:
+=======
+Следующий фрагмент используется внутри [CREATE STREAMING QUERY](../../yql/reference/syntax/create-streaming-query.md) в блоке `DO BEGIN ... END DO`:
+>>>>>>> bed1a355b29 (YDBDOCS-2109 added docs on topic reading/writing (#39856))
 
 ```yql
 SELECT
-    *
+    Id,
+    Name
 FROM
+<<<<<<< HEAD
     ydb_source.input_topic
+=======
+    topic_name  -- локальный топик; для внешнего: ext_source.topic_name
+>>>>>>> bed1a355b29 (YDBDOCS-2109 added docs on topic reading/writing (#39856))
 WITH (
     FORMAT = json_each_row,
     SCHEMA = (
@@ -36,6 +56,8 @@ WITH (
 ```
 
 Подробнее о форматах: [{#T}](streaming-query-formats.md).
+
+Этот шаблон используется во всех последующих примерах.
 
 ## Запись в топик (JSON) {#topic-json}
 
@@ -137,5 +159,9 @@ END DO
 
 ## См. также
 
+<<<<<<< HEAD
+=======
+- [Локальные и внешние топики](../../concepts/query_execution/topics.md#local-external-topics)
+>>>>>>> bed1a355b29 (YDBDOCS-2109 added docs on topic reading/writing (#39856))
 - [{#T}](../../yql/reference/syntax/create-streaming-query.md)
 - [{#T}](../../recipes/streaming_queries/topics.md)

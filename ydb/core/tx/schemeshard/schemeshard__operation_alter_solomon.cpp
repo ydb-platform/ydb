@@ -23,6 +23,7 @@ using namespace NSchemeShard;
 class TRollingUpdateSolomonActor: public TActorBootstrapped<TRollingUpdateSolomonActor> {
 public:
     static constexpr TDuration RequestTimeout = TDuration::Seconds(60);
+    static constexpr TDuration RetryDelay = TDuration::Seconds(60);
     static constexpr ui64 MaxConsecutiveFailures = 10;
 
 private:
@@ -37,6 +38,7 @@ private:
     TTabletId ExpectedTabletId = InvalidTabletId;
     bool WaitingCreateReply = false;
     bool WaitingCreationResult = false;
+    bool WaitingRetry = false;
     ui64 ConsecutiveFailures = 0;
     ui64 WakeupSeqNo = 0;
     ui64 ActiveWakeupSeqNo = 0;
@@ -63,6 +65,7 @@ private:
     }
 
     void ScheduleTimeout(const TActorContext& ctx) {
+        WaitingRetry = false;
         ActiveWakeupSeqNo = ++WakeupSeqNo;
         ctx.Schedule(RequestTimeout, new TEvents::TEvWakeup(ActiveWakeupSeqNo));
     }
@@ -71,29 +74,36 @@ private:
         LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                      DebugHint() << " finished successfully");
 
-        ctx.Send(SchemeShardActorId,
-                 new TEvPrivate::TEvSolomonRollingUpdateDone(OperationId, /*success=*/true));
+        ctx.Send(SchemeShardActorId, new TEvPrivate::TEvSolomonRollingUpdateDone(OperationId));
         PassAway();
     }
 
-    void Fail(const TActorContext& ctx, const TString& error) {
-        LOG_ERROR_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                    DebugHint() << " giving up: " << error);
-
-        ctx.Send(SchemeShardActorId,
-                 new TEvPrivate::TEvSolomonRollingUpdateDone(OperationId, /*success=*/false, error));
-        PassAway();
-    }
-
-    void RetryCurrent(const TActorContext& ctx) {
+    void ResetCurrentRequest() {
         ClosePipe();
         WaitingCreateReply = false;
         WaitingCreationResult = false;
         ExpectedTabletId = InvalidTabletId;
+    }
+
+    void RetryCurrent(const TActorContext& ctx) {
+        ResetCurrentRequest();
         SendCurrent(ctx);
     }
 
-    bool NoteFailureAndShouldGiveUp(const TActorContext& ctx, const TString& reason) {
+    void RetryCurrentAfterBackoff(const TActorContext& ctx, const TString& reason) {
+        LOG_ERROR_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                    DebugHint() << " failure budget exhausted, will retry current shard"
+                                << ", delay: " << RetryDelay
+                                << ", error: " << reason);
+
+        ResetCurrentRequest();
+        ConsecutiveFailures = 0;
+        WaitingRetry = true;
+        ActiveWakeupSeqNo = ++WakeupSeqNo;
+        ctx.Schedule(RetryDelay, new TEvents::TEvWakeup(ActiveWakeupSeqNo));
+    }
+
+    bool NoteFailureAndShouldBackoff(const TActorContext& ctx, const TString& reason) {
         ++ConsecutiveFailures;
         LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                    DebugHint() << " transient failure (" << ConsecutiveFailures
@@ -208,15 +218,22 @@ public:
         if (ev->Get()->Tag != ActiveWakeupSeqNo) {
             return;
         }
-        if (!WaitingCreateReply && !WaitingCreationResult) {
-            return;
-        }
         if (!CheckOperation()) {
             PassAway();
             return;
         }
-        if (NoteFailureAndShouldGiveUp(ctx, "request timed out")) {
-            Fail(ctx, "Hive request timed out repeatedly");
+
+        if (WaitingRetry) {
+            WaitingRetry = false;
+            SendCurrent(ctx);
+            return;
+        }
+
+        if (!WaitingCreateReply && !WaitingCreationResult) {
+            return;
+        }
+        if (NoteFailureAndShouldBackoff(ctx, "request timed out")) {
+            RetryCurrentAfterBackoff(ctx, "Hive request timed out repeatedly");
             return;
         }
         RetryCurrent(ctx);
@@ -248,8 +265,8 @@ public:
         if (status == NKikimrProto::INVALID_OWNER) {
             const auto redirectTo = TTabletId(record.GetForwardRequest().GetHiveTabletId());
             if (redirectTo == InvalidTabletId) {
-                if (NoteFailureAndShouldGiveUp(ctx, "INVALID_OWNER with empty redirect")) {
-                    Fail(ctx, "Hive returned INVALID_OWNER without a forward target");
+                if (NoteFailureAndShouldBackoff(ctx, "INVALID_OWNER with empty redirect")) {
+                    RetryCurrentAfterBackoff(ctx, "Hive returned INVALID_OWNER without a forward target");
                     return;
                 }
                 RetryCurrent(ctx);
@@ -302,8 +319,8 @@ public:
             const TString reason = TStringBuilder()
                 << "Hive returned " << NKikimrProto::EReplyStatus_Name(status)
                 << " for shard " << expectedShardIdx;
-            if (NoteFailureAndShouldGiveUp(ctx, reason)) {
-                Fail(ctx, reason);
+            if (NoteFailureAndShouldBackoff(ctx, reason)) {
+                RetryCurrentAfterBackoff(ctx, reason);
                 return;
             }
             RetryCurrent(ctx);
@@ -313,8 +330,8 @@ public:
         const auto tabletId = TTabletId(record.GetTabletID());
         if (tabletId == InvalidTabletId) {
             const TString reason = "Hive returned OK with InvalidTabletId";
-            if (NoteFailureAndShouldGiveUp(ctx, reason)) {
-                Fail(ctx, reason);
+            if (NoteFailureAndShouldBackoff(ctx, reason)) {
+                RetryCurrentAfterBackoff(ctx, reason);
                 return;
             }
             RetryCurrent(ctx);
@@ -354,8 +371,8 @@ public:
             const TString reason = TStringBuilder()
                 << "TabletCreationResult status " << NKikimrProto::EReplyStatus_Name(status)
                 << " for tabletId " << tabletId;
-            if (NoteFailureAndShouldGiveUp(ctx, reason)) {
-                Fail(ctx, reason);
+            if (NoteFailureAndShouldBackoff(ctx, reason)) {
+                RetryCurrentAfterBackoff(ctx, reason);
                 return;
             }
             RetryCurrent(ctx);
@@ -383,8 +400,8 @@ public:
             const TString reason = TStringBuilder()
                 << "pipe connect failed to hive " << ev->Get()->TabletId
                 << " status " << NKikimrProto::EReplyStatus_Name(ev->Get()->Status);
-            if (NoteFailureAndShouldGiveUp(ctx, reason)) {
-                Fail(ctx, reason);
+            if (NoteFailureAndShouldBackoff(ctx, reason)) {
+                RetryCurrentAfterBackoff(ctx, reason);
                 return;
             }
             RetryCurrent(ctx);
@@ -398,8 +415,8 @@ public:
 
         const TString reason = TStringBuilder()
             << "pipe disconnected from hive " << ev->Get()->TabletId;
-        if (NoteFailureAndShouldGiveUp(ctx, reason)) {
-            Fail(ctx, reason);
+        if (NoteFailureAndShouldBackoff(ctx, reason)) {
+            RetryCurrentAfterBackoff(ctx, reason);
             return;
         }
         RetryCurrent(ctx);
@@ -413,7 +430,6 @@ public:
 
 class TRollingUpdateParts: public TSubOperationState {
 private:
-    static constexpr TDuration RetryDelay = TDuration::Seconds(60);
     TOperationId OperationId;
 
     TString DebugHint() const override {
@@ -457,25 +473,10 @@ public:
     bool HandleReply(TEvPrivate::TEvSolomonRollingUpdateDone::TPtr& ev, TOperationContext& context) override {
         LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                    DebugHint() << " HandleReply TEvSolomonRollingUpdateDone"
-                               << ", success: " << ev->Get()->Success
-                               << ", error: " << ev->Get()->Error);
+                               << ", operationId: " << ev->Get()->OperationId);
 
         TTxState* txState = context.SS->FindTx(OperationId);
         if (!txState || txState->State != TTxState::RollingUpdateParts) {
-            return false;
-        }
-
-        if (!ev->Get()->Success) {
-            // Rolling update could not finish (e.g. Hive permanently rejected
-            // a shard). We do NOT have an abort path for AlterSolomon today,
-            // so retry with a delay instead of immediately spawning a fresh
-            // rolling-update actor and resetting its failure budget.
-            LOG_ERROR_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                        DebugHint() << " rolling update reported failure, will retry"
-                                    << ", delay: " << RetryDelay
-                                    << ", error: " << ev->Get()->Error);
-            txState->ClearShardsInProgress();
-            context.OnComplete.ActivateTxDelayed(OperationId, RetryDelay);
             return false;
         }
 

@@ -86,13 +86,9 @@ namespace TEvPrivate {
 
     struct TEvSolomonRollingUpdateDone: public TEventLocal<TEvSolomonRollingUpdateDone, EvSolomonRollingUpdateDone> {
         const TOperationId OperationId;
-        const bool Success;
-        const TString Error;
 
-        TEvSolomonRollingUpdateDone(TOperationId operationId, bool success = true, TString error = {})
+        explicit TEvSolomonRollingUpdateDone(TOperationId operationId)
             : OperationId(operationId)
-            , Success(success)
-            , Error(std::move(error))
         {}
     };
 

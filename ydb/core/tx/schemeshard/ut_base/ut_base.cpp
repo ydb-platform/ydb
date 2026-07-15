@@ -10822,19 +10822,37 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
 
         TestCreateSolomon(runtime, ++txId, "/MyRoot", R"(
             Name: "Solomon"
-            PartitionCount: 1
+            PartitionCount: 2
             ChannelProfileId: 2
         )");
         env.TestWaitNotification(runtime, txId);
 
-        ui32 createRequests = 0;
+        TMaybe<ui64> firstShardOwnerIdx;
+        TMaybe<ui64> failingShardOwnerIdx;
+        ui32 firstShardRequests = 0;
+        ui32 failingShardRequests = 0;
         ui32 failuresLeft = 11;
         auto prevObserver = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
             if (ev->GetTypeRewrite() == TEvHive::TEvCreateTablet::EventType) {
-                ++createRequests;
+                const ui64 ownerIdx = ev->Get<TEvHive::TEvCreateTablet>()->Record.GetOwnerIdx();
+                if (!firstShardOwnerIdx) {
+                    firstShardOwnerIdx = ownerIdx;
+                }
+                if (ownerIdx == *firstShardOwnerIdx) {
+                    ++firstShardRequests;
+                } else {
+                    if (!failingShardOwnerIdx) {
+                        failingShardOwnerIdx = ownerIdx;
+                    }
+                    UNIT_ASSERT_VALUES_EQUAL(ownerIdx, *failingShardOwnerIdx);
+                    ++failingShardRequests;
+                }
             } else if (ev->GetTypeRewrite() == TEvHive::TEvCreateTabletReply::EventType && failuresLeft) {
-                ev->Get<TEvHive::TEvCreateTabletReply>()->Record.SetStatus(NKikimrProto::ERROR);
-                --failuresLeft;
+                auto& record = ev->Get<TEvHive::TEvCreateTabletReply>()->Record;
+                if (firstShardOwnerIdx && record.GetOwnerIdx() != *firstShardOwnerIdx) {
+                    record.SetStatus(NKikimrProto::ERROR);
+                    --failuresLeft;
+                }
             }
             return TTestActorRuntime::EEventAction::PROCESS;
         });
@@ -10850,7 +10868,10 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         runtime.SetObserverFunc(prevObserver);
 
         UNIT_ASSERT_VALUES_EQUAL(failuresLeft, 0);
-        UNIT_ASSERT_VALUES_EQUAL(createRequests, 12);
+        UNIT_ASSERT(firstShardOwnerIdx);
+        UNIT_ASSERT(failingShardOwnerIdx);
+        UNIT_ASSERT_VALUES_EQUAL(firstShardRequests, 1);
+        UNIT_ASSERT_VALUES_EQUAL(failingShardRequests, 12);
     }
 
     Y_UNIT_TEST(UpdateChannelsBindingSolomonBlockedOwnerDoesNotRetry) {

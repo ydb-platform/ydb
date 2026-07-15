@@ -40,8 +40,6 @@ struct TDebugEvent<TEvPrivate::TEvSolomonRollingUpdateDone> {
     static TString ToString(const TEvPrivate::TEvSolomonRollingUpdateDone::TPtr& ev) {
         return TStringBuilder() << "TEvSolomonRollingUpdateDone {"
                                 << " OperationId: " << ev->Get()->OperationId
-                                << " Success: " << ev->Get()->Success
-                                << " Error: " << ev->Get()->Error
                                 << " }";
     }
 };

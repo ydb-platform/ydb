@@ -107,7 +107,7 @@ private:
             {"statusCode", status.GetStatus()},
             {"storageId", storageId});
         NActors::TActorContext::AsActorContext().Send(Source->GetContext()->GetCommonContext()->GetScanActorId(),
-            std::make_unique<NReader::TEvTaskProcessedResult>(
+            std::make_unique<NColumnShard::TEvPrivate::TEvTaskProcessedResult>(
                 TConclusionStatus::Fail(
                     TStringBuilder{} << "Error reading blob range for columns: " << range.ToString() << ", error: " << status.GetErrorMessage()
                                      << ", status: " << NKikimrProto::EReplyStatus_Name(status.GetStatus())), std::move(Guard)));

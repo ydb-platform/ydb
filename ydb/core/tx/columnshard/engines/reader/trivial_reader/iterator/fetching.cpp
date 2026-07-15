@@ -400,7 +400,7 @@ TConclusion<bool> TBuildResultStep::DoExecuteInplace(
     ReportTracing(source, step, TMonotonic::Now() - startExecution);
     const ui64 blobBytes = source->GetTotalBytesRead();
     NActors::TActivationContext::AsActorContext().Send(context->GetCommonContext()->GetScanActorId(),
-        new NReader::TEvTaskProcessedResult(std::make_shared<TApplySourceResult>(source, step),
+        new NColumnShard::TEvPrivate::TEvTaskProcessedResult(std::make_shared<TApplySourceResult>(source, step),
             source->GetContext()->GetCommonContext()->GetCounters().GetResultsForSourceGuard(), source->GetDeprecatedPortionId(), blobBytes,
             sSource->GetUsedRawBytes(), recordsCount, source->GetRecordsCount(), source->GetReservedMemory()));
     return false;
@@ -454,7 +454,7 @@ TConclusion<bool> TPrepareResultStep::DoExecuteInplace(
         context->GetCommonContext()->GetCounters().OnSourceFinished(source->GetRecordsCount(), sSource->GetUsedRawBytes(), 0);
         const ui64 blobBytes = source->GetTotalBytesRead();
         NActors::TActivationContext::AsActorContext().Send(context->GetCommonContext()->GetScanActorId(),
-            new TEvTaskProcessedResult(std::make_shared<TApplySourceResult>(source, step),
+            new NColumnShard::TEvPrivate::TEvTaskProcessedResult(std::make_shared<TApplySourceResult>(source, step),
                 source->GetContext()->GetCommonContext()->GetCounters().GetResultsForSourceGuard(), source->GetDeprecatedPortionId(), blobBytes,
                 sSource->GetUsedRawBytes(), 0, source->GetRecordsCount(), source->GetReservedMemory()));
         return false;

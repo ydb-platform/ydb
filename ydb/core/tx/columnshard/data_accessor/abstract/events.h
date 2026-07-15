@@ -6,21 +6,21 @@
 
 #include <ydb/library/actors/core/event_local.h>
 
-namespace NKikimr::NOlap::NDataAccessorControl {
+namespace NKikimr::NColumnShard {
 
-class TEvAskTabletDataAccessors
-    : public NActors::TEventLocal<TEvAskTabletDataAccessors, NColumnShard::TEvPrivate::EEv::EvAskTabletDataAccessors> {
+class TEvPrivate::TEvAskTabletDataAccessors
+    : public NActors::TEventLocal<TEvPrivate::TEvAskTabletDataAccessors, TEvPrivate::EEv::EvAskTabletDataAccessors> {
 private:
-    using TPortions = THashMap<TInternalPathId, TPortionsByConsumer>;
+    using TPortions = THashMap<TInternalPathId, NOlap::NDataAccessorControl::TPortionsByConsumer>;
     YDB_ACCESSOR_DEF(TPortions, Portions);
-    YDB_READONLY_DEF(std::shared_ptr<IAccessorCallback>, Callback);
+    YDB_READONLY_DEF(std::shared_ptr<NOlap::NDataAccessorControl::IAccessorCallback>, Callback);
 
 public:
-    explicit TEvAskTabletDataAccessors(TPortions&& portions, const std::shared_ptr<IAccessorCallback>& callback)
+    explicit TEvAskTabletDataAccessors(TPortions&& portions, const std::shared_ptr<NOlap::NDataAccessorControl::IAccessorCallback>& callback)
         : Portions(std::move(portions))
         , Callback(callback)
     {
     }
 };
 
-}   // namespace NKikimr::NOlap::NDataAccessorControl
+}   // namespace NKikimr::NColumnShard

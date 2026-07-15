@@ -814,7 +814,7 @@ private:
     virtual void DoOnRequestsFinished(
         NOlap::TDataAccessorsResult&& result, std::shared_ptr<NOlap::NResourceBroker::NSubscribe::TResourcesGuard>&& guard) override {
         NActors::TActivationContext::Send(
-            TabletActorId, std::make_unique<TEvMetadataAccessorsInfo>(Processor, Generation,
+            TabletActorId, std::make_unique<TEvPrivate::TEvMetadataAccessorsInfo>(Processor, Generation,
                                NOlap::NResourceBroker::NSubscribe::TResourceContainer(std::move(result), std::move(guard))));
     }
 
@@ -1225,7 +1225,7 @@ void TColumnShard::RecheckForcedCompactions(const TActorContext& ctx) {
     }
 }
 
-void TColumnShard::Handle(TEvMetadataAccessorsInfo::TPtr& ev, const TActorContext& /*ctx*/) {
+void TColumnShard::Handle(TEvPrivate::TEvMetadataAccessorsInfo::TPtr& ev, const TActorContext& /*ctx*/) {
     AFL_VERIFY(ev->Get()->GetGeneration() == Generation())("ev", ev->Get()->GetGeneration())("tablet", Generation());
     ev->Get()->GetProcessor()->ApplyResult(
         ev->Get()->ExtractResult(), TablesManager.MutablePrimaryIndexAsVerified<NOlap::TColumnEngineForLogs>());
@@ -1671,7 +1671,7 @@ public:
     }
 };
 
-void TColumnShard::Handle(NOlap::NDataAccessorControl::TEvAskTabletDataAccessors::TPtr& ev, const TActorContext& /*ctx*/) {
+void TColumnShard::Handle(NColumnShard::TEvPrivate::TEvAskTabletDataAccessors::TPtr& ev, const TActorContext& /*ctx*/) {
     Execute(new TTxAskPortionChunks(this, ev->Get()->GetCallback(), std::move(ev->Get()->DetachPortions())));
 }
 
@@ -1867,8 +1867,8 @@ void TColumnShard::Enqueue(STFUNC_SIG) {
         "self_id", SelfId())("process", "Enqueue")("ev", ev->GetTypeName());
     switch (ev->GetTypeRewrite()) {
         HFunc(TEvPrivate::TEvTieringModified, HandleInit);
-        HFunc(NOlap::TEvNormalizerResult, Handle);
-        HFunc(NOlap::NDataAccessorControl::TEvAskTabletDataAccessors, Handle);
+        HFunc(TEvPrivate::TEvNormalizerResult, Handle);
+        HFunc(NColumnShard::TEvPrivate::TEvAskTabletDataAccessors, Handle);
         HFunc(TEvTxProxySchemeCache::TEvWatchNotifyUpdated, Handle);
         HFunc(TEvTxProxySchemeCache::TEvWatchNotifyUnavailable, Handle);
         HFunc(TEvColumnShard::TEvNotifyTxCompletion, Handle);

@@ -349,7 +349,7 @@ ITransaction* TColumnShard::CreateTxInitSchema() {
     return new TTxInitSchema(this);
 }
 
-void TColumnShard::Handle(NOlap::TEvNormalizerResult::TPtr& ev, const TActorContext& ctx) {
+void TColumnShard::Handle(TEvPrivate::TEvNormalizerResult::TPtr& ev, const TActorContext& ctx) {
     Execute(new TTxApplyNormalizer(this, ev->Get()->GetChanges()), ctx);
 }
 

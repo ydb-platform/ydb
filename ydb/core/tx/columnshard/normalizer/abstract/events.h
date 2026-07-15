@@ -6,21 +6,21 @@
 
 #include <ydb/library/actors/core/event_local.h>
 
-namespace NKikimr::NOlap {
+namespace NKikimr::NColumnShard {
 
-class TEvNormalizerResult: public NActors::TEventLocal<TEvNormalizerResult, NColumnShard::TEvPrivate::EEv::EvNormalizerResult> {
-    INormalizerChanges::TPtr Changes;
+class TEvPrivate::TEvNormalizerResult: public NActors::TEventLocal<TEvPrivate::TEvNormalizerResult, TEvPrivate::EEv::EvNormalizerResult> {
+    NOlap::INormalizerChanges::TPtr Changes;
 
 public:
-    TEvNormalizerResult(INormalizerChanges::TPtr changes)
+    TEvNormalizerResult(NOlap::INormalizerChanges::TPtr changes)
         : Changes(changes)
     {
     }
 
-    INormalizerChanges::TPtr GetChanges() const {
+    NOlap::INormalizerChanges::TPtr GetChanges() const {
         Y_ABORT_UNLESS(!!Changes);
         return Changes;
     }
 };
 
-}   // namespace NKikimr::NOlap
+}   // namespace NKikimr::NColumnShard

@@ -64,8 +64,9 @@ public:
         for (auto&& blobId : Blobs) {
             removeAction->DeclareSelfRemove(blobId);
         }
-        TActorContext::AsActorContext().Send(nCtx.GetShardActor(),
-            std::make_unique<NKikimr::NOlap::TEvNormalizerResult>(std::make_shared<TBlobsRemovingResult>(removeAction, std::move(Portions))));
+        TActorContext::AsActorContext().Send(
+            nCtx.GetShardActor(), std::make_unique<NKikimr::NColumnShard::TEvPrivate::TEvNormalizerResult>(
+                                      std::make_shared<TBlobsRemovingResult>(removeAction, std::move(Portions))));
     }
 };
 

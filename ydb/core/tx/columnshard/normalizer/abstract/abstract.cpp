@@ -57,7 +57,8 @@ bool TNormalizationController::SwitchNormalizer() {
 }
 
 void TTrivialNormalizerTask::Start(const TNormalizationController& /* controller */, const TNormalizationContext& nCtx) {
-    TActorContext::AsActorContext().Send(nCtx.GetShardActor(), std::make_unique<NKikimr::NOlap::TEvNormalizerResult>(Changes));
+    TActorContext::AsActorContext().Send(
+        nCtx.GetShardActor(), std::make_unique<NKikimr::NColumnShard::TEvPrivate::TEvNormalizerResult>(Changes));
 }
 
 void TNormalizationController::AddNormalizerEvent(NIceDb::TNiceDb& db, const TString& eventType, const TString& eventDescription) const {

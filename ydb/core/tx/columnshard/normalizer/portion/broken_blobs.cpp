@@ -116,7 +116,8 @@ protected:
         }
 
         auto changes = std::make_shared<TNormalizerResult>(std::move(BrokenPortions), Schemas);
-        TActorContext::AsActorContext().Send(NormContext.GetShardActor(), std::make_unique<NKikimr::NOlap::TEvNormalizerResult>(changes));
+        TActorContext::AsActorContext().Send(
+            NormContext.GetShardActor(), std::make_unique<NKikimr::NColumnShard::TEvPrivate::TEvNormalizerResult>(changes));
     }
 
     virtual bool DoOnError(const TString& storageId, const TBlobRange& range, const IBlobsReadingAction::TErrorStatus& status) override {

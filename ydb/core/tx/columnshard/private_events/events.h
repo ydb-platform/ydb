@@ -91,6 +91,12 @@ struct TEvPrivate {
 
     static_assert(EvEnd < EventSpaceEnd(TEvents::ES_PRIVATE), "expect EvEnd < EventSpaceEnd(TEvents::ES_PRIVATE)");
 
+    // Defined out-of-line in their owning modules because of dependencies (kept there to avoid pulling those modules' deps into private_events):
+    class TEvNormalizerResult;
+    class TEvAskTabletDataAccessors;
+    class TEvTaskProcessedResult;
+    class TEvMetadataAccessorsInfo;
+
     class TEvAskColumnData: public NActors::TEventLocal<TEvAskColumnData, NColumnShard::TEvPrivate::EEv::EvAskColumnData> {
     public:
         class TPortionRequest {

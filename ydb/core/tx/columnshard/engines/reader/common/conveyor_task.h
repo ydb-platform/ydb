@@ -78,10 +78,15 @@ public:
     };
 };
 
-class TEvTaskProcessedResult: public NActors::TEventLocal<TEvTaskProcessedResult, NColumnShard::TEvPrivate::EEv::EvTaskProcessedResult> {
+}   // namespace NKikimr::NOlap::NReader
+
+namespace NKikimr::NColumnShard {
+
+class TEvPrivate::TEvTaskProcessedResult
+    : public NActors::TEventLocal<TEvPrivate::TEvTaskProcessedResult, TEvPrivate::EEv::EvTaskProcessedResult> {
 private:
-    TConclusion<std::shared_ptr<IApplyAction>> Result;
-    NColumnShard::TCounterGuard ScanCounter;
+    TConclusion<std::shared_ptr<NOlap::NReader::IApplyAction>> Result;
+    TCounterGuard ScanCounter;
     ui64 SourceId = 0;
     ui64 BlobBytes = 0;
     ui64 RawBytes = 0;
@@ -90,7 +95,7 @@ private:
     ui64 TotalReservedBytes = 0;
 
 public:
-    TConclusion<std::shared_ptr<IApplyAction>>& MutableResult() {
+    TConclusion<std::shared_ptr<NOlap::NReader::IApplyAction>>& MutableResult() {
         return Result;
     }
 
@@ -118,7 +123,7 @@ public:
         return TotalReservedBytes;
     }
 
-    TEvTaskProcessedResult(TConclusion<std::shared_ptr<IApplyAction>>&& result, NColumnShard::TCounterGuard&& scanCounters, ui64 sourceId = 0,
+    TEvTaskProcessedResult(TConclusion<std::shared_ptr<NOlap::NReader::IApplyAction>>&& result, TCounterGuard&& scanCounters, ui64 sourceId = 0,
         ui64 blobBytes = 0, ui64 rawBytes = 0, ui32 filteredRows = 0, ui32 totalRows = 0, ui64 totalReservedBytes = 0)
         : Result(std::move(result))
         , ScanCounter(std::move(scanCounters))
@@ -132,4 +137,4 @@ public:
     }
 };
 
-}   // namespace NKikimr::NOlap::NReader
+}   // namespace NKikimr::NColumnShard

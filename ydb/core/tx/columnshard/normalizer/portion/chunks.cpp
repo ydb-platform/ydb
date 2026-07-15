@@ -73,7 +73,8 @@ protected:
         }
 
         auto changes = std::make_shared<TChunksNormalizer::TNormalizerResult>(std::move(Chunks));
-        TActorContext::AsActorContext().Send(NormContext.GetShardActor(), std::make_unique<NKikimr::NOlap::TEvNormalizerResult>(changes));
+        TActorContext::AsActorContext().Send(
+            NormContext.GetShardActor(), std::make_unique<NKikimr::NColumnShard::TEvPrivate::TEvNormalizerResult>(changes));
     }
 
 public:

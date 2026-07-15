@@ -62,13 +62,13 @@ private:
             hFunc(NActors::TEvents::TEvPoison, HandleScan);
             hFunc(TEvents::TEvUndelivered, HandleScan);
             hFunc(TEvents::TEvWakeup, HandleScan);
-            hFunc(NReader::TEvTaskProcessedResult, HandleScan);
+            hFunc(NColumnShard::TEvPrivate::TEvTaskProcessedResult, HandleScan);
             default:
                 AFL_VERIFY(false)("unexpected_event", ev->GetTypeName());
         }
     }
 
-    void HandleScan(NReader::TEvTaskProcessedResult::TPtr& ev);
+    void HandleScan(NColumnShard::TEvPrivate::TEvTaskProcessedResult::TPtr& ev);
 
     void HandleScan(NKqp::TEvKqpCompute::TEvScanDataAck::TPtr& ev);
 

@@ -397,7 +397,7 @@ private:
         PrintFoundLeakedBlobsStats();
         PrintLeakedBlobIdsChunks();
         TActorContext::AsActorContext().Send(
-            CSActorId, std::make_unique<NKikimr::NOlap::TEvNormalizerResult>(std::make_shared<TLeakedBlobsNormalizerChanges>(
+            CSActorId, std::make_unique<NKikimr::NColumnShard::TEvPrivate::TEvNormalizerResult>(std::make_shared<TLeakedBlobsNormalizerChanges>(
                            std::move(BSBlobIds), CSTabletId, TablePathId, TablePath, DsGroupSelector, LogLevel)));
         PassAway();
     }

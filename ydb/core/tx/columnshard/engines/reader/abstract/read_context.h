@@ -98,8 +98,8 @@ public:
 
     void AbortWithError(const TString& errorMessage) {
         if (AbortionFlag->Inc() == 1) {
-            NActors::TActivationContext::Send(ScanActorId,
-                std::make_unique<NReader::TEvTaskProcessedResult>(TConclusionStatus::Fail(errorMessage), Counters.GetAbortsGuard()));
+            NActors::TActivationContext::Send(ScanActorId, std::make_unique<NColumnShard::TEvPrivate::TEvTaskProcessedResult>(
+                                                               TConclusionStatus::Fail(errorMessage), Counters.GetAbortsGuard()));
         }
     }
 

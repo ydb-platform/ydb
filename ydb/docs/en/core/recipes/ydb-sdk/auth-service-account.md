@@ -306,7 +306,7 @@ Below are authentication code examples using a service account file in different
       'discovery'   => false,
       'iam_config'  => [
           'temp_dir'       => './tmp', // Temp directory
-          // 'root_cert_file' => './CA.pem', // Root CA file (uncomment for dedicated server)ы
+          // 'root_cert_file' => './CA.pem', // Root CA file (uncomment for dedicated server)
       ],
 
       'credentials' => new JwtWithJsonAuthentication('./jwtjson.json')

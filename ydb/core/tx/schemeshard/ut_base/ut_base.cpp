@@ -10815,6 +10815,44 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         UNIT_ASSERT_VALUES_EQUAL(createRequests, 2);
     }
 
+    Y_UNIT_TEST(UpdateChannelsBindingSolomonRecoversAfterManyFailures) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().AllowUpdateChannelsBindingOfSolomonPartitions(true));
+        ui64 txId = 100;
+
+        TestCreateSolomon(runtime, ++txId, "/MyRoot", R"(
+            Name: "Solomon"
+            PartitionCount: 1
+            ChannelProfileId: 2
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        ui32 createRequests = 0;
+        ui32 failuresLeft = 11;
+        auto prevObserver = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvHive::TEvCreateTablet::EventType) {
+                ++createRequests;
+            } else if (ev->GetTypeRewrite() == TEvHive::TEvCreateTabletReply::EventType && failuresLeft) {
+                ev->Get<TEvHive::TEvCreateTabletReply>()->Record.SetStatus(NKikimrProto::ERROR);
+                --failuresLeft;
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+
+        TestAlterSolomon(runtime, ++txId, "/MyRoot", R"(
+            Name: "Solomon"
+            ChannelProfileId: 3
+            UpdateChannelsBinding: true
+        )");
+
+        env.SimulateSleep(runtime, TDuration::Seconds(61));
+        env.TestWaitNotification(runtime, txId);
+        runtime.SetObserverFunc(prevObserver);
+
+        UNIT_ASSERT_VALUES_EQUAL(failuresLeft, 0);
+        UNIT_ASSERT_VALUES_EQUAL(createRequests, 12);
+    }
+
     void UpdateChannelsBindingSolomonStorageConfig() {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime, TTestEnvOptions().AllowUpdateChannelsBindingOfSolomonPartitions(true));

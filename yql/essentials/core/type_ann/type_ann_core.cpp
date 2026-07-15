@@ -2644,7 +2644,7 @@ namespace NTypeAnnImpl {
             }
         }
 
-        const auto commonItemType = CommonTypeForChildren(*input, ctx.Expr);
+        const auto commonItemType = CommonTypeForChildren(*input, ctx.Expr, ctx.Types);
         if (!commonItemType) {
             return IGraphTransformer::TStatus::Error;
         }
@@ -4385,7 +4385,7 @@ namespace NTypeAnnImpl {
 
             output = ctx.Expr.RenameNode(*input, "AsList");
             return IGraphTransformer::TStatus::Repeat;
-        } else if (const auto commonItemType = CommonTypeForChildren(*input, ctx.Expr, warn)) {
+        } else if (const auto commonItemType = CommonTypeForChildren(*input, ctx.Expr, ctx.Types, warn)) {
             if (const auto status = ConvertChildrenToType(input, commonItemType, ctx.Expr, ctx.Types);
                 status != IGraphTransformer::TStatus::Ok) {
                 return status;
@@ -7501,7 +7501,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
 
             output = ctx.Expr.RenameNode(*input, IsSet ? "AsSet" : "AsDict");
             return IGraphTransformer::TStatus::Repeat;
-        } else if (const auto commonType = CommonTypeForChildren(*input, ctx.Expr, warn)) {
+        } else if (const auto commonType = CommonTypeForChildren(*input, ctx.Expr, ctx.Types, warn)) {
             if (const auto status = ConvertChildrenToType(input, commonType, ctx.Expr, ctx.Types);
                 status != IGraphTransformer::TStatus::Ok) {
                 return status;
@@ -7613,7 +7613,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
                     *thenType << ", else type: " << *elseType));
                 return IGraphTransformer::TStatus::Error;
             }
-        } else if (const auto commonType = CommonType<false>(input->Pos(), thenType, elseType, ctx.Expr)) {
+        } else if (const auto commonType = CommonType<false>(input->Pos(), thenType, elseType, ctx.Expr, ctx.Types)) {
             if (const auto status = TryConvertTo(input->ChildRef(1), *commonType, ctx.Expr, ctx.Types)
                 .Combine(TryConvertTo(input->TailRef(), *commonType, ctx.Expr, ctx.Types));
                 status != IGraphTransformer::TStatus::Ok)
@@ -16029,13 +16029,13 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["Merge"] = &ExtendWrapper;
         Functions["Extract"] = &ExtractWrapper;
         Functions["OrderedExtract"] = &ExtractWrapper;
-        Functions["UnionAll"] = &SelectOpWrapper;
-        Functions["UnionMerge"] = &SelectOpWrapper;
-        Functions["Union"] = &SelectOpWrapper;
-        Functions["IntersectAll"] = &SelectOpWrapper;
-        Functions["Intersect"] = &SelectOpWrapper;
-        Functions["ExceptAll"] = &SelectOpWrapper;
-        Functions["Except"] = &SelectOpWrapper;
+        ExtFunctions["UnionAll"] = &SelectOpWrapper;
+        ExtFunctions["UnionMerge"] = &SelectOpWrapper;
+        ExtFunctions["Union"] = &SelectOpWrapper;
+        ExtFunctions["IntersectAll"] = &SelectOpWrapper;
+        ExtFunctions["Intersect"] = &SelectOpWrapper;
+        ExtFunctions["ExceptAll"] = &SelectOpWrapper;
+        ExtFunctions["Except"] = &SelectOpWrapper;
         ExtFunctions["ListExtend"] = &ListExtendWrapper<false>;
         ExtFunctions["ListExtendStrict"] = &ListExtendWrapper<true>;
         Functions["ListUnionAll"] = &ListUnionAllWrapper;
@@ -16227,7 +16227,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["ListJoinCore"] = &ListJoinCoreWrapper;
         Functions["CombineCore"] = &CombineCoreWrapper;
         Functions["GroupingCore"] = &GroupingCoreWrapper;
-        Functions["EquiJoin"] = &EquiJoinWrapper;
+        ExtFunctions["EquiJoin"] = &EquiJoinWrapper;
         Functions["OptionalReduce"] = &OptionalReduceWrapper;
         ExtFunctions["OptionalItemType"] = &TypeArgWrapper<ETypeArgument::OptionalItem>;
         ExtFunctions["LinearItemType"] = &TypeArgWrapper<ETypeArgument::LinearItem>;
@@ -16303,7 +16303,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["SqlAccess"] = &SqlAccessWrapper;
         Functions["SqlProcess"] = &SqlProcessWrapper;
         Functions["SqlReduce"] = &SqlReduceWrapper;
-        Functions["SqlCombine"] = &SqlCombineWrapper;
+        ExtFunctions["SqlCombine"] = &SqlCombineWrapper;
         Functions["SqlExternalFunction"] = &SqlExternalFunctionWrapper;
         Functions["SqlExtractKey"] = &SqlExtractKeyWrapper;
         Functions["SqlReduceUdf"] = &SqlReduceUdfWrapper;

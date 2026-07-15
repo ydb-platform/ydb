@@ -57,7 +57,7 @@
       (return (AsStruct '('"__ydb_cluster" (Member $51 '"__ydb_cluster")) '($2 (Member $51 $2)) '('"k" (Member $66 '"k")) '('"t" (Member $66 '"t")) '('"v" (Member $66 '"v"))))
     )))))
   ))) $31))
-  (return (FromFlow (Map (ToFlow (DqPhyWatermarkGenerator $32 (lambda '($72) (- (SafeCast (Member $72 '"t") $20) (Interval '"5000000"))) (lambda '($73) (AsStruct '('"cluster" (Member $73 '"__ydb_watermark_cluster")) '('"partition_id" (Member $73 '"__ydb_watermark_partition_id")))) (lambda '($74) (Member $74 '"__ydb_watermark_write_time")) '() (Void))) (lambda '($75) (block '(
+  (return (FromFlow (Map (ToFlow (DqPhyWatermarkGenerator $32 (lambda '($72) (SafeCast (Member $72 '"t") $20)) (lambda '($73) (AsStruct '('"cluster" (Member $73 '"__ydb_watermark_cluster")) '('"partition_id" (Member $73 '"__ydb_watermark_partition_id")))) (lambda '($74) (Member $74 '"__ydb_watermark_write_time")) '('('"WatermarksLateArrivalDelayUs" '"5000000")) (Void))) (lambda '($75) (block '(
     (let $76 (Member $75 '"t"))
     (return (AsStruct '('"__ydb_cluster" (Member $75 '"__ydb_cluster")) '($2 (Member $75 $2)) '('"event_time" (SafeCast $76 $20)) '('"k" (Member $75 '"k")) '('"t" $76) '('"v" (Member $75 '"v"))))
   ))))))

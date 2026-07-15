@@ -56,7 +56,7 @@
       (return (AsStruct '('"k" (Member $65 '"k")) '('"t" (Member $65 '"t")) '('"v" (Member $65 '"v"))))
     )))))
   ))) $29))
-  (return (FromFlow (Map (ToFlow (DqPhyWatermarkGenerator $30 (lambda '($71) (- (SafeCast (Member $71 '"t") $18) (Interval '"5000000"))) (lambda '($72) (AsStruct '('"cluster" (Member $72 '"__ydb_watermark_cluster")) '('"partition_id" (Member $72 '"__ydb_watermark_partition_id")))) (lambda '($73) (Member $73 '"__ydb_watermark_write_time")) '() (Void))) (lambda '($74) (block '(
+  (return (FromFlow (Map (ToFlow (DqPhyWatermarkGenerator $30 (lambda '($71) (SafeCast (Member $71 '"t") $18)) (lambda '($72) (AsStruct '('"cluster" (Member $72 '"__ydb_watermark_cluster")) '('"partition_id" (Member $72 '"__ydb_watermark_partition_id")))) (lambda '($73) (Member $73 '"__ydb_watermark_write_time")) '('('"WatermarksLateArrivalDelayUs" '"5000000")) (Void))) (lambda '($74) (block '(
     (let $75 (Member $74 '"t"))
     (return (AsStruct '('"event_time" (SafeCast $75 $18)) '('"k" (Member $74 '"k")) '('"t" $75) '('"v" (Member $74 '"v"))))
   ))))))

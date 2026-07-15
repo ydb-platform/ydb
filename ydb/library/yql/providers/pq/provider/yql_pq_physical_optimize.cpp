@@ -67,6 +67,8 @@ TMaybeNode<TExprBase> ParseISO8601(TCoAtom input, TExprContext& ctx) {
 TMaybeNode<TCoNameValueTupleList> BuildDqWatermarkSettings(
     TCoNameValueTupleList settings,
     TCoNameValueTupleList topicProps,
+    TCoLambda watermark,
+    const TPqState& state,
     TExprContext& ctx
 ) {
     auto result = Build<TCoNameValueTupleList>(ctx, settings.Pos());
@@ -137,6 +139,19 @@ TMaybeNode<TCoNameValueTupleList> BuildDqWatermarkSettings(
             .Build();
     }
 
+    const auto eventTimeAndDelay = SplitWatermarkExpr(watermark, state, ctx);
+    if (!eventTimeAndDelay) {
+        return {};
+    }
+    const auto [_, delay] = *eventTimeAndDelay;
+
+    result.Add<TCoNameValueTuple>()
+        .Name<TCoAtom>().Build(WatermarksLateArrivalDelayUsSetting)
+        .Value<TCoAtom>()
+            .Value(ToString(delay))
+            .Build()
+        .Build();
+
     return result.Done();
 }
 
@@ -176,7 +191,6 @@ public:
         if (!maybeParsingWrap) {
             const auto metadataColumns = GetWatermarkMetadataColumns(watermarkGenerator.Pos(), *State_, ctx);
 
-
             return Build<TCoRemovePrefixMembers>(ctx, watermarkGenerator.Pos())
                 .Input<TCoWatermarkGenerator>()
                     .InitFrom(watermarkGenerator)
@@ -206,10 +220,19 @@ public:
         }
         const auto pqReadTopic = maybePqReadTopic.Cast();
 
+        const auto eventTimeAndDelay = SplitWatermarkExpr(watermarkGenerator.WatermarkExtractor(), *State_, ctx);
+        if (!eventTimeAndDelay) {
+            return {};
+        }
+        const auto [eventTimeExtractor, _] = *eventTimeAndDelay;
+
         const auto maybeWatermarkSettings = BuildDqWatermarkSettings(
             watermarkGenerator.WatermarkSettings(),
             pqReadTopic.Topic().Props(),
-            ctx);
+            watermarkGenerator.WatermarkExtractor(),
+            *State_,
+            ctx
+        );
         if (!maybeWatermarkSettings) {
             return {};
         }
@@ -221,7 +244,7 @@ public:
                 .Lambda(parsingWrap.Lambda())
                 .MetadataColumns(parsingWrap.MetadataColumns())
                 .Build()
-            .WatermarkExtractor(watermarkGenerator.WatermarkExtractor())
+            .WatermarkExtractor(eventTimeExtractor)
             .PartitionKeyExtractor<TCoLambda>()
                 .Args({"arg"})
                 .Body<TCoAsStruct>()

@@ -307,14 +307,15 @@ public:
         InstantiateModule(wavmModule, linkResult, name);
     }
 
-    void AddSdk(const TModuleBytecode& bytecode) override
+    void AddPrecompiledModule(const TModuleBytecode& bytecode, TStringBuf name = "") override
     {
-        YT_ASSERT(!RuntimeLibraryInstance_);
-        YT_ASSERT(Compartment_->instances.size() == 1);
+        if (!bytecode.ObjectCode) {
+            THROW_ERROR_EXCEPTION("Precompiled module object code is required");
+        }
 
         switch (bytecode.Format) {
             case EBytecodeFormat::HumanReadable: {
-                THROW_ERROR_EXCEPTION("Human-readable runtime library files are not supported");
+                THROW_ERROR_EXCEPTION("Human-readable precompiled modules are not supported");
                 break;
             }
 
@@ -334,19 +335,55 @@ public:
                     &loadError);
 
                 if (!succeeded) {
-                    THROW_ERROR_EXCEPTION("Could not load WebAssembly runtime library: %v", loadError.message);
+                    THROW_ERROR_EXCEPTION("Could not load WebAssembly module: %v", loadError.message);
                 }
 
+                auto objectCode = std::vector<U8>(bytecode.ObjectCode.size());
+                ::memcpy(objectCode.data(), bytecode.ObjectCode.data(), bytecode.ObjectCode.size());
+                auto wavmModule = std::make_shared<Runtime::Module>(std::move(irModule), std::move(objectCode));
+                const auto& runtimeIR = Runtime::getModuleIR(wavmModule);
+                auto linkResult = LinkModule(runtimeIR);
+                AddExportsToGlobalOffsetTable(runtimeIR);
+                InstantiateModule(wavmModule, linkResult, name);
+                break;
+            }
+        }
+    }
+
+    void AddSdk(const TModuleBytecode& bytecode) override
+    {
+        YT_ASSERT(!RuntimeLibraryInstance_);
+        YT_ASSERT(Compartment_->instances.size() == 1);
+
+        switch (bytecode.Format) {
+            case EBytecodeFormat::HumanReadable: {
+                THROW_ERROR_EXCEPTION("Human-readable runtime library files are not supported");
+                break;
+            }
+
+            case EBytecodeFormat::Binary: {
                 if (bytecode.ObjectCode) {
-                    auto objectCode = std::vector<U8>(bytecode.ObjectCode.size());
-                    ::memcpy(objectCode.data(), bytecode.ObjectCode.data(), bytecode.ObjectCode.size());
-                    auto sdkModule = std::make_shared<Runtime::Module>(std::move(irModule), std::move(objectCode));
-                    const auto& runtimeIR = Runtime::getModuleIR(sdkModule);
-                    auto linkResult = LinkModule(runtimeIR);
-                    AddExportsToGlobalOffsetTable(runtimeIR);
-                    InstantiateModule(sdkModule, linkResult, "env");
+                    AddPrecompiledModule(bytecode, "env");
                     RuntimeLibraryInstance_ = Instances_.back();
                 } else {
+                    auto featureSpec = IR::FeatureSpec();
+                    featureSpec.memory64 = true;
+                    featureSpec.table64 = true;
+                    featureSpec.exceptionHandling = true;
+
+                    auto irModule = IR::Module(std::move(featureSpec));
+
+                    auto loadError = WASM::LoadError();
+                    bool succeeded = WASM::loadBinaryModule(
+                        std::bit_cast<U8*>(bytecode.Data.begin()),
+                        bytecode.Data.size(),
+                        irModule,
+                        &loadError);
+
+                    if (!succeeded) {
+                        THROW_ERROR_EXCEPTION("Could not load WebAssembly runtime library: %v", loadError.message);
+                    }
+
                     auto linkResult = LinkModule(irModule);
                     auto sdkModule = Runtime::compileModule(irModule);
                     const auto& runtimeIR = Runtime::getModuleIR(sdkModule);

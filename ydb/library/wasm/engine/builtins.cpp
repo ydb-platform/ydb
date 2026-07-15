@@ -15,7 +15,7 @@ static constexpr auto BuiltinYtQlUdfsResource = "libwasm-udfs-builtin-ytql-udfs.
 TModuleBytecode GetBuiltinMinimalRuntimeSdk()
 {
     static auto sdk = [] {
-        auto bytecode = TSharedRef::FromString(R"(
+        auto bytecode = TSharedRef::FromString(TString(R"(
             (module
                 (type (;0;) (func))
                 (type (;1;) (func (param i64) (result i64)))
@@ -35,7 +35,7 @@ TModuleBytecode GetBuiltinMinimalRuntimeSdk()
 
                 (export "malloc" (func $malloc))
                 (export "free" (func $free))
-            ))");
+            ))"));
 
         return TModuleBytecode{
             .Format = EBytecodeFormat::HumanReadable,

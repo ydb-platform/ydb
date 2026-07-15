@@ -20,6 +20,9 @@ struct IWebAssemblyCompartment
     //! Adds new module in WebAssembly WAST format.
     virtual void AddModule(TStringBuf wast, TStringBuf name = "") = 0;
 
+    //! Adds precompiled module. ObjectCode must be present.
+    virtual void AddPrecompiledModule(const TModuleBytecode& bytecode, TStringBuf name = "") = 0;
+
     //! Adds sdk.
     virtual void AddSdk(const TModuleBytecode& bytecode) = 0;
 

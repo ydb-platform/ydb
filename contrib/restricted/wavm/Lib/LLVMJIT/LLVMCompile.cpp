@@ -18,7 +18,11 @@ PUSH_DISABLE_WARNINGS_FOR_LLVM_HEADERS
 #include <llvm-c/Disassembler.h>
 #include <llvm/ADT/SmallVector.h>
 #include <llvm/ADT/StringRef.h>
+#if LLVM_VERSION_MAJOR >= 17
 #include <llvm/TargetParser/Triple.h>
+#else
+#include <llvm/ADT/Triple.h>
+#endif
 #include <llvm/ADT/ilist_iterator.h>
 #include <llvm/CodeGen/TargetSubtargetInfo.h>
 #include <llvm/ExecutionEngine/ExecutionEngine.h>
@@ -29,7 +33,11 @@ PUSH_DISABLE_WARNINGS_FOR_LLVM_HEADERS
 #include <llvm/Object/SymbolSize.h>
 #include <llvm/Pass.h>
 #include <llvm/Support/FileSystem.h>
+#if LLVM_VERSION_MAJOR >= 17
 #include <llvm/TargetParser/Host.h>
+#else
+#include <llvm/Support/Host.h>
+#endif
 #include <llvm/Support/raw_ostream.h>
 #include <llvm/Target/TargetMachine.h>
 #include <llvm/Transforms/Scalar.h>
@@ -212,7 +220,11 @@ std::vector<U8> LLVMJIT::compileModule(const IR::Module& irModule, const TargetS
 		= getAndValidateTargetMachine(irModule.featureSpec, targetSpec);
 
 	targetMachine->setFastISel(true);
+#if LLVM_VERSION_MAJOR >= 18
 	targetMachine->setOptLevel(llvm::CodeGenOptLevel::None);
+#else
+	targetMachine->setOptLevel(llvm::CodeGenOpt::None);
+#endif
 
 	// Emit LLVM IR for the module.
 	LLVMContext llvmContext;
@@ -231,7 +243,11 @@ std::string LLVMJIT::emitLLVMIR(const IR::Module& irModule,
 		= getAndValidateTargetMachine(irModule.featureSpec, targetSpec);
 
 	targetMachine->setFastISel(true);
+#if LLVM_VERSION_MAJOR >= 18
 	targetMachine->setOptLevel(llvm::CodeGenOptLevel::None);
+#else
+	targetMachine->setOptLevel(llvm::CodeGenOpt::None);
+#endif
 
 	// Emit LLVM IR for the module.
 	LLVMContext llvmContext;

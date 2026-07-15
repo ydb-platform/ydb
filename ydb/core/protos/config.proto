@@ -3313,6 +3313,10 @@ message TUdfStoreConfig {
     optional string KvStorageMedia = 2 [default = "ssd"];
     optional bool EnableUnsafeNativeUdf = 3 [default = false];
     optional string UnsafeNativeUdfDir = 4;
+    optional bool EnableWasmUdf = 5 [default = false];
+    reserved 6, 7, 8, 10;
+    reserved "WasmUdfRegistryDir", "WasmSdkPath", "WasmSdkObjectCacheDir", "WasmPrecompileOnUpload";
+    optional string WasmCpuSpecOverride = 9;
 }
 
 message TAppConfig {

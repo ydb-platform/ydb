@@ -4,6 +4,10 @@ YQL_LAST_ABI_VERSION()
 SRCS(
     udf_meta.cpp
     snapshot.cpp
+    wasm_source.cpp
+    library_source.cpp
+    wasm_artifact.cpp
+    storage_paths.cpp
 )
 
 GENERATE_ENUM_SERIALIZATION(udf_meta.h)

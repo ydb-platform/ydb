@@ -6,6 +6,11 @@ namespace NYdb::NWasm {
 
 ////////////////////////////////////////////////////////////////////////////////
 
+Y_WEAK void IWebAssemblyCompartment::AddPrecompiledModule(const TModuleBytecode& /*bytecode*/, TStringBuf /*name*/)
+{
+    YT_UNIMPLEMENTED();
+}
+
 Y_WEAK std::unique_ptr<IWebAssemblyCompartment> CreateImageFromSdk(const TModuleBytecode& /*bytecode*/)
 {
     YT_UNIMPLEMENTED();

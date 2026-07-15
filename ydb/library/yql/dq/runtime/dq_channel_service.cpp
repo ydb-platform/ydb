@@ -10,7 +10,7 @@
 
 #include <util/random/random.h>
 
-#if defined(NDEBUG)
+#if defined(NDEBUGG)
 #define LOG_T(stream)
 #else
 #define LOG_T(stream) LOG_TRACE_S(*ActorSystem, NKikimrServices::KQP_CHANNELS, stream)
@@ -1042,6 +1042,7 @@ void TNodeState::PushDataChunk(TDataChunk&& data, std::shared_ptr<TOutputDescrip
                 item->Leading = descriptor->Leading.exchange(false);
                 Queue.push_back(item);
                 SendMessage(item);
+                SendCount++;
                 InflightBytes += bytes;
                 *OutputBufferInflightBytes += bytes;
                 (*OutputBufferInflightMessages)++;
@@ -1136,8 +1137,8 @@ void TNodeState::SendMessage(std::shared_ptr<TOutputItem> item) {
         }
 #endif
         LOG_T(LogPrefix << "SEND DATA, G=" << GenMajor << '.' << GenMinor << ", SeqNo=" << item->SeqNo
-            << ", ChannelSeqNo=" << item->ChannelSeqNo
-            << ", ChannelId=" << item->Descriptor->Info.ChannelId << ", Leading=" << item->Leading << ", Bytes=" << item->Data.Bytes);
+            << ", ChannelSeqNo=" << item->ChannelSeqNo << ", ChannelId=" << item->Descriptor->Info.ChannelId
+            << ", Leading=" << item->Leading << ", Finished=" << item->Data.Finished << ", Bytes=" << item->Data.Bytes);
         ActorSystem->Send(new NActors::IEventHandle(PeerActorId, NodeActorId, ev.Release(), flags, item->SeqNo));
 #if !defined(NDEBUG)
     }
@@ -1430,12 +1431,13 @@ void TNodeState::HandleData(TEvDqCompute::TEvChannelDataV2::TPtr& ev) {
 
     if (PeerActorId != ev->Sender || PeerGenMajor.load() != genMajor || PeerGenMinor.load() != genMinor) {
         LOG_D(LogPrefix << "OBSOLETE DATA, PeerActorId=" << PeerActorId << ", PG=" << PeerGenMajor.load() << '.' << PeerGenMinor.load()
-            << "vs Sender=" << ev->Sender << ", G=" << genMajor << '.' << genMinor
+            << " vs Sender=" << ev->Sender << ", G=" << genMajor << '.' << genMinor
             << ", SeqNo=" << seqNo);
     } else {
         LOG_T(LogPrefix << "RECV DATA, G=" << genMajor << '.' << genMinor << ", SeqNo=" << seqNo
-            << ", ChannelSeqNo=" << record.GetChannelSeqNo()
-            << ", ChannelId=" << record.GetChannelId() << ", Bytes=" << record.GetBytes());
+            << ", ChannelSeqNo=" << record.GetChannelSeqNo() << ", ChannelId=" << record.GetChannelId()
+            << ", Leading=" << record.GetLeading() << ", Finished=" << record.GetFinished()
+            << ", Bytes=" << record.GetBytes());
     }
 
     if (seqNo <= ConfirmedSeqNo) {
@@ -1552,6 +1554,7 @@ now may need to send very last msg from terminated descriptor
                 item->Leading = waiter->Leading.exchange(false);
                 Queue.push_back(item);
                 SendMessage(item);
+                SendCount++;
                 inflightBytes += bytes;
                 InflightBytes += bytes;
                 *OutputBufferInflightBytes += bytes;
@@ -1598,7 +1601,7 @@ void TNodeState::HandleAck(TEvDqCompute::TEvChannelAckV2::TPtr& ev) {
         auto genMajor = record.GetGenMajor();
         auto genMinor = record.GetGenMinor();
         if (GenMajor != genMajor || GenMinor != genMinor) {
-            LOG_W(LogPrefix << "ACK/IGNORED, G=" << GenMajor << '.' << GenMinor << ", ack.G=" << genMajor << '.' << genMinor);
+            LOG_W(LogPrefix << "ACK/IGNORED, G=" << GenMajor << '.' << GenMinor << ", ack.G=" << genMajor << '.' << genMinor << ", Sender=" << ev->Sender);
             return;
         }
 
@@ -1685,10 +1688,12 @@ void TNodeState::HandleAck(TEvDqCompute::TEvChannelAckV2::TPtr& ev) {
 
         if (Reconciliation.exchange(0) > 0) {
             ReconciliationCount = 0;
+            ReconSent.store(TInstant::Zero());
             LOG_I(LogPrefix << "RECONCILED, Q=" << (Queue.empty() ? "E" : ToString(Queue.front()->SeqNo)) << ':' << SeqNo << ", WQ=" << WaitersQueueSize.load() << ", InflightBytes=" << InflightBytes.load() << '-' << deltaBytes);
             if (!Queue.empty()) {
                 for (auto item : Queue) {
                     SendMessage(item);
+                    ResendCount++;
                     item->Descriptor->CheckGenMajor(GenMajor, TStringBuilder() << "Abort by Repeat from SeqNo=" << Queue.front()->SeqNo << ", item->SeqNo=" << item->SeqNo);
                 }
             }
@@ -1985,6 +1990,7 @@ void TNodeState::HandleReconciliation(TEvPrivate::TEvReconciliation::TPtr& ev) {
 
 void TNodeState::StartReconciliation(bool major, char logSymbol) {
     if (Reconciliation.load() == 0 || (major && (GenMinor > 1))) {
+        ReconCount++;
         if (major) {
             GenMajor++;
             GenMinor = 1;
@@ -2077,6 +2083,7 @@ void TNodeState::DoReconciliation(char logSymbol) {
     InflightBytes -= delta;
 
     SendDiscovery();
+    ReconSent.store(TInstant::Now());
     ActorSystem->Schedule(reconciliationTimeout,
         new NActors::IEventHandle(NodeActorId, NodeActorId, new TEvPrivate::TEvReconciliation(GenMajor, GenMinor, ReconciliationCount)));
 }
@@ -2562,18 +2569,21 @@ void TChannelServiceActor::Handle(NActors::NMon::TEvHttpInfo::TPtr& ev) {
                         TABLEH_ATTRS({{"title", "FailureReconciliation"}}) {str << "FR";}
 #endif
                         TABLEH_ATTRS({{"title", "FailureDestroy"}}) {str << "F~";}
-                        TABLEH_ATTRS({{"title", "GenMajor"}}) {str << "GM";}
-                        TABLEH_ATTRS({{"title", "GenMinor"}}) {str << "gm";}
+                        TABLEH_ATTRS({{"title", "Gen"}}) {str << "G";}
+                        TABLEH_ATTRS({{"title", "Queue.front()->SeqNo"}}) {str << "f/SeqNo";}
                         TABLEH() {str << "SeqNo";}
-                        TABLEH_ATTRS({{"title", "Queue.front()->SeqNo"}}) {str << "front()";}
                         TABLEH_ATTRS({{"title", "InflightBytes"}}) {str << "InflightB";}
+                        TABLEH_ATTRS({{"title", "SendCount"}}) {str << "Send";}
+                        TABLEH_ATTRS({{"title", "ResendCount"}}) {str << "Resend";}
+                        TABLEH_ATTRS({{"title", "ReconCount"}}) {str << "Recon";}
+                        TABLEH() {str << "ReconSent";}
                         TABLEH_ATTRS({{"title", "WaitersQueueSize"}}) {str << "W/Queue";}
                         TABLEH_ATTRS({{"title", "WaitersMessages"}}) {str << "W/Msg";}
-                        TABLEH_ATTRS({{"title", "PeerGenMajor"}}) {str << "PM";}
-                        TABLEH_ATTRS({{"title", "PeerGenMinor"}}) {str << "pm";}
+                        TABLEH_ATTRS({{"title", "PeerGenMajor"}}) {str << "PG";}
                         TABLEH_ATTRS({{"title", "ConfirmedSeqNo"}}) {str << "C/SeqNo";}
                         TABLEH() {str << "PeerActorId";}
                         TABLEH() {str << "NodeActorId";}
+                        TABLEH() {str << "ReconciliationLog";}
                     }
                 }
                 TABLEBODY() {
@@ -2607,22 +2617,25 @@ void TChannelServiceActor::Handle(NActors::NMon::TEvHttpInfo::TPtr& ev) {
                                     str << "X";
                                 }
                             }
-                            TABLED() {str << state->GenMajor;}
-                            TABLED() {str << state->GenMinor;}
-                            TABLED() {str << state->SeqNo;}
+                            TABLED() {str << state->GenMajor << '.' << state->GenMinor;}
                             TABLED() {
                                 if (!state->Queue.empty()) {
                                     str << state->Queue.front()->SeqNo;
                                 }
                             }
+                            TABLED() {str << state->SeqNo;}
                             TABLED() {str << state->InflightBytes.load();}
+                            TABLED() {str << state->SendCount.load();}
+                            TABLED() {str << state->ResendCount.load();}
+                            TABLED() {str << state->ReconCount.load();}
+                            TABLED() {str << state->ReconSent.load();}
                             TABLED() {str << state->WaitersQueue.size();}
                             TABLED() {str << state->WaiterMessages.load();}
-                            TABLED() {str << state->PeerGenMajor.load();}
-                            TABLED() {str << state->PeerGenMinor.load();}
+                            TABLED() {str << state->PeerGenMajor.load() << '.' << state->PeerGenMinor.load();}
                             TABLED() {str << state->ConfirmedSeqNo;}
                             TABLED() {str << state->PeerActorId;}
                             TABLED() {str << state->NodeActorId;}
+                            TABLED() {str << state->GetReconciliationLog();}
                         }
                     }
                 }

@@ -86,6 +86,10 @@ bool IsRboTraceLogEnabled() {
 } // anonymous namespace
 
 IGraphTransformer::TStatus TKqpRewriteSelectTransformer::DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) {
+    if (KqpCtx.Config->OptFallbackToLegacyOptimizer.Get()) {
+        Y_ENSURE(false, "Forced fallback to legacy optimizer");
+    }
+    
     output = input;
     TOptimizeExprSettings settings(&TypeCtx);
     const bool needTraceAst = IsRboTraceLogEnabled();

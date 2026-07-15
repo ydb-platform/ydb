@@ -394,7 +394,7 @@ void TKafkaBalancerActor::JoinStepCreateNewOrJoinGroup(NKqp::TEvKqp::TEvQueryRes
     }
 
     if (groupStatus->Exists) {
-        YDB_LOG_INFO("\n \n \n \n \n \n \n \n \n",
+        YDB_LOG_INFO("Check group before join status",
             {"logPrefix", LogPrefix()},
             {"memberId", MemberId},
             {"instanceId", InstanceId},
@@ -666,7 +666,7 @@ void TKafkaBalancerActor::JoinStepWaitMembersAndChooseProtocol(NKqp::TEvKqp::TEv
         if (WaitedMemberIdsAndTimeouts.size() != 0) {
             YDB_LOG_DEBUG("Members waited",
                 {"logPrefix", LogPrefix()},
-                {"waitedMemberIdsAndTimeouts", WaitedMemberIdsAndTimeouts.size()});
+                {"count", WaitedMemberIdsAndTimeouts.size()});
             WaitedMemberIdsAndTimeouts.clear();
             AllWorkerStates.clear();
             WorkerStatesPaginationMemberId = "";

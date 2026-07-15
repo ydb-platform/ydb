@@ -6,12 +6,8 @@
 
 - [Глоссарий](glossary.md)
 - [Аналитические возможности](./analytics/index.md)
-<<<<<<< HEAD
-- [Архитектура](architecture.md)
-=======
 - [Потоковая обработка](./streaming-query/index.md)
-- [Архитектура](architecture/index.md)
->>>>>>> 0275a5bf6b9 ([YQ-4843] Watermarks: docs (#30237))
+- [Архитектура](architecture.md)
 - [Соединение с БД](connect.md)
 - [Схемные объекты](datamodel/index.md)
 - [Топология кластера](topology.md)

@@ -28,7 +28,7 @@ public:
 
 private:
     TSchemeShard* const SS;
-    const std::weak_ptr<TSchemeShard::TLifetimeToken> SchemeShardLifetimeToken;
+    const std::weak_ptr<TSchemeShard::TOperationLifetimeToken> OperationLifetimeToken;
     const TActorId SchemeShardActorId;
     const TOperationId OperationId;
     TVector<TShardIdx> Shards;
@@ -163,14 +163,14 @@ private:
 public:
     TRollingUpdateSolomonActor(TSchemeShard* ss, TOperationId operationId)
         : SS(ss)
-        , SchemeShardLifetimeToken(ss->GetLifetimeToken())
+        , OperationLifetimeToken(ss->GetOperationLifetimeToken(operationId))
         , SchemeShardActorId(ss->SelfId())
         , OperationId(operationId)
     {
     }
 
     void Bootstrap(const TActorContext& ctx) {
-        auto lifetimeGuard = SchemeShardLifetimeToken.lock();
+        auto lifetimeGuard = OperationLifetimeToken.lock();
         if (!lifetimeGuard) {
             PassAway();
             return;
@@ -193,10 +193,11 @@ public:
     }
 
     STFUNC(StateWork) {
-        // The token is reset at the start of TSchemeShard::Die(). Since this
-        // actor shares SchemeShard's mailbox, a live guard makes SS accesses
-        // safe for the whole event handler.
-        auto lifetimeGuard = SchemeShardLifetimeToken.lock();
+        // The operation token is invalidated when the operation is removed or
+        // cancelled and at the start of TSchemeShard::Die(). Since this actor
+        // shares SchemeShard's mailbox, a live guard makes SS accesses safe for
+        // the whole event handler.
+        auto lifetimeGuard = OperationLifetimeToken.lock();
         if (!lifetimeGuard) {
             PassAway();
             return;

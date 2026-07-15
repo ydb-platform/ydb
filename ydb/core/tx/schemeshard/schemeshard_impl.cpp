@@ -5629,9 +5629,9 @@ bool TSchemeShard::IsSchemeShardConfigured() const {
 }
 
 void TSchemeShard::Die(const TActorContext &ctx) {
-    // Invalidate raw SchemeShard pointers held by same-mailbox helper actors
+    // Invalidate raw SchemeShard pointers held by same-mailbox operation actors
     // before any tablet state is torn down.
-    LifetimeToken.reset();
+    OperationLifetimeTokens.clear();
 
     ctx.Send(SchemeBoardPopulator, new TEvents::TEvPoisonPill());
     ctx.Send(TxAllocatorClient, new TEvents::TEvPoisonPill());
@@ -6224,6 +6224,7 @@ void TSchemeShard::RemoveTx(const TActorContext &ctx, NIceDb::TNiceDb &db, TOper
     }
 
     LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "RemoveTx for txid " << opId);
+    InvalidateOperationLifetimeToken(opId);
     auto pathId = txState->TargetPathId;
 
     PersistRemoveTx(db, opId, *txState);

@@ -228,15 +228,23 @@ public:
 
     static const TSchemeLimits DefaultLimits;
 
-    struct TLifetimeToken {};
+    struct TOperationLifetimeToken {};
 
-    // Actors registered with the same mailbox may keep raw pointers to this
-    // SchemeShard. Die() resets this token before tearing the tablet state down,
-    // allowing those actors to stop before accessing a stale pointer.
-    std::shared_ptr<TLifetimeToken> LifetimeToken = std::make_shared<TLifetimeToken>();
+    // Same-mailbox helper actors keep raw SchemeShard pointers. Operation
+    // tokens are invalidated when an operation is removed or explicitly
+    // cancelled, and all tokens are invalidated before SchemeShard teardown.
+    THashMap<TOperationId, std::shared_ptr<TOperationLifetimeToken>> OperationLifetimeTokens;
 
-    std::weak_ptr<TLifetimeToken> GetLifetimeToken() const {
-        return LifetimeToken;
+    std::weak_ptr<TOperationLifetimeToken> GetOperationLifetimeToken(TOperationId operationId) {
+        auto& token = OperationLifetimeTokens[operationId];
+        if (!token) {
+            token = std::make_shared<TOperationLifetimeToken>();
+        }
+        return token;
+    }
+
+    void InvalidateOperationLifetimeToken(TOperationId operationId) {
+        OperationLifetimeTokens.erase(operationId);
     }
 
     TIntrusivePtr<TChannelProfiles> ChannelProfiles;

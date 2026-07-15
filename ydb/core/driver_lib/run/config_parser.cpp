@@ -69,7 +69,7 @@ void TRunCommandConfigParser::SetupLastGetOptForConfigFiles(NLastGetopt::TOpts& 
     opts.AddLongOption("grpc-port", "enable gRPC server on port").RequiredArgument("PORT");
     opts.AddLongOption("grpcs-port", "enable gRPC SSL server on port").RequiredArgument("PORT");
     opts.AddLongOption("kafka-port", "enable kafka proxy server on port").OptionalArgument("PORT");
-    opts.AddLongOption("kafka-listen-address", "set kafka proxy listen address").RequiredArgument("ADDR");
+    opts.AddLongOption("kafka-address", "set kafka proxy listen address").RequiredArgument("ADDR");
     opts.AddLongOption("grpc-public-host", "set public gRPC host for discovery").RequiredArgument("HOST");
     opts.AddLongOption("grpc-public-port", "set public gRPC port for discovery").RequiredArgument("PORT");
     opts.AddLongOption("grpcs-public-port", "set public gRPC SSL port for discovery").RequiredArgument("PORT");

@@ -604,27 +604,6 @@ TString RenderScanTracesPage(ui64 tabletId) {
     return html.Str();
 }
 
-}   // namespace
-
-class TTxMonitoring: public TTransactionBase<TColumnShard> {
-public:
-    TTxMonitoring(TColumnShard* self, const NMon::TEvRemoteHttpInfo::TPtr& ev)
-        : TBase(self)
-        , HttpInfoEvent(ev)
-    {
-    }
-
-    bool Execute(TTransactionContext& txc, const TActorContext& ctx) override;
-    void Complete(const TActorContext& ctx) override;
-    //TTxType GetTxType() const override { return TXTYPE_INIT; }
-
-private:
-    NMon::TEvRemoteHttpInfo::TPtr HttpInfoEvent;
-    NJson::TJsonValue JsonReport = NJson::JSON_MAP;
-    TString RenderCompactionPage();
-    TString RenderMainPage();
-};
-
 bool TTxMonitoring::Execute(TTransactionContext& txc, const TActorContext&) {
     return Self->TablesManager.FillMonitoringReport(txc, JsonReport["tables_manager"]);
 }

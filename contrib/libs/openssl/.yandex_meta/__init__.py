@@ -141,7 +141,6 @@ openssl = NixProject(
         "include/**/*.h",
     ],
     platform_dispatchers=[
-        "apps/progs.h",
         "crypto/buildinf.h",
         "include/crypto/bn_conf.h",
         "include/crypto/dso_conf.h",

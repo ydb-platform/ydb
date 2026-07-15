@@ -188,4 +188,36 @@ Y_UNIT_TEST_SUITE(SubColumnsNativeScalars) {
         UNIT_ASSERT_VALUES_EQUAL_C(CountValueType(arr, EValueType::String), 1, arr->DebugJson().GetStringRobust());
         UNIT_ASSERT_VALUES_EQUAL(PrintBinaryJsons(arr->GetChunkedArray()), PrintBinaryJsons(BuildSubColumns(docs, OffSettings())->GetChunkedArray()));
     }
+
+    // Drive the JSONPath pushdown projection (TJsonPathAccessor::VisitValues) for a key and render the
+    // per-record string it yields ("<null>" for absent / non-projectable), joined for easy comparison.
+    TString CollectPushdown(const std::shared_ptr<TSubColumnsArray>& arr, const std::string_view path) {
+        auto accResult = arr->GetPathAccessor(path, arr->GetRecordsCount());
+        UNIT_ASSERT_C(accResult.IsSuccess(), accResult.GetErrorMessage());
+        auto acc = accResult.DetachResult();
+        TStringBuilder out;
+        acc->VisitValues([&](const std::optional<TStringBuf>& v) { out << (v ? TString(*v) : TString("<null>")) << ";"; });
+        return out;
+    }
+
+    Y_UNIT_TEST(PushdownVisitValuesNativeEqualToBinaryJson) {
+        const std::vector<TString> docs = {
+            R"({"s":"x","n":1,"b":true})",
+            R"({"s":"yy","n":2.5,"b":false})",
+            "null",
+            R"({"s":"z","n":-3,"b":true})",
+        };
+        auto native = BuildSubColumns(docs, NativeSettings(0));
+        auto binaryJson = BuildSubColumns(docs, OffSettings());
+        UNIT_ASSERT_VALUES_EQUAL_C(CountValueType(native, EValueType::String), 1, native->DebugJson().GetStringRobust());
+        UNIT_ASSERT_VALUES_EQUAL_C(CountValueType(native, EValueType::Double), 1, native->DebugJson().GetStringRobust());
+        UNIT_ASSERT_VALUES_EQUAL_C(CountValueType(native, EValueType::Bool), 1, native->DebugJson().GetStringRobust());
+
+        for (const auto& path : {"$.s", "$.n", "$.b"}) {
+            UNIT_ASSERT_VALUES_EQUAL_C(CollectPushdown(native, path), CollectPushdown(binaryJson, path), path);
+        }
+        UNIT_ASSERT_VALUES_EQUAL(CollectPushdown(native, "$.s"), "x;yy;<null>;z;");
+        UNIT_ASSERT_VALUES_EQUAL(CollectPushdown(native, "$.n"), "1;2.5;<null>;-3;");
+        UNIT_ASSERT_VALUES_EQUAL(CollectPushdown(native, "$.b"), "true;false;<null>;true;");
+    }
 };

@@ -4,9 +4,11 @@
 #include <ydb/core/protos/kqp_physical.pb.h>
 #include <ydb/public/api/protos/ydb_query.pb.h>
 
+#include <util/generic/maybe.h>
 #include <util/generic/string.h>
 #include <util/str_stl.h>
 #include <util/string/builder.h>
+#include <util/string/cast.h>
 
 #include <tuple>
 

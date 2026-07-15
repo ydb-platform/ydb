@@ -326,7 +326,7 @@ Your client application must monitor the session state, because it can rely on t
 
 - Rust
 
-  With [`CoordinationSession`](https://docs.rs/ydb/latest/ydb/struct.CoordinationSession.html) call [`alive`](https://docs.rs/ydb/latest/ydb/struct.CoordinationSession.html#method.alive): it returns [`CancellationToken`](https://docs.rs/tokio-util/latest/tokio_util/sync/struct.CancellationToken.html) — it is cancelled when the session ends (similar to Go's context tracking). When releasing [`Lease`](https://docs.rs/ydb/latest/ydb/struct.Lease.html) or when `Drop` the session, the semaphore release is sent to the server in the background.
+  With [`CoordinationSession`](https://docs.rs/ydb/latest/ydb/struct.CoordinationSession.html) call [`alive`](https://docs.rs/ydb/latest/ydb/struct.CoordinationSession.html#method.alive): it returns [`CancellationToken`](https://docs.rs/tokio-util/latest/tokio_util/sync/struct.CancellationToken.html) — it is cancelled when the session ends (similar to Go's context tracking). When releasing [`Lease`](https://docs.rs/ydb/latest/ydb/struct.Lease.html) or when calling `Drop` on the session, the semaphore release is sent to the server in the background.
 
 - PHP
 

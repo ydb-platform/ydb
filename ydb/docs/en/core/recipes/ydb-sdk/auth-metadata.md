@@ -50,7 +50,7 @@ Below are authentication code examples using the metadata service in different {
 
     {% cut "secdist" %}
 
-    `<PEM>` – Yandex Cloud certificates.
+    `<PEM>` - Yandex Cloud certificates.
 
 
     ```json

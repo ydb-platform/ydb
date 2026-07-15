@@ -388,7 +388,7 @@ Below are code examples of using the built-in retry mechanisms in the {{ ydb-sho
 
     {% cut "Execution retry attempts when errors on the interactive transaction {{ ydb-short-name }}" %}
 
-    For retrying errors at the interactive transaction level of the table service {{ ydb-short-name }}, the function `db.Table().DoTx(ctx, txOp)` provides a prepared transaction {{ ydb-short-name }} on a session for executing queries.
+    For retrying errors at the interactive transaction level of the {{ ydb-short-name }} table service, the function `db.Table().DoTx(ctx, txOp)` provides a prepared transaction {{ ydb-short-name }} on a session for executing queries.
     The function `db.Table().DoTx(ctx, txOp)` uses the package `retry` and also monitors the session lifetime {{ ydb-short-name }}.
     A user operation `txOp` must, according to its signature, return an error or `nil` so that the driver can, based on the error type, understand what to do: retry the operation or not, with a delay or not, on the same transaction or a new one.
     The user can influence the retry query logic via context and the idempotency flag, and the {{ ydb-short-name }} Go SDK interprets errors returned from `op`.
@@ -487,7 +487,7 @@ Below are code examples of using the built-in retry mechanisms in the {{ ydb-sho
 
     {% cut "Execution retry attempts when errors on the interactive transaction `*sql.Tx`:" %}
 
-    For retrying errors on the interactive transaction object `*sql.Tx`, there is a helper function `retry.DoTx(ctx, db, op)` that provides a prepared transaction `*sql.Tx` for executing queries.
+    For retry handling of errors on the interactive transaction object `*sql.Tx`, there is a helper function `retry.DoTx(ctx, db, op)` that provides a prepared transaction `*sql.Tx` for executing queries.
     The function `retry.DoTx` requires a context, a database object, and a user operation to execute.
     A prepared transaction `*sql.Tx` is passed to the function, on which you should execute queries against {{ ydb-short-name }}.
     From client code you can influence the retry logic via the context and the operation's idempotency flag, and the {{ ydb-short-name }} Go SDK, in turn, interprets errors returned from `op`.

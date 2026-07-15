@@ -194,6 +194,12 @@ bool IsConnectionError(const NProto::TError& e)
     return e.GetCode() == E_GRPC_UNAVAILABLE;
 }
 
+bool IsSessionBlockedError(const NProto::TError& e)
+{
+    return e.GetCode() == E_REJECTED &&
+           e.GetMessage() == TabletGenerationBlockedErrorMessage;
+}
+
 NJson::TJsonValue FormatErrorJson(const NProto::TError& e)
 {
     NJson::TJsonValue result;
@@ -285,11 +291,6 @@ NProto::TError MakeTabletIsDeadError(ui32 code, const TSourceLocation& location)
     TStringStream out;
     out << "Tablet is dead: " << location.File << ":" << location.Line;
     return MakeError(code, out.Str());
-}
-
-NProto::TError MakeTabletGenerationBlockedError()
-{
-    return MakeError(E_REJECTED, TString(TabletGenerationBlockedErrorMessage));
 }
 
 }   // namespace NYdb::NBS

@@ -309,12 +309,10 @@ TDirectBlockGroup::ReadBlocksFromDDisk(
                     if (auto self = weakSelf.lock()) {
                         NProto::TError error = TranslateError(f.GetValue());
 
-                        if (IsBlockedStatus(f.GetValue().GetStatus())) {
+                        if (IsSessionBlockedError(error)) {
                             self->HandleBlockedGeneration(
                                 hostIndex,
-                                "ReadFromDDisk",
-                                f.GetValue().GetStatus());
-                            error = MakeTabletGenerationBlockedError();
+                                "ReadFromDDisk");
                         }
 
                         self->OnResponse(
@@ -473,12 +471,10 @@ TDirectBlockGroup::WriteBlocksToDDisk(
                     if (auto self = weakSelf.lock()) {
                         NProto::TError error = TranslateError(f.GetValue());
 
-                        if (IsBlockedStatus(f.GetValue().GetStatus())) {
+                        if (IsSessionBlockedError(error)) {
                             self->HandleBlockedGeneration(
                                 hostIndex,
-                                "WriteToDDisk",
-                                f.GetValue().GetStatus());
-                            error = MakeTabletGenerationBlockedError();
+                                "WriteToDDisk");
                         }
                         self->OnResponse(
                             hostIndex,
@@ -853,6 +849,7 @@ TDBGFlushResponse TDirectBlockGroup::HandleSyncWithPBufferResponse(
                 ETranslateFlags::TreatOutdatedAsSuccess));
         }
     } else {
+        NProto::TError error = TranslateError(response);
         LOG_ERROR(
             *ActorSystem,
             NKikimrServices::NBS_PARTITION,
@@ -860,15 +857,10 @@ TDBGFlushResponse TDirectBlockGroup::HandleSyncWithPBufferResponse(
             LogTitle.GetWithTime().c_str(),
             segmentCount,
             response.ShortUtf8DebugString().c_str(),
-            FormatError(TranslateError(response)).c_str());
+            FormatError(error).c_str());
 
-        auto error = MakeError(E_FAIL, response.GetErrorReason());
-        if (IsBlockedStatus(response.GetStatus())) {
-            HandleBlockedGeneration(
-                ddiskHostIndex,
-                "SyncWithPBuffer",
-                response.GetStatus());
-            error = MakeTabletGenerationBlockedError();
+        if (IsSessionBlockedError(error)) {
+            HandleBlockedGeneration(ddiskHostIndex, "SyncWithPBuffer");
         }
 
         for (size_t i = 0; i < segmentCount; ++i) {
@@ -1447,9 +1439,9 @@ void TDirectBlockGroup::OnConnectionEstablished(
             Oracle.OnDDiskConnected(index, TInstant::Now());
         }
         // INVARIANT: PBuffer does NOT require a session/lock
-    } else if (IsBlockedStatus(result.GetStatus())) {
+    } else if (IsSessionBlockedError(error)) {
         // Terminal: our tablet generation is stale. Suicide, no reconnect.
-        HandleBlockedGeneration(index, "Connect", result.GetStatus());
+        HandleBlockedGeneration(index, "Connect");
         // Unblock waiters on ConnectFuture with the error.
         connection.ConnectPromise.SetValue(error);
         return;
@@ -1755,8 +1747,7 @@ bool TDirectBlockGroup::WaitForSessionLock(THostIndex hostIndex)
 
 void TDirectBlockGroup::HandleBlockedGeneration(
     THostIndex hostIndex,
-    TStringBuf context,
-    NKikimrBlobStorage::NDDisk::TReplyStatus_E status)
+    TStringBuf context)
 {
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
 
@@ -1770,12 +1761,9 @@ void TDirectBlockGroup::HandleBlockedGeneration(
                            << "DDisk returned BLOCKED (stale tablet generation "
                            << TabletGeneration << "); context: " << context
                            << "; " << PrintHostIndex(hostIndex)
-                           << "; DBGIndex: " << DirectBlockGroupIndex
-                           << "; status="
-                           << NKikimrBlobStorage::NDDisk::TReplyStatus_E_Name(
-                                  status);
+                           << "; DBGIndex: " << DirectBlockGroupIndex;
 
-    LOG_CRIT(
+    LOG_ERROR(
         *ActorSystem,
         NKikimrServices::NBS_PARTITION,
         "%s SUICIDE: %s",

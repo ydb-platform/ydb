@@ -16,6 +16,11 @@ NProto::TError TranslateError(
     {
         return MakeError(E_CANCELLED, errorReason);
     }
+    if (errorResponse == NKikimrBlobStorage::NDDisk::TReplyStatus::BLOCKED) {
+        return MakeError(
+            E_REJECTED,
+            TString(TabletGenerationBlockedErrorMessage));
+    }
 
     switch (flags) {
         case ETranslateFlags::None: {
@@ -47,11 +52,6 @@ bool HasSuccessOrOutdated(
 {
     return errorResponse == NKikimrBlobStorage::NDDisk::TReplyStatus::OK ||
            errorResponse == NKikimrBlobStorage::NDDisk::TReplyStatus::OUTDATED;
-}
-
-bool IsBlockedStatus(NKikimrBlobStorage::NDDisk::TReplyStatus_E status)
-{
-    return status == NKikimrBlobStorage::NDDisk::TReplyStatus::BLOCKED;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

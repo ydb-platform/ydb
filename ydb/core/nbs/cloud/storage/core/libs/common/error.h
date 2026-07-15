@@ -204,6 +204,7 @@ enum class EErrorKind
 
 bool IsCancelledError(const NProto::TError& e);
 bool IsConnectionError(const NProto::TError& e);
+bool IsSessionBlockedError(const NProto::TError& e);
 EErrorKind GetErrorKind(const NProto::TError& e);
 
 // error classification used for logging and stats
@@ -512,8 +513,6 @@ inline TResultOrError<void> ResultOrError(NThreading::TFuture<void>& future)
 NProto::TError MakeTabletIsDeadError(
     ui32 code,
     const TSourceLocation& location);
-
-NProto::TError MakeTabletGenerationBlockedError();
 
 }   // namespace NYdb::NBS
 

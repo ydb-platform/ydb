@@ -251,10 +251,7 @@ private:
 
     [[nodiscard]] bool WaitForSessionLock(THostIndex hostIndex);
 
-    void HandleBlockedGeneration(
-        THostIndex hostIndex,
-        TStringBuf context,
-        NKikimrBlobStorage::NDDisk::TReplyStatus_E status);
+    void HandleBlockedGeneration(THostIndex hostIndex, TStringBuf context);
 
     TDBGDumpResponse DoDebugPrintDirtyMap();
 

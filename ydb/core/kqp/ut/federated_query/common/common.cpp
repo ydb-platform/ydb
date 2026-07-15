@@ -1,6 +1,7 @@
 #include "common.h"
 
 #include <ydb/core/kqp/rm_service/kqp_rm_service.h>
+#include <ydb/library/yql/providers/common/token_accessor/client/factory.h>
 #include <ydb/library/yql/providers/pq/gateway/dummy/yql_pq_dummy_gateway_factory.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/credentials/credentials.h>
 
@@ -208,14 +209,28 @@ private:
     const TString Token_;
 };
 
+class TStaticServiceAccountCredentialsFactory : public NYql::ISecuredServiceAccountCredentialsFactory {
+public:
+    explicit TStaticServiceAccountCredentialsFactory(TString token)
+        : Token_(std::move(token))
+    {}
+
+    std::shared_ptr<NYdb::ICredentialsProviderFactory> Create(const TString&, const TString&) override {
+        return std::make_shared<TStaticCredentialsProviderFactory>(Token_);
+    }
+
+private:
+    const TString Token_;
+};
+
 class TStaticSecuredCredentialsFactory: public NYql::IStructuredTokenCredentialsFactory {
 public:
     explicit TStaticSecuredCredentialsFactory(const TString& token)
-        : Token_(token)
+        : SaFactory_(std::make_shared<TStaticServiceAccountCredentialsFactory>(token))
     {
     }
 
-    std::shared_ptr<NYdb::ICredentialsProviderFactory> Create(const TString& structuredTokenJson, bool) override {
+    std::shared_ptr<NYdb::ICredentialsProviderFactory> Create(const TString& structuredTokenJson, bool addBearerToToken) override {
         if (NYql::IsStructuredTokenJson(structuredTokenJson)) {
             NYql::TStructuredTokenParser parser = NYql::CreateStructuredTokenParser(structuredTokenJson);
             if (parser.HasIamAuth()) {
@@ -226,11 +241,12 @@ public:
             }
         }
 
-        return std::make_shared<TStaticCredentialsProviderFactory>(Token_);
+        return NYql::CreateCredentialsProviderFactoryForStructuredToken(
+            SaFactory_, structuredTokenJson, addBearerToToken);
     }
 
 private:
-    const TString Token_;
+    const NYql::ISecuredServiceAccountCredentialsFactory::TPtr SaFactory_;
 };
 
 std::shared_ptr<NYql::IStructuredTokenCredentialsFactory> CreateCredentialsFactory(const TString& token) {

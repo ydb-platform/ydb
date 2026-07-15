@@ -17,6 +17,7 @@
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <yql/essentials/public/issue/yql_issue_message.h>
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor_impl.h>
+#include <ydb/library/yql/dq/runtime/streaming/dq_compute_actor_watermarks.h>
 #include <ydb/library/wilson_ids/wilson.h>
 
 namespace NKikimr {
@@ -82,6 +83,7 @@ public:
         , NodeLockId(settings.HasLockNodeId() ? settings.GetLockNodeId() : TMaybe<ui32>())
         , LockMode(settings.HasLockMode() ? settings.GetLockMode() : TMaybe<NKikimrDataEvents::ELockMode>())
         , QuerySpanId(settings.HasQuerySpanId() ? settings.GetQuerySpanId() : 0)
+        , WatermarksTracker(args.WatermarksTracker)
         , SchemeCacheRequestTimeout(SCHEME_CACHE_REQUEST_TIMEOUT)
         , LookupStrategy(settings.GetLookupStrategy())
         , IsolationLevel(settings.GetIsolationLevel())
@@ -473,7 +475,7 @@ private:
         LookupActorSpan.End();
     }
 
-    i64 GetAsyncInputData(NKikimr::NMiniKQL::TUnboxedValueBatch& batch, TMaybe<TInstant>&, bool& finished, i64 freeSpace) final {
+    i64 GetAsyncInputData(NKikimr::NMiniKQL::TUnboxedValueBatch& batch, TMaybe<TInstant>& maybeWatermark, bool& finished, i64 freeSpace) final {
         YQL_ENSURE(!batch.IsWide(), "Wide stream is not supported");
         SentResultsAvailable = false;
 
@@ -513,13 +515,29 @@ private:
         const bool allReadsFinished = AllReadsFinished();
         const bool allRowsProcessed = StreamLookupWorker->AllRowsProcessed() && (!StreamLockWorker || StreamLockWorker->AllRowsProcessed()) && UnmodifiedOutputRows.empty();
         const bool hasPendingResults = StreamLookupWorker->HasPendingResults();
+        bool inputUnpaused = false;
+
+        if (batch.empty() && !(allReadsFinished && allRowsProcessed && !hasPendingResults)) {
+            // Checkpointing special case: nothing to return yet, but in-flight requests exists
+            // Return 1 to indicate that
+            replyResultStats.ResultBytesCount++;
+        }
+
+        if (LastFetchStatus == NUdf::EFetchStatus::Yield && allReadsFinished && allRowsProcessed && !hasPendingResults) {
+            if (WatermarksTracker && WatermarksTracker->HasPendingWatermark()) {
+                // No unprocessed data: pop and send watermark
+                maybeWatermark = WatermarksTracker->GetPendingWatermark();
+                WatermarksTracker->PopPendingWatermark();
+                inputUnpaused = true; // we unpaused input, so we should try fetching more data
+            }
+        }
 
         // If we have no new reads, no pending results and lock worker is not overloaded,
         // we can fetch input rows again.
         bool noNewReads = (
             Partitioning && Reads.InFlightReads() + StreamLookupWorker->ScheduledRequestsCount() == 0
             && LastFetchStatus == NUdf::EFetchStatus::Ok);
-        if (hasPendingResults || (noNewReads && !IsLockWorkerOverloaded())) {
+        if (hasPendingResults || (noNewReads && !IsLockWorkerOverloaded()) || inputUnpaused) {
             // has more results
             if (!SentResultsAvailable) {
                 Send(ComputeActorId, new TEvNewAsyncInputDataArrived(InputIndex));
@@ -1357,6 +1375,7 @@ private:
     bool SentResultsAvailable = false;
     THashMap<ui64, TString> CacheKeys;
     NUdf::EFetchStatus LastFetchStatus = NUdf::EFetchStatus::Yield;
+    NYql::NDq::TDqComputeActorWatermarks* WatermarksTracker;
     TPartitioning::TCPtr Partitioning;
     const TDuration SchemeCacheRequestTimeout;
     NActors::TActorId SchemeCacheRequestTimeoutTimer;

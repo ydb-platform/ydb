@@ -321,11 +321,12 @@ void TKqpStreamLockWorker::ProcessRowsByLockResult(ui64 requestId, TProcessRowCa
     AFL_ENSURE(batchInfo.LockResultReceived);
 
     for (size_t i = 0; i < batchInfo.BatchSize; ++i) {
-        NUdf::TUnboxedValue row = ConvertRowToUnboxedValue(batchInfo.Rows[i]);
-        callback(
-            row,
-            batchInfo.LockedFlags[i],
-            batchInfo.ModifiedFlags[i]);
+        if (batchInfo.LockedFlags[i]) {
+            NUdf::TUnboxedValue row = ConvertRowToUnboxedValue(batchInfo.Rows[i]);
+            callback(row, true, batchInfo.ModifiedFlags[i]);
+        } else {
+            callback({}, false, batchInfo.ModifiedFlags[i]);
+        }
     }
 
     BatchesByRequestId.erase(it);

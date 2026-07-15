@@ -1244,7 +1244,7 @@ Y_UNIT_TEST_SUITE(KqpReadCommittedPg) {
     // skipped and not locked. A concurrent INSERT of the same key proceeds
     // without blocking.
     // =========================================================================
-    class TUpdateOnLocksMissingKey : public TTableDataModificationTester {
+    class TUpdateOnDoesNotLockMissingKey : public TTableDataModificationTester {
     protected:
         void DoExecute() override {
             auto& runtime = *Kikimr->GetTestServer().GetRuntime();
@@ -1294,8 +1294,8 @@ Y_UNIT_TEST_SUITE(KqpReadCommittedPg) {
         }
     };
 
-    Y_UNIT_TEST(TUpdateOnLocksMissingKey) {
-        TUpdateOnLocksMissingKey tester;
+    Y_UNIT_TEST(TUpdateOnDoesNotLockMissingKey) {
+        TUpdateOnDoesNotLockMissingKey tester;
         tester.SetIsOlap(false);
         tester.SetUseRealThreads(false);
         tester.Execute();
@@ -1307,7 +1307,7 @@ Y_UNIT_TEST_SUITE(KqpReadCommittedPg) {
     // skipped and not locked. A concurrent INSERT of the same key proceeds
     // without blocking.
     // =========================================================================
-    class TDeleteOnLocksMissingKey : public TTableDataModificationTester {
+    class TDeleteOnDoesNotLockMissingKey : public TTableDataModificationTester {
     protected:
         void DoExecute() override {
             auto& runtime = *Kikimr->GetTestServer().GetRuntime();
@@ -1358,8 +1358,8 @@ Y_UNIT_TEST_SUITE(KqpReadCommittedPg) {
         }
     };
 
-    Y_UNIT_TEST(TDeleteOnLocksMissingKey) {
-        TDeleteOnLocksMissingKey tester;
+    Y_UNIT_TEST(TDeleteOnDoesNotLockMissingKey) {
+        TDeleteOnDoesNotLockMissingKey tester;
         tester.SetIsOlap(false);
         tester.SetUseRealThreads(false);
         tester.Execute();

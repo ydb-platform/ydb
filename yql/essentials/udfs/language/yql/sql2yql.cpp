@@ -1,5 +1,6 @@
 #include "sql2yql.h"
 
+#include <yql/essentials/sql/settings/flags/flags.h>
 #include <yql/essentials/sql/sql.h>
 #include <yql/essentials/sql/v1/sql.h>
 #include <yql/essentials/sql/v1/lexer/antlr4/lexer.h>
@@ -37,9 +38,10 @@ void ParseGatewaysConfig(TStringBuf cfg, NSQLTranslation::TTranslationSettings& 
         ythrow yexception() << "Failed to parse gateways config";
     }
 
-    GetClusterMappingFromGateways(config, settings.ClusterMapping);
+    NSQLTranslation::TExtendedSqlFlags sqlFlags = NYql::TGatewaySQLFlags::FromTesting(config).ToMap();
 
-    NYql::TGatewaySQLFlags::FromTesting(config).CollectAllTo(settings.Flags);
+    GetClusterMappingFromGateways(config, settings.ClusterMapping);
+    NSQLTranslation::ParseTranslationSettings(sqlFlags, settings);
 }
 
 void ParseTranslationSettings(const TSql2YqlInput& input, NSQLTranslation::TTranslationSettings& settings) {

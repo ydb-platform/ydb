@@ -54,6 +54,8 @@ private:
     void OnHedgingTimeout();
     void OnRequestTimeout();
 
+    TString ExtendedDebugState() const;
+
     NActors::TActorSystem const* ActorSystem;
     const TChildLogTitle LogTitle;
     const TVChunkConfig VChunkConfig;
@@ -63,6 +65,7 @@ private:
     const NWilson::TTraceId TraceId;
     const TDuration RequestTimeout;
 
+    TInstant StartAt;
     TReadRangeHint ReadHint;
     THostMask Requested;
     THostMask Failed;

@@ -206,40 +206,6 @@ Y_UNIT_TEST_SUITE(KqpQueryServiceScripts) {
         UNIT_ASSERT_EQUAL_C(scriptExecutionOperation.Status().GetIssues().back().GetMessage(), "Query mode is not specified", scriptExecutionOperation.Status().GetIssues().ToString());
     }
 
-    Y_UNIT_TEST(ExecuteScriptPg) {
-        auto kikimr = DefaultKikimrRunner();
-        auto db = kikimr.GetQueryClient();
-
-        auto settings = TExecuteScriptSettings()
-            .Syntax(ESyntax::Pg);
-
-        auto scriptExecutionOperation = db.ExecuteScript(R"(
-            SELECT * FROM (VALUES
-                (1::int8, 'one'),
-                (2::int8, 'two'),
-                (3::int8, 'three')
-            ) AS t;
-        )", settings).ExtractValueSync();
-
-        UNIT_ASSERT_VALUES_EQUAL_C(scriptExecutionOperation.Status().GetStatus(), EStatus::SUCCESS, scriptExecutionOperation.Status().GetIssues().ToString());
-        UNIT_ASSERT(!scriptExecutionOperation.Metadata().ExecutionId.empty());
-
-        NYdb::NQuery::TScriptExecutionOperation readyOp = WaitScriptExecutionOperation(scriptExecutionOperation.Id(), kikimr.GetDriver());
-        UNIT_ASSERT_EQUAL_C(readyOp.Metadata().ExecStatus, EExecStatus::Completed, readyOp.Status().GetIssues().ToString());
-        UNIT_ASSERT_EQUAL(readyOp.Metadata().ExecMode, EExecMode::Execute);
-        UNIT_ASSERT_EQUAL(readyOp.Metadata().ExecutionId, scriptExecutionOperation.Metadata().ExecutionId);
-        UNIT_ASSERT_EQUAL(readyOp.Metadata().ScriptContent.Syntax, ESyntax::Pg);
-
-        TFetchScriptResultsResult results = db.FetchScriptResults(scriptExecutionOperation.Id(), 0).ExtractValueSync();
-        UNIT_ASSERT_C(results.IsSuccess(), results.GetIssues().ToString());
-
-        CompareYson(R"([
-            ["1";"one"];
-            ["2";"two"];
-            ["3";"three"]
-        ])", FormatResultSetYson(results.GetResultSet()));
-    }
-
     Y_UNIT_TEST(ExecuteScriptWithParameters) {
         auto kikimr = DefaultKikimrRunner();
         auto db = kikimr.GetQueryClient();

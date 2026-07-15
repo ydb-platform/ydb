@@ -17,7 +17,7 @@ constexpr ui64 DefaultVChunkSize = RegionSize / DirectBlockGroupsCount;
 TVChunkConfig MakeTestVChunkConfig()
 {
     return TVChunkConfig::MakeDefault(
-        /*vChunkIndex=*/0,
+        0,   // VChunkIndex
         DirectBlockGroupHostCount,
         DefaultPrimaryCount);
 }
@@ -88,6 +88,27 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
         UNIT_ASSERT_VALUES_EQUAL(
             "0{[H1,H2][10..19][0..9]};",
             readHint.DebugPrint());
+    }
+
+    Y_UNIT_TEST(ShouldResizeHosts)
+    {
+        auto vchunkConfig = MakeTestVChunkConfig();
+        TBlocksDirtyMap dirtyMap(
+            vchunkConfig,
+            DefaultBlockSize,
+            DefaultVChunkSize / DefaultBlockSize);
+
+        vchunkConfig.AppendHost();
+        const auto newIdx = static_cast<THostIndex>(5);
+        dirtyMap.ResizeHosts(vchunkConfig.GetHostCount());
+        dirtyMap.UpdateConfig(vchunkConfig);
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            0u,
+            dirtyMap.GetPBufferCounters(newIdx).CurrentBytesCount);
+        UNIT_ASSERT_STRING_CONTAINS(
+            dirtyMap.DebugPrintDDiskState(),
+            "H5-{Disabled,0,0}");
     }
 
     Y_UNIT_TEST(ShouldRespectWatermarksWhenConstruct)
@@ -2012,6 +2033,59 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
         UNIT_ASSERT_VALUES_EQUAL(
             40960,
             dirtyMap.GetPBufferCounters(THostIndex{2}).TotalBytesCount);
+    }
+
+    Y_UNIT_TEST(ShouldIgnoreOutdatedFlushResponseAfterInflightRemoved)
+    {
+        const auto vchunkConfig = MakeTestVChunkConfig();
+        TBlocksDirtyMap dirtyMap(
+            vchunkConfig,
+            DefaultBlockSize,
+            DefaultVChunkSize / DefaultBlockSize);
+
+        const THostMask requested = MakePrimaryHosts();
+        const THostMask confirmed = MakePrimaryHosts();
+
+        // Complete a full write -> flush -> erase lifecycle so the inflight
+        // item for lsn 123 is removed from the map.
+        dirtyMap.RegisterInflightWrite(123, TBlockRange64::WithLength(10, 10));
+        dirtyMap.WriteFinished(
+            123,
+            TBlockRange64::WithLength(10, 10),
+            requested,
+            confirmed);
+
+        auto flushHint = dirtyMap.MakeFlushHint(1);
+        UNIT_ASSERT_EQUAL(false, flushHint.Empty());
+        for (const auto& [route, hint]: flushHint.GetAllHints()) {
+            dirtyMap.FlushFinished(route, MakeLsnVector(hint.Segments), {});
+        }
+
+        auto eraseHints = dirtyMap.MakeEraseHint(1);
+        UNIT_ASSERT_EQUAL(false, eraseHints.Empty());
+        for (const auto& [host, hint]: eraseHints.GetAllHints()) {
+            dirtyMap.EraseFinished(host, MakeLsnVector(hint.Segments), {});
+        }
+
+        // The inflight item is gone.
+        UNIT_ASSERT_VALUES_EQUAL(0, dirtyMap.GetInflightCount());
+
+        // An outdated flush response for the already-removed inflight item must
+        // be ignored gracefully. Previously this tripped a Y_ABORT_UNLESS(item)
+        // invariant check. Exercise both the flushOk and flushFailed branches
+        // on still-enabled destination hosts.
+        dirtyMap.FlushFinished(
+            THostRoute{.SourceHostIndex = 0, .DestinationHostIndex = 0},
+            {123},
+            {});
+        dirtyMap.FlushFinished(
+            THostRoute{.SourceHostIndex = 1, .DestinationHostIndex = 1},
+            {},
+            {123});
+
+        // Nothing should have changed and no new flush hints appear.
+        UNIT_ASSERT_VALUES_EQUAL(0, dirtyMap.GetInflightCount());
+        UNIT_ASSERT_EQUAL(true, dirtyMap.MakeFlushHint(1).Empty());
     }
 }
 

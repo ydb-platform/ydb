@@ -359,7 +359,8 @@ public:
         Send(IntermediateResult->KeyValueActorId, new TEvKeyValue::TEvNotify(
             IntermediateResult->RequestUid,
             IntermediateResult->CreatedAtGeneration, IntermediateResult->CreatedAtStep,
-            IntermediateResult->Stat, status, std::move(IntermediateResult->RefCountsIncr)));
+            IntermediateResult->Stat, status, std::move(IntermediateResult->AcquiredChannels),
+            std::move(IntermediateResult->RefCountsIncr)));
     }
 
     std::unique_ptr<TEvKeyValue::TEvReadResponse> CreateReadResponse(NKikimrKeyValue::Statuses::ReplyStatus status,

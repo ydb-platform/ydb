@@ -4294,6 +4294,135 @@ Y_UNIT_TEST(AlterTableDropIndexIsCorrect) {
     UNIT_ASSERT_C(result.IsOk(), result.Issues.ToString());
 }
 
+Y_UNIT_TEST(CreateTableWithStatisticsIsSupported) {
+    auto res = SqlToYql(R"sql(
+        USE ydb;
+        CREATE TABLE table (
+            k Uint64 NOT NULL,
+            a Uint64,
+            b Utf8,
+            PRIMARY KEY (k),
+            STATISTICS s ON (a, b) WITH (COUNT_MIN_SKETCH)
+        );
+    )sql");
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+        if (word == "Write") {
+            UNIT_ASSERT_STRING_CONTAINS(line, "statisticsName");
+            UNIT_ASSERT_STRING_CONTAINS(line, "statisticsColumns");
+            UNIT_ASSERT_STRING_CONTAINS(line, "statisticsTypes");
+            UNIT_ASSERT_STRING_CONTAINS(line, "COUNT_MIN_SKETCH");
+        }
+    };
+    TWordCountHive elementStat = {"Write"};
+    VerifyProgram(res, elementStat, verifyLine);
+    UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
+}
+
+Y_UNIT_TEST(CreateTableWithStatisticsOnUnknownColumnFails) {
+    ExpectFailWithError(R"sql(
+        USE ydb;
+        CREATE TABLE table (
+            k Uint64 NOT NULL,
+            a Uint64,
+            PRIMARY KEY (k),
+            STATISTICS s ON (missing) WITH (COUNT_MIN_SKETCH)
+        );
+    )sql", "<main>:7:30: Error: Undefined column: missing\n");
+}
+
+Y_UNIT_TEST(CreateTableWithStatisticsWithoutWithIsSupported) {
+    auto res = SqlToYql(R"sql(
+        USE ydb;
+        CREATE TABLE table (
+            k Uint64 NOT NULL,
+            a Uint64,
+            b Utf8,
+            PRIMARY KEY (k),
+            STATISTICS s ON (a, b)
+        );
+    )sql");
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+}
+
+Y_UNIT_TEST(CreateTableWithStatisticsEmptyWithFails) {
+    // Empty WITH () is rejected by the grammar: the statistic type list must be non-empty.
+    ExpectFailWithFuzzyError(R"sql(
+        USE ydb;
+        CREATE TABLE table (
+            k Uint64 NOT NULL,
+            a Uint64,
+            PRIMARY KEY (k),
+            STATISTICS s ON (a) WITH ()
+        );
+    )sql", "<main>:7:38: Error: mismatched input");
+}
+
+Y_UNIT_TEST(AlterTableAddStatisticsIsSupported) {
+    auto res = SqlToYql(R"sql(
+        USE ydb;
+        ALTER TABLE table
+            ADD STATISTICS s1 ON (a, b) WITH (COUNT_MIN_SKETCH),
+            ADD STATISTICS s2 ON (a) WITH (COUNT_MIN_SKETCH);
+    )sql");
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+        if (word == "Write") {
+            UNIT_ASSERT_STRING_CONTAINS(line, "addStatistics");
+        }
+    };
+    TWordCountHive elementStat = {"Write"};
+    VerifyProgram(res, elementStat, verifyLine);
+}
+
+Y_UNIT_TEST(AlterTableAddStatisticsDuplicateFails) {
+    ExpectFailWithError(R"sql(
+        USE ydb;
+        ALTER TABLE table
+            ADD STATISTICS s1 ON (a) WITH (COUNT_MIN_SKETCH),
+            ADD STATISTICS s1 ON (b) WITH (COUNT_MIN_SKETCH);
+    )sql", "<main>:5:28: Error: Statistics s1 must be defined once\n");
+}
+
+Y_UNIT_TEST(AlterTableAddStatisticsWithoutWithIsSupported) {
+    auto res = SqlToYql(R"sql(
+        USE ydb;
+        ALTER TABLE table
+            ADD STATISTICS s1 ON (a, b);
+    )sql");
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+}
+
+Y_UNIT_TEST(AlterTableAddStatisticsEmptyWithFails) {
+    // Empty WITH () is rejected by the grammar: the statistic type list must be non-empty.
+    ExpectFailWithFuzzyError(R"sql(
+        USE ydb;
+        ALTER TABLE table
+            ADD STATISTICS s1 ON (a) WITH ();
+    )sql", "<main>:4:43: Error: mismatched input");
+}
+
+Y_UNIT_TEST(AlterTableDropStatisticsIsSupported) {
+    auto res = SqlToYql("USE ydb; ALTER TABLE table DROP STATISTICS s");
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+        if (word == "Write") {
+            UNIT_ASSERT_STRING_CONTAINS(line, "dropStatistics");
+        }
+    };
+    TWordCountHive elementStat = {"Write"};
+    VerifyProgram(res, elementStat, verifyLine);
+}
+
+Y_UNIT_TEST(StatisticsKeywordIsNotReserved) {
+    // STATISTICS is a non-reserved keyword and must remain usable as an identifier.
+    UNIT_ASSERT(SqlToYql("SELECT 1 AS statistics;").IsOk());
+    UNIT_ASSERT(SqlToYql("USE ydb; SELECT statistics FROM plato.Input;").IsOk());
+}
+
 Y_UNIT_TEST(CreateTableWithLocalBloomFilterAndDropIndexIsCorrect) {
     const auto result = SqlToYql(R"sql(
         USE ydb;
@@ -12078,6 +12207,33 @@ Y_UNIT_TEST(ParseProtoseq) {
     VerifyProgram(res, stat);
     UNIT_ASSERT_VALUES_EQUAL(stat["watermark"], 0);
     UNIT_ASSERT_VALUES_EQUAL(stat["WatermarkGenerator"], 1);
+}
+
+Y_UNIT_TEST(ComplexParseWithOptions) {
+    auto res = SqlToYql(R"sql(
+        USE plato;
+
+        $input = SELECT Protobuf::Parse(records) AS event FROM Input
+        FLATTEN LIST BY (ChunksSplitters::Protoseq(Data).SplitRecords AS records);
+
+        SELECT * FROM $input
+        WITH (
+            WATERMARK = event.ts - Interval("PT1S"),
+            WATERMARK_GRANULARITY = "PT1S",
+            WATERMARK_IDLE_TIMEOUT = "PT1M"
+        );
+    )sql");
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TWordCountHive stat = {
+        "WatermarkGenerator",
+        "watermarkgranularity",
+        "watermarkidletimeout",
+    };
+    VerifyProgram(res, stat);
+    UNIT_ASSERT_VALUES_EQUAL(stat["WatermarkGenerator"], 1);
+    UNIT_ASSERT_VALUES_EQUAL(stat["watermarkgranularity"], 1);
+    UNIT_ASSERT_VALUES_EQUAL(stat["watermarkidletimeout"], 1);
 }
 
 Y_UNIT_TEST(ExprList) {

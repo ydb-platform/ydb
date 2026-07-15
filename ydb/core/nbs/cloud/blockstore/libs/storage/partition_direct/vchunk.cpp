@@ -40,7 +40,10 @@ TVChunk::TVChunk(
     , BlockSize(DefaultBlockSize)
     , BlocksCount(vChunkSize / BlockSize)
     , SyncRequestsBatchSize(syncRequestsBatchSize)
-    , LogTitle{GetCycleCount(), TLogTitle::TVChunk{.VChunkIndex = vChunkConfig.GetVChunkIndex()}}
+    , LogTitle{GetCycleCount(), TLogTitle::TVChunk{
+        .DBGIndex = vChunkConfig.GetDBGIndex(),
+        .VChunkIndex = vChunkConfig.GetVChunkIndex()
+     }}
     , VChunkConfig(vChunkConfig)
     , BlocksDirtyMap(VChunkConfig, BlockSize, BlocksCount)
     , Counters(std::move(counters))
@@ -221,6 +224,33 @@ void TVChunk::SetHostState(THostIndex hostIndex, EHostState state)
     UpdateConfig(std::move(prepare), std::move(apply));
 }
 
+void TVChunk::OnHostAppended(size_t newHostCount)
+{
+    Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
+
+    // Resize synchronously - the config apply below is async, but the new host
+    // is connected and used before it runs.
+    BlocksDirtyMap.ResizeHosts(newHostCount);
+
+    auto prepare = [weakSelf = weak_from_this()]() -> TVChunkConfig
+    {
+        if (auto self = weakSelf.lock()) {
+            TVChunkConfig cfg = self->VChunkConfig;
+            cfg.AppendHost();
+            return cfg;
+        }
+        return TVChunkConfig{};
+    };
+    auto apply = [weakSelf = weak_from_this()]()
+    {
+        if (auto self = weakSelf.lock()) {
+            self->ApplyConfig();
+        }
+    };
+
+    UpdateConfig(std::move(prepare), std::move(apply));
+}
+
 const TVChunkConfig& TVChunk::GetConfig() const
 {
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
@@ -238,6 +268,14 @@ ui64 TVChunk::GetPBufferUsedSize(THostIndex hostIndex) const
 std::optional<ui64> TVChunk::GetSafeBarrierForErase() const
 {
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
+
+    if (!DirtyMapReady.HasValue()) {
+        // Not restored yet: this vchunk's records may still exist only in the
+        // PBuffers and are not inflight, so an empty dirty map does not mean
+        // "no constraint". Report the blocking bound so the tablet-wide
+        // cleanup skips its tick until every vchunk finishes restoring.
+        return 0;
+    }
 
     return BlocksDirtyMap.GetSafeBarrierForErase();
 }
@@ -312,10 +350,7 @@ void TVChunk::OnBelatedWriteBlocksResponse(
         LogTitle.GetWithTime().c_str(),
         bundle->GetVChunkRange().Print().c_str());
 
-    BlocksDirtyMap.UpdateBelatedEraseQueue(
-        completedWrites,
-        bundle->GetLsn(),
-        bundle->GetVChunkRange());
+    BlocksDirtyMap.UpdateBelatedEraseQueue(completedWrites, bundle->GetLsn());
 
     DoErase(false, TBlocksDirtyMap::EEraseType::Belated);
     ScheduleCleaningUp();

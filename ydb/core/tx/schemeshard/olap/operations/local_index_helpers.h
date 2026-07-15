@@ -62,6 +62,19 @@ inline bool ConvertOlapIndexToCreationConfig(
         }
         config.AddKeyColumnNames(it->second);
         return true;
+    } else if (indexProto.HasCountMinSketch()) {
+        config.SetType(NKikimrSchemeOp::EIndexTypeLocalCountMinSketch);
+        for (ui32 colId : indexProto.GetCountMinSketch().GetColumnIds()) {
+            auto it = columnIdToName.find(colId);
+            if (it == columnIdToName.end()) {
+                LOG_ERROR_S(*TlsActivationContext, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                    "ConvertOlapIndexToCreationConfig: CountMinSketch column ID " << colId
+                    << " not found in columnIdToName map for index '" << indexProto.GetName() << "'");
+                return false;
+            }
+            config.AddKeyColumnNames(it->second);
+        }
+        return true;
     }
     LOG_ERROR_S(*TlsActivationContext, NKikimrServices::FLAT_TX_SCHEMESHARD,
         "ConvertOlapIndexToCreationConfig: Unrecognized index type for index '" << indexProto.GetName() << "'");
@@ -151,8 +164,21 @@ inline bool ConvertOlapIndexToRequested(
             }
             return true;
         }
+        case NKikimrSchemeOp::TOlapIndexDescription::kCountMinSketch: {
+            NKikimrSchemeOp::TRequestedCountMinSketch* sketch = dst.MutableCountMinSketch();
+            for (ui32 colId : src.GetCountMinSketch().GetColumnIds()) {
+                auto it = columnIdToName.find(colId);
+                if (it == columnIdToName.end()) {
+                    LOG_ERROR_S(*TlsActivationContext, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                        "ConvertOlapIndexToRequested: CountMinSketch column ID " << colId
+                        << " not found in columnIdToName map for index '" << src.GetName() << "'");
+                    return false;
+                }
+                sketch->AddColumnNames(it->second);
+            }
+            return true;
+        }
         case NKikimrSchemeOp::TOlapIndexDescription::kMaxIndex:
-        case NKikimrSchemeOp::TOlapIndexDescription::kCountMinSketch:
         case NKikimrSchemeOp::TOlapIndexDescription::IMPLEMENTATION_NOT_SET:
             LOG_ERROR_S(*TlsActivationContext, NKikimrServices::FLAT_TX_SCHEMESHARD,
                 Sprintf("ConvertOlapIndexToRequested: unimplemented olap index type '%s'", src.GetClassName().c_str()));
@@ -216,9 +242,17 @@ inline bool ConvertRequestedIndexToCreationConfig(
                 config.AddKeyColumnNames(min_max.GetColumnName());
             }
             return true;
-        }        case NKikimrSchemeOp::TOlapIndexRequested::IMPLEMENTATION_NOT_SET:
+        }
+        case NKikimrSchemeOp::TOlapIndexRequested::kCountMinSketch: {
+            config.SetType(NKikimrSchemeOp::EIndexTypeLocalCountMinSketch);
+            const auto& sketch = indexProto.GetCountMinSketch();
+            for (const auto& colName : sketch.GetColumnNames()) {
+                config.AddKeyColumnNames(colName);
+            }
+            return true;
+        }
+        case NKikimrSchemeOp::TOlapIndexRequested::IMPLEMENTATION_NOT_SET:
         case NKikimrSchemeOp::TOlapIndexRequested::kMaxIndex:
-        case NKikimrSchemeOp::TOlapIndexRequested::kCountMinSketch:
             LOG_ERROR_S(*TlsActivationContext, NKikimrServices::FLAT_TX_SCHEMESHARD,
                 Sprintf("ConvertRequestedIndexToCreationConfig: unimplemented olap index type '%s'", indexProto.GetClassName().c_str()));
             return false;
@@ -282,6 +316,14 @@ inline bool ConvertRequestedIndexToAlteringConfig(
             const auto& min_max = indexProto.GetMinMaxIndex();
             if (!min_max.GetColumnName().empty()) {
                 config.AddKeyColumnNames(min_max.GetColumnName());
+            }
+            return true;
+        }
+        case NKikimrSchemeOp::TOlapIndexRequested::kCountMinSketch: {
+            config.SetType(NKikimrSchemeOp::EIndexTypeLocalCountMinSketch);
+            const auto& sketch = indexProto.GetCountMinSketch();
+            for (const auto& colName : sketch.GetColumnNames()) {
+                config.AddKeyColumnNames(colName);
             }
             return true;
         }
@@ -388,6 +430,15 @@ inline bool ConvertCreationConfigToRequested(
             for (const auto& colName : config.GetKeyColumnNames()) {
                 min_max->SetColumnName(colName);
                 break; // Only one column for min_max index
+            }
+            return true;
+        }
+        case NKikimrSchemeOp::EIndexTypeLocalCountMinSketch: {
+            // Class name must match NOlap::NIndexes::NCountMinSketch::TIndexMeta::GetClassNameStatic()
+            requested.SetClassName("COUNT_MIN_SKETCH");
+            auto* sketch = requested.MutableCountMinSketch();
+            for (const auto& colName : config.GetKeyColumnNames()) {
+                sketch->AddColumnNames(colName);
             }
             return true;
         }

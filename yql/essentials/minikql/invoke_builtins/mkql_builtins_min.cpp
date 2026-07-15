@@ -207,6 +207,8 @@ void RegisterMin(IBuiltinFunctionRegistry& registry) {
 
     RegisterCustomSameTypesFunction<NUdf::TDataType<char*>, TCustomMin, TBinaryArgsOpt>(registry, "Min");
     RegisterCustomSameTypesFunction<NUdf::TDataType<NUdf::TUtf8>, TCustomMin, TBinaryArgsOpt>(registry, "Min");
+    RegisterCustomSameTypesFunction<NUdf::TDataType<NUdf::TDyNumber>, TCustomMin, TBinaryArgsOpt>(registry, "Min");
+    RegisterCustomSameTypesFunction<NUdf::TDataType<NUdf::TUuid>, TCustomMin, TBinaryArgsOpt>(registry, "Min");
 }
 
 void RegisterAggrMin(IBuiltinFunctionRegistry& registry) {
@@ -220,6 +222,8 @@ void RegisterAggrMin(IBuiltinFunctionRegistry& registry) {
 
     RegisterCustomAggregateFunction<NUdf::TDataType<char*>, TCustomMin, TBinaryArgsSameOpt>(registry, "AggrMin");
     RegisterCustomAggregateFunction<NUdf::TDataType<NUdf::TUtf8>, TCustomMin, TBinaryArgsSameOpt>(registry, "AggrMin");
+    RegisterCustomAggregateFunction<NUdf::TDataType<NUdf::TDyNumber>, TCustomMin, TBinaryArgsSameOpt>(registry, "AggrMin");
+    RegisterCustomAggregateFunction<NUdf::TDataType<NUdf::TUuid>, TCustomMin, TBinaryArgsSameOpt>(registry, "AggrMin");
 }
 
 } // namespace NMiniKQL

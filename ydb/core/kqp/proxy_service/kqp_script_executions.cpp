@@ -14,6 +14,7 @@
 #include <ydb/core/kqp/proxy_service/script_executions_utils/kqp_script_execution_retries.h>
 #include <ydb/core/kqp/run_script_actor/kqp_run_script_actor.h>
 #include <ydb/core/protos/kqp.pb.h>
+#include <ydb/core/util/proto_duration.h>
 #include <ydb/library/aclib/aclib.h>
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/core/actorid.h>
@@ -701,7 +702,7 @@ public:
             .ExecutionId = ExecutionId,
             .LeaseGeneration = ev.Generation,
             .LeaseDuration = LeaseDuration,
-            .ResultsTtl = NProtoInterop::CastFromProto(meta.GetResultsTtl()),
+            .ResultsTtl = GetDuration(meta.GetResultsTtl()),
             .ProgressStatsPeriod = ev.ProgressStatsPeriod,
             .Counters = Counters,
             .SaveQueryPhysicalGraph = ev.SaveQueryPhysicalGraph,
@@ -710,6 +711,7 @@ public:
             .CheckpointId = ev.CheckpointId,
             .StreamingQueryPath = ev.StreamingQueryPath,
             .CustomerSuppliedId = ev.CustomerSuppliedId,
+            .WatermarkLateEventsPolicy = ev.WatermarkLateEventsPolicy,
             .StreamingDisposition = ev.StreamingDisposition,
         }, QueryServiceConfig));
 
@@ -1127,7 +1129,7 @@ private:
             .ExecutionId = ExecutionId,
             .LeaseGeneration = LeaseGeneration + 1,
             .LeaseDuration = LeaseDuration,
-            .ResultsTtl = NProtoInterop::CastFromProto(meta.GetResultsTtl()),
+            .ResultsTtl = GetDuration(meta.GetResultsTtl()),
             .ProgressStatsPeriod = NProtoInterop::CastFromProto(meta.GetProgressStatsPeriod()),
             .Counters = Counters,
             .SaveQueryPhysicalGraph = meta.GetSaveQueryPhysicalGraph(),
@@ -3298,7 +3300,7 @@ private:
                 return;
             }
 
-            const auto resultsTtl = NProtoInterop::CastFromProto(meta.GetResultsTtl());
+            const auto resultsTtl = GetDuration(meta.GetResultsTtl());
             if (resultsTtl && (*endTs + resultsTtl) < TInstant::Now()){
                 Finish(Ydb::StatusIds::NOT_FOUND, "Results are expired");
                 return;
@@ -3812,7 +3814,7 @@ private:
 
             NKikimrKqp::TScriptExecutionOperationMeta meta;
             DeserializeBinaryProto(serializedMetaJson, meta);
-            OperationTtl = NProtoInterop::CastFromProto(meta.GetOperationTtl());
+            OperationTtl = GetDuration(meta.GetOperationTtl());
             LeaseDuration = NProtoInterop::CastFromProto(meta.GetLeaseDuration());
 
             if (meta.GetSaveQueryPhysicalGraph() && !result.ColumnParser("has_graph").GetBool()) {

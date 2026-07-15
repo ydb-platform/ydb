@@ -106,7 +106,7 @@ struct IYPathService
      *  an ephemeral tree, and the request is forwarded to that tree.
      */
     static IYPathServicePtr FromProducer(
-        NYson::TExtendedYsonProducer<const IAttributeDictionaryPtr&> producer);
+        NYson::TParametricYsonProducer<const IAttributeDictionaryPtr&> producer);
 
     //! Creates a producer from YPath service.
     /*!

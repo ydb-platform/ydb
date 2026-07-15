@@ -16087,7 +16087,8 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["ToBytes"] = &ToBytesWrapper;
         Functions["GroupByKey"] = &GroupByKeyWrapper;
         Functions["PartitionByKey"] = &PartitionByKeyWrapper;
-        Functions["PartitionsByKeys"] = &PartitionsByKeysWrapper;
+        Functions["PartitionsByKeys"] = &PartitionsByKeysWrapper<false>;
+        Functions["LPartitionsByKeys"] = &PartitionsByKeysWrapper<true>;
         Functions["Reverse"] = &ReverseWrapper;
         ExtFunctions["Skip"] = &TakeWrapperEx;
         ExtFunctions["Take"] = &TakeWrapperEx;
@@ -16518,6 +16519,8 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["BlockXor"] = &BlockLogicalWrapper;
         Functions["BlockNot"] = &BlockLogicalWrapper;
         Functions["BlockGuess"] = &BlockGuessWrapper;
+        Functions["BlockWay"] = &BlockWayWrapper;
+        Functions["BlockVariant"] = &BlockVariantWrapper;
         Functions["BlockIf"] = &BlockIfWrapper;
         Functions["BlockJust"] = &BlockJustWrapper;
         Functions["BlockAsStruct"] = &BlockAsStructWrapper;

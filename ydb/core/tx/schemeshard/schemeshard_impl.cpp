@@ -5805,6 +5805,9 @@ void TSchemeShard::StateInit(STFUNC_SIG) {
         HFunc(NConsole::TEvConsole::TEvConfigNotificationRequest, Handle);
         HFunc(TEvPrivate::TEvConsoleConfigsTimeout, Handle);
 
+        // The rolling actor restarted by TTxInit may finish before StateWork is activated.
+        HFuncTraced(TEvPrivate::TEvSolomonRollingUpdateDone, Handle);
+
         // These may arrive during StateInit after a reboot; re-dispatch happens in TTxInit.
         IgnoreFunc(TEvDataShard::TEvIncrementalRestoreShardProgress);
         IgnoreFunc(TEvTabletPipe::TEvClientConnected);

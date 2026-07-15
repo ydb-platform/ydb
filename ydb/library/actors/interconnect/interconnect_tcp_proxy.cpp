@@ -401,12 +401,12 @@ namespace NActors {
             // Create new session actor.
             ++RdmaRetryWatchdogCookie;
             if (msg->Params.UseSessionV2) {
-                Session = new TInterconnectSessionTCPv2(this, msg->Params);
+                Session = new TInterconnectSessionTCPv2(this);
             } else {
-                Session = new TInterconnectSessionTCP(this, msg->Params);
+                Session = new TInterconnectSessionTCP(this);
             }
             SessionID = RegisterWithSameMailbox(&Session->SessionActor());
-            InvokeSession(&IInterconnectSession::Init);
+            InvokeSession(&IInterconnectSession::Init, msg->Params);
             SessionVirtualId = msg->Self;
             RemoteSessionVirtualId = msg->Peer;
             LOG_INFO_IC("ICP22", "created new session: %s", SessionID.ToString().data());

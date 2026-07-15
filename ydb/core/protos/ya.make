@@ -72,6 +72,7 @@ SRCS(
     counters_tx_allocator.proto
     counters_tx_proxy.proto
     data_events.proto
+    data_format_settings.proto
     data_integrity_trails.proto
     database_basic_sausage_metainfo.proto
     datashard_backup.proto
@@ -127,6 +128,7 @@ SRCS(
     node_whiteboard.proto
     pdiskfit.proto
     pqconfig.proto
+    pqdata_deferred_publish_destination.proto
     pqdata_mlp.proto
     pqdata_transaction.proto
     pqevents_global.proto

@@ -450,7 +450,7 @@ combine_core:
   ON expr USING using_call_expr
 ;
 
-materialize_stmt: MATERIALIZE named_single_source (ON cluster_expr)? table_hints? INTO bind_parameter;
+materialize_stmt: MATERIALIZE named_single_source INTO bind_parameter (ON cluster_expr)? table_hints?;
 
 // ISO/IEC 9075-2:2016(E) 7.7 <row pattern recognition clause>
 row_pattern_recognition_clause: MATCH_RECOGNIZE LPAREN

@@ -270,6 +270,11 @@ struct TPersistentBufferFormat {
     // Allocate a new chunk proactively when free space drops below this percentage
     // of the currently owned capacity. 0 disables proactive allocation.
     ui32 PreallocateFreeSpaceThresholdPercent = 10;
+    // Deallocate a chunk proactively when free space is over this percentage
+    // of the currently owned capacity. 100% disables proactive deallocation.
+    ui32 DeallocateFreeSpaceThresholdPercent = 90;
+    // Deallocate a chunk proactively when it has been freed for this many seconds.
+    ui32 DeallocateThresholdSeconds = 30;
 };
 
 #define DECLARE_DDISK_EVENT(NAME) \

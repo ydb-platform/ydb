@@ -4555,6 +4555,7 @@ public:
         }
         const auto& topicOps = TxManager->GetTopicOperations();
         const bool kafkaTransaction = topicOps.HasKafkaOperations();
+        const bool deferredPublication = topicOps.HasDeferredPublicationOperations();
 
         THashSet<ui64> topicTabletPeers;
         bool omitPeerTopicTablets = false;
@@ -4575,7 +4576,16 @@ public:
 
             FillTopicsCommit(isImmediateCommit, transaction, TxManager, tabletId, omitPeerTopicTablets, topicTabletPeers);
 
-            if (t.hasWrite && writeId.Defined() && !kafkaTransaction) {
+            if (t.hasWrite && deferredPublication) {
+                NKikimrPQ::TWriteId proto;
+                auto* deferred = proto.MutableDeferredPublicationApi();
+                deferred->SetIntPublicationId(topicOps.GetDeferredPublicationIntId());
+                const auto& extPublicationId = topicOps.GetDeferredPublicationExtId();
+                if (!extPublicationId.empty()) {
+                    deferred->SetExtPublicationId(extPublicationId);
+                }
+                NPQ::SetWriteId(transaction, NPQ::TWriteId{std::move(proto)});
+            } else if (t.hasWrite && writeId.Defined() && !kafkaTransaction) {
                 NPQ::SetWriteId(transaction, NPQ::TWriteId{SelfId().NodeId(), *writeId});
             } else if (t.hasWrite && kafkaTransaction) {
                 NPQ::SetWriteId(transaction, NPQ::TWriteId{topicOps.GetKafkaProducerInstanceId()});

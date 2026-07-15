@@ -7,6 +7,7 @@
 #include <ydb/library/accessor/accessor.h>
 #include <ydb/public/api/protos/ydb_table.pb.h>
 #include <ydb/public/api/protos/ydb_scheme.pb.h>
+#include <ydb/public/api/protos/ydb_keyvalue.pb.h>
 #include <ydb/core/base/events.h>
 
 namespace NKikimr::NMetadata::NRequest {
@@ -52,6 +53,10 @@ enum EEvents {
     EvDeleteSessionInternalResponse,
     EvDeleteSessionResponse,
 
+    EvCreateKvVolumeRequest,
+    EvCreateKvVolumeInternalResponse,
+    EvCreateKvVolumeResponse,
+
     EvEnd
 };
 
@@ -94,6 +99,8 @@ using TDialogCreateSession = TDialogPolicyImpl<Ydb::Table::CreateSessionRequest,
     EEvents::EvCreateSessionRequest, EEvents::EvCreateSessionInternalResponse, EEvents::EvCreateSessionResponse>;
 using TDialogDeleteSession = TDialogPolicyImpl<Ydb::Table::DeleteSessionRequest, Ydb::Table::DeleteSessionResponse,
     EEvents::EvDeleteSessionRequest, EEvents::EvDeleteSessionInternalResponse, EEvents::EvDeleteSessionResponse>;
+using TDialogCreateKvVolume = TDialogPolicyImpl<Ydb::KeyValue::CreateVolumeRequest, Ydb::KeyValue::CreateVolumeResponse,
+    EEvents::EvCreateKvVolumeRequest, EEvents::EvCreateKvVolumeInternalResponse, EEvents::EvCreateKvVolumeResponse>;
 
 template <ui32 evResult = EEvents::EvGeneralYQLResponse>
 using TCustomDialogYQLRequest = TDialogPolicyImpl<Ydb::Table::ExecuteDataQueryRequest, Ydb::Table::ExecuteDataQueryResponse,
@@ -137,6 +144,15 @@ public:
     static bool IsSuccess(const Ydb::Table::DropTableResponse& r) {
         return r.operation().status() == Ydb::StatusIds::SUCCESS ||
             r.operation().status() == Ydb::StatusIds::NOT_FOUND;
+    }
+};
+
+template <>
+class TOperatorChecker<Ydb::KeyValue::CreateVolumeResponse> {
+public:
+    static bool IsSuccess(const Ydb::KeyValue::CreateVolumeResponse& r) {
+        return r.operation().status() == Ydb::StatusIds::SUCCESS ||
+            r.operation().status() == Ydb::StatusIds::ALREADY_EXISTS;
     }
 };
 

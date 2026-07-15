@@ -1,6 +1,7 @@
 #pragma once
 
 #include "yql_generic_provider.h"
+#include "yql_generic_describe_table.h"
 
 #include <util/generic/ptr.h>
 #include <yql/essentials/core/yql_graph_transformer.h>
@@ -10,8 +11,6 @@
 namespace NYql {
 
     THolder<IGraphTransformer> CreateGenericIODiscoveryTransformer(TGenericState::TPtr state);
-    THolder<IGraphTransformer> CreateGenericLoadTableMetadataTransformer(TGenericState::TPtr state);
-
     THolder<TVisitorTransformerBase> CreateGenericDataSourceTypeAnnotationTransformer(TGenericState::TPtr state);
     THolder<TVisitorTransformerBase> CreateGenericDataSinkTypeAnnotationTransformer(TGenericState::TPtr state);
 

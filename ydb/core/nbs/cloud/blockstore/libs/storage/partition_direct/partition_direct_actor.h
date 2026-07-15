@@ -9,6 +9,7 @@
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/core/tablet.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/model/log_title.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/host.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/mon_page/mon_model.h>
 
 #include <ydb/core/nbs/cloud/storage/core/libs/common/error.h>
 #include <ydb/core/nbs/cloud/storage/core/libs/coroutine/executor_pool.h>
@@ -173,6 +174,8 @@ private:
         const NActors::TActorContext& ctx,
         size_t dbgId,
         const TString& message);
+
+    TTabletInfo MakeMonTabletInfo();
 
     void Start(
         const NActors::TActorContext& ctx,

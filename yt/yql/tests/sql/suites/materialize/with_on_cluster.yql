@@ -1,4 +1,4 @@
-MATERIALIZE plato.Input ON plato INTO $result;
+MATERIALIZE plato.Input INTO $result ON plato;
 
 SELECT
     *

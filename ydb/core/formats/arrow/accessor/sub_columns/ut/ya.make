@@ -11,6 +11,7 @@ PEERDIR(
 
 SRCS(
     ut_sub_columns.cpp
+    ut_native_scalars.cpp
     ut_dictionary.cpp
 )
 

@@ -585,12 +585,17 @@ void TBlocksDirtyMap::FlushFinished(
     const TVector<ui64>& flushFailed)
 {
     if (DisabledHosts.Get(route.DestinationHostIndex)) {
+        // No processing is required, all inflight operations have been updated
+        // when transition to disabled state occurs.
         return;
     }
 
     for (ui64 lsn: flushOk) {
         auto item = Inflight.GetValue(lsn);
-        Y_ABORT_UNLESS(item);
+        if (!item) {
+            // The item was deleted when the host was disabled.
+            continue;
+        }
         auto& inflight = item->Value;
 
         inflight.ConfirmFlush(route.DestinationHostIndex);
@@ -598,7 +603,10 @@ void TBlocksDirtyMap::FlushFinished(
 
     for (ui64 lsn: flushFailed) {
         auto item = Inflight.GetValue(lsn);
-        Y_ABORT_UNLESS(item);
+        if (!item) {
+            // The item was deleted when the host was disabled.
+            continue;
+        }
         auto& inflight = item->Value;
 
         inflight.FlushFailed(route.DestinationHostIndex);
@@ -638,10 +646,9 @@ void TBlocksDirtyMap::EraseFinished(
 
 void TBlocksDirtyMap::UpdateBelatedEraseQueue(
     THostMask completedWrites,
-    ui64 lsn,
-    TBlockRange64 range)
+    ui64 lsn)
 {
-    auto item = Inflight.GetValue(lsn);
+    const auto item = Inflight.GetValue(lsn);
     const bool unknownLsn = item == std::nullopt;
     const bool erasingInProgress =
         item &&
@@ -649,10 +656,8 @@ void TBlocksDirtyMap::UpdateBelatedEraseQueue(
          item->Value.GetState() == TInflightInfo::EState::PBufferErased);
 
     if (unknownLsn || erasingInProgress) {
-        ReadyToEraseBelated.emplace(TInfoEraseBelated{
-            .Lsn = lsn,
-            .Hosts = completedWrites,
-            .Range = range});
+        ReadyToEraseBelated.emplace(
+            TInfoEraseBelated{.Lsn = lsn, .Hosts = completedWrites});
     }
 }
 
@@ -998,13 +1003,12 @@ TReadRangeHint TBlocksDirtyMap::MakeReadRangeHint(
 bool TBlocksDirtyMap::TInfoEraseBelated::operator<(
     const TInfoEraseBelated& other) const
 {
-    if (Lsn != other.Lsn) {
-        return Lsn < other.Lsn;
-    }
-    if (Hosts != other.Hosts) {
-        return Hosts < other.Hosts;
-    }
-    return TBlockRangeComparator{}(Range, other.Range);
+    auto makeTuple = [](const TInfoEraseBelated& info)
+    {
+        return std::tie(info.Lsn, info.Hosts);
+    };
+
+    return makeTuple(*this) < makeTuple(other);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

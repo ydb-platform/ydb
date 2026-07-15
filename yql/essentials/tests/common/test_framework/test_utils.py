@@ -1,6 +1,5 @@
 import json
 import os
-import six
 import re
 import yatest.common
 import zlib
@@ -21,9 +20,7 @@ except BaseException:
 
 
 def _make_hash(x):
-    if six.PY2:
-        return hash(x)
-    return zlib.crc32(repr(x).encode("utf-8"))
+    return zlib.crc32(repr(x).encode("utf-8")) & 0xffffffff
 
 
 def get_sql_flags():

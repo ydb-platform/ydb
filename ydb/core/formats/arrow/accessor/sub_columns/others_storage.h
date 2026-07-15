@@ -117,6 +117,17 @@ public:
             return res;
         }
 
+        // The Others store is always BinaryJson; exposed as (array, local index) like the column
+        // iterator so the general iterator reads both uniformly.
+        const arrow::Array& GetArray() const {
+            AFL_VERIFY(IsValid());
+            return *Values;
+        }
+        i64 GetLocalIndex() const {
+            AFL_VERIFY(IsValid());
+            return CurrentIndex;
+        }
+
         NArrow::NAccessor::TBinaryJsonValueView GetValue() const;
 
         bool HasValue() const {

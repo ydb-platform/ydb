@@ -17,7 +17,7 @@
 #include <yql/essentials/core/qplayer/storage/interface/yql_qstorage.h>
 #include <yql/essentials/core/layers/layers.h>
 #include <yql/essentials/ast/yql_expr.h>
-#include <yql/essentials/sql/settings/translation_sql_flags.h>
+#include <yql/essentials/sql/settings/flags/flags.h>
 #include <yql/essentials/sql/sql.h>
 #include <yql/essentials/minikql/runtime_settings/runtime_settings.h>
 
@@ -53,16 +53,21 @@ class TModuleResolver : public IModuleResolver {
 public:
     using TModuleChecker = std::function<bool(const TString& query, const TString& fileName, TExprContext& ctx)>;
 
-    TModuleResolver(NSQLTranslation::TTranslators translators, TModulesTable&& modules,
-        ui64 nextUniqueId, const THashMap<TString, TString>& clusterMapping,
-        const THashSet<TString>& sqlFlags, bool optimizeLibraries = true,
-        THolder<TExprContext> ownedCtx = {}, TModuleChecker moduleChecker = {})
+    TModuleResolver(
+        NSQLTranslation::TTranslators translators,
+        TModulesTable&& modules,
+        ui64 nextUniqueId,
+        const THashMap<TString, TString>& clusterMapping,
+        NSQLTranslation::TExtendedSqlFlags sqlFlags,
+        bool optimizeLibraries = true,
+        THolder<TExprContext> ownedCtx = {},
+        TModuleChecker moduleChecker = {})
         : Translators_(std::move(translators))
         , OwnedCtx_(std::move(ownedCtx))
         , LibsContext_(nextUniqueId)
         , Modules_(std::move(modules))
         , ClusterMapping_(clusterMapping)
-        , SqlFlags_(sqlFlags)
+        , SqlFlags_(std::move(sqlFlags))
         , ModuleChecker_(std::move(moduleChecker))
         , OptimizeLibraries_(optimizeLibraries)
     {
@@ -71,17 +76,25 @@ public:
         }
     }
 
-    TModuleResolver(NSQLTranslation::TTranslators translators, const TModulesTable* parentModules,
-        ui64 nextUniqueId, const THashMap<TString, TString>& clusterMapping,
-        const THashSet<TString>& sqlFlags, bool optimizeLibraries, const TSet<TString>& knownPackages, const THashMap<TString,
-        THashMap<int, TLibraryCohesion>>& libs, TString fileAliasPrefix, TModuleChecker moduleChecker)
+    TModuleResolver(
+        NSQLTranslation::TTranslators translators,
+        const TModulesTable* parentModules,
+        ui64 nextUniqueId,
+        const THashMap<TString, TString>& clusterMapping,
+        NSQLTranslation::TExtendedSqlFlags sqlFlags,
+        bool optimizeLibraries,
+        const TSet<TString>& knownPackages,
+        const THashMap<TString,
+        THashMap<int, TLibraryCohesion>>& libs,
+        TString fileAliasPrefix,
+        TModuleChecker moduleChecker)
         : Translators_(std::move(translators))
         , ParentModules_(parentModules)
         , LibsContext_(nextUniqueId)
         , KnownPackages_(knownPackages)
         , Libs_(libs)
         , ClusterMapping_(clusterMapping)
-        , SqlFlags_(sqlFlags)
+        , SqlFlags_(std::move(sqlFlags))
         , ModuleChecker_(std::move(moduleChecker))
         , OptimizeLibraries_(optimizeLibraries)
         , FileAliasPrefix_(std::move(fileAliasPrefix))
@@ -113,8 +126,9 @@ public:
     void SetClusterMapping(const THashMap<TString, TString>& clusterMapping) {
         ClusterMapping_ = clusterMapping;
     }
-    void SetSqlFlags(const THashSet<TString>& flags) {
-        SqlFlags_ = flags;
+
+    void SetSqlFlags(NSQLTranslation::TExtendedSqlFlags flags) {
+        SqlFlags_ = std::move(flags);
     }
 
     void SetModuleChecker(TModuleChecker moduleChecker) {
@@ -162,7 +176,7 @@ private:
     THashMap<TString, THashMap<int, TLibraryCohesion>> Libs_;
     TModulesTable Modules_;
     THashMap<TString, TString> ClusterMapping_;
-    THashSet<TString> SqlFlags_;
+    NSQLTranslation::TExtendedSqlFlags SqlFlags_;
     TModuleChecker ModuleChecker_;
     const bool OptimizeLibraries_;
     THolder<TExprContext::TFreezeGuard> FreezeGuard_;

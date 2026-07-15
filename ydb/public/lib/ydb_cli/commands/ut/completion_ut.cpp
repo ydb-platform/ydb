@@ -115,6 +115,7 @@ Y_UNIT_TEST_SUITE(CompletionData) {
 
         UNIT_ASSERT_C(errors.empty(), FormatErrors(errors));
     }
+
 }
 
 namespace {
